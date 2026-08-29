@@ -1,0 +1,6 @@
+{
+  "name": "Sarmaya - Pakistani Bulk Trading & Logistics",
+  "description": "Simple, smart, and beautiful Pakistani bulk trading system for managing bookings, dispatches by tons, automated WhatsApp alerts, and real-time ledger balance tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

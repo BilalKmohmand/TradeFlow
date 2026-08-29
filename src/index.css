@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-serif: 'Newsreader', Georgia, Cambria, 'Times New Roman', Times, serif;
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    
+    --bg-app: #FAF9F6;
+    --bg-card: #FFFFFF;
+    --bg-subtle: #FAF9F6;
+    --border-main: #E5E5E1;
+    --text-primary: #111827;
+    --text-secondary: #6B7280;
+    --text-muted: #8E9299;
+  }
+
+  .dark, [data-theme="deep-ocean"] {
+    --bg-app: #090F17;
+    --bg-card: #101A26;
+    --bg-subtle: #162436;
+    --border-main: #203248;
+    --text-primary: #F1F5F9;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  .font-serif {
+    font-family: var(--font-serif);
+  }
+
+  .font-sans {
+    font-family: var(--font-sans);
+  }
+
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+}
+
+/* Custom scrollbars for Artistic Flair & Deep Ocean */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-app);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D8D7D2;
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb,
+[data-theme="deep-ocean"] ::-webkit-scrollbar-thumb {
+  background: #2A3F58;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B8B7B2;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover,
+[data-theme="deep-ocean"] ::-webkit-scrollbar-thumb:hover {
+  background: #3B5576;
+}
+

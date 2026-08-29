@@ -1,0 +1,293 @@
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  LayoutDashboard,
+  Users,
+  Layers,
+  Package,
+  ShoppingBag,
+  BarChart3,
+  Truck,
+  MessageSquare,
+  RotateCcw,
+  Sparkles,
+  Search,
+  Sun,
+  Moon,
+  Check,
+  ChevronDown,
+} from 'lucide-react';
+import { useTrading } from '../context/TradingContext';
+import { useTheme, ThemeMode } from '../context/ThemeContext';
+import { ActiveScreen } from '../types';
+
+interface NavbarProps {
+  onOpenDispatch: () => void;
+  onOpenWhatsAppDrawer: () => void;
+  onOpenCommandBar: () => void;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({
+  onOpenDispatch,
+  onOpenWhatsAppDrawer,
+  onOpenCommandBar,
+}) => {
+  const { activeScreen, setActiveScreen, whatsappMessages, resetToSampleData } = useTrading();
+  const { themeMode, resolvedTheme, setThemeMode, isNightTime, timeLabel } = useTheme();
+
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const themeMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close theme menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
+        setIsThemeMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const navItems: { id: ActiveScreen; label: string; icon: React.FC<{ className?: string }> }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'customers', label: 'Customers', icon: Users },
+    { id: 'suppliers', label: 'Suppliers', icon: Layers },
+    { id: 'products', label: 'Products', icon: Package },
+    { id: 'bookings', label: 'Bookings', icon: ShoppingBag },
+    { id: 'reports', label: 'Reports', icon: BarChart3 },
+  ];
+
+  return (
+    <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#101A26]/90 backdrop-blur-md border-b border-[#E5E5E1] dark:border-[#203248] text-[#111827] dark:text-[#F1F5F9] shadow-xs transition-colors">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-18 gap-3 sm:gap-4">
+          {/* Logo & Brand */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-[#111827] dark:bg-[#162436] flex items-center justify-center text-white shadow-xs border border-transparent dark:border-[#203248]">
+              <Truck className="w-5 h-5 text-teal-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="font-serif italic font-bold text-xl tracking-tight text-[#111827] dark:text-white">
+                  Sarmaya
+                </h1>
+                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 bg-[#FAF9F6] dark:bg-[#162436] text-teal-800 dark:text-teal-300 rounded-full border border-[#E5E5E1] dark:border-[#203248]">
+                  Bulk Trading
+                </span>
+              </div>
+              <p className="text-[11px] text-[#8E9299] dark:text-[#94A3B8] font-medium hidden sm:block">
+                Simple • Smart • Automated
+              </p>
+            </div>
+          </div>
+
+          {/* Core Navigation Items */}
+          <nav className="hidden lg:flex items-center gap-1 bg-[#FAF9F6] dark:bg-[#162436] p-1.5 rounded-full border border-[#E5E5E1] dark:border-[#203248]">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeScreen === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveScreen(item.id)}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    isActive
+                      ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
+                      : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40]'
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-teal-400 dark:text-teal-700' : 'text-[#8E9299] dark:text-[#64748B]'}`} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Global Command Bar Search Trigger (CMD+K) */}
+          <button
+            onClick={onOpenCommandBar}
+            title="Global Quick Search (CMD+K)"
+            className="flex items-center gap-2.5 px-3 py-2 bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl text-xs text-[#6B7280] dark:text-[#94A3B8] transition-all max-w-[200px] sm:max-w-[240px] w-full justify-between group"
+          >
+            <div className="flex items-center gap-2 truncate">
+              <Search className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0 group-hover:scale-110 transition-transform" />
+              <span className="text-xs truncate font-medium text-[#8E9299] dark:text-[#94A3B8]">
+                Search or jump to...
+              </span>
+            </div>
+            <div className="hidden sm:flex items-center gap-0.5 text-[10px] font-mono font-semibold bg-white dark:bg-[#101A26] px-1.5 py-0.5 rounded-lg border border-[#E5E5E1] dark:border-[#203248] text-[#8E9299] dark:text-[#94A3B8] shrink-0">
+              <span>⌘K</span>
+            </div>
+          </button>
+
+          {/* Right Action Hub */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Automated System-Aware Theme Toggle */}
+            <div className="relative" ref={themeMenuRef}>
+              <button
+                onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
+                title={`Theme: ${timeLabel}. Click to switch theme.`}
+                className="p-2.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-[#F1F5F9] border border-[#E5E5E1] dark:border-[#203248] transition-colors flex items-center gap-1.5"
+              >
+                {themeMode === 'auto' ? (
+                  <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400 animate-pulse" />
+                ) : themeMode === 'dark' ? (
+                  <Moon className="w-4 h-4 text-teal-400" />
+                ) : (
+                  <Sun className="w-4 h-4 text-amber-500" />
+                )}
+                <span className="hidden xl:inline text-[11px] font-semibold text-[#6B7280] dark:text-[#94A3B8]">
+                  {themeMode === 'auto' ? 'Auto' : themeMode === 'dark' ? 'Ocean' : 'Light'}
+                </span>
+                <ChevronDown className="w-3 h-3 text-[#8E9299] hidden sm:block" />
+              </button>
+
+              {/* Theme Dropdown Menu */}
+              {isThemeMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-[#101A26] rounded-2xl shadow-xl border border-[#E5E5E1] dark:border-[#203248] py-2 z-50 text-xs animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8E9299] dark:text-[#64748B] border-b border-[#E5E5E1] dark:border-[#203248] mb-1 flex items-center justify-between">
+                    <span>Theme Aesthetics</span>
+                    <span className="text-[9px] font-mono font-normal">
+                      {isNightTime ? '🌙 Night' : '☀️ Day'}
+                    </span>
+                  </div>
+
+                  {/* Option 1: Auto (System & Time-Aware) */}
+                  <button
+                    onClick={() => {
+                      setThemeMode('auto');
+                      setIsThemeMenuOpen(false);
+                    }}
+                    className={`w-full px-3.5 py-2 text-left flex items-center justify-between hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors ${
+                      themeMode === 'auto'
+                        ? 'text-teal-700 dark:text-teal-400 font-bold bg-teal-50/50 dark:bg-teal-950/30'
+                        : 'text-[#111827] dark:text-[#F1F5F9]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                      <div>
+                        <div className="font-semibold">Auto (System & Time)</div>
+                        <div className="text-[10px] text-[#8E9299] dark:text-[#94A3B8]">
+                          {isNightTime ? 'Deep Ocean at night' : 'Light Neutral in daytime'}
+                        </div>
+                      </div>
+                    </div>
+                    {themeMode === 'auto' && <Check className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />}
+                  </button>
+
+                  {/* Option 2: Light Neutral */}
+                  <button
+                    onClick={() => {
+                      setThemeMode('light');
+                      setIsThemeMenuOpen(false);
+                    }}
+                    className={`w-full px-3.5 py-2 text-left flex items-center justify-between hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors ${
+                      themeMode === 'light'
+                        ? 'text-teal-700 dark:text-teal-400 font-bold bg-teal-50/50 dark:bg-teal-950/30'
+                        : 'text-[#111827] dark:text-[#F1F5F9]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Sun className="w-4 h-4 text-amber-500" />
+                      <div>
+                        <div className="font-semibold">Light Neutral</div>
+                        <div className="text-[10px] text-[#8E9299] dark:text-[#94A3B8]">
+                          Warm Alabaster aesthetic
+                        </div>
+                      </div>
+                    </div>
+                    {themeMode === 'light' && <Check className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />}
+                  </button>
+
+                  {/* Option 3: Deep Ocean Dark Mode */}
+                  <button
+                    onClick={() => {
+                      setThemeMode('dark');
+                      setIsThemeMenuOpen(false);
+                    }}
+                    className={`w-full px-3.5 py-2 text-left flex items-center justify-between hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors ${
+                      themeMode === 'dark'
+                        ? 'text-teal-700 dark:text-teal-400 font-bold bg-teal-50/50 dark:bg-teal-950/30'
+                        : 'text-[#111827] dark:text-[#F1F5F9]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Moon className="w-4 h-4 text-teal-400" />
+                      <div>
+                        <div className="font-semibold">Deep Ocean (Dark)</div>
+                        <div className="text-[10px] text-[#8E9299] dark:text-[#94A3B8]">
+                          Midnight Navy & Sea Teal
+                        </div>
+                      </div>
+                    </div>
+                    {themeMode === 'dark' && <Check className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Dispatch Button */}
+            <button
+              onClick={onOpenDispatch}
+              className="bg-[#111827] dark:bg-white hover:bg-black dark:hover:bg-slate-100 text-white dark:text-[#111827] text-xs font-bold py-2.5 px-3.5 sm:px-4 rounded-2xl flex items-center gap-2 shadow-xs active:scale-95 transition-all border border-[#111827] dark:border-white"
+            >
+              <Truck className="w-3.5 h-3.5 text-teal-400 dark:text-teal-700" />
+              <span className="hidden sm:inline">Log Dispatch</span>
+            </button>
+
+            {/* WhatsApp Automated Badge */}
+            <button
+              onClick={onOpenWhatsAppDrawer}
+              title="Open WhatsApp Automation Hub"
+              className="relative p-2.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-[#F1F5F9] border border-[#E5E5E1] dark:border-[#203248] transition-colors"
+            >
+              <MessageSquare className="w-4 h-4 text-teal-700 dark:text-teal-400" />
+              {whatsappMessages.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-teal-600 text-white text-[9px] font-bold flex items-center justify-center shadow-xs">
+                  {whatsappMessages.length}
+                </span>
+              )}
+            </button>
+
+            {/* Reset sample data */}
+            <button
+              onClick={() => {
+                if (window.confirm('Reset all sample data back to fresh state?')) {
+                  resetToSampleData();
+                }
+              }}
+              title="Reset Sample Data"
+              className="hidden xl:flex p-2.5 rounded-2xl text-[#8E9299] dark:text-[#64748B] hover:text-[#111827] dark:hover:text-white hover:bg-[#FAF9F6] dark:hover:bg-[#162436] border border-transparent hover:border-[#E5E5E1] dark:hover:border-[#203248] transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Navigation Bar */}
+        <div className="flex lg:hidden items-center justify-around py-2.5 border-t border-[#E5E5E1] dark:border-[#203248] overflow-x-auto">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeScreen === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveScreen(item.id)}
+                className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl text-[10px] font-semibold transition-colors ${
+                  isActive
+                    ? 'text-teal-700 dark:text-teal-400 font-bold'
+                    : 'text-[#8E9299] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </header>
+  );
+};
+
