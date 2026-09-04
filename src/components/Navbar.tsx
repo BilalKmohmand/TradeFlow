@@ -238,8 +238,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Mobile Navigation Bar */}
-        <div className="flex lg:hidden items-center justify-around py-2.5 border-t border-[#E5E5E1] dark:border-[#203248] overflow-x-auto">
+        {/* Mobile Navigation Bar: equal-width tabs so all screens fit without scrolling */}
+        <nav className="grid lg:hidden grid-cols-7 gap-0.5 py-1.5 border-t border-[#E5E5E1] dark:border-[#203248]">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeScreen === item.id;
@@ -247,18 +247,20 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 key={item.id}
                 onClick={() => setActiveScreen(item.id)}
-                className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl text-[10px] font-semibold transition-colors ${
+                aria-label={item.label}
+                aria-current={isActive ? 'page' : undefined}
+                className={`min-w-0 flex flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 rounded-xl text-[9px] leading-tight font-semibold transition-colors ${
                   isActive
-                    ? 'text-teal-700 dark:text-teal-400 font-bold'
-                    : 'text-[#8E9299] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'
+                    ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]'
+                    : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40]'
                 }`}
               >
-                <Icon className="w-4 h-4" />
-                <span>{item.label}</span>
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-teal-400 dark:text-teal-700' : ''}`} />
+                <span className="w-full truncate text-center">{item.label}</span>
               </button>
             );
           })}
-        </div>
+        </nav>
       </div>
     </header>
   );
