@@ -7,7 +7,6 @@ import {
   ShoppingBag,
   BarChart3,
   Truck,
-  MessageSquare,
   Sparkles,
   Search,
   Sun,
@@ -21,17 +20,13 @@ import { useTheme, ThemeMode } from '../context/ThemeContext';
 import { ActiveScreen } from '../types';
 
 interface NavbarProps {
-  onOpenDispatch: () => void;
-  onOpenWhatsAppDrawer: () => void;
   onOpenCommandBar: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
-  onOpenDispatch,
-  onOpenWhatsAppDrawer,
   onOpenCommandBar,
 }) => {
-  const { activeScreen, setActiveScreen, whatsappMessages, isAdminUnlocked, lockAdmin } = useTrading();
+  const { activeScreen, setActiveScreen, isAdminUnlocked, lockAdmin } = useTrading();
   const { themeMode, resolvedTheme, setThemeMode, isNightTime, timeLabel } = useTheme();
 
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
@@ -238,28 +233,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden sm:inline">Lock</span>
             </button>
 
-            {/* Quick Dispatch Button */}
-            <button
-              onClick={onOpenDispatch}
-              className="bg-[#111827] dark:bg-white hover:bg-black dark:hover:bg-slate-100 text-white dark:text-[#111827] text-xs font-bold py-2 px-3 sm:px-3.5 rounded-2xl flex items-center gap-1.5 sm:gap-2 shadow-xs active:scale-95 transition-all border border-[#111827] dark:border-white"
-            >
-              <Truck className="w-3.5 h-3.5 text-teal-400 dark:text-teal-700" />
-              <span className="hidden sm:inline">Log Dispatch</span>
-            </button>
-
-            {/* WhatsApp Automated Badge */}
-            <button
-              onClick={onOpenWhatsAppDrawer}
-              title="Open WhatsApp Automation Hub"
-              className="relative p-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-[#F1F5F9] border border-[#E5E5E1] dark:border-[#203248] transition-colors"
-            >
-              <MessageSquare className="w-4 h-4 text-teal-700 dark:text-teal-400" />
-              {whatsappMessages.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-teal-600 text-white text-[9px] font-bold flex items-center justify-center shadow-xs">
-                  {whatsappMessages.length}
-                </span>
-              )}
-            </button>
           </div>
         </div>
 

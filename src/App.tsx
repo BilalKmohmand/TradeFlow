@@ -88,8 +88,6 @@ function MainApp() {
     <div className="min-h-screen w-full overflow-x-hidden bg-[#FAF9F6] dark:bg-[#090F17] text-[#111827] dark:text-[#F1F5F9] font-sans flex flex-col selection:bg-teal-700 selection:text-white transition-colors">
       {/* Navigation Header */}
       <Navbar
-        onOpenDispatch={() => handleOpenDispatch()}
-        onOpenWhatsAppDrawer={() => setIsWhatsAppDrawerOpen(true)}
         onOpenCommandBar={() => setIsCommandBarOpen(true)}
       />
 
