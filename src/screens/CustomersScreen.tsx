@@ -87,7 +87,7 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
       </div>
 
       {/* Customer Cards List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0">
         {filteredCustomers.length === 0 ? (
           <div className="col-span-full py-16 text-center text-[#8E9299] bg-white rounded-[32px] border border-[#E5E5E1]">
             <Users className="w-10 h-10 mx-auto mb-2 text-[#8E9299]" />
@@ -104,7 +104,7 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
                 key={cust.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-[28px] p-6 border border-[#E5E5E1] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between space-y-4 group"
+                className="min-w-0 bg-white rounded-[28px] p-6 border border-[#E5E5E1] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between space-y-4 group"
               >
                 <div className="space-y-3.5">
                   <div className="flex items-start justify-between">

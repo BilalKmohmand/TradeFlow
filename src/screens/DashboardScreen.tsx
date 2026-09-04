@@ -89,7 +89,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   return (
     <div className="space-y-6 pb-12">
       {/* Top Banner / Welcome with Quick Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0 bg-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs">
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-teal-600" />
@@ -124,13 +124,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       </div>
 
       {/* 4 Animated Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 min-w-0">
         {/* Card 1: Today's Dispatches */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.05 }}
-          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-teal-600/40 transition-colors relative overflow-hidden"
+          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-teal-600/40 transition-colors relative overflow-hidden min-w-0"
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
@@ -157,7 +157,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.1 }}
-          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-amber-600/40 transition-colors relative overflow-hidden"
+          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-amber-600/40 transition-colors relative overflow-hidden min-w-0"
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
@@ -183,7 +183,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.15 }}
-          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-teal-600/40 transition-colors relative overflow-hidden"
+          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-teal-600/40 transition-colors relative overflow-hidden min-w-0"
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
@@ -208,7 +208,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.2 }}
-          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-[#111827]/40 transition-colors relative overflow-hidden"
+          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-[#111827]/40 transition-colors relative overflow-hidden min-w-0"
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
@@ -230,9 +230,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       </div>
 
       {/* Main Grid: Quick Sales Chart + Active Bookings Quick Dispatch */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
         {/* Left 2 Cols: Minimal Clean Sales & Dispatch Chart */}
-        <div className="lg:col-span-2 bg-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-5">
+        <div className="lg:col-span-2 min-w-0 bg-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-5">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-serif italic font-normal text-2xl text-[#111827]">Weekly Dispatch & Revenue Trend</h3>
@@ -302,7 +302,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
 
         {/* Right 1 Col: Smart WhatsApp Background Automation Activity */}
-        <div className="bg-[#111827] text-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#1F2937] shadow-sm flex flex-col justify-between space-y-4">
+        <div className="min-w-0 bg-[#111827] text-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#1F2937] shadow-sm flex flex-col justify-between space-y-4">
           <div className="space-y-3.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -371,7 +371,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <p className="text-xs text-[#8E9299] mt-1">Create a new booking to start shipping.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0">
             {activeBookings.map((b) => {
               const cust = customers.find((c) => c.id === b.customerId);
               const prod = products.find((p) => p.id === b.productId);
@@ -380,7 +380,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               return (
                 <div
                   key={b.id}
-                  className="bg-[#FAF9F6] hover:bg-white p-6 rounded-[28px] border border-[#E5E5E1] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all space-y-4 flex flex-col justify-between group"
+                  className="min-w-0 bg-[#FAF9F6] hover:bg-white p-6 rounded-[28px] border border-[#E5E5E1] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all space-y-4 flex flex-col justify-between group"
                 >
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between">

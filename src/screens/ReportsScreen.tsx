@@ -32,7 +32,7 @@ import {
 } from 'recharts';
 import { useTrading } from '../context/TradingContext';
 import { useTheme } from '../context/ThemeContext';
-import { formatCurrency, formatTons, formatDate } from '../utils/formatters';
+import { formatCurrency, formatTons, formatDate, formatNumber } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
 
 export const ReportsScreen: React.FC = () => {
@@ -268,7 +268,7 @@ export const ReportsScreen: React.FC = () => {
       </AnimatePresence>
 
       {/* Header & Main Tabs */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#101A26] p-6 sm:p-7 rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs transition-colors">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 min-w-0 bg-white dark:bg-[#101A26] p-6 sm:p-7 rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs transition-colors">
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-teal-600 animate-pulse" />
@@ -325,7 +325,7 @@ export const ReportsScreen: React.FC = () => {
       </div>
 
       {/* Date / Month Picker Filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#101A26] p-4 px-6 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] shadow-xs transition-colors">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0 bg-white dark:bg-[#101A26] p-4 px-6 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] shadow-xs transition-colors">
         <div className="flex items-center gap-3 text-xs font-semibold text-[#111827] dark:text-[#F1F5F9]">
           <Calendar className="w-4 h-4 text-teal-700 dark:text-teal-400" />
           <span>
@@ -358,8 +358,8 @@ export const ReportsScreen: React.FC = () => {
       {reportTab === 'daily' && (
         <div className="space-y-6">
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 min-w-0">
+            <div className="min-w-0 bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
               <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
                 Dispatched Today
               </span>
@@ -371,7 +371,7 @@ export const ReportsScreen: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
+            <div className="min-w-0 bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
               <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
                 Billed Sales Value
               </span>
@@ -383,7 +383,7 @@ export const ReportsScreen: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
+            <div className="min-w-0 bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
               <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
                 Payments Collected
               </span>
@@ -496,8 +496,8 @@ export const ReportsScreen: React.FC = () => {
       {reportTab === 'monthly' && (
         <div className="space-y-6">
           {/* 4 Key Monthly Metrics */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 min-w-0">
+            <div className="min-w-0 bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
               <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
                 Monthly Tonnage
               </span>
@@ -509,7 +509,7 @@ export const ReportsScreen: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
+            <div className="min-w-0 bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
               <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
                 Monthly Gross Billed
               </span>
@@ -521,7 +521,7 @@ export const ReportsScreen: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
+            <div className="min-w-0 bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
               <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
                 Monthly Collections
               </span>
@@ -533,7 +533,7 @@ export const ReportsScreen: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
+            <div className="min-w-0 bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
               <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
                 Collection Efficiency
               </span>
@@ -547,7 +547,7 @@ export const ReportsScreen: React.FC = () => {
           </div>
 
           {/* ENHANCED MONTHLY TRADING VOLUME CHART WITH GRANULAR HOVER STATES */}
-          <div className="bg-white dark:bg-[#101A26] p-6 sm:p-7 rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs space-y-6">
+          <div className="min-w-0 bg-white dark:bg-[#101A26] p-6 sm:p-7 rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#E5E5E1] dark:border-[#203248]">
               <div>
                 <div className="flex items-center gap-2">
@@ -640,7 +640,8 @@ export const ReportsScreen: React.FC = () => {
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(v) => `${v}T`}
+                      width={45}
+                      tickFormatter={(v) => `${formatNumber(v)}T`}
                     />
                   )}
 
@@ -653,6 +654,7 @@ export const ReportsScreen: React.FC = () => {
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
+                      width={60}
                       tickFormatter={(v) => `Rs. ${(v / 1000).toFixed(0)}k`}
                     />
                   )}
@@ -803,7 +805,7 @@ export const ReportsScreen: React.FC = () => {
           </div>
 
           {/* Commodity Volume Breakdown Chart & Customer Activity */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
             <div className="bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs space-y-4">
               <div>
                 <h3 className="font-serif italic text-xl font-normal text-[#111827] dark:text-white">
@@ -823,7 +825,7 @@ export const ReportsScreen: React.FC = () => {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={monthlyCommodityData}
-                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                      margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                     >
                       <XAxis
                         dataKey="name"
@@ -837,7 +839,8 @@ export const ReportsScreen: React.FC = () => {
                         fontSize={11}
                         tickLine={false}
                         axisLine={false}
-                        tickFormatter={(v) => `${v}T`}
+                        width={45}
+                        tickFormatter={(v) => `${formatNumber(v)}T`}
                       />
                       <Tooltip
                         content={({ active, payload }) => {

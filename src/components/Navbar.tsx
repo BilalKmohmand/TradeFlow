@@ -59,8 +59,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#101A26]/90 backdrop-blur-md border-b border-[#E5E5E1] dark:border-[#203248] text-[#111827] dark:text-[#F1F5F9] shadow-xs transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between min-h-16 py-3 gap-3 sm:gap-4">
+      <div className="max-w-screen-2xl min-w-0 mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between min-h-16 min-w-0 py-3 gap-3 sm:gap-4">
           {/* Logo & Brand */}
           <div className="flex items-center gap-3 shrink-0">
             <div className="w-10 h-10 rounded-2xl bg-[#111827] dark:bg-[#162436] flex items-center justify-center text-white shadow-xs border border-transparent dark:border-[#203248]">
@@ -107,7 +107,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={onOpenCommandBar}
             title="Global Quick Search (CMD+K)"
-            className="flex items-center gap-2.5 px-3 py-2 bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl text-xs text-[#6B7280] dark:text-[#94A3B8] transition-all max-w-[140px] sm:max-w-[220px] w-full justify-between group"
+            className="flex items-center gap-2.5 px-3 py-2 bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl text-xs text-[#6B7280] dark:text-[#94A3B8] transition-all max-w-[140px] sm:max-w-[220px] flex-1 min-w-0 justify-between group"
           >
             <div className="flex items-center gap-2 truncate min-w-0">
               <Search className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0 group-hover:scale-110 transition-transform" />

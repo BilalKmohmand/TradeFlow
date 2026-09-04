@@ -86,7 +86,7 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
       </div>
 
       {/* Suppliers Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0">
         {filteredSuppliers.length === 0 ? (
           <div className="col-span-full py-16 text-center text-[#8E9299] bg-white rounded-[32px] border border-[#E5E5E1]">
             <Layers className="w-10 h-10 mx-auto mb-2 text-[#8E9299]" />
@@ -102,7 +102,7 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
                 key={sup.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-[28px] p-6 border border-[#E5E5E1] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between space-y-4 group"
+                className="min-w-0 bg-white rounded-[28px] p-6 border border-[#E5E5E1] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between space-y-4 group"
               >
                 <div className="space-y-3.5">
                   <div className="flex items-start justify-between">
