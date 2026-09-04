@@ -15,6 +15,7 @@ import {
   ShoppingBag,
   Plus,
   Tag,
+  Pencil,
 } from 'lucide-react';
 import {
   ComposedChart,
@@ -84,6 +85,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ productI
     setSelectedSupplierId,
     setSelectedCustomerId,
     openBooking,
+    setEditRequest,
+    can,
   } = useTrading();
 
   const [tab, setTab] = useState<'price' | 'movements' | 'bookings'>('price');
@@ -198,6 +201,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ productI
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                <button onClick={() => go(() => setEditRequest({ type: 'product', id: product.id }))} title="Edit product" className="text-[#9CA3AF] hover:text-white p-2 rounded-2xl hover:bg-white/10">
+                  <Pencil className="w-5 h-5" />
+                </button>
                 <button
                   onClick={() => go(() => onReceiveStock(product.id))}
                   className="hidden sm:flex px-3.5 py-2 bg-white text-[#111827] text-xs font-bold rounded-2xl items-center gap-1.5 hover:bg-slate-100"
@@ -285,6 +291,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ productI
                   </div>
 
                   {/* Forms */}
+                  {can('edit_prices') && (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <form onSubmit={submitNewPrice} className="bg-white rounded-2xl border border-[#E5E5E1] p-5 shadow-xs space-y-3">
                       <h4 className="text-sm font-bold text-[#111827] flex items-center gap-1.5">
@@ -313,6 +320,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ productI
                       </button>
                     </form>
                   </div>
+                  )}
 
                   {/* Log */}
                   <div className="bg-white rounded-2xl border border-[#E5E5E1] overflow-hidden shadow-xs">

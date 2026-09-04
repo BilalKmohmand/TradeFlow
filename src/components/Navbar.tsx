@@ -15,7 +15,11 @@ import {
   ChevronDown,
   Lock,
   ShieldCheck,
+  Bell,
+  UserCircle2,
 } from 'lucide-react';
+import { useMemo } from 'react';
+import { computeAlerts } from '../utils/alerts';
 import { useTrading } from '../context/TradingContext';
 import { useTheme, ThemeMode } from '../context/ThemeContext';
 import { ActiveScreen } from '../types';
@@ -27,7 +31,11 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenCommandBar,
 }) => {
-  const { activeScreen, setActiveScreen, isAdminUnlocked, lockAdmin } = useTrading();
+  const { activeScreen, setActiveScreen, lockAdmin, can, currentUser, products, customers, suppliers, bookings, trucks, ledger } = useTrading();
+  const alertCount = useMemo(
+    () => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger }, new Date().toISOString().split('T')[0]).length,
+    [products, customers, suppliers, bookings, trucks, ledger]
+  );
   const { themeMode, resolvedTheme, setThemeMode, isNightTime, timeLabel } = useTheme();
 
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
@@ -51,7 +59,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'products', label: 'Products', icon: Package },
     { id: 'bookings', label: 'Bookings', icon: ShoppingBag },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
-    { id: 'admin', label: 'Admin', icon: ShieldCheck },
+    { id: 'ops', label: 'Ops', icon: Bell },
+    ...(can('admin_screen') ? [{ id: 'admin' as ActiveScreen, label: 'Admin', icon: ShieldCheck }] : []),
   ];
 
   return (
@@ -96,6 +105,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 >
                   <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-teal-400 dark:text-teal-700' : 'text-[#8E9299] dark:text-[#64748B]'}`} />
                   <span className="hidden xl:inline">{item.label}</span>
+                  {item.id === 'ops' && alertCount > 0 && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/20' : 'bg-rose-100 text-rose-700'}`}>{alertCount}</span>
+                  )}
                 </button>
               );
             })}
@@ -225,6 +237,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
 
+            {/* Signed-in user */}
+            {currentUser && (
+              <div
+                title={`Signed in as ${currentUser.name} (${currentUser.role})`}
+                className="hidden md:flex items-center gap-1.5 px-2.5 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] max-w-40"
+              >
+                <UserCircle2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                <span className="truncate">{currentUser.name}</span>
+                <span className="text-[9px] uppercase tracking-wider text-[#8E9299] shrink-0">{currentUser.role}</span>
+              </div>
+            )}
+
             {/* Lock Terminal Button */}
             <button
               onClick={() => lockAdmin()}
@@ -239,7 +263,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Mobile Navigation Bar: equal-width tabs so all screens fit without scrolling */}
-        <nav className="grid lg:hidden grid-cols-7 gap-0.5 py-1.5 border-t border-[#E5E5E1] dark:border-[#203248]">
+        <nav className="grid lg:hidden grid-cols-4 gap-0.5 py-1.5 border-t border-[#E5E5E1] dark:border-[#203248]">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeScreen === item.id;
@@ -255,7 +279,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                     : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40]'
                 }`}
               >
-                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-teal-400 dark:text-teal-700' : ''}`} />
+                <span className="relative">
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-teal-400 dark:text-teal-700' : ''}`} />
+                  {item.id === 'ops' && alertCount > 0 && <span className="absolute -top-1 -right-2 min-w-3.5 h-3.5 px-0.5 rounded-full bg-rose-500 text-white text-[8px] font-bold flex items-center justify-center">{alertCount}</span>}
+                </span>
                 <span className="w-full truncate text-center">{item.label}</span>
               </button>
             );

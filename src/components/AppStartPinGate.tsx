@@ -21,9 +21,16 @@ import { useTheme } from '../context/ThemeContext';
 export const AppStartPinGate: React.FC = () => {
   const {
     unlockAdmin,
+    unlockAsUser,
+    users,
     adminPin,
     changeAdminPin,
   } = useTrading();
+
+  const activeUsers = users.filter((u) => u.active);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const selectedUser = activeUsers.find((u) => u.id === selectedUserId) || null;
+  const targetPin = selectedUser ? selectedUser.pin : adminPin;
   const { resolvedTheme, setThemeMode } = useTheme();
 
   // PIN entry state
@@ -91,7 +98,7 @@ export const AppStartPinGate: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [enteredPin, adminPin]);
+  }, [enteredPin, adminPin, selectedUserId]);
 
   const handleDigit = (digit: string) => {
     if (enteredPin.length >= 6) return;
@@ -100,7 +107,7 @@ export const AppStartPinGate: React.FC = () => {
     setEnteredPin(next);
 
     // Auto unlock if matches exact pin upon reaching length
-    if ((next.length === 4 || next.length === adminPin.length) && next === adminPin) {
+    if ((next.length === 4 || next.length === targetPin.length) && next === targetPin) {
       triggerSuccessUnlock(next);
     }
   };
@@ -118,7 +125,8 @@ export const AppStartPinGate: React.FC = () => {
   const triggerSuccessUnlock = (pin: string) => {
     setIsSuccess(true);
     setTimeout(() => {
-      unlockAdmin(pin);
+      if (selectedUser) unlockAsUser(selectedUser.id, pin);
+      else unlockAdmin(pin);
     }, 280);
   };
 
@@ -129,7 +137,7 @@ export const AppStartPinGate: React.FC = () => {
       return;
     }
 
-    if (enteredPin.trim() === adminPin.trim()) {
+    if (enteredPin.trim() === targetPin.trim()) {
       triggerSuccessUnlock(enteredPin);
     } else {
       setErrorMessage('Incorrect PIN. Please try again.');
@@ -240,11 +248,54 @@ export const AppStartPinGate: React.FC = () => {
           </div>
 
           <h2 className="font-serif italic text-2xl sm:text-3xl md:text-4xl font-bold text-[#111827] dark:text-white mb-2">
-            Enter PIN to Open
+            {selectedUser ? `Hello, ${selectedUser.name}` : 'Enter PIN to Open'}
           </h2>
-          <p className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] max-w-sm mb-6 leading-relaxed">
-            Please enter your security PIN to access dispatches, customer ledgers, and trade bookings.
+          <p className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] max-w-sm mb-4 leading-relaxed">
+            {selectedUser
+              ? `Enter your personal PIN to sign in as ${selectedUser.role}.`
+              : activeUsers.length > 0
+              ? 'Pick your name, or use the master PIN for full administrator access.'
+              : 'Please enter your security PIN to access dispatches, customer ledgers, and trade bookings.'}
           </p>
+
+          {activeUsers.length > 0 && (
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-5 max-w-md">
+              {activeUsers.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedUserId(u.id);
+                    setEnteredPin('');
+                    setErrorMessage(null);
+                  }}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                    selectedUserId === u.id
+                      ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] border-transparent shadow-xs'
+                      : 'bg-white dark:bg-[#162436] text-[#374151] dark:text-[#CBD5E1] border-[#E5E5E1] dark:border-[#203248] hover:border-teal-600/50'
+                  }`}
+                >
+                  {u.name}
+                  <span className="ml-1.5 text-[9px] uppercase tracking-wider opacity-60">{u.role}</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedUserId(null);
+                  setEnteredPin('');
+                  setErrorMessage(null);
+                }}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                  selectedUserId === null
+                    ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] border-transparent shadow-xs'
+                    : 'bg-white dark:bg-[#162436] text-[#374151] dark:text-[#CBD5E1] border-[#E5E5E1] dark:border-[#203248] hover:border-teal-600/50'
+                }`}
+              >
+                Master PIN
+              </button>
+            </div>
+          )}
 
           {/* PIN Digits Display */}
           <div className="flex items-center justify-center gap-3 sm:gap-3.5 mb-3">

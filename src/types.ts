@@ -54,6 +54,8 @@ export interface Booking {
   createdAt: string;
   targetDeliveryDate?: string;
   notes?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
 }
 
 export interface Dispatch {
@@ -71,6 +73,7 @@ export interface Dispatch {
   whatsappSent: boolean;
   whatsappMessage?: string;
   paymentReceivedImmediately?: boolean;
+  truckId?: string | null;
 }
 
 export type TransactionType =
@@ -136,9 +139,10 @@ export interface PriceHistoryEntry {
   referenceId?: string;
 }
 
-export type ReportsTab = 'daily' | 'monthly' | 'flow';
+export type ReportsTab = 'daily' | 'monthly' | 'flow' | 'pnl' | 'aging';
+export type OpsTab = 'fleet' | 'expenses' | 'alerts';
 
-export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'reports' | 'admin';
+export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'reports' | 'ops' | 'admin';
 
 export interface AuditLogEntry {
   id: string;
@@ -146,4 +150,107 @@ export interface AuditLogEntry {
   action: string;
   details: string;
   severity: 'info' | 'warning' | 'danger';
+  /** Name of the signed-in user who performed the action. */
+  user?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Enterprise: expenses, fleet, users & roles
+// ---------------------------------------------------------------------------
+
+export type ExpenseCategory =
+  | 'transport'
+  | 'fuel'
+  | 'labour'
+  | 'port_charges'
+  | 'rent'
+  | 'utilities'
+  | 'salaries'
+  | 'maintenance'
+  | 'tax'
+  | 'other';
+
+export const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string }[] = [
+  { id: 'transport', label: 'Transport & Freight' },
+  { id: 'fuel', label: 'Fuel' },
+  { id: 'labour', label: 'Loading / Labour' },
+  { id: 'port_charges', label: 'Port & Terminal Charges' },
+  { id: 'rent', label: 'Warehouse Rent' },
+  { id: 'utilities', label: 'Utilities' },
+  { id: 'salaries', label: 'Salaries' },
+  { id: 'maintenance', label: 'Vehicle Maintenance' },
+  { id: 'tax', label: 'Taxes & Duties' },
+  { id: 'other', label: 'Other' },
+];
+
+export interface Expense {
+  id: string;
+  date: string;
+  category: ExpenseCategory;
+  amount: number;
+  description: string;
+  paidVia?: string;
+  truckId?: string | null;
+  referenceId?: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export type TruckStatus = 'available' | 'on_trip' | 'maintenance' | 'inactive';
+
+export interface Truck {
+  id: string;
+  number: string;
+  driverName: string;
+  driverPhone: string;
+  capacityKg: number;
+  status: TruckStatus;
+  notes?: string;
+  createdAt: string;
+}
+
+export type UserRole = 'admin' | 'manager' | 'operator';
+
+export interface AppUser {
+  id: string;
+  name: string;
+  role: UserRole;
+  pin: string;
+  active: boolean;
+  createdAt: string;
+}
+
+export type Permission =
+  | 'delete_records'
+  | 'edit_prices'
+  | 'override_credit'
+  | 'view_finance'
+  | 'manage_fleet'
+  | 'manage_expenses'
+  | 'admin_screen'
+  | 'purge_data'
+  | 'manage_users';
+
+export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
+  admin: ['delete_records', 'edit_prices', 'override_credit', 'view_finance', 'manage_fleet', 'manage_expenses', 'admin_screen', 'purge_data', 'manage_users'],
+  manager: ['delete_records', 'edit_prices', 'override_credit', 'view_finance', 'manage_fleet', 'manage_expenses', 'admin_screen'],
+  operator: ['manage_fleet', 'manage_expenses'],
+};
+
+export interface SessionUser {
+  id: string;
+  name: string;
+  role: UserRole;
+}
+
+export type AlertKind = 'low_stock' | 'overdue_receivable' | 'overdue_payable' | 'late_delivery' | 'credit_exceeded' | 'truck_maintenance';
+
+export interface AppAlert {
+  id: string;
+  kind: AlertKind;
+  severity: 'info' | 'warning' | 'danger';
+  title: string;
+  detail: string;
+  /** Click-through target */
+  link?: { type: 'customer' | 'supplier' | 'product' | 'booking' | 'truck'; id: string };
 }

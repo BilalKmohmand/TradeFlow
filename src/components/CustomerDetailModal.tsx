@@ -17,6 +17,8 @@ import {
   CheckCircle2,
   ExternalLink,
   Trash2,
+  Pencil,
+  Printer,
 } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useTrading } from '../context/TradingContext';
@@ -46,6 +48,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     deleteCustomer,
     deleteLedgerEntry,
     openBooking,
+    setEditRequest,
+    setPrintRequest,
+    can,
   } = useTrading();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'ledger' | 'bookings'>('overview');
@@ -104,12 +109,36 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
             <div className="flex items-center gap-1">
               <button
+                onClick={() => {
+                  onClose();
+                  setEditRequest({ type: 'customer', id: customer.id });
+                }}
+                title="Edit customer"
+                className="text-[#9CA3AF] hover:text-white p-2 rounded-2xl hover:bg-white/10 transition-colors"
+              >
+                <Pencil className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => {
+                  const to = new Date().toISOString().split('T')[0];
+                  const fromD = new Date();
+                  fromD.setUTCMonth(fromD.getUTCMonth() - 3);
+                  setPrintRequest({ type: 'statement', customerId: customer.id, from: fromD.toISOString().split('T')[0], to });
+                }}
+                title="Print statement of account (last 3 months)"
+                className="text-[#9CA3AF] hover:text-white p-2 rounded-2xl hover:bg-white/10 transition-colors"
+              >
+                <Printer className="w-5 h-5" />
+              </button>
+              {can('delete_records') && (
+              <button
                 onClick={() => setConfirmDeleteCustomer(true)}
                 title="Delete customer (admin)"
                 className="text-[#9CA3AF] hover:text-rose-400 p-2 rounded-2xl hover:bg-rose-500/10 transition-colors"
               >
                 <Trash2 className="w-5 h-5" />
               </button>
+              )}
               <button
                 onClick={onClose}
                 className="text-[#9CA3AF] hover:text-white p-2 rounded-2xl hover:bg-white/10 transition-colors"
@@ -457,6 +486,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                                 {formatCurrency(item.balanceAfter)}
                               </td>
                               <td className="py-3 px-2 text-right">
+                                {can('delete_records') && (
                                 <button
                                   type="button"
                                   onClick={() => setPendingLedgerId(item.id)}
@@ -465,6 +495,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
+                                )}
                               </td>
                             </tr>
                           ))

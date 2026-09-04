@@ -32,11 +32,49 @@ A localised bulk-trading operations dashboard built for Pakistani commodity trad
 - **Product detail** (click a product name or "History") has three tabs: Price History (chart, log, year-over-year comparison cards, "set new price" and "add a past price point" for back-filling last year's prices), Stock In / Out, and Bookings.
 - Price points are recorded automatically when a product is created, when its price is changed, and when a booking is agreed (shown as dots; only listed prices drive the comparisons).
 
+## Enterprise Features
+
+- **Users & roles**: Admin → Users & Roles. Each person gets a name, role and PIN and picks their name on the lock screen. The master PIN always signs in as Administrator. Roles: **admin** (everything), **manager** (everything except purging data and managing users), **operator** (day-to-day transactions only: no deletes, no price changes, no finance, no admin). The audit log records who did what.
+- **Editing & lifecycle**: pencil icons on every customer, supplier, product and booking card and in the detail modals. Bookings can be edited (quantity never below what is dispatched; amounts recalculated) and cancelled with a reason.
+- **Credit control**: a booking shows the customer's projected exposure (outstanding + committed active bookings + this contract) against their credit limit and is blocked when over it. Managers and admins can tick an override, which is written to the audit log.
+- **Receive Stock / purchases**, **Stock Flow log** and **Price History** are described above.
+- **Operations screen** (Ops): 
+  - *Alerts*: low or zero stock, customers over credit limit, receivables and payables past 30 days (ledger-based, oldest-first), bookings past their target date, vehicles in maintenance. Each alert opens the record. The nav badge shows the count.
+  - *Fleet*: vehicles with driver, phone, capacity and status; picked from a list when logging a dispatch (with an over-capacity warning); trips, kg hauled and costs per vehicle.
+  - *Expenses*: categorised operating expenses (transport, fuel, labour, port charges, rent, utilities, salaries, maintenance, tax, other), optionally tied to a vehicle, with monthly totals and CSV export.
+- **Finance** (Reports → Profit & Loss / Aging, managers and admins only):
+  - *P&L*: monthly revenue, cost of goods (weighted-average purchase cost per product), gross profit, expenses by category, net profit, six-month trend and per-product margins. Dispatched kg with no purchase record is flagged as uncosted.
+  - *Aging*: receivables and payables in 0-30 / 31-60 / 61-90 / 90+ buckets with oldest open invoice, one-click WhatsApp reminders and CSV export.
+- **Documents**: print or save as PDF a tax invoice or delivery challan for any dispatch (booking detail → printer icons) and a statement of account for any customer or supplier (detail modal → printer icon).
+- **Dashboard**: month-to-date revenue, gross profit, expenses and net profit, top customers, and a "Needs Attention" panel with the top alerts.
+- **Exports**: Admin → Data Exports for customers, suppliers, products and the full ledger as CSV.
+
+## Testing
+
+```bash
+npm test          # run the Vitest suite once
+npm run test:watch
+npm run check     # type-check + tests (what CI should run)
+```
+
+Tests live in `src/__tests__/` and cover the finance maths (cost basis, P&L, aging, credit exposure), stock-flow grouping, price-history comparisons, alerts, and an integration suite that drives the real `TradingProvider` through bookings, dispatches, purchases, payments, cascading deletes with reversals, booking edits/cancellation, roles and permissions.
+
+In VS Code, install the recommended **Vitest** extension (`.vscode/extensions.json`) to run and debug individual tests from the Testing sidebar, or use the "Vitest: run all tests" and "Dev server" launch configurations from the Run and Debug panel.
+
+## Database migrations
+
+Run the SQL files in `supabase/` in this order on an existing project:
+
+1. `migrate_tons_to_kg.sql` (once) — tons → kg, purchases and price_history tables.
+2. `migrate_v3_enterprise.sql` (once) — expenses, trucks, users tables; booking cancellation and dispatch→truck columns.
+
+New projects can run `schema.sql` instead, which already contains everything.
+
 ## Admin Access
 
 This app is for internal use only, so every unlocked session has full admin rights.
 
-- **Master PIN**: the default PIN is `7860`. Change it from the lock screen or from **Admin → Master PIN & Session**. The PIN is 4–6 digits and is stored in the browser's localStorage.
+- **Master PIN**: the default PIN is `7860`. Change it from the lock screen or from **Admin → Master PIN & Session**. The PIN is 4–6 digits. Named users with their own PINs are managed under **Admin → Users & Roles**.
 - **Deleting records**: every card and detail modal has a trash icon. Deletes cascade and reverse their side-effects:
   - Deleting a **dispatch** returns its tonnage to warehouse stock and the booking's remaining balance, removes its ledger rows and WhatsApp alert, and reduces the customer's due if the dispatch was unpaid.
   - Deleting a **booking** deletes all of its dispatches (with the reversal above), then the booking itself.

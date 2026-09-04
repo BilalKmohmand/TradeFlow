@@ -23,7 +23,13 @@ import {
   MessageSquare,
   PackagePlus,
   History,
+  UserPlus,
+  Users2,
+  Pencil,
+  Receipt,
+  Truck as TruckIcon,
 } from 'lucide-react';
+import { AppUser, UserRole } from '../types';
 import { useTrading } from '../context/TradingContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { TableName } from '../lib/database';
@@ -34,6 +40,7 @@ type PendingAction =
   | { kind: 'sample' }
   | { kind: 'clearAudit' }
   | { kind: 'resetPin' }
+  | { kind: 'deleteUser'; user: AppUser }
   | null;
 
 const inputCls =
@@ -63,6 +70,14 @@ export const AdminScreen: React.FC = () => {
     dispatches,
     purchases,
     priceHistory,
+    expenses,
+    trucks,
+    users,
+    addUser,
+    updateUser,
+    deleteUser,
+    can,
+    currentUser,
     ledger,
     whatsappMessages,
     changeAdminPin,
@@ -88,6 +103,39 @@ export const AdminScreen: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [pending, setPending] = useState<PendingAction>(null);
+
+  // Users & roles
+  const [userForm, setUserForm] = useState<{ id: string | null; name: string; role: UserRole; pin: string }>({ id: null, name: '', role: 'operator', pin: '' });
+  const [userFormOpen, setUserFormOpen] = useState(false);
+  const [userFeedback, setUserFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const submitUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = userForm.id
+      ? updateUser(userForm.id, { name: userForm.name.trim(), role: userForm.role, ...(userForm.pin ? { pin: userForm.pin } : {}) })
+      : addUser({ name: userForm.name, role: userForm.role, pin: userForm.pin });
+    setUserFeedback({ type: res.success ? 'success' : 'error', message: res.message });
+    if (res.success) {
+      setUserFormOpen(false);
+      setUserForm({ id: null, name: '', role: 'operator', pin: '' });
+    }
+  };
+
+  const downloadCsv = (name: string, csv: string) => {
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+  const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const exportCustomers = () => downloadCsv('sarmaya-customers.csv', 'Name,Company,Phone,Email,Address,Outstanding (Rs.),Credit limit (Rs.),Since\n' + customers.map((c) => [q(c.name), q(c.company), q(c.phone), q(c.email), q(c.address), c.totalDue, c.creditLimit, q(c.createdAt)].join(',')).join('\n'));
+  const exportSuppliers = () => downloadCsv('sarmaya-suppliers.csv', 'Name,Company,Phone,Email,Category,Address,Payable (Rs.),Since\n' + suppliers.map((s) => [q(s.name), q(s.company), q(s.phone), q(s.email), q(s.materialCategory), q(s.address), s.totalOwed, q(s.createdAt)].join(',')).join('\n'));
+  const exportProducts = () => downloadCsv('sarmaya-products.csv', 'Name,Category,Price (Rs./kg),Stock (kg),Reorder level (kg),Supplier\n' + products.map((p) => [q(p.name), q(p.category), p.unitPricePerKg, p.stockKg, p.minThresholdKg, q(suppliers.find((s) => s.id === p.supplierId)?.company || '')].join(',')).join('\n'));
+  const exportLedger = () => downloadCsv('sarmaya-ledger.csv', 'Date,Entity type,Entity,Type,Reference,Description,Debit,Credit,Balance after,kg\n' + [...ledger].sort((a, b) => (a.date < b.date ? -1 : 1)).map((l) => { const name = l.entityType === 'customer' ? customers.find((c) => c.id === l.entityId)?.name : suppliers.find((s) => s.id === l.entityId)?.company; return [q(l.date), q(l.entityType), q(name || l.entityId), q(l.type), q(l.referenceId), q(l.description), l.debit, l.credit, l.balanceAfter, l.kg ?? ''].join(','); }).join('\n'));
 
   const handleChangePin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,6 +174,8 @@ export const AdminScreen: React.FC = () => {
     { table: 'dispatches', label: 'Dispatches', count: dispatches.length, icon: <Truck className="w-4 h-4" /> },
     { table: 'purchases', label: 'Stock Receipts', count: purchases.length, icon: <PackagePlus className="w-4 h-4" /> },
     { table: 'price_history', label: 'Price History', count: priceHistory.length, icon: <History className="w-4 h-4" /> },
+    { table: 'expenses', label: 'Expenses', count: expenses.length, icon: <Receipt className="w-4 h-4" /> },
+    { table: 'trucks', label: 'Fleet', count: trucks.length, icon: <TruckIcon className="w-4 h-4" /> },
     { table: 'ledger', label: 'Ledger Entries', count: ledger.length, icon: <BookOpen className="w-4 h-4" /> },
     { table: 'whatsapp_messages', label: 'WhatsApp Logs', count: whatsappMessages.length, icon: <MessageSquare className="w-4 h-4" /> },
   ];
@@ -148,6 +198,9 @@ export const AdminScreen: React.FC = () => {
       case 'resetPin':
         resetAdminPinToDefault();
         setPinFeedback({ type: 'success', message: 'Master PIN reset to the factory default (7860).' });
+        break;
+      case 'deleteUser':
+        deleteUser(pending.user.id);
         break;
     }
     setPending(null);
@@ -183,6 +236,12 @@ export const AdminScreen: React.FC = () => {
           title: 'Clear the audit log?',
           message: 'The security and activity history shown below will be erased.',
           confirmLabel: 'Clear Log',
+        };
+      case 'deleteUser':
+        return {
+          title: `Remove ${pending.user.name}?`,
+          message: 'They will no longer be able to sign in. Their name stays on past audit entries.',
+          confirmLabel: 'Remove User',
         };
       case 'resetPin':
         return {
@@ -344,6 +403,7 @@ export const AdminScreen: React.FC = () => {
               <FlaskConical className="w-3.5 h-3.5 text-teal-600" />
               <span>Load Sample Data</span>
             </button>
+            {can('purge_data') && (
             <button
               type="button"
               onClick={() => setPending({ kind: 'factory' })}
@@ -352,6 +412,7 @@ export const AdminScreen: React.FC = () => {
               <Trash2 className="w-3.5 h-3.5" />
               <span>Factory Reset</span>
             </button>
+            )}
           </div>
 
           {importFeedback && (
@@ -374,7 +435,80 @@ export const AdminScreen: React.FC = () => {
         </div>
       </div>
 
+      {/* Users & roles */}
+      {can('manage_users') && (
+      <div className={cardCls}>
+        <div className="flex items-start justify-between gap-3">
+          {sectionTitle(<Users2 className="w-5 h-5" />, 'Users & Roles', 'Each person signs in with their own PIN. Admins can do everything; managers can delete and change prices but not purge data; operators can only record day-to-day transactions.')}
+          <button type="button" onClick={() => { setUserForm({ id: null, name: '', role: 'operator', pin: '' }); setUserFormOpen(true); setUserFeedback(null); }} className="px-4 py-2.5 rounded-2xl bg-[#111827] dark:bg-white text-white dark:text-[#111827] text-xs font-bold shadow-xs flex items-center gap-1.5 shrink-0">
+            <UserPlus className="w-3.5 h-3.5 text-teal-400 dark:text-teal-700" /> Add User
+          </button>
+        </div>
+
+        {userFormOpen && (
+          <form onSubmit={submitUser} className="bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+            <div><label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Name</label><input value={userForm.name} onChange={(e) => setUserForm({ ...userForm, name: e.target.value })} className={inputCls} required /></div>
+            <div>
+              <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Role</label>
+              <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value as UserRole })} className={inputCls}>
+                <option value="admin">Admin</option>
+                <option value="manager">Manager</option>
+                <option value="operator">Operator</option>
+              </select>
+            </div>
+            <div><label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">{userForm.id ? 'New PIN (blank = keep)' : 'PIN (4-6 digits)'}</label><input type="password" inputMode="numeric" maxLength={6} value={userForm.pin} onChange={(e) => setUserForm({ ...userForm, pin: e.target.value })} className={inputCls} required={!userForm.id} /></div>
+            <div className="flex gap-2">
+              <button type="submit" className="px-4 py-2.5 rounded-2xl bg-[#111827] dark:bg-white text-white dark:text-[#111827] text-xs font-bold">{userForm.id ? 'Save' : 'Create'}</button>
+              <button type="button" onClick={() => setUserFormOpen(false)} className="px-4 py-2.5 rounded-2xl text-xs font-semibold text-[#6B7280]">Cancel</button>
+            </div>
+          </form>
+        )}
+
+        {userFeedback && (
+          <div className={`p-3 rounded-2xl text-xs font-medium flex items-center gap-2 ${userFeedback.type === 'success' ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800'}`}>
+            {userFeedback.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+            <span>{userFeedback.message}</span>
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-[#E5E5E1] dark:border-[#203248] divide-y divide-[#F0F0EE] dark:divide-[#1E2E40] overflow-hidden">
+          {users.length === 0 ? (
+            <div className="py-8 text-center text-xs text-[#8E9299]">No named users yet. Everyone is using the master PIN as Administrator. Add users so the audit log shows who did what.</div>
+          ) : (
+            users.map((u) => (
+              <div key={u.id} className="px-4 py-3 flex items-center gap-3 text-xs">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${u.active ? 'bg-teal-500' : 'bg-[#CBD5E1]'}`} />
+                <span className="font-bold text-[#111827] dark:text-white flex-1 min-w-0 truncate">{u.name}{currentUser?.id === u.id && <span className="ml-2 text-[10px] text-teal-700 font-semibold">(you)</span>}</span>
+                <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-[#374151] dark:text-[#CBD5E1]">{u.role}</span>
+                <button type="button" onClick={() => updateUser(u.id, { active: !u.active })} className="text-[11px] font-semibold text-[#6B7280] hover:text-[#111827] dark:hover:text-white">{u.active ? 'Deactivate' : 'Activate'}</button>
+                <button type="button" onClick={() => { setUserForm({ id: u.id, name: u.name, role: u.role, pin: '' }); setUserFormOpen(true); setUserFeedback(null); }} className="p-1.5 rounded-lg text-[#8E9299] hover:text-teal-700 hover:bg-teal-50"><Pencil className="w-3.5 h-3.5" /></button>
+                <button type="button" onClick={() => setPending({ kind: 'deleteUser', user: u })} className="p-1.5 rounded-lg text-[#8E9299] hover:text-rose-600 hover:bg-rose-50"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+      )}
+
+      {/* Exports */}
+      <div className={cardCls}>
+        {sectionTitle(<Download className="w-5 h-5" />, 'Data Exports', 'Download master data and the full ledger as CSV for Excel or your accountant.')}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {[
+            { label: `Customers (${customers.length})`, fn: exportCustomers },
+            { label: `Suppliers (${suppliers.length})`, fn: exportSuppliers },
+            { label: `Products (${products.length})`, fn: exportProducts },
+            { label: `Full ledger (${ledger.length})`, fn: exportLedger },
+          ].map((x) => (
+            <button key={x.label} type="button" onClick={x.fn} className="px-4 py-3 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] flex items-center justify-center gap-1.5">
+              <Download className="w-3.5 h-3.5" /> {x.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Table management */}
+      {can('purge_data') && (
       <div className={cardCls}>
         {sectionTitle(<ShieldCheck className="w-5 h-5" />, 'Data Tables', 'Row counts per table with a hard purge for each. Purges skip cascade logic.')}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -404,6 +538,8 @@ export const AdminScreen: React.FC = () => {
         </div>
       </div>
 
+      )}
+
       {/* Audit log */}
       <div className={cardCls}>
         <div className="flex items-start justify-between gap-3">
@@ -431,7 +567,7 @@ export const AdminScreen: React.FC = () => {
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="font-bold text-[#111827] dark:text-white truncate">{log.action}</span>
+                    <span className="font-bold text-[#111827] dark:text-white truncate">{log.action}{log.user && <span className="ml-2 text-[10px] font-semibold text-teal-700 dark:text-teal-400">{log.user}</span>}</span>
                     <span className="font-mono text-[10px] text-[#8E9299] shrink-0">{log.timestamp}</span>
                   </div>
                   <p className="text-[#6B7280] dark:text-[#94A3B8] mt-0.5 break-words">{log.details}</p>

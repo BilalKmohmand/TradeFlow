@@ -6,10 +6,12 @@ import { useTrading } from '../context/TradingContext';
 interface ProductModalProps {
   isOpen: boolean;
   onClose: () => void;
+  editId?: string | null;
 }
 
-export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose }) => {
-  const { suppliers, addProduct } = useTrading();
+export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, editId }) => {
+  const { suppliers, addProduct, updateProduct, products, can } = useTrading();
+  const editing = editId ? products.find((p) => p.id === editId) : undefined;
 
   const [name, setName] = useState<string>('');
   const [category, setCategory] = useState<string>('Construction & Cement');
@@ -26,9 +28,39 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose }) =
     }
   }, [suppliers, supplierId]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setName(editing?.name || '');
+    setCategory(editing?.category || 'Construction & Cement');
+    setUnitPricePerKg(editing ? String(editing.unitPricePerKg) : '25');
+    setStockKg(editing ? String(editing.stockKg) : '500000');
+    setMinThresholdKg(editing ? String(editing.minThresholdKg) : '100000');
+    setSupplierId(editing?.supplierId || suppliers[0]?.id || '');
+    setDescription(editing?.description || '');
+    setIsSuccess(false);
+  }, [isOpen, editId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !unitPricePerKg || !stockKg) return;
+
+    if (editing) {
+      updateProduct(editing.id, {
+        name: name.trim(),
+        category,
+        unitPricePerKg: can('edit_prices') ? parseFloat(unitPricePerKg) || 0 : editing.unitPricePerKg,
+        stockKg: parseFloat(stockKg) || 0,
+        minThresholdKg: parseFloat(minThresholdKg) || 0,
+        supplierId: supplierId || null,
+        description: description.trim(),
+      });
+      setIsSuccess(true);
+      setTimeout(() => {
+        setIsSuccess(false);
+        onClose();
+      }, 600);
+      return;
+    }
 
     addProduct({
       name: name.trim(),
@@ -72,7 +104,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose }) =
                 <Package className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-serif italic text-2xl font-normal text-white tracking-tight">Add Bulk Commodity</h3>
+                <h3 className="font-serif italic text-2xl font-normal text-white tracking-tight">{editing ? `Edit ` : "Add Bulk Commodity"}</h3>
                 <p className="text-xs text-[#9CA3AF]">Track inventory and trading pricing</p>
               </div>
             </div>
@@ -144,6 +176,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose }) =
                   min="0.1"
                   value={unitPricePerKg}
                   onChange={(e) => setUnitPricePerKg(e.target.value)}
+                  disabled={Boolean(editing) && !can('edit_prices')}
+                  title={editing && !can('edit_prices') ? 'Only managers and admins can change prices' : undefined}
                   className="w-full bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl px-4 py-2 text-xs font-mono font-bold text-[#111827] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600"
                   required
                 />
@@ -195,7 +229,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose }) =
                     <span>Added!</span>
                   </>
                 ) : (
-                  <span>Save Commodity</span>
+                  <span>{editing ? 'Save Changes' : 'Save Commodity'}</span>
                 )}
               </button>
             </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserPlus, X, CheckCircle } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
@@ -6,10 +6,13 @@ import { useTrading } from '../context/TradingContext';
 interface CustomerModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** When set, the modal edits this customer instead of creating one. */
+  editId?: string | null;
 }
 
-export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose }) => {
-  const { addCustomer } = useTrading();
+export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, editId }) => {
+  const { addCustomer, updateCustomer, customers } = useTrading();
+  const editing = editId ? customers.find((c) => c.id === editId) : undefined;
 
   const [name, setName] = useState<string>('');
   const [company, setCompany] = useState<string>('');
@@ -19,9 +22,37 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose })
   const [creditLimit, setCreditLimit] = useState<string>('100000');
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setName(editing?.name || '');
+    setCompany(editing?.company || '');
+    setPhone(editing?.phone || '+92 300 ');
+    setEmail(editing?.email || '');
+    setAddress(editing?.address || '');
+    setCreditLimit(editing ? String(editing.creditLimit) : '100000');
+    setIsSuccess(false);
+  }, [isOpen, editId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !company || !phone) return;
+
+    if (editing) {
+      updateCustomer(editing.id, {
+        name: name.trim(),
+        company: company.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+        address: address.trim(),
+        creditLimit: parseFloat(creditLimit) || 0,
+      });
+      setIsSuccess(true);
+      setTimeout(() => {
+        setIsSuccess(false);
+        onClose();
+      }, 600);
+      return;
+    }
 
     addCustomer({
       name: name.trim(),
@@ -64,7 +95,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose })
                 <UserPlus className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-serif italic text-2xl font-normal text-white tracking-tight">Add New Customer</h3>
+                <h3 className="font-serif italic text-2xl font-normal text-white tracking-tight">{editing ? 'Edit Customer' : 'Add New Customer'}</h3>
                 <p className="text-xs text-[#9CA3AF]">Account setup for bookings & WhatsApp alerts</p>
               </div>
             </div>

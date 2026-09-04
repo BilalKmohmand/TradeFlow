@@ -2,20 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingBag, X, CheckCircle, Calculator, Package, User } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, formatKg } from '../utils/formatters';
+import { creditExposure } from '../utils/finance';
+import { AlertTriangle, ShieldAlert } from 'lucide-react';
 
 interface BookingModalProps {
   isOpen: boolean;
   onClose: () => void;
   preselectedCustomerId?: string | null;
+  /** When set, edits the existing booking (quantity, rate, date, notes) instead of creating one. */
+  editBookingId?: string | null;
 }
 
 export const BookingModal: React.FC<BookingModalProps> = ({
   isOpen,
   onClose,
   preselectedCustomerId,
+  editBookingId,
 }) => {
-  const { customers, products, createBooking } = useTrading();
+  const { customers, products, bookings, createBooking, updateBooking, can, logAuditEvent } = useTrading();
+  const editing = editBookingId ? bookings.find((b) => b.id === editBookingId) : undefined;
+  const [overrideCredit, setOverrideCredit] = useState<boolean>(false);
 
   const [customerId, setCustomerId] = useState<string>(
     preselectedCustomerId || (customers[0]?.id || '')
@@ -44,7 +51,23 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     }
   }, [products, productId]);
 
+  // Prefill when editing / reset when opening fresh
+  useEffect(() => {
+    if (!isOpen) return;
+    setOverrideCredit(false);
+    setIsSuccess(false);
+    if (editing) {
+      setCustomerId(editing.customerId);
+      setProductId(editing.productId);
+      setKg(String(editing.totalKg));
+      setPricePerKg(String(editing.pricePerKg));
+      setTargetDeliveryDate(editing.targetDeliveryDate || '');
+      setNotes(editing.notes || '');
+    }
+  }, [isOpen, editBookingId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const selectedProduct = products.find((p) => p.id === productId);
+  const selectedCustomer = customers.find((c) => c.id === customerId);
 
   const handleProductChange = (prodId: string) => {
     setProductId(prodId);
@@ -58,9 +81,37 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const parsedPrice = Math.max(0, parseFloat(pricePerKg) || 0);
   const totalContractAmount = parsedKg * parsedPrice;
 
+  // Credit control: outstanding + committed active bookings + this contract vs the customer's limit.
+  const exposure = selectedCustomer ? creditExposure(selectedCustomer, bookings.filter((b) => b.id !== editBookingId)) : null;
+  const projected = exposure ? exposure.exposure + totalContractAmount : 0;
+  const creditBreached = Boolean(exposure && exposure.limit > 0 && projected > exposure.limit);
+  const stockShort = Boolean(selectedProduct && parsedKg > selectedProduct.stockKg);
+  const minKg = editing ? editing.dispatchedKg : 0;
+  const kgTooLow = editing ? parsedKg < minKg : false;
+  const blocked = (creditBreached && !(can('override_credit') && overrideCredit)) || kgTooLow;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerId || !productId || parsedKg <= 0 || parsedPrice <= 0) return;
+    if (!customerId || !productId || parsedKg <= 0 || parsedPrice <= 0 || blocked) return;
+
+    if (creditBreached && overrideCredit) {
+      logAuditEvent('Credit Limit Overridden', `${selectedCustomer?.name}: projected exposure ${formatCurrency(projected)} vs limit ${formatCurrency(exposure?.limit || 0)}.`, 'warning');
+    }
+
+    if (editing) {
+      updateBooking(editing.id, {
+        totalKg: parsedKg,
+        pricePerKg: can('edit_prices') ? parsedPrice : editing.pricePerKg,
+        targetDeliveryDate: targetDeliveryDate || undefined,
+        notes: notes.trim() || undefined,
+      });
+      setIsSuccess(true);
+      setTimeout(() => {
+        setIsSuccess(false);
+        onClose();
+      }, 700);
+      return;
+    }
 
     createBooking({
       customerId,
@@ -104,7 +155,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 <ShoppingBag className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-serif italic text-2xl font-normal text-white tracking-tight">New Bulk Booking</h3>
+                <h3 className="font-serif italic text-2xl font-normal text-white tracking-tight">{editing ? `Edit ${editing.bookingNumber}` : 'New Bulk Booking'}</h3>
                 <p className="text-xs text-[#9CA3AF]">Creates contract & starts live tracking</p>
               </div>
             </div>
@@ -124,7 +175,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 Customer *
               </label>
               <select
-                value={customerId}
+                value={customerId} disabled={Boolean(editing)}
                 onChange={(e) => setCustomerId(e.target.value)}
                 className="w-full bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl px-4 py-2.5 text-xs font-semibold text-[#111827] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all"
                 required
@@ -144,7 +195,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 Commodity / Product *
               </label>
               <select
-                value={productId}
+                value={productId} disabled={Boolean(editing)}
                 onChange={(e) => handleProductChange(e.target.value)}
                 className="w-full bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl px-4 py-2.5 text-xs font-semibold text-[#111827] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all"
                 required
@@ -184,6 +235,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   min="0.1"
                   value={pricePerKg}
                   onChange={(e) => setPricePerKg(e.target.value)}
+                  disabled={Boolean(editing) && !can('edit_prices')}
                   className="w-full bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl px-4 py-2.5 text-xs font-mono font-bold text-[#111827] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600"
                   required
                 />
@@ -205,6 +257,45 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 <span className="block text-[11px]">@ Rs. {parsedPrice}/kg</span>
               </div>
             </div>
+
+            {/* Credit control & stock warnings */}
+            {exposure && (
+              <div className={`rounded-2xl p-3.5 border text-xs space-y-1.5 ${creditBreached ? 'bg-rose-50 border-rose-200' : 'bg-[#FAF9F6] border-[#E5E5E1]'}`}>
+                <div className="flex items-center justify-between">
+                  <span className={`font-bold flex items-center gap-1.5 ${creditBreached ? 'text-rose-800' : 'text-[#374151]'}`}>
+                    {creditBreached ? <ShieldAlert className="w-3.5 h-3.5" /> : null}
+                    Credit exposure after this booking
+                  </span>
+                  <span className={`font-mono font-bold ${creditBreached ? 'text-rose-800' : 'text-[#111827]'}`}>
+                    {formatCurrency(projected)} / {exposure.limit > 0 ? formatCurrency(exposure.limit) : 'no limit'}
+                  </span>
+                </div>
+                <div className="text-[11px] text-[#6B7280] font-mono">
+                  Outstanding {formatCurrency(exposure.outstanding)} + committed {formatCurrency(exposure.committed)} + this {formatCurrency(totalContractAmount)}
+                </div>
+                {creditBreached && (
+                  can('override_credit') ? (
+                    <label className="flex items-center gap-2 pt-1 cursor-pointer text-rose-900 font-semibold">
+                      <input type="checkbox" checked={overrideCredit} onChange={(e) => setOverrideCredit(e.target.checked)} className="w-4 h-4 accent-rose-600" />
+                      Override the credit limit (logged in the audit trail)
+                    </label>
+                  ) : (
+                    <div className="text-rose-800 font-semibold pt-1">Over the credit limit. Ask a manager or admin to approve this booking.</div>
+                  )
+                )}
+              </div>
+            )}
+            {stockShort && selectedProduct && (
+              <div className="rounded-2xl p-3 border bg-amber-50 border-amber-200 text-[11px] text-amber-900 flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                Only {formatKg(selectedProduct.stockKg)} in stock; {formatKg(parsedKg - selectedProduct.stockKg)} will need to be received before the order can be fully dispatched.
+              </div>
+            )}
+            {kgTooLow && (
+              <div className="rounded-2xl p-3 border bg-rose-50 border-rose-200 text-[11px] text-rose-900">
+                Quantity cannot be below the {formatKg(minKg)} already dispatched.
+              </div>
+            )}
 
             {/* Target Date & Notes */}
             <div>
@@ -243,7 +334,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={isSuccess}
+                disabled={isSuccess || blocked}
                 className="px-6 py-2.5 bg-[#111827] hover:bg-black text-white text-xs font-bold rounded-2xl shadow-xs flex items-center gap-2 transition-all active:scale-95 border border-[#111827]"
               >
                 {isSuccess ? (
@@ -254,7 +345,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 ) : (
                   <>
                     <ShoppingBag className="w-4 h-4 text-teal-400" />
-                    <span>Create Booking</span>
+                    <span>{editing ? 'Save Changes' : 'Create Booking'}</span>
                   </>
                 )}
               </button>

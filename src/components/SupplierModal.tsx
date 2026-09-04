@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Layers, X, CheckCircle } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
@@ -6,10 +6,12 @@ import { useTrading } from '../context/TradingContext';
 interface SupplierModalProps {
   isOpen: boolean;
   onClose: () => void;
+  editId?: string | null;
 }
 
-export const SupplierModal: React.FC<SupplierModalProps> = ({ isOpen, onClose }) => {
-  const { addSupplier } = useTrading();
+export const SupplierModal: React.FC<SupplierModalProps> = ({ isOpen, onClose, editId }) => {
+  const { addSupplier, updateSupplier, suppliers } = useTrading();
+  const editing = editId ? suppliers.find((s) => s.id === editId) : undefined;
 
   const [name, setName] = useState<string>('');
   const [company, setCompany] = useState<string>('');
@@ -19,9 +21,30 @@ export const SupplierModal: React.FC<SupplierModalProps> = ({ isOpen, onClose })
   const [address, setAddress] = useState<string>('');
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setName(editing?.name || '');
+    setCompany(editing?.company || '');
+    setPhone(editing?.phone || '+92 300 ');
+    setEmail(editing?.email || '');
+    setMaterialCategory(editing?.materialCategory || 'Cement & Building Materials');
+    setAddress(editing?.address || '');
+    setIsSuccess(false);
+  }, [isOpen, editId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !company || !phone) return;
+
+    if (editing) {
+      updateSupplier(editing.id, { name: name.trim(), company: company.trim(), phone: phone.trim(), email: email.trim(), materialCategory, address: address.trim() });
+      setIsSuccess(true);
+      setTimeout(() => {
+        setIsSuccess(false);
+        onClose();
+      }, 600);
+      return;
+    }
 
     addSupplier({
       name: name.trim(),

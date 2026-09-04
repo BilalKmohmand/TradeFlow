@@ -53,7 +53,9 @@ CREATE TABLE IF NOT EXISTS bookings (
   "paymentStatus" TEXT DEFAULT 'unpaid',
   "createdAt" TEXT,
   "targetDeliveryDate" TEXT,
-  notes TEXT
+  notes TEXT,
+  "cancelledAt" TEXT,
+  "cancelReason" TEXT
 );
 
 CREATE TABLE IF NOT EXISTS dispatches (
@@ -70,7 +72,8 @@ CREATE TABLE IF NOT EXISTS dispatches (
   notes TEXT,
   "whatsappSent" BOOLEAN DEFAULT FALSE,
   "whatsappMessage" TEXT,
-  "paymentReceivedImmediately" BOOLEAN DEFAULT FALSE
+  "paymentReceivedImmediately" BOOLEAN DEFAULT FALSE,
+  "truckId" TEXT
 );
 
 -- Incoming stock from suppliers (goods receipts)
@@ -100,6 +103,42 @@ CREATE TABLE IF NOT EXISTS price_history (
   "referenceId" TEXT
 );
 
+-- Operating expenses (transport, fuel, labour, rent...)
+CREATE TABLE IF NOT EXISTS expenses (
+  id TEXT PRIMARY KEY,
+  date TEXT,
+  category TEXT,
+  amount NUMERIC DEFAULT 0,
+  description TEXT,
+  "paidVia" TEXT,
+  "truckId" TEXT,
+  "referenceId" TEXT,
+  "createdAt" TEXT,
+  "createdBy" TEXT
+);
+
+-- Fleet / driver registry
+CREATE TABLE IF NOT EXISTS trucks (
+  id TEXT PRIMARY KEY,
+  number TEXT NOT NULL,
+  "driverName" TEXT,
+  "driverPhone" TEXT,
+  "capacityKg" NUMERIC DEFAULT 0,
+  status TEXT DEFAULT 'available',
+  notes TEXT,
+  "createdAt" TEXT
+);
+
+-- Named users with their own PIN and role (admin / manager / operator)
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  role TEXT DEFAULT 'operator',
+  pin TEXT NOT NULL,
+  active BOOLEAN DEFAULT TRUE,
+  "createdAt" TEXT
+);
+
 CREATE TABLE IF NOT EXISTS ledger (
   id TEXT PRIMARY KEY,
   "entityType" TEXT,
@@ -127,6 +166,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_messages (
   "dispatchId" TEXT
 );
 
+CREATE INDEX IF NOT EXISTS expenses_date_idx ON expenses (date);
 CREATE INDEX IF NOT EXISTS dispatches_date_idx ON dispatches (date);
 CREATE INDEX IF NOT EXISTS purchases_date_idx ON purchases (date);
 CREATE INDEX IF NOT EXISTS price_history_product_idx ON price_history ("productId", date);
@@ -139,5 +179,8 @@ ALTER TABLE bookings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE dispatches DISABLE ROW LEVEL SECURITY;
 ALTER TABLE purchases DISABLE ROW LEVEL SECURITY;
 ALTER TABLE price_history DISABLE ROW LEVEL SECURITY;
+ALTER TABLE expenses DISABLE ROW LEVEL SECURITY;
+ALTER TABLE trucks DISABLE ROW LEVEL SECURITY;
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE ledger DISABLE ROW LEVEL SECURITY;
 ALTER TABLE whatsapp_messages DISABLE ROW LEVEL SECURITY;

@@ -35,6 +35,7 @@ import { useTrading } from '../context/TradingContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Dispatch, ReportsTab } from '../types';
 import { StockFlowPanel } from '../components/StockFlowPanel';
+import { PnLPanel, AgingPanel } from '../components/FinancePanels';
 import { useTheme } from '../context/ThemeContext';
 import { formatCurrency, formatKg, formatDate, formatNumber } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
@@ -56,6 +57,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
     setSelectedProductId,
     requestedReportsTab,
     clearRequestedReportsTab,
+    openOps,
+    can,
   } = useTrading();
   const [pendingDispatch, setPendingDispatch] = useState<Dispatch | null>(null);
   const { resolvedTheme } = useTheme();
@@ -346,10 +349,34 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
             >
               Stock Flow
             </button>
+            {can('view_finance') && (
+              <>
+                <button
+                  onClick={() => setReportTab('pnl')}
+                  className={`px-4 py-1.5 rounded-full transition-all ${
+                    reportTab === 'pnl'
+                      ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
+                      : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'
+                  }`}
+                >
+                  Profit & Loss
+                </button>
+                <button
+                  onClick={() => setReportTab('aging')}
+                  className={`px-4 py-1.5 rounded-full transition-all ${
+                    reportTab === 'aging'
+                      ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
+                      : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'
+                  }`}
+                >
+                  Aging
+                </button>
+              </>
+            )}
           </div>
 
           {/* Prominent Download Report Button */}
-          {reportTab !== 'flow' && (
+          {reportTab !== 'flow' && reportTab !== 'pnl' && reportTab !== 'aging' && (
           <button
             onClick={handleDownloadReport}
             title="Download CSV for local bookkeeping"
@@ -366,7 +393,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
       </div>
 
       {/* Date / Month Picker Filter */}
-      {reportTab !== 'flow' && (
+      {(reportTab === 'daily' || reportTab === 'monthly') && (
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0 bg-white dark:bg-[#101A26] p-4 px-6 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] shadow-xs transition-colors">
         <div className="flex items-center gap-3 text-xs font-semibold text-[#111827] dark:text-[#F1F5F9]">
           <Calendar className="w-4 h-4 text-teal-700 dark:text-teal-400" />
@@ -395,6 +422,25 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
           Real-time reconciliation • Filtered Dataset
         </span>
       </div>
+      )}
+
+      {reportTab === 'pnl' && (
+        <PnLPanel
+          onOpenExpenses={() => openOps('expenses')}
+          onDownload={(fileName) => {
+            setDownloadSuccessToast(fileName);
+            setTimeout(() => setDownloadSuccessToast(null), 4000);
+          }}
+        />
+      )}
+
+      {reportTab === 'aging' && (
+        <AgingPanel
+          onDownload={(fileName) => {
+            setDownloadSuccessToast(fileName);
+            setTimeout(() => setDownloadSuccessToast(null), 4000);
+          }}
+        />
       )}
 
       {/* STOCK FLOW VIEW */}
@@ -540,14 +586,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
                             )}
                           </td>
                           <td className="py-3.5 px-4 text-right">
-                            <button
+                            {can('delete_records') && (<button
                               type="button"
                               onClick={() => setPendingDispatch(d)}
                               title="Delete dispatch (admin)"
                               className="p-1.5 rounded-lg text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            </button>)}
                           </td>
                         </tr>
                       );

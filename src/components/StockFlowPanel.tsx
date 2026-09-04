@@ -42,6 +42,7 @@ export const StockFlowPanel: React.FC<StockFlowPanelProps> = ({ onReceiveStock, 
     setSelectedProductId,
     deletePurchase,
     deleteDispatch,
+    can,
   } = useTrading();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
@@ -283,9 +284,9 @@ export const StockFlowPanel: React.FC<StockFlowPanelProps> = ({ onReceiveStock, 
                             <span className="block text-[10px] text-[#8E9299]">@ Rs. {m.pricePerKg.toFixed(2)}/kg</span>
                           </div>
                         </div>
-                        <button onClick={() => setPending(m)} title={m.direction === 'in' ? 'Delete receipt (admin)' : 'Delete dispatch (admin)'} className="p-1.5 rounded-lg text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0 self-end md:self-center">
+                        {can('delete_records') && (<button onClick={() => setPending(m)} title={m.direction === 'in' ? 'Delete receipt (admin)' : 'Delete dispatch (admin)'} className="p-1.5 rounded-lg text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0 self-end md:self-center">
                           <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        </button>)}
                       </div>
                     ))}
                   </div>

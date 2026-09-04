@@ -1,6 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+/// <reference types="vitest/config" />
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
@@ -12,6 +13,11 @@ export default defineConfig(() => {
       },
     },
     envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
+    test: {
+      environment: 'jsdom',
+      globals: true,
+      include: ['src/**/*.test.{ts,tsx}'],
+    },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.

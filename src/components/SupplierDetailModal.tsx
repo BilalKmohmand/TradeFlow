@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
   Trash2,
+  Pencil,
+  Printer,
   PackagePlus,
   ArrowDownLeft,
   Phone,
@@ -33,7 +35,7 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
   onOpenPayment,
   onReceiveStock,
 }) => {
-  const { suppliers, products, ledger, purchases, deleteSupplier, setSelectedProductId } = useTrading();
+  const { suppliers, products, ledger, purchases, deleteSupplier, setSelectedProductId, setEditRequest, setPrintRequest, can } = useTrading();
   const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
 
   const supplier = suppliers.find((s) => s.id === supplierId);
@@ -83,12 +85,36 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
 
             <div className="flex items-center gap-1">
               <button
+                onClick={() => {
+                  onClose();
+                  setEditRequest({ type: 'supplier', id: supplier.id });
+                }}
+                title="Edit supplier"
+                className="text-[#9CA3AF] hover:text-white p-2 rounded-2xl hover:bg-white/10 transition-colors"
+              >
+                <Pencil className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => {
+                  const to = new Date().toISOString().split('T')[0];
+                  const fromD = new Date();
+                  fromD.setUTCMonth(fromD.getUTCMonth() - 3);
+                  setPrintRequest({ type: 'supplier_statement', supplierId: supplier.id, from: fromD.toISOString().split('T')[0], to });
+                }}
+                title="Print supplier statement (last 3 months)"
+                className="text-[#9CA3AF] hover:text-white p-2 rounded-2xl hover:bg-white/10 transition-colors"
+              >
+                <Printer className="w-5 h-5" />
+              </button>
+              {can('delete_records') && (
+              <button
                 onClick={() => setConfirmDelete(true)}
                 title="Delete supplier (admin)"
                 className="text-[#9CA3AF] hover:text-rose-400 p-2 rounded-2xl hover:bg-rose-500/10 transition-colors"
               >
                 <Trash2 className="w-5 h-5" />
               </button>
+              )}
               <button
                 onClick={onClose}
                 className="text-[#9CA3AF] hover:text-white p-2 rounded-2xl hover:bg-white/10 transition-colors"

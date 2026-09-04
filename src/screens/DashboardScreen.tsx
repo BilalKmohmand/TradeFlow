@@ -18,6 +18,9 @@ import {
   Building,
   User,
   Scale,
+  Bell,
+  TrendingDown,
+  Wallet,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -33,6 +36,8 @@ import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg, formatDate, formatNumber } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
 import { buildMovements, groupByDay, shiftDate } from '../utils/stockFlow';
+import { computeMonthlyPnL, currentMonthKey } from '../utils/finance';
+import { computeAlerts } from '../utils/alerts';
 
 interface DashboardScreenProps {
   onOpenDispatch: (bookingId?: string) => void;
@@ -59,8 +64,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     whatsappMessages,
     openBooking,
     openReports,
+    openOps,
     setSelectedSupplierId,
     setSelectedProductId,
+    expenses,
+    trucks,
+    ledger,
+    can,
+    currentUser,
   } = useTrading();
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -90,6 +101,16 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const last7 = useMemo(() => groupByDay(movements, shiftDate(todayStr, -6), todayStr), [movements, todayStr]);
   const todayFlow = last7.find((d) => d.date === todayStr) || { inKg: 0, inAmount: 0, outKg: 0, outAmount: 0, netKg: 0, movements: [] };
   const recentMovements = movements.slice(0, 6);
+
+  // Month-to-date P&L and live alerts
+  const pnl = useMemo(() => computeMonthlyPnL(currentMonthKey(), dispatches, purchases, expenses, products), [dispatches, purchases, expenses, products]);
+  const alerts = useMemo(() => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger }, todayStr), [products, customers, suppliers, bookings, trucks, ledger, todayStr]);
+  const topAlerts = alerts.slice(0, 3);
+  const topCustomers = useMemo(() => {
+    const m = new Map<string, number>();
+    dispatches.filter((d) => d.date.startsWith(currentMonthKey())).forEach((d) => m.set(d.customerId, (m.get(d.customerId) || 0) + d.amount));
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id, v]) => ({ customer: customers.find((c) => c.id === id), value: v }));
+  }, [dispatches, customers]);
 
   // Real last-7-day trend (oldest -> newest)
   const chartData = [...last7].reverse().map((d) => ({
@@ -252,6 +273,85 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
           </div>
         </motion.div>
+      </div>
+
+      {/* Month-to-date finance KPIs + alerts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
+        <div className="lg:col-span-2 bg-white p-5 sm:p-6 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-4 min-w-0">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-serif italic font-normal text-2xl text-[#111827]">This Month at a Glance</h3>
+              <p className="text-xs text-[#8E9299] mt-0.5">{pnl.label} • revenue, cost of goods, expenses and net profit to date</p>
+            </div>
+            {can('view_finance') && (
+              <button onClick={() => openReports('pnl')} className="px-3.5 py-2 bg-[#FAF9F6] hover:bg-[#F4F3EF] text-[#111827] text-xs font-semibold rounded-2xl border border-[#E5E5E1] flex items-center gap-1.5 shrink-0">
+                Full P&L <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4 min-w-0">
+              <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Revenue</div>
+              <div className="text-lg font-bold font-mono text-[#111827] mt-1 truncate"><AnimatedNumber value={pnl.revenue} format="currency" /></div>
+              <div className="text-[10px] text-[#8E9299] font-mono mt-0.5">{formatKg(pnl.soldKg)} sold</div>
+            </div>
+            {can('view_finance') ? (
+              <>
+                <div className="bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4 min-w-0">
+                  <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Gross profit</div>
+                  <div className={`text-lg font-bold font-mono mt-1 truncate ${pnl.grossProfit >= 0 ? 'text-teal-800' : 'text-rose-700'}`}><AnimatedNumber value={pnl.grossProfit} format="currency" /></div>
+                  <div className="text-[10px] text-[#8E9299] font-mono mt-0.5">{pnl.grossMarginPct != null ? `${pnl.grossMarginPct}% margin` : 'no sales yet'}</div>
+                </div>
+                <div className="bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4 min-w-0">
+                  <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Expenses</div>
+                  <div className="text-lg font-bold font-mono text-amber-800 mt-1 truncate"><AnimatedNumber value={pnl.expenses} format="currency" /></div>
+                  <button onClick={() => openOps('expenses')} className="text-[10px] text-teal-700 font-semibold hover:underline mt-0.5">Record expense</button>
+                </div>
+                <div className={`rounded-2xl p-4 min-w-0 border ${pnl.netProfit >= 0 ? 'bg-[#111827] border-[#111827] text-white' : 'bg-rose-50 border-rose-200'}`}>
+                  <div className={`text-[10px] font-bold uppercase tracking-widest ${pnl.netProfit >= 0 ? 'text-[#9CA3AF]' : 'text-rose-700'}`}>Net profit</div>
+                  <div className={`text-lg font-bold font-mono mt-1 truncate ${pnl.netProfit >= 0 ? 'text-teal-300' : 'text-rose-700'}`}><AnimatedNumber value={pnl.netProfit} format="currency" /></div>
+                  <div className={`text-[10px] font-mono mt-0.5 ${pnl.netProfit >= 0 ? 'text-[#9CA3AF]' : 'text-rose-700'}`}>{pnl.netMarginPct != null ? `${pnl.netMarginPct}% net` : '—'}</div>
+                </div>
+              </>
+            ) : (
+              <div className="col-span-3 bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4 text-xs text-[#6B7280] flex items-center gap-2"><Wallet className="w-4 h-4" /> Margin and profit figures are visible to managers and admins.</div>
+            )}
+          </div>
+          {topCustomers.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#6B7280]">
+              <span className="font-bold uppercase tracking-widest text-[10px] text-[#8E9299]">Top customers</span>
+              {topCustomers.map((t, i) => t.customer && (
+                <button key={t.customer.id} onClick={() => onOpenCustomer(t.customer!.id)} className="px-2.5 py-1 rounded-full bg-[#FAF9F6] border border-[#E5E5E1] hover:border-teal-600/50 font-semibold text-[#111827]">
+                  {i + 1}. {t.customer.name} <span className="font-mono text-[#8E9299]">{formatCurrency(t.value)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className={`p-5 sm:p-6 rounded-[32px] border shadow-xs space-y-3 min-w-0 ${alerts.some((a) => a.severity === 'danger') ? 'bg-rose-50/60 border-rose-200' : 'bg-white border-[#E5E5E1]'}`}>
+          <div className="flex items-center justify-between">
+            <h3 className="font-serif italic font-normal text-2xl text-[#111827] flex items-center gap-2"><Bell className="w-5 h-5 text-rose-600" /> Needs Attention</h3>
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${alerts.length > 0 ? 'bg-rose-100 text-rose-800 border-rose-200' : 'bg-teal-50 text-teal-800 border-teal-200'}`}>{alerts.length}</span>
+          </div>
+          {topAlerts.length === 0 ? (
+            <div className="text-xs text-[#6B7280] py-6 text-center flex flex-col items-center gap-1"><CheckCircle2 className="w-6 h-6 text-teal-600" /> All clear. Nothing overdue, late or short.</div>
+          ) : (
+            <div className="space-y-2">
+              {topAlerts.map((a) => (
+                <button key={a.id} onClick={() => openOps('alerts')} className="w-full text-left bg-white border border-[#E5E5E1] rounded-2xl p-3 hover:border-rose-300 transition-colors">
+                  <div className="flex items-start gap-2">
+                    <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${a.severity === 'danger' ? 'bg-rose-500' : a.severity === 'warning' ? 'bg-amber-500' : 'bg-teal-500'}`} />
+                    <span className="min-w-0"><span className="text-xs font-bold text-[#111827] block truncate">{a.title}</span><span className="text-[11px] text-[#6B7280] block line-clamp-2">{a.detail}</span></span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          <button onClick={() => openOps('alerts')} className="w-full py-2.5 bg-[#111827] hover:bg-black text-white text-xs font-bold rounded-2xl flex items-center justify-center gap-1.5">
+            Open alerts centre <ArrowRight className="w-3.5 h-3.5 text-teal-400" />
+          </button>
+        </div>
       </div>
 
       {/* Daily Incoming / Outgoing Tracker */}

@@ -7,6 +7,9 @@ import {
   Dispatch,
   Purchase,
   PriceHistoryEntry,
+  Expense,
+  Truck,
+  AppUser,
   LedgerEntry,
   WhatsAppMessage,
 } from '../types';
@@ -19,6 +22,9 @@ export interface AppData {
   dispatches: Dispatch[];
   purchases: Purchase[];
   priceHistory: PriceHistoryEntry[];
+  expenses: Expense[];
+  trucks: Truck[];
+  users: AppUser[];
   ledger: LedgerEntry[];
   whatsappMessages: WhatsAppMessage[];
 }
@@ -31,6 +37,9 @@ export type TableName =
   | 'dispatches'
   | 'purchases'
   | 'price_history'
+  | 'expenses'
+  | 'trucks'
+  | 'users'
   | 'ledger'
   | 'whatsapp_messages';
 
@@ -42,6 +51,9 @@ export const ALL_TABLES: TableName[] = [
   'dispatches',
   'purchases',
   'price_history',
+  'expenses',
+  'trucks',
+  'users',
   'ledger',
   'whatsapp_messages',
 ];
@@ -88,10 +100,10 @@ const stripLegacy = <T,>(rows: T[]): T[] =>
   });
 
 /** Tables that may be missing on a project that has not run the migration yet. */
-const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history'];
+const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users'];
 
 export const loadAllData = async (): Promise<AppData> => {
-  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, ledger, whatsappMessages] =
+  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, ledger, whatsappMessages] =
     await Promise.all([
       supabase.from('customers').select('*'),
       supabase.from('suppliers').select('*'),
@@ -100,6 +112,9 @@ export const loadAllData = async (): Promise<AppData> => {
       supabase.from('dispatches').select('*'),
       supabase.from('purchases').select('*'),
       supabase.from('price_history').select('*'),
+      supabase.from('expenses').select('*'),
+      supabase.from('trucks').select('*'),
+      supabase.from('users').select('*'),
       supabase.from('ledger').select('*'),
       supabase.from('whatsapp_messages').select('*'),
     ]);
@@ -107,7 +122,7 @@ export const loadAllData = async (): Promise<AppData> => {
   const maybeThrow = (result: { error?: { message: string } | null }, label: TableName) => {
     if (result.error) {
       if (OPTIONAL_TABLES.includes(label)) {
-        console.warn(`Supabase table "${label}" unavailable (run supabase/migrate_tons_to_kg.sql):`, result.error.message);
+        console.warn(`Supabase table "${label}" unavailable (run the SQL files in supabase/):`, result.error.message);
         return;
       }
       throw new Error(`${label}: ${result.error.message}`);
@@ -121,6 +136,9 @@ export const loadAllData = async (): Promise<AppData> => {
   maybeThrow(dispatches, 'dispatches');
   maybeThrow(purchases, 'purchases');
   maybeThrow(priceHistory, 'price_history');
+  maybeThrow(expenses, 'expenses');
+  maybeThrow(trucks, 'trucks');
+  maybeThrow(users, 'users');
   maybeThrow(ledger, 'ledger');
   maybeThrow(whatsappMessages, 'whatsapp_messages');
 
@@ -132,6 +150,9 @@ export const loadAllData = async (): Promise<AppData> => {
     dispatches: stripLegacy((dispatches.data || []).map(normalizeDispatch)),
     purchases: (purchases.data || []) as Purchase[],
     priceHistory: (priceHistory.data || []) as PriceHistoryEntry[],
+    expenses: (expenses.data || []) as Expense[],
+    trucks: (trucks.data || []) as Truck[],
+    users: (users.data || []) as AppUser[],
     ledger: stripLegacy((ledger.data || []).map(normalizeLedger)),
     whatsappMessages: (whatsappMessages.data || []) as WhatsAppMessage[],
   };

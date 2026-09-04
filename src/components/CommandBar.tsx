@@ -213,6 +213,20 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     });
 
     items.push({
+      id: 'nav-ops',
+      category: 'navigation',
+      title: 'Open Operations (Alerts, Fleet, Expenses)',
+      subtitle: 'Low stock, overdue accounts, late deliveries, vehicles and running costs',
+      badge: 'Ops',
+      badgeType: 'info',
+      icon: Truck,
+      perform: () => {
+        onClose();
+        setActiveScreen('ops');
+      },
+    });
+
+    items.push({
       id: 'nav-admin',
       category: 'navigation',
       title: 'Open Admin Control Center',

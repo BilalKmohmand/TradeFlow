@@ -17,6 +17,8 @@ import { SupplierDetailModal } from './components/SupplierDetailModal';
 import { ProductDetailModal } from './components/ProductDetailModal';
 import { BookingDetailModal } from './components/BookingDetailModal';
 import { PurchaseModal } from './components/PurchaseModal';
+import { PrintDocument, PrintRequest } from './components/PrintDocument';
+import { OpsScreen } from './screens/OpsScreen';
 
 // Screens
 import { DashboardScreen } from './screens/DashboardScreen';
@@ -41,6 +43,11 @@ function MainApp() {
     highlightDispatchId,
     openBooking,
     isAdminUnlocked,
+    requestedOpsTab,
+    printRequest,
+    setPrintRequest,
+    editRequest,
+    setEditRequest,
   } = useTrading();
 
   // Modal States
@@ -164,6 +171,8 @@ function MainApp() {
 
             {activeScreen === 'reports' && <ReportsScreen onReceiveStock={() => handleOpenPurchase()} />}
 
+            {activeScreen === 'ops' && <OpsScreen initialTab={requestedOpsTab || 'alerts'} />}
+
             {activeScreen === 'admin' && <AdminScreen />}
           </motion.div>
         </AnimatePresence>
@@ -214,8 +223,12 @@ function MainApp() {
 
       {/* New Booking Modal */}
       <BookingModal
-        isOpen={isBookingModalOpen}
-        onClose={() => setIsBookingModalOpen(false)}
+        isOpen={isBookingModalOpen || editRequest?.type === 'booking'}
+        onClose={() => {
+          setIsBookingModalOpen(false);
+          if (editRequest?.type === 'booking') setEditRequest(null);
+        }}
+        editBookingId={editRequest?.type === 'booking' ? editRequest.id : null}
       />
 
       {/* Customer Detail & Ledger Modal */}
@@ -270,19 +283,34 @@ function MainApp() {
 
       {/* Add Entity Modals */}
       <CustomerModal
-        isOpen={isCustomerModalOpen}
-        onClose={() => setIsCustomerModalOpen(false)}
+        isOpen={isCustomerModalOpen || editRequest?.type === 'customer'}
+        onClose={() => {
+          setIsCustomerModalOpen(false);
+          if (editRequest?.type === 'customer') setEditRequest(null);
+        }}
+        editId={editRequest?.type === 'customer' ? editRequest.id : null}
       />
 
       <SupplierModal
-        isOpen={isSupplierModalOpen}
-        onClose={() => setIsSupplierModalOpen(false)}
+        isOpen={isSupplierModalOpen || editRequest?.type === 'supplier'}
+        onClose={() => {
+          setIsSupplierModalOpen(false);
+          if (editRequest?.type === 'supplier') setEditRequest(null);
+        }}
+        editId={editRequest?.type === 'supplier' ? editRequest.id : null}
       />
 
       <ProductModal
-        isOpen={isProductModalOpen}
-        onClose={() => setIsProductModalOpen(false)}
+        isOpen={isProductModalOpen || editRequest?.type === 'product'}
+        onClose={() => {
+          setIsProductModalOpen(false);
+          if (editRequest?.type === 'product') setEditRequest(null);
+        }}
+        editId={editRequest?.type === 'product' ? editRequest.id : null}
       />
+
+      {/* Printable documents (invoice, delivery challan, statements) */}
+      <PrintDocument request={printRequest as PrintRequest | null} onClose={() => setPrintRequest(null)} />
     </div>
   );
 }

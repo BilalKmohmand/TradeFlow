@@ -14,6 +14,14 @@ import {
   PriceHistoryEntry,
   PriceSource,
   ReportsTab,
+  OpsTab,
+  Expense,
+  Truck,
+  AppUser,
+  UserRole,
+  Permission,
+  ROLE_PERMISSIONS,
+  SessionUser,
 } from '../types';
 import { formatCurrency } from '../utils/formatters';
 import {
@@ -63,6 +71,13 @@ interface TradingContextType {
   openReports: (tab: ReportsTab) => void;
   requestedReportsTab: ReportsTab | null;
   clearRequestedReportsTab: () => void;
+  openOps: (tab: OpsTab) => void;
+  requestedOpsTab: OpsTab | null;
+  /** Cross-cutting UI requests handled by App: which record to edit / which document to print. */
+  editRequest: EditRequest | null;
+  setEditRequest: (r: EditRequest | null) => void;
+  printRequest: PrintRequestLike | null;
+  setPrintRequest: (r: PrintRequestLike | null) => void;
   
   // Actions
   addCustomer: (customer: Omit<Customer, 'id' | 'createdAt' | 'totalDue'>) => Customer;
@@ -104,6 +119,24 @@ interface TradingContextType {
   purgeTable: (table: TableName) => void;
   isCloudSyncEnabled: boolean;
   isCloudSyncReady: boolean;
+
+  // Enterprise: expenses, fleet, users & roles
+  expenses: Expense[];
+  trucks: Truck[];
+  users: AppUser[];
+  addExpense: (data: Omit<Expense, 'id' | 'createdAt' | 'createdBy'>) => Expense;
+  updateExpense: (id: string, data: Partial<Expense>) => void;
+  deleteExpense: (id: string) => void;
+  addTruck: (data: Omit<Truck, 'id' | 'createdAt'>) => Truck;
+  updateTruck: (id: string, data: Partial<Truck>) => void;
+  deleteTruck: (id: string) => void;
+  addUser: (data: { name: string; role: UserRole; pin: string }) => { success: boolean; message: string };
+  updateUser: (id: string, data: Partial<Omit<AppUser, 'id' | 'createdAt'>>) => { success: boolean; message: string };
+  deleteUser: (id: string) => void;
+  currentUser: SessionUser | null;
+  can: (permission: Permission) => boolean;
+  unlockAsUser: (userId: string, pin: string) => boolean;
+  cancelBooking: (id: string, reason?: string) => void;
   
   createBooking: (bookingData: {
     customerId: string;
@@ -118,6 +151,7 @@ interface TradingContextType {
     bookingId: string;
     kg: number;
     truckNumber: string;
+    truckId?: string | null;
     driverPhone?: string;
     notes?: string;
     paymentReceivedImmediately?: boolean;
@@ -181,6 +215,14 @@ const emptySummary = (): DeleteSummary => ({
 
 export const todayISO = () => new Date().toISOString().split('T')[0];
 
+export type EditRequest = { type: 'customer' | 'supplier' | 'product' | 'booking'; id: string };
+/** Mirrors PrintRequest in components/PrintDocument.tsx without importing a component into the context. */
+export type PrintRequestLike =
+  | { type: 'invoice'; dispatchId: string }
+  | { type: 'challan'; dispatchId: string }
+  | { type: 'statement'; customerId: string; from: string; to: string }
+  | { type: 'supplier_statement'; supplierId: string; from: string; to: string };
+
 /** Collision-safe id generator (Date.now() alone repeats when called in a tight loop). */
 let idCounter = 0;
 export const uid = (prefix: string): string => {
@@ -228,6 +270,9 @@ const STORAGE_KEYS = {
   DISPATCHES: 'tradeflow_dispatches_v2',
   PURCHASES: 'tradeflow_purchases_v2',
   PRICE_HISTORY: 'tradeflow_price_history_v2',
+  EXPENSES: 'tradeflow_expenses_v2',
+  TRUCKS: 'tradeflow_trucks_v2',
+  USERS: 'tradeflow_users_v2',
   LEDGER: 'tradeflow_ledger_v2',
   MESSAGES: 'tradeflow_whatsapp_v2',
   ADMIN_PIN: 'sarmaya_admin_pin_v1',
@@ -263,6 +308,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [dispatches, setDispatches] = useState<Dispatch[]>(() => loadLocal(STORAGE_KEYS.DISPATCHES, initialDispatches, normalizeDispatch));
   const [purchases, setPurchases] = useState<Purchase[]>(() => loadLocal(STORAGE_KEYS.PURCHASES, []));
   const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>(() => loadLocal(STORAGE_KEYS.PRICE_HISTORY, []));
+  const [expenses, setExpenses] = useState<Expense[]>(() => loadLocal(STORAGE_KEYS.EXPENSES, []));
+  const [trucks, setTrucks] = useState<Truck[]>(() => loadLocal(STORAGE_KEYS.TRUCKS, []));
+  const [users, setUsers] = useState<AppUser[]>(() => loadLocal(STORAGE_KEYS.USERS, []));
+  const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>(() => loadLocal(STORAGE_KEYS.LEDGER, initialLedgerEntries, normalizeLedger));
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>(() =>
     loadLocal(STORAGE_KEYS.MESSAGES, initialWhatsAppMessages)
@@ -275,6 +324,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [highlightDispatchId, setHighlightDispatchId] = useState<string | null>(null);
   const [requestedReportsTab, setRequestedReportsTab] = useState<ReportsTab | null>(null);
+  const [requestedOpsTab, setRequestedOpsTab] = useState<OpsTab | null>(null);
+  const [editRequest, setEditRequest] = useState<EditRequest | null>(null);
+  const [printRequest, setPrintRequest] = useState<PrintRequestLike | null>(null);
+  const openOps = (tab: OpsTab) => {
+    setRequestedOpsTab(tab);
+    setActiveScreen('ops');
+  };
 
   const openBooking = (bookingId: string | null, dispatchId: string | null = null) => {
     setSelectedBookingId(bookingId);
@@ -306,6 +362,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setDispatches(data.dispatches);
         setPurchases(data.purchases);
         setPriceHistory(data.priceHistory);
+        setExpenses(data.expenses);
+        setTrucks(data.trucks);
+        setUsers(data.users);
         setLedger(data.ledger);
         setWhatsappMessages(data.whatsappMessages);
         setIsCloudSyncReady(true);
@@ -348,6 +407,18 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [priceHistory]);
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+  }, [expenses]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.TRUCKS, JSON.stringify(trucks));
+  }, [trucks]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(ledger));
   }, [ledger]);
 
@@ -372,6 +443,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { void syncToSupabase('dispatches', dispatches); }, [dispatches, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('purchases', purchases); }, [purchases, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('price_history', priceHistory); }, [priceHistory, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('expenses', expenses); }, [expenses, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('trucks', trucks); }, [trucks, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('users', users); }, [users, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('ledger', ledger); }, [ledger, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('whatsapp_messages', whatsappMessages); }, [whatsappMessages, isCloudSyncReady]);
 
@@ -392,6 +466,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDispatches(initialDispatches);
     setPurchases([]);
     setPriceHistory([]);
+    setExpenses([]);
+    setTrucks([]);
     setLedger(initialLedgerEntries);
     setWhatsappMessages(initialWhatsAppMessages);
     logAuditEvent('Sample Data Loaded', 'All business data replaced with the built-in sample dataset.', 'warning');
@@ -585,7 +661,22 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const updateBooking = (id: string, data: Partial<Booking>) => {
-    setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, ...data } : b)));
+    setBookings((prev) =>
+      prev.map((b) => {
+        if (b.id !== id) return b;
+        const next = { ...b, ...data };
+        if (data.totalKg != null || data.pricePerKg != null) {
+          next.totalKg = Math.max(round2(next.totalKg), next.dispatchedKg);
+          next.remainingKg = Math.max(0, round2(next.totalKg - next.dispatchedKg));
+          next.totalAmount = round2(next.totalKg * next.pricePerKg);
+          if (next.status !== 'cancelled') next.status = next.remainingKg === 0 ? 'completed' : 'active';
+          next.paymentStatus = next.paidAmount <= 0 ? 'unpaid' : next.paidAmount >= next.totalAmount ? 'paid' : 'partial';
+        }
+        return next;
+      })
+    );
+    const existing = bookings.find((b) => b.id === id);
+    if (existing) logAuditEvent('Booking Updated', `${existing.bookingNumber}: ${Object.keys(data).join(', ')} changed.`, 'info');
   };
 
   // ---------------------------------------------------------------------------
@@ -726,10 +817,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const target = customers.find((c) => c.id === id);
     if (!target) return emptySummary();
 
-    const summary = removeBookings(bookings.filter((b) => b.customerId === id));
+    const customerBookings = bookings.filter((b) => b.customerId === id);
+    const removedBookingIds = new Set(customerBookings.map((b) => b.id));
+    const summary = removeBookings(customerBookings);
 
-    // Remaining rows that point at the customer directly (payments, reminders, stray dispatches)
-    const strayDispatchIds = dispatches.filter((d) => d.customerId === id).map((d) => d.id);
+    // Remaining rows that point at the customer directly (payments, reminders, dispatches whose booking is gone)
+    const strayDispatchIds = dispatches.filter((d) => d.customerId === id && !removedBookingIds.has(d.bookingId)).map((d) => d.id);
     const ledgerIds = ledger.filter((l) => l.entityType === 'customer' && l.entityId === id).map((l) => l.id);
     const cleanPhone = target.phone.replace(/[^0-9]/g, '');
     const waIds = whatsappMessages
@@ -808,8 +901,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const target = products.find((p) => p.id === id);
     if (!target) return emptySummary();
 
-    const summary = removeBookings(bookings.filter((b) => b.productId === id));
-    const strayDispatchIds = dispatches.filter((d) => d.productId === id).map((d) => d.id);
+    const productBookings = bookings.filter((b) => b.productId === id);
+    const removedBookingIds = new Set(productBookings.map((b) => b.id));
+    const summary = removeBookings(productBookings);
+    const strayDispatchIds = dispatches.filter((d) => d.productId === id && !removedBookingIds.has(d.bookingId)).map((d) => d.id);
 
     const purchaseIds = purchases.filter((p) => p.productId === id).map((p) => p.id);
     const priceIds = priceHistory.filter((e) => e.productId === id).map((e) => e.id);
@@ -861,6 +956,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       dispatches: () => setDispatches([]),
       purchases: () => setPurchases([]),
       price_history: () => setPriceHistory([]),
+      expenses: () => setExpenses([]),
+      trucks: () => setTrucks([]),
+      users: () => setUsers([]),
       ledger: () => setLedger([]),
       whatsapp_messages: () => setWhatsappMessages([]),
     };
@@ -936,6 +1034,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     bookingId,
     kg,
     truckNumber,
+    truckId = null,
     driverPhone,
     notes,
     paymentReceivedImmediately = false,
@@ -944,6 +1043,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     bookingId: string;
     kg: number;
     truckNumber: string;
+    truckId?: string | null;
     driverPhone?: string;
     notes?: string;
     paymentReceivedImmediately?: boolean;
@@ -978,6 +1078,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       kg,
       amount: dispatchAmount,
       truckNumber: truckNumber.toUpperCase(),
+      truckId,
       driverPhone,
       date: today,
       notes,
@@ -1213,6 +1314,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       action,
       details,
       severity,
+      user: currentUser?.name,
     };
     setAuditLogs((prev) => [newEntry, ...prev.slice(0, 99)]);
   };
@@ -1224,17 +1326,139 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const unlockAdmin = (pin: string): boolean => {
     if (pin.trim() === adminPin.trim()) {
+      setCurrentUser({ id: 'master', name: 'Administrator', role: 'admin' });
       setIsAdminUnlocked(true);
-      logAuditEvent('Admin Session Unlocked', 'Master PIN successfully verified.', 'info');
+      logAuditEvent('Session Unlocked', 'Master PIN verified (Administrator).', 'info');
       return true;
     }
-    logAuditEvent('Invalid PIN Attempt', `Unsuccessful PIN entry attempt.`, 'warning');
+    logAuditEvent('Invalid PIN Attempt', `Unsuccessful master PIN entry attempt.`, 'warning');
     return false;
   };
 
+  const unlockAsUser = (userId: string, pin: string): boolean => {
+    const user = users.find((u) => u.id === userId && u.active);
+    if (user && pin.trim() === user.pin.trim()) {
+      setCurrentUser({ id: user.id, name: user.name, role: user.role });
+      setIsAdminUnlocked(true);
+      setAuditLogs((prev) => [
+        {
+          id: uid('audit'),
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          action: 'Session Unlocked',
+          details: `${user.name} signed in as ${user.role}.`,
+          severity: 'info',
+          user: user.name,
+        },
+        ...prev.slice(0, 99),
+      ]);
+      return true;
+    }
+    logAuditEvent('Invalid PIN Attempt', `Unsuccessful PIN entry for user ${user?.name || userId}.`, 'warning');
+    return false;
+  };
+
+  const can = (permission: Permission): boolean => {
+    if (!currentUser) return false;
+    return ROLE_PERMISSIONS[currentUser.role].includes(permission);
+  };
+
   const lockAdmin = () => {
+    logAuditEvent('Session Locked', `${currentUser?.name || 'Session'} locked the terminal.`, 'info');
     setIsAdminUnlocked(false);
-    logAuditEvent('Admin Session Locked', 'Security session manually locked.', 'info');
+    setCurrentUser(null);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Users & roles
+  // ---------------------------------------------------------------------------
+  const validPin = (pin: string) => /^\d{4,6}$/.test(pin.trim());
+
+  const addUser = ({ name, role, pin }: { name: string; role: UserRole; pin: string }) => {
+    const clean = name.trim();
+    if (!clean) return { success: false, message: 'Name is required.' };
+    if (!validPin(pin)) return { success: false, message: 'PIN must be 4 to 6 digits.' };
+    if (users.some((u) => u.name.toLowerCase() === clean.toLowerCase())) return { success: false, message: 'A user with that name already exists.' };
+    if (users.some((u) => u.pin === pin.trim() && u.active)) return { success: false, message: 'Another active user already uses that PIN. Pick a different one.' };
+    const user: AppUser = { id: uid('user'), name: clean, role, pin: pin.trim(), active: true, createdAt: todayISO() };
+    setUsers((prev) => [user, ...prev]);
+    logAuditEvent('User Added', `${clean} created with role ${role}.`, 'warning');
+    return { success: true, message: `${clean} added.` };
+  };
+
+  const updateUser = (id: string, data: Partial<Omit<AppUser, 'id' | 'createdAt'>>) => {
+    const existing = users.find((u) => u.id === id);
+    if (!existing) return { success: false, message: 'User not found.' };
+    if (data.pin != null && !validPin(data.pin)) return { success: false, message: 'PIN must be 4 to 6 digits.' };
+    if (data.pin != null && users.some((u) => u.id !== id && u.active && u.pin === data.pin!.trim())) return { success: false, message: 'Another active user already uses that PIN.' };
+    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...data, pin: data.pin != null ? data.pin.trim() : u.pin } : u)));
+    logAuditEvent('User Updated', `${existing.name}: ${Object.keys(data).filter((k) => k !== 'pin').join(', ') || 'PIN'} changed.`, 'warning');
+    return { success: true, message: 'User updated.' };
+  };
+
+  const deleteUser = (id: string) => {
+    const existing = users.find((u) => u.id === id);
+    if (!existing) return;
+    setUsers((prev) => prev.filter((u) => u.id !== id));
+    removeRemote('users', [id]);
+    logAuditEvent('User Removed', `${existing.name} (${existing.role}) removed.`, 'danger');
+  };
+
+  // ---------------------------------------------------------------------------
+  // Expenses
+  // ---------------------------------------------------------------------------
+  const addExpense = (data: Omit<Expense, 'id' | 'createdAt' | 'createdBy'>): Expense => {
+    const expense: Expense = { ...data, amount: round2(data.amount), id: uid('exp'), createdAt: todayISO(), createdBy: currentUser?.name };
+    setExpenses((prev) => [expense, ...prev]);
+    logAuditEvent('Expense Recorded', `${data.category}: ${formatCurrency(expense.amount)} — ${data.description}`, 'info');
+    return expense;
+  };
+
+  const updateExpense = (id: string, data: Partial<Expense>) => {
+    setExpenses((prev) => prev.map((e) => (e.id === id ? { ...e, ...data, amount: data.amount != null ? round2(data.amount) : e.amount } : e)));
+  };
+
+  const deleteExpense = (id: string) => {
+    const existing = expenses.find((e) => e.id === id);
+    if (!existing) return;
+    setExpenses((prev) => prev.filter((e) => e.id !== id));
+    removeRemote('expenses', [id]);
+    logAuditEvent('Expense Deleted', `${existing.category}: ${formatCurrency(existing.amount)} — ${existing.description}`, 'danger');
+  };
+
+  // ---------------------------------------------------------------------------
+  // Fleet
+  // ---------------------------------------------------------------------------
+  const addTruck = (data: Omit<Truck, 'id' | 'createdAt'>): Truck => {
+    const truck: Truck = { ...data, number: data.number.trim().toUpperCase(), id: uid('truck'), createdAt: todayISO() };
+    setTrucks((prev) => [truck, ...prev]);
+    logAuditEvent('Vehicle Added', `${truck.number} (${truck.driverName || 'no driver'}, ${truck.capacityKg.toLocaleString()} kg).`, 'info');
+    return truck;
+  };
+
+  const updateTruck = (id: string, data: Partial<Truck>) => {
+    setTrucks((prev) => prev.map((t) => (t.id === id ? { ...t, ...data, number: data.number != null ? data.number.trim().toUpperCase() : t.number } : t)));
+  };
+
+  const deleteTruck = (id: string) => {
+    const existing = trucks.find((t) => t.id === id);
+    if (!existing) return;
+    setTrucks((prev) => prev.filter((t) => t.id !== id));
+    setDispatches((prev) => prev.map((d) => (d.truckId === id ? { ...d, truckId: null } : d)));
+    setExpenses((prev) => prev.map((e) => (e.truckId === id ? { ...e, truckId: null } : e)));
+    removeRemote('trucks', [id]);
+    logAuditEvent('Vehicle Removed', `${existing.number} removed from the fleet; past dispatches keep the plate number.`, 'danger');
+  };
+
+  // ---------------------------------------------------------------------------
+  // Booking lifecycle
+  // ---------------------------------------------------------------------------
+  const cancelBooking = (id: string, reason?: string) => {
+    const booking = bookings.find((b) => b.id === id);
+    if (!booking || booking.status === 'cancelled') return;
+    setBookings((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, status: 'cancelled', cancelledAt: todayISO(), cancelReason: reason?.trim() || undefined } : b))
+    );
+    logAuditEvent('Booking Cancelled', `${booking.bookingNumber} cancelled${reason ? `: ${reason}` : ''}. ${booking.remainingKg.toLocaleString()} kg undispatched.`, 'warning');
   };
 
   const changeAdminPin = (oldPin: string, newPin: string): { success: boolean; message: string } => {
@@ -1270,6 +1494,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       dispatches,
       purchases,
       priceHistory,
+      expenses,
+      trucks,
+      users,
       ledger,
       whatsappMessages,
       auditLogs,
@@ -1307,6 +1534,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (Array.isArray(data.dispatches)) setDispatches(data.dispatches.map(normalizeDispatch));
       if (Array.isArray(data.purchases)) setPurchases(data.purchases);
       if (Array.isArray(data.priceHistory)) setPriceHistory(data.priceHistory);
+      if (Array.isArray(data.expenses)) setExpenses(data.expenses);
+      if (Array.isArray(data.trucks)) setTrucks(data.trucks);
+      if (Array.isArray(data.users)) setUsers(data.users);
       if (Array.isArray(data.ledger)) setLedger(data.ledger.map(normalizeLedger));
       if (Array.isArray(data.whatsappMessages)) setWhatsappMessages(data.whatsappMessages);
       if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
@@ -1327,8 +1557,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDispatches([]);
     setPurchases([]);
     setPriceHistory([]);
+    setExpenses([]);
+    setTrucks([]);
     setLedger([]);
     setWhatsappMessages([]);
+    localStorage.removeItem(STORAGE_KEYS.EXPENSES);
+    localStorage.removeItem(STORAGE_KEYS.TRUCKS);
     localStorage.removeItem(STORAGE_KEYS.PURCHASES);
     localStorage.removeItem(STORAGE_KEYS.PRICE_HISTORY);
     localStorage.removeItem(STORAGE_KEYS.CUSTOMERS);
@@ -1367,6 +1601,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         openReports,
         requestedReportsTab,
         clearRequestedReportsTab,
+        openOps,
+        requestedOpsTab,
+        editRequest,
+        setEditRequest,
+        printRequest,
+        setPrintRequest,
         addPurchase,
         deletePurchase,
         updateProductPrice,
@@ -1389,6 +1629,22 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         purgeTable,
         isCloudSyncEnabled: isSupabaseConfigured,
         isCloudSyncReady,
+        expenses,
+        trucks,
+        users,
+        addExpense,
+        updateExpense,
+        deleteExpense,
+        addTruck,
+        updateTruck,
+        deleteTruck,
+        addUser,
+        updateUser,
+        deleteUser,
+        currentUser,
+        can,
+        unlockAsUser,
+        cancelBooking,
         createBooking,
         logDispatch,
         recordCustomerPayment,

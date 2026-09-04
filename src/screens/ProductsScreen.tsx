@@ -12,6 +12,7 @@ import {
   Trash2,
   PackagePlus,
   History,
+  Pencil,
 } from 'lucide-react';
 import { Product } from '../types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -30,7 +31,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
   onOpenBooking,
   onReceiveStock,
 }) => {
-  const { products, suppliers, updateProduct, bookings, dispatches, deleteProduct, setSelectedProductId } = useTrading();
+  const { products, suppliers, updateProduct, bookings, dispatches, deleteProduct, setSelectedProductId, can, setEditRequest } = useTrading();
   const [pendingDelete, setPendingDelete] = useState<Product | null>(null);
   const pendingBookings = pendingDelete ? bookings.filter((b) => b.productId === pendingDelete.id) : [];
   const pendingDispatches = pendingDelete ? dispatches.filter((d) => d.productId === pendingDelete.id) : [];
@@ -273,12 +274,20 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                   </button>
                   <button
                         type="button"
+                        onClick={() => setEditRequest({ type: 'product', id: prod.id })}
+                        title="Edit product"
+                        className="p-1.5 rounded-xl text-[#8E9299] hover:text-teal-800 hover:bg-teal-50 border border-transparent hover:border-teal-200 transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      {can('delete_records') && (<button
+                        type="button"
                         onClick={() => setPendingDelete(prod)}
                         title="Delete product (admin)"
                         className="p-1.5 rounded-xl text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      </button>)}
                   <button
                     onClick={onOpenBooking}
                     className="px-3.5 py-1.5 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-xl flex items-center gap-1 transition-colors"

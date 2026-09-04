@@ -1,0 +1,4 @@
+{
+  "vitest.commandLine": "npx vitest",
+  "typescript.tsdk": "node_modules/typescript/lib"
+}

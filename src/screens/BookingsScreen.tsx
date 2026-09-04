@@ -32,7 +32,7 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
   onOpenDispatchForBooking,
   onOpenCustomer,
 }) => {
-  const { bookings, customers, products, dispatches, deleteBooking, openBooking } = useTrading();
+  const { bookings, customers, products, dispatches, deleteBooking, openBooking, can } = useTrading();
   const [pendingDelete, setPendingDelete] = useState<Booking | null>(null);
   const pendingDispatches = pendingDelete ? dispatches.filter((d) => d.bookingId === pendingDelete.id) : [];
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -174,14 +174,14 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                       <span className="text-xs text-[#8E9299] font-medium font-mono">
                         {formatDate(b.createdAt)}
                       </span>
-                      <button
+                      {can('delete_records') && (<button
                         type="button"
                         onClick={() => setPendingDelete(b)}
                         title="Delete booking (admin)"
                         className="p-1.5 rounded-xl text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      </button>)}
                     </div>
                   </div>
 

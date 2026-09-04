@@ -12,6 +12,7 @@ import {
   DollarSign,
   ExternalLink,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 import { Customer } from '../types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -30,7 +31,7 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
   onOpenAddCustomer,
   onOpenPayment,
 }) => {
-  const { customers, bookings, dispatches, deleteCustomer } = useTrading();
+  const { customers, bookings, dispatches, deleteCustomer, can, setEditRequest } = useTrading();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [pendingDelete, setPendingDelete] = useState<Customer | null>(null);
 
@@ -140,12 +141,20 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
                       </span>
                       <button
                         type="button"
+                        onClick={() => setEditRequest({ type: 'customer', id: cust.id })}
+                        title="Edit customer"
+                        className="p-1.5 rounded-xl text-[#8E9299] hover:text-teal-800 hover:bg-teal-50 border border-transparent hover:border-teal-200 transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      {can('delete_records') && (<button
+                        type="button"
                         onClick={() => setPendingDelete(cust)}
                         title="Delete customer (admin)"
                         className="p-1.5 rounded-xl text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      </button>)}
                     </div>
                   </div>
 

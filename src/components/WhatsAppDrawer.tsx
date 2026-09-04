@@ -26,6 +26,7 @@ export const WhatsAppDrawer: React.FC<WhatsAppDrawerProps> = ({ isOpen, onClose 
     customers,
     sendWhatsAppDirect,
     deleteWhatsAppMessage,
+    can,
     sendWhatsAppReminder,
     runAutomatedOverdueCheck,
   } = useTrading();
@@ -194,13 +195,13 @@ export const WhatsAppDrawer: React.FC<WhatsAppDrawerProps> = ({ isOpen, onClose 
                               <span>Open in WhatsApp</span>
                               <ExternalLink className="w-3 h-3" />
                             </button>
-                            <button
+                            {can('delete_records') && (<button
                               onClick={() => deleteWhatsAppMessage(msg.id)}
                               title="Delete log entry (admin)"
                               className="p-1 rounded-lg text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 transition-colors"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            </button>)}
                           </div>
                         </div>
                       </motion.div>

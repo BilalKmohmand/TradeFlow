@@ -10,6 +10,7 @@ import {
   ArrowRight,
   ExternalLink,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 import { Supplier } from '../types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -28,7 +29,7 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
   onOpenAddSupplier,
   onOpenPayment,
 }) => {
-  const { suppliers, products, deleteSupplier } = useTrading();
+  const { suppliers, products, deleteSupplier, can, setEditRequest } = useTrading();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null);
   const pendingProducts = pendingDelete ? products.filter((p) => p.supplierId === pendingDelete.id) : [];
@@ -130,12 +131,20 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
                       </span>
                       <button
                         type="button"
+                        onClick={() => setEditRequest({ type: 'supplier', id: sup.id })}
+                        title="Edit supplier"
+                        className="p-1.5 rounded-xl text-[#8E9299] hover:text-teal-800 hover:bg-teal-50 border border-transparent hover:border-teal-200 transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      {can('delete_records') && (<button
+                        type="button"
                         onClick={() => setPendingDelete(sup)}
                         title="Delete supplier (admin)"
                         className="p-1.5 rounded-xl text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      </button>)}
                     </div>
                   </div>
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, User, Package, Truck, Calendar, Trash2, CreditCard, ArrowUpRight } from 'lucide-react';
+import { X, User, Package, Truck, Calendar, Trash2, CreditCard, ArrowUpRight, Pencil, Ban, FileText, Printer } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -24,8 +24,13 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({ bookingI
     setSelectedProductId,
     deleteBooking,
     deleteDispatch,
+    cancelBooking,
+    setEditRequest,
+    setPrintRequest,
+    can,
   } = useTrading();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [pendingDispatchId, setPendingDispatchId] = useState<string | null>(null);
 
   const booking = bookings.find((b) => b.id === bookingId);
@@ -84,9 +89,19 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({ bookingI
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                <button onClick={() => go(() => setEditRequest({ type: 'booking', id: booking.id }))} title="Edit booking" className="text-[#9CA3AF] hover:text-white p-2 rounded-2xl hover:bg-white/10">
+                  <Pencil className="w-5 h-5" />
+                </button>
+                {booking.status === 'active' && (
+                  <button onClick={() => setConfirmCancel(true)} title="Cancel booking" className="text-[#9CA3AF] hover:text-amber-300 p-2 rounded-2xl hover:bg-amber-500/10">
+                    <Ban className="w-5 h-5" />
+                  </button>
+                )}
+                {can('delete_records') && (
                 <button onClick={() => setConfirmDelete(true)} title="Delete booking (admin)" className="text-[#9CA3AF] hover:text-rose-400 p-2 rounded-2xl hover:bg-rose-500/10">
                   <Trash2 className="w-5 h-5" />
                 </button>
+                )}
                 <button onClick={onClose} className="text-[#9CA3AF] hover:text-white p-2 rounded-2xl hover:bg-white/10">
                   <X className="w-5 h-5" />
                 </button>
@@ -109,6 +124,14 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({ bookingI
                   <div><span className="text-[#8E9299] block text-[10px] uppercase font-bold tracking-wider">Balance</span><span className="font-mono font-bold text-amber-800">{formatCurrency(balanceDue)}</span></div>
                 </div>
                 {booking.notes && <p className="text-xs text-[#6B7280] italic bg-[#FAF9F6] p-3 rounded-xl border border-[#E5E5E1]">"{booking.notes}"</p>}
+                {booking.status === 'cancelled' && (
+                  <p className="text-xs text-rose-800 bg-rose-50 p-3 rounded-xl border border-rose-200">
+                    Cancelled{booking.cancelledAt ? ` on ${formatDate(booking.cancelledAt)}` : ''}{booking.cancelReason ? `: ${booking.cancelReason}` : ''}. {formatKg(booking.remainingKg)} was never dispatched.
+                  </p>
+                )}
+                {booking.targetDeliveryDate && (
+                  <p className="text-[11px] text-[#6B7280] font-mono">Target delivery: {formatDate(booking.targetDeliveryDate)}</p>
+                )}
                 {booking.remainingKg > 0 && onOpenDispatchForBooking && (
                   <div className="flex justify-end">
                     <button onClick={() => go(() => onOpenDispatchForBooking(booking.id))} className="px-4 py-2 bg-[#111827] hover:bg-black text-white text-xs font-bold rounded-2xl flex items-center gap-1.5">
@@ -147,8 +170,12 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({ bookingI
                               <td className="py-2.5 px-4 text-right font-bold text-amber-800">{formatKg(d.kg)}</td>
                               <td className="py-2.5 px-4 text-right text-[#111827]">{formatCurrency(d.amount)}</td>
                               <td className="py-2.5 px-4 text-center font-sans">{d.paymentReceivedImmediately ? <span className="text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">Yes</span> : <span className="text-[#8E9299]">—</span>}</td>
-                              <td className="py-2.5 px-2 text-right">
+                              <td className="py-2.5 px-2 text-right whitespace-nowrap">
+                                <button onClick={() => setPrintRequest({ type: 'invoice', dispatchId: d.id })} title="Print invoice" className="p-1.5 rounded-lg text-[#8E9299] hover:text-teal-700 hover:bg-teal-50"><FileText className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => setPrintRequest({ type: 'challan', dispatchId: d.id })} title="Print delivery challan" className="p-1.5 rounded-lg text-[#8E9299] hover:text-teal-700 hover:bg-teal-50"><Printer className="w-3.5 h-3.5" /></button>
+                                {can('delete_records') && (
                                 <button onClick={() => setPendingDispatchId(d.id)} title="Delete dispatch (admin)" className="p-1.5 rounded-lg text-[#8E9299] hover:text-rose-600 hover:bg-rose-50"><Trash2 className="w-3.5 h-3.5" /></button>
+                                )}
                               </td>
                             </tr>
                           ))
@@ -208,6 +235,18 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({ bookingI
           onClose();
         }}
         onCancel={() => setConfirmDelete(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmCancel}
+        title={`Cancel booking ${booking.bookingNumber}?`}
+        message={`${formatKg(booking.remainingKg)} still undispatched will be released. Dispatches already made and their invoices are kept.`}
+        confirmLabel="Cancel Booking"
+        onConfirm={() => {
+          setConfirmCancel(false);
+          cancelBooking(booking.id);
+        }}
+        onCancel={() => setConfirmCancel(false)}
       />
 
       <ConfirmDialog

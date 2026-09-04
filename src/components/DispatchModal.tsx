@@ -27,14 +27,15 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   onClose,
   preselectedBookingId,
 }) => {
-  const { bookings, customers, products, logDispatch } = useTrading();
+  const { bookings, customers, products, trucks, logDispatch } = useTrading();
 
   const activeBookings = bookings.filter((b) => b.status === 'active' && b.remainingKg > 0);
 
   const [selectedBookingId, setSelectedBookingId] = useState<string>('');
   const [kgInput, setKgInput] = useState<string>('20000');
-  const [truckNumber, setTruckNumber] = useState<string>('LES-8921-A');
-  const [driverPhone, setDriverPhone] = useState<string>('+92 300 1234567');
+  const [truckNumber, setTruckNumber] = useState<string>('');
+  const [driverPhone, setDriverPhone] = useState<string>('');
+  const [truckId, setTruckId] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [paymentReceivedImmediately, setPaymentReceivedImmediately] = useState<boolean>(false);
   const [sendWhatsApp, setSendWhatsApp] = useState<boolean>(true);
@@ -77,6 +78,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       bookingId: currentBooking.id,
       kg: dispatchKg,
       truckNumber: truckNumber.trim() || 'TR-GENERIC',
+      truckId: truckId || null,
       driverPhone: driverPhone.trim(),
       notes: notes.trim(),
       paymentReceivedImmediately,
@@ -278,6 +280,42 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {trucks.length > 0 && (
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8E9299] mb-1.5 uppercase tracking-widest">
+                    Pick from fleet
+                  </label>
+                  <select
+                    value={truckId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setTruckId(id);
+                      const t = trucks.find((x) => x.id === id);
+                      if (t) {
+                        setTruckNumber(t.number);
+                        setDriverPhone(t.driverPhone || '');
+                      }
+                    }}
+                    className="w-full bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl px-4 py-2.5 text-xs font-semibold text-[#111827] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600"
+                  >
+                    <option value="">— Enter vehicle manually —</option>
+                    {trucks
+                      .filter((t) => t.status !== 'inactive')
+                      .map((t) => (
+                        <option key={t.id} value={t.id} disabled={t.status === 'maintenance'}>
+                          {t.number} • {t.driverName || 'no driver'} • {t.capacityKg.toLocaleString()} kg{t.status === 'maintenance' ? ' (maintenance)' : t.status === 'on_trip' ? ' (on trip)' : ''}
+                        </option>
+                      ))}
+                  </select>
+                  {(() => {
+                    const t = trucks.find((x) => x.id === truckId);
+                    return t && t.capacityKg > 0 && dispatchKg > t.capacityKg ? (
+                      <p className="text-[11px] text-amber-700 mt-1">This load exceeds {t.number}'s capacity of {t.capacityKg.toLocaleString()} kg.</p>
+                    ) : null;
+                  })()}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
