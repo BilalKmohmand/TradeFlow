@@ -18,6 +18,8 @@ import {
   X,
   Clock,
   Plus,
+  ShieldCheck,
+  Lock,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { useTheme } from '../context/ThemeContext';
@@ -67,6 +69,7 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     products,
     bookings,
     setActiveScreen,
+    lockAdmin,
   } = useTrading();
 
   const { themeMode, setThemeMode, cycleTheme, resolvedTheme } = useTheme();
@@ -201,6 +204,20 @@ export const CommandBar: React.FC<CommandBarProps> = ({
       perform: () => {
         onClose();
         onOpenWhatsAppDrawer();
+      },
+    });
+
+    items.push({
+      id: 'action-lock-terminal',
+      category: 'actions',
+      title: 'Lock Trading Terminal (PIN Required)',
+      subtitle: 'Instantly lock the app so PIN is required on reopen',
+      badge: 'Security',
+      badgeType: 'warning',
+      icon: Lock,
+      perform: () => {
+        onClose();
+        lockAdmin();
       },
     });
 

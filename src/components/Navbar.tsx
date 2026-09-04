@@ -8,13 +8,13 @@ import {
   BarChart3,
   Truck,
   MessageSquare,
-  RotateCcw,
   Sparkles,
   Search,
   Sun,
   Moon,
   Check,
   ChevronDown,
+  Lock,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { useTheme, ThemeMode } from '../context/ThemeContext';
@@ -31,7 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenWhatsAppDrawer,
   onOpenCommandBar,
 }) => {
-  const { activeScreen, setActiveScreen, whatsappMessages, resetToSampleData } = useTrading();
+  const { activeScreen, setActiveScreen, whatsappMessages, isAdminUnlocked, lockAdmin } = useTrading();
   const { themeMode, resolvedTheme, setThemeMode, isNightTime, timeLabel } = useTheme();
 
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
@@ -227,6 +227,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
 
+            {/* Lock Terminal Button */}
+            <button
+              onClick={() => lockAdmin()}
+              title="Lock Trading Terminal (Requires PIN to enter)"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#E5E5E1] dark:border-[#203248] hover:border-rose-200 dark:hover:border-rose-900/60 text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600 dark:hover:text-rose-400 transition-all shadow-2xs active:scale-95"
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              <span className="hidden sm:inline">Lock</span>
+            </button>
+
             {/* Quick Dispatch Button */}
             <button
               onClick={onOpenDispatch}
@@ -248,19 +258,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {whatsappMessages.length}
                 </span>
               )}
-            </button>
-
-            {/* Reset sample data */}
-            <button
-              onClick={() => {
-                if (window.confirm('Reset all sample data back to fresh state?')) {
-                  resetToSampleData();
-                }
-              }}
-              title="Reset Sample Data"
-              className="hidden xl:flex p-2.5 rounded-2xl text-[#8E9299] dark:text-[#64748B] hover:text-[#111827] dark:hover:text-white hover:bg-[#FAF9F6] dark:hover:bg-[#162436] border border-transparent hover:border-[#E5E5E1] dark:hover:border-[#203248] transition-colors"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

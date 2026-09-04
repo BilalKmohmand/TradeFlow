@@ -103,3 +103,11 @@ export interface WhatsAppMessage {
 }
 
 export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'reports';
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  action: string;
+  details: string;
+  severity: 'info' | 'warning' | 'danger';
+}

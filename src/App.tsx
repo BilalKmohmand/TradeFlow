@@ -22,6 +22,7 @@ import { SuppliersScreen } from './screens/SuppliersScreen';
 import { ProductsScreen } from './screens/ProductsScreen';
 import { BookingsScreen } from './screens/BookingsScreen';
 import { ReportsScreen } from './screens/ReportsScreen';
+import { AppStartPinGate } from './components/AppStartPinGate';
 
 function MainApp() {
   const {
@@ -30,6 +31,7 @@ function MainApp() {
     setSelectedCustomerId,
     selectedSupplierId,
     setSelectedSupplierId,
+    isAdminUnlocked,
   } = useTrading();
 
   // Modal States
@@ -76,6 +78,11 @@ function MainApp() {
     setPaymentPreselectedId(supplierId);
     setIsPaymentModalOpen(true);
   };
+
+  // Master PIN Gate on start of web app
+  if (!isAdminUnlocked) {
+    return <AppStartPinGate />;
+  }
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-[#FAF9F6] dark:bg-[#090F17] text-[#111827] dark:text-[#F1F5F9] font-sans flex flex-col selection:bg-teal-700 selection:text-white transition-colors">

@@ -9,6 +9,7 @@ import {
   LedgerEntry,
   WhatsAppMessage,
   ActiveScreen,
+  AuditLogEntry,
 } from '../types';
 import { formatCurrency } from '../utils/formatters';
 import { loadAllData } from '../lib/database';
@@ -80,6 +81,20 @@ interface TradingContextType {
   // Latest Alert notification state for UI popups
   recentWhatsAppAlert: WhatsAppMessage | null;
   clearRecentAlert: () => void;
+
+  // Admin PIN & Security
+  isAdminUnlocked: boolean;
+  unlockAdmin: (pin: string) => boolean;
+  lockAdmin: () => void;
+  adminPin: string;
+  changeAdminPin: (oldPin: string, newPin: string) => { success: boolean; message: string };
+  resetAdminPinToDefault: () => void;
+  auditLogs: AuditLogEntry[];
+  logAuditEvent: (action: string, details: string, severity?: 'info' | 'warning' | 'danger') => void;
+  clearAuditLogs: () => void;
+  exportSystemBackup: () => string;
+  importSystemBackup: (jsonContent: string) => { success: boolean; message: string };
+  factoryResetAllData: () => void;
 }
 
 const TradingContext = createContext<TradingContextType | undefined>(undefined);
@@ -93,6 +108,25 @@ const safeParse = <T,>(raw: string | null, fallback: T): T => {
   }
 };
 
+const DEFAULT_ADMIN_PIN = '7860';
+
+const initialAuditLogs: AuditLogEntry[] = [
+  {
+    id: 'log-init-1',
+    timestamp: new Date(Date.now() - 3600000 * 4).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    action: 'System Security Armed',
+    details: 'Sarmaya Bulk Trading Engine initialized with Master PIN protection active.',
+    severity: 'info',
+  },
+  {
+    id: 'log-init-2',
+    timestamp: new Date(Date.now() - 1800000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    action: 'Ledger Audit Verified',
+    details: 'Calculated and balanced customer receivables against delivered tonnage.',
+    severity: 'info',
+  },
+];
+
 const STORAGE_KEYS = {
   CUSTOMERS: 'tradeflow_customers_v1',
   SUPPLIERS: 'tradeflow_suppliers_v1',
@@ -101,9 +135,18 @@ const STORAGE_KEYS = {
   DISPATCHES: 'tradeflow_dispatches_v1',
   LEDGER: 'tradeflow_ledger_v1',
   MESSAGES: 'tradeflow_whatsapp_v1',
+  ADMIN_PIN: 'sarmaya_admin_pin_v1',
+  AUDIT_LOGS: 'sarmaya_audit_logs_v1',
 };
 
 export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [adminPin, setAdminPin] = useState<string>(() =>
+    localStorage.getItem(STORAGE_KEYS.ADMIN_PIN) || DEFAULT_ADMIN_PIN
+  );
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(false);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() =>
+    safeParse(localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS), initialAuditLogs)
+  );
   const [customers, setCustomers] = useState<Customer[]>(() =>
     safeParse(localStorage.getItem(STORAGE_KEYS.CUSTOMERS), initialCustomers)
   );
@@ -589,6 +632,134 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return count;
   };
 
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(auditLogs));
+  }, [auditLogs]);
+
+  const logAuditEvent = (action: string, details: string, severity: 'info' | 'warning' | 'danger' = 'info') => {
+    const newEntry: AuditLogEntry = {
+      id: `audit-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      action,
+      details,
+      severity,
+    };
+    setAuditLogs((prev) => [newEntry, ...prev.slice(0, 99)]);
+  };
+
+  const clearAuditLogs = () => {
+    setAuditLogs([]);
+    localStorage.removeItem(STORAGE_KEYS.AUDIT_LOGS);
+  };
+
+  const unlockAdmin = (pin: string): boolean => {
+    if (pin.trim() === adminPin.trim()) {
+      setIsAdminUnlocked(true);
+      logAuditEvent('Admin Session Unlocked', 'Master PIN successfully verified.', 'info');
+      return true;
+    }
+    logAuditEvent('Invalid PIN Attempt', `Unsuccessful PIN entry attempt.`, 'warning');
+    return false;
+  };
+
+  const lockAdmin = () => {
+    setIsAdminUnlocked(false);
+    logAuditEvent('Admin Session Locked', 'Security session manually locked.', 'info');
+  };
+
+  const changeAdminPin = (oldPin: string, newPin: string): { success: boolean; message: string } => {
+    if (oldPin.trim() !== adminPin.trim()) {
+      logAuditEvent('PIN Change Rejected', 'Provided existing PIN did not match.', 'warning');
+      return { success: false, message: 'Current PIN is incorrect.' };
+    }
+    const clean = newPin.trim();
+    if (!/^\d{4,6}$/.test(clean)) {
+      return { success: false, message: 'New PIN must be exactly 4 to 6 numeric digits.' };
+    }
+    setAdminPin(clean);
+    localStorage.setItem(STORAGE_KEYS.ADMIN_PIN, clean);
+    logAuditEvent('Master PIN Updated', 'Administrator established a new master PIN.', 'warning');
+    return { success: true, message: 'Master PIN successfully updated.' };
+  };
+
+  const resetAdminPinToDefault = () => {
+    setAdminPin(DEFAULT_ADMIN_PIN);
+    localStorage.setItem(STORAGE_KEYS.ADMIN_PIN, DEFAULT_ADMIN_PIN);
+    logAuditEvent('Master PIN Reset', 'Master PIN restored to factory default (7860).', 'warning');
+  };
+
+  const exportSystemBackup = (): string => {
+    const backupData = {
+      appName: 'Sarmaya - Pakistani Bulk Trading & Logistics',
+      exportedAt: new Date().toISOString(),
+      version: '1.0',
+      customers,
+      suppliers,
+      products,
+      bookings,
+      dispatches,
+      ledger,
+      whatsappMessages,
+      auditLogs,
+    };
+    const jsonString = JSON.stringify(backupData, null, 2);
+    try {
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sarmaya-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      logAuditEvent('Backup Exported', 'Full system database exported to JSON file.', 'info');
+    } catch (e) {
+      console.error(e);
+    }
+    return jsonString;
+  };
+
+  const importSystemBackup = (jsonContent: string): { success: boolean; message: string } => {
+    try {
+      const data = JSON.parse(jsonContent);
+      if (!data || typeof data !== 'object') {
+        return { success: false, message: 'Invalid JSON backup format.' };
+      }
+      if (Array.isArray(data.customers)) setCustomers(data.customers);
+      if (Array.isArray(data.suppliers)) setSuppliers(data.suppliers);
+      if (Array.isArray(data.products)) setProducts(data.products);
+      if (Array.isArray(data.bookings)) setBookings(data.bookings);
+      if (Array.isArray(data.dispatches)) setDispatches(data.dispatches);
+      if (Array.isArray(data.ledger)) setLedger(data.ledger);
+      if (Array.isArray(data.whatsappMessages)) setWhatsappMessages(data.whatsappMessages);
+      if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
+
+      logAuditEvent('Backup Restored', 'Full system database restored from JSON backup.', 'warning');
+      return { success: true, message: 'Database successfully restored from backup.' };
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Failed to parse JSON backup file.' };
+    }
+  };
+
+  const factoryResetAllData = () => {
+    setCustomers([]);
+    setSuppliers([]);
+    setProducts([]);
+    setBookings([]);
+    setDispatches([]);
+    setLedger([]);
+    setWhatsappMessages([]);
+    localStorage.removeItem(STORAGE_KEYS.CUSTOMERS);
+    localStorage.removeItem(STORAGE_KEYS.SUPPLIERS);
+    localStorage.removeItem(STORAGE_KEYS.PRODUCTS);
+    localStorage.removeItem(STORAGE_KEYS.BOOKINGS);
+    localStorage.removeItem(STORAGE_KEYS.DISPATCHES);
+    localStorage.removeItem(STORAGE_KEYS.LEDGER);
+    localStorage.removeItem(STORAGE_KEYS.MESSAGES);
+    logAuditEvent('Factory Data Purged', 'Administrator performed complete system wipe.', 'danger');
+  };
+
   return (
     <TradingContext.Provider
       value={{
@@ -621,6 +792,18 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         resetToSampleData,
         recentWhatsAppAlert,
         clearRecentAlert,
+        isAdminUnlocked,
+        unlockAdmin,
+        lockAdmin,
+        adminPin,
+        changeAdminPin,
+        resetAdminPinToDefault,
+        auditLogs,
+        logAuditEvent,
+        clearAuditLogs,
+        exportSystemBackup,
+        importSystemBackup,
+        factoryResetAllData,
       }}
     >
       {children}
