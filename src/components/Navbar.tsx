@@ -88,7 +88,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   key={item.id}
                   onClick={() => setActiveScreen(item.id)}
                   title={item.label}
-                  className={`flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  className={`flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
                     isActive
                       ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
                       : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40]'
@@ -105,11 +105,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={onOpenCommandBar}
             title="Global Quick Search (Press ⌘K or Ctrl+K to open)"
-            className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] border border-[#CBD5E1] dark:border-[#2A3F5A] hover:border-teal-600/50 dark:hover:border-teal-400/50 rounded-2xl text-xs text-[#374151] dark:text-[#E2E8F0] shadow-2xs transition-all w-36 sm:w-44 lg:w-36 xl:w-52 shrink min-w-0 justify-between group cursor-pointer"
+            className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] border border-[#CBD5E1] dark:border-[#2A3F5A] hover:border-teal-600/50 dark:hover:border-teal-400/50 rounded-2xl text-xs text-[#374151] dark:text-[#E2E8F0] shadow-2xs transition-all shrink-0 justify-between group cursor-pointer w-auto sm:w-44 lg:w-auto 2xl:w-52"
           >
-            <div className="flex items-center gap-2 truncate min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               <Search className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0 group-hover:scale-110 transition-transform" />
-              <span className="text-xs font-medium text-[#4B5563] dark:text-[#CBD5E1] group-hover:text-[#111827] dark:group-hover:text-white truncate">
+              <span className="hidden sm:inline lg:hidden 2xl:inline text-xs font-medium text-[#4B5563] dark:text-[#CBD5E1] group-hover:text-[#111827] dark:group-hover:text-white truncate">
                 Search...
               </span>
             </div>
