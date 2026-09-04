@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
+  Trash2,
   Phone,
   Mail,
   MapPin,
@@ -13,6 +14,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
+import { ConfirmDialog } from './ConfirmDialog';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { AnimatedNumber } from './AnimatedNumber';
 
@@ -27,7 +29,8 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
   onClose,
   onOpenPayment,
 }) => {
-  const { suppliers, products, ledger } = useTrading();
+  const { suppliers, products, ledger, deleteSupplier } = useTrading();
+  const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
 
   const supplier = suppliers.find((s) => s.id === supplierId);
 
@@ -39,6 +42,7 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
   );
 
   return (
+    <>
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
         <motion.div
@@ -68,12 +72,21 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
               <p className="text-xs text-[#9CA3AF] font-medium">{supplier.company}</p>
             </div>
 
-            <button
-              onClick={onClose}
-              className="text-[#9CA3AF] hover:text-white p-2 rounded-2xl hover:bg-white/10 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setConfirmDelete(true)}
+                title="Delete supplier (admin)"
+                className="text-[#9CA3AF] hover:text-rose-400 p-2 rounded-2xl hover:bg-rose-500/10 transition-colors"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+              <button
+                onClick={onClose}
+                className="text-[#9CA3AF] hover:text-white p-2 rounded-2xl hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Metrics & Actions */}
@@ -217,6 +230,26 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
           </div>
         </motion.div>
       </div>
+
     </AnimatePresence>
+
+      <ConfirmDialog
+        isOpen={confirmDelete}
+        title={`Delete ${supplier.name}?`}
+        message={`${supplier.company} will be permanently removed from this device and the cloud database.`}
+        details={[
+          `${supplierProducts.length} product(s) will be kept but unlinked from this supplier.`,
+          'Supplier ledger entries and WhatsApp logs are removed.',
+          `Payable balance being written off: ${formatCurrency(supplier.totalOwed)}.`,
+        ]}
+        confirmLabel="Delete Supplier"
+        onConfirm={() => {
+          setConfirmDelete(false);
+          deleteSupplier(supplier.id);
+          onClose();
+        }}
+        onCancel={() => setConfirmDelete(false)}
+      />
+    </>
   );
 };

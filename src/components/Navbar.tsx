@@ -14,6 +14,7 @@ import {
   Check,
   ChevronDown,
   Lock,
+  ShieldCheck,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { useTheme, ThemeMode } from '../context/ThemeContext';
@@ -50,6 +51,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'products', label: 'Products', icon: Package },
     { id: 'bookings', label: 'Bookings', icon: ShoppingBag },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
+    { id: 'admin', label: 'Admin', icon: ShieldCheck },
   ];
 
   return (

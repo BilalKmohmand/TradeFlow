@@ -22,6 +22,7 @@ import { SuppliersScreen } from './screens/SuppliersScreen';
 import { ProductsScreen } from './screens/ProductsScreen';
 import { BookingsScreen } from './screens/BookingsScreen';
 import { ReportsScreen } from './screens/ReportsScreen';
+import { AdminScreen } from './screens/AdminScreen';
 import { AppStartPinGate } from './components/AppStartPinGate';
 
 function MainApp() {
@@ -142,6 +143,8 @@ function MainApp() {
             )}
 
             {activeScreen === 'reports' && <ReportsScreen />}
+
+            {activeScreen === 'admin' && <AdminScreen />}
           </motion.div>
         </AnimatePresence>
       </main>

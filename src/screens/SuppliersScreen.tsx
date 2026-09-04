@@ -9,7 +9,10 @@ import {
   CreditCard,
   ArrowRight,
   ExternalLink,
+  Trash2,
 } from 'lucide-react';
+import { Supplier } from '../types';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
@@ -25,8 +28,10 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
   onOpenAddSupplier,
   onOpenPayment,
 }) => {
-  const { suppliers, products } = useTrading();
+  const { suppliers, products, deleteSupplier } = useTrading();
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null);
+  const pendingProducts = pendingDelete ? products.filter((p) => p.supplierId === pendingDelete.id) : [];
 
   const filteredSuppliers = suppliers.filter(
     (s) =>
@@ -119,9 +124,19 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
                       </p>
                     </div>
 
-                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#FAF9F6] text-[#111827] border border-[#E5E5E1] uppercase tracking-wider">
-                      {sup.materialCategory.split('&')[0]}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#FAF9F6] text-[#111827] border border-[#E5E5E1] uppercase tracking-wider">
+                        {sup.materialCategory.split('&')[0]}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDelete(sup)}
+                        title="Delete supplier (admin)"
+                        className="p-1.5 rounded-xl text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#E5E5E1] space-y-2">
@@ -177,6 +192,23 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
           })
         )}
       </div>
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingDelete)}
+        title={`Delete ${pendingDelete?.name ?? 'supplier'}?`}
+        message={`${pendingDelete?.company ?? ''} will be permanently removed from this device and the cloud database.`}
+        details={[
+          `${pendingProducts.length} product(s) will be kept but unlinked from this supplier.`,
+          'Supplier ledger entries and WhatsApp logs are removed.',
+          `Payable balance being written off: ${formatCurrency(pendingDelete?.totalOwed ?? 0)}.`,
+        ]}
+        confirmLabel="Delete Supplier"
+        onConfirm={() => {
+          if (pendingDelete) deleteSupplier(pendingDelete.id);
+          setPendingDelete(null);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 };

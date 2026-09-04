@@ -194,6 +194,20 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     });
 
     items.push({
+      id: 'nav-admin',
+      category: 'navigation',
+      title: 'Open Admin Control Center',
+      subtitle: 'Change PIN, delete or purge data, backups, audit log',
+      badge: 'Admin',
+      badgeType: 'warning',
+      icon: ShieldCheck,
+      perform: () => {
+        onClose();
+        setActiveScreen('admin');
+      },
+    });
+
+    items.push({
       id: 'nav-whatsapp',
       category: 'navigation',
       title: 'Open WhatsApp Automation Hub',

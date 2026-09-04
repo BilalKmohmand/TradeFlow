@@ -10,6 +10,7 @@ import {
   Package,
   Users,
   CheckCircle2,
+  Trash2,
   FileSpreadsheet,
   Layers,
   ArrowUpRight,
@@ -31,12 +32,15 @@ import {
   Legend,
 } from 'recharts';
 import { useTrading } from '../context/TradingContext';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { Dispatch } from '../types';
 import { useTheme } from '../context/ThemeContext';
 import { formatCurrency, formatTons, formatDate, formatNumber } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
 
 export const ReportsScreen: React.FC = () => {
-  const { dispatches, ledger, bookings, customers, products } = useTrading();
+  const { dispatches, ledger, bookings, customers, products, deleteDispatch } = useTrading();
+  const [pendingDispatch, setPendingDispatch] = useState<Dispatch | null>(null);
   const { resolvedTheme } = useTheme();
 
   const [reportTab, setReportTab] = useState<'daily' | 'monthly'>('daily');
@@ -423,12 +427,13 @@ export const ReportsScreen: React.FC = () => {
                     <th className="py-3.5 px-6 text-right">Quantity</th>
                     <th className="py-3.5 px-6 text-right">Amount</th>
                     <th className="py-3.5 px-6 text-center">WhatsApp Alert</th>
+                    <th className="py-3.5 px-4 text-right"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0F0EE] dark:divide-[#1E2E40] font-mono">
                   {dailyDispatches.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-[#8E9299] dark:text-[#64748B] font-sans">
+                      <td colSpan={8} className="py-12 text-center text-[#8E9299] dark:text-[#64748B] font-sans">
                         No dispatches logged for {selectedDate}.
                       </td>
                     </tr>
@@ -480,6 +485,16 @@ export const ReportsScreen: React.FC = () => {
                             ) : (
                               <span className="text-[11px] text-[#8E9299]">—</span>
                             )}
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setPendingDispatch(d)}
+                              title="Delete dispatch (admin)"
+                              className="p-1.5 rounded-lg text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </td>
                         </tr>
                       );
@@ -912,6 +927,25 @@ export const ReportsScreen: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingDispatch)}
+        title={`Delete dispatch ${pendingDispatch?.dispatchNumber ?? ''}?`}
+        message="The dispatch will be permanently removed from this device and the cloud database."
+        details={[
+          `${pendingDispatch?.tons ?? 0} T is returned to warehouse stock and to the booking's remaining balance.`,
+          pendingDispatch?.paymentReceivedImmediately
+            ? 'The immediate payment recorded with it is reversed on the booking.'
+            : `${formatCurrency(pendingDispatch?.amount ?? 0)} is removed from the customer's outstanding balance.`,
+          'Matching ledger rows and the WhatsApp alert are removed.',
+        ]}
+        confirmLabel="Delete Dispatch"
+        onConfirm={() => {
+          if (pendingDispatch) deleteDispatch(pendingDispatch.id);
+          setPendingDispatch(null);
+        }}
+        onCancel={() => setPendingDispatch(null)}
+      />
     </div>
   );
 };

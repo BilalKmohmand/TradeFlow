@@ -11,7 +11,10 @@ import {
   Building,
   DollarSign,
   ExternalLink,
+  Trash2,
 } from 'lucide-react';
+import { Customer } from '../types';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
@@ -27,8 +30,12 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
   onOpenAddCustomer,
   onOpenPayment,
 }) => {
-  const { customers, bookings, sendWhatsAppReminder } = useTrading();
+  const { customers, bookings, dispatches, deleteCustomer } = useTrading();
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [pendingDelete, setPendingDelete] = useState<Customer | null>(null);
+
+  const pendingBookings = pendingDelete ? bookings.filter((b) => b.customerId === pendingDelete.id) : [];
+  const pendingDispatches = pendingDelete ? dispatches.filter((d) => d.customerId === pendingDelete.id) : [];
 
   const filteredCustomers = customers.filter(
     (c) =>
@@ -121,15 +128,25 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
                       </p>
                     </div>
 
-                    <span
-                      className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${
-                        cust.totalDue > 0
-                          ? 'bg-amber-50 text-amber-900 border-amber-200/80'
-                          : 'bg-teal-50 text-teal-900 border-teal-200/80'
-                      }`}
-                    >
-                      {cust.totalDue > 0 ? 'Pending Due' : 'All Clear'}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${
+                          cust.totalDue > 0
+                            ? 'bg-amber-50 text-amber-900 border-amber-200/80'
+                            : 'bg-teal-50 text-teal-900 border-teal-200/80'
+                        }`}
+                      >
+                        {cust.totalDue > 0 ? 'Pending Due' : 'All Clear'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDelete(cust)}
+                        title="Delete customer (admin)"
+                        className="p-1.5 rounded-xl text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#E5E5E1] space-y-2">
@@ -185,6 +202,24 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
           })
         )}
       </div>
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingDelete)}
+        title={`Delete ${pendingDelete?.name ?? 'customer'}?`}
+        message={`${pendingDelete?.company ?? ''} will be permanently removed from this device and the cloud database.`}
+        details={[
+          `${pendingBookings.length} booking(s) and ${pendingDispatches.length} dispatch(es) will be deleted.`,
+          'Dispatched stock is returned to the warehouse and the ledger rows are removed.',
+          `Outstanding balance being written off: ${formatCurrency(pendingDelete?.totalDue ?? 0)}.`,
+        ]}
+        confirmLabel="Delete Customer"
+        requireText={pendingBookings.length > 0 ? 'DELETE' : undefined}
+        onConfirm={() => {
+          if (pendingDelete) deleteCustomer(pendingDelete.id);
+          setPendingDelete(null);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 };

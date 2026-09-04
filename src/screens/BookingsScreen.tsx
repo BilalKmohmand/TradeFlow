@@ -13,11 +13,13 @@ import {
   DollarSign,
   ArrowRight,
   Filter,
+  Trash2,
 } from 'lucide-react';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatTons, formatDate } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
-import { BookingStatus } from '../types';
+import { BookingStatus, Booking } from '../types';
 
 interface BookingsScreenProps {
   onOpenNewBooking: () => void;
@@ -30,7 +32,9 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
   onOpenDispatchForBooking,
   onOpenCustomer,
 }) => {
-  const { bookings, customers, products } = useTrading();
+  const { bookings, customers, products, dispatches, deleteBooking } = useTrading();
+  const [pendingDelete, setPendingDelete] = useState<Booking | null>(null);
+  const pendingDispatches = pendingDelete ? dispatches.filter((d) => d.bookingId === pendingDelete.id) : [];
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | BookingStatus>('all');
 
@@ -162,9 +166,19 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                       </span>
                     </div>
 
-                    <span className="text-xs text-[#8E9299] font-medium font-mono">
-                      {formatDate(b.createdAt)}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-[#8E9299] font-medium font-mono">
+                        {formatDate(b.createdAt)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDelete(b)}
+                        title="Delete booking (admin)"
+                        className="p-1.5 rounded-xl text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Customer and Commodity Details */}
@@ -272,6 +286,24 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
           })
         )}
       </div>
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingDelete)}
+        title={`Delete booking ${pendingDelete?.bookingNumber ?? ''}?`}
+        message="The booking will be permanently removed from this device and the cloud database."
+        details={[
+          `${pendingDispatches.length} dispatch(es) under this booking will be deleted.`,
+          `${pendingDispatches.reduce((a, d) => a + d.tons, 0)} T of dispatched stock goes back into the warehouse.`,
+          'Unpaid dispatch amounts are removed from the customer balance and the ledger.',
+        ]}
+        confirmLabel="Delete Booking"
+        requireText={pendingDispatches.length > 0 ? 'DELETE' : undefined}
+        onConfirm={() => {
+          if (pendingDelete) deleteBooking(pendingDelete.id);
+          setPendingDelete(null);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 };

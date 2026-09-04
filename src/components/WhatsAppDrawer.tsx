@@ -7,6 +7,7 @@ import {
   CheckCheck,
   Zap,
   ExternalLink,
+  Trash2,
   Users,
   BellRing,
   RotateCcw,
@@ -24,6 +25,7 @@ export const WhatsAppDrawer: React.FC<WhatsAppDrawerProps> = ({ isOpen, onClose 
     whatsappMessages,
     customers,
     sendWhatsAppDirect,
+    deleteWhatsAppMessage,
     sendWhatsAppReminder,
     runAutomatedOverdueCheck,
   } = useTrading();
@@ -184,13 +186,22 @@ export const WhatsAppDrawer: React.FC<WhatsAppDrawerProps> = ({ isOpen, onClose 
                           <span className="text-[11px] text-[#8E9299] font-mono">
                             {msg.recipientPhone}
                           </span>
-                          <button
-                            onClick={() => sendWhatsAppDirect(msg.recipientPhone, msg.message)}
-                            className="text-xs font-bold text-teal-700 hover:text-teal-800 flex items-center gap-1 hover:underline"
-                          >
-                            <span>Open in WhatsApp</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => sendWhatsAppDirect(msg.recipientPhone, msg.message)}
+                              className="text-xs font-bold text-teal-700 hover:text-teal-800 flex items-center gap-1 hover:underline"
+                            >
+                              <span>Open in WhatsApp</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => deleteWhatsAppMessage(msg.id)}
+                              title="Delete log entry (admin)"
+                              className="p-1 rounded-lg text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </motion.div>
                     ))}

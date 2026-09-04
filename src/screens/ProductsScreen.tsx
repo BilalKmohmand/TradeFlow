@@ -9,7 +9,10 @@ import {
   CheckCircle2,
   DollarSign,
   Building,
+  Trash2,
 } from 'lucide-react';
+import { Product } from '../types';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatTons } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
@@ -23,7 +26,10 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
   onOpenAddProduct,
   onOpenBooking,
 }) => {
-  const { products, suppliers, updateProduct, bookings } = useTrading();
+  const { products, suppliers, updateProduct, bookings, dispatches, deleteProduct } = useTrading();
+  const [pendingDelete, setPendingDelete] = useState<Product | null>(null);
+  const pendingBookings = pendingDelete ? bookings.filter((b) => b.productId === pendingDelete.id) : [];
+  const pendingDispatches = pendingDelete ? dispatches.filter((d) => d.productId === pendingDelete.id) : [];
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [editingStockId, setEditingStockId] = useState<string | null>(null);
@@ -233,23 +239,50 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                 )}
               </div>
 
-              <div className="pt-2 border-t border-[#F0F0EE] flex items-center justify-between">
-                <span className="text-[11px] font-mono text-[#8E9299]">
+              <div className="pt-2 border-t border-[#F0F0EE] flex items-center justify-between gap-2">
+                <span className="text-[11px] font-mono text-[#8E9299] truncate">
                   Total Value: {formatCurrency(prod.stockTons * prod.unitPricePerTon)}
                 </span>
 
-                <button
-                  onClick={onOpenBooking}
-                  className="px-3.5 py-1.5 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-xl flex items-center gap-1 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5 text-teal-400" />
-                  <span>Book Order</span>
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                        type="button"
+                        onClick={() => setPendingDelete(prod)}
+                        title="Delete product (admin)"
+                        className="p-1.5 rounded-xl text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                  <button
+                    onClick={onOpenBooking}
+                    className="px-3.5 py-1.5 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-xl flex items-center gap-1 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-teal-400" />
+                    <span>Book Order</span>
+                  </button>
+                </div>
               </div>
             </motion.div>
           );
         })}
       </div>
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingDelete)}
+        title={`Delete ${pendingDelete?.name ?? 'product'}?`}
+        message="This commodity will be permanently removed from this device and the cloud database."
+        details={[
+          `${pendingBookings.length} booking(s) and ${pendingDispatches.length} dispatch(es) for this product will be deleted.`,
+          'Customer balances for unpaid dispatches of this product are reduced accordingly.',
+        ]}
+        confirmLabel="Delete Product"
+        requireText={pendingBookings.length > 0 ? 'DELETE' : undefined}
+        onConfirm={() => {
+          if (pendingDelete) deleteProduct(pendingDelete.id);
+          setPendingDelete(null);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 };

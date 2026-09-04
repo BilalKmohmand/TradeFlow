@@ -16,7 +16,9 @@ import {
   Send,
   CheckCircle2,
   ExternalLink,
+  Trash2,
 } from 'lucide-react';
+import { ConfirmDialog } from './ConfirmDialog';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatTons, formatDate } from '../utils/formatters';
 import { AnimatedNumber } from './AnimatedNumber';
@@ -40,11 +42,15 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     ledger,
     products,
     sendWhatsAppReminder,
-    sendWhatsAppDirect,
+    dispatches,
+    deleteCustomer,
+    deleteLedgerEntry,
   } = useTrading();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'ledger' | 'bookings'>('overview');
   const [reminderSent, setReminderSent] = useState<boolean>(false);
+  const [confirmDeleteCustomer, setConfirmDeleteCustomer] = useState<boolean>(false);
+  const [pendingLedgerId, setPendingLedgerId] = useState<string | null>(null);
 
   const customer = customers.find((c) => c.id === customerId);
 
@@ -55,13 +61,17 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     (l) => l.entityType === 'customer' && l.entityId === customer.id
   );
 
+  const customerDispatches = dispatches.filter((d) => d.customerId === customer.id);
+  const pendingLedger = pendingLedgerId ? customerLedger.find((l) => l.id === pendingLedgerId) : undefined;
+
   const handleSendReminder = () => {
-    const msg = sendWhatsAppReminder(customer.id);
+    sendWhatsAppReminder(customer.id);
     setReminderSent(true);
     setTimeout(() => setReminderSent(false), 3000);
   };
 
   return (
+    <>
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
         <motion.div
@@ -91,12 +101,21 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
               <p className="text-xs text-[#9CA3AF] font-medium">{customer.company}</p>
             </div>
 
-            <button
-              onClick={onClose}
-              className="text-[#9CA3AF] hover:text-white p-2 rounded-2xl hover:bg-white/10 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setConfirmDeleteCustomer(true)}
+                title="Delete customer (admin)"
+                className="text-[#9CA3AF] hover:text-rose-400 p-2 rounded-2xl hover:bg-rose-500/10 transition-colors"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+              <button
+                onClick={onClose}
+                className="text-[#9CA3AF] hover:text-white p-2 rounded-2xl hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Quick Metrics Bar */}
@@ -405,12 +424,13 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                           <th className="py-3 px-4 text-right">Debit (+)</th>
                           <th className="py-3 px-4 text-right">Credit (-)</th>
                           <th className="py-3 px-4 text-right">Balance</th>
+                          <th className="py-3 px-4 text-right"><span className="sr-only">Actions</span></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#FAF9F6] font-mono">
                         {customerLedger.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="py-8 text-center text-[#8E9299] font-sans">
+                            <td colSpan={6} className="py-8 text-center text-[#8E9299] font-sans">
                               No ledger entries for this customer.
                             </td>
                           </tr>
@@ -437,6 +457,16 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                               <td className="py-3 px-4 text-right font-bold text-[#111827]">
                                 {formatCurrency(item.balanceAfter)}
                               </td>
+                              <td className="py-3 px-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => setPendingLedgerId(item.id)}
+                                  title="Delete ledger entry (admin)"
+                                  className="p-1.5 rounded-lg text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
                             </tr>
                           ))
                         )}
@@ -449,6 +479,40 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           </div>
         </motion.div>
       </div>
+
     </AnimatePresence>
+
+      <ConfirmDialog
+        isOpen={confirmDeleteCustomer}
+        title={`Delete ${customer.name}?`}
+        message={`${customer.company} will be permanently removed from this device and the cloud database.`}
+        details={[
+          `${customerBookings.length} booking(s) and ${customerDispatches.length} dispatch(es) will be deleted.`,
+          'Dispatched stock is returned to the warehouse and the ledger rows are removed.',
+          `Outstanding balance being written off: ${formatCurrency(customer.totalDue)}.`,
+        ]}
+        confirmLabel="Delete Customer"
+        requireText={customerBookings.length > 0 ? 'DELETE' : undefined}
+        onConfirm={() => {
+          setConfirmDeleteCustomer(false);
+          deleteCustomer(customer.id);
+          onClose();
+        }}
+        onCancel={() => setConfirmDeleteCustomer(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingLedger)}
+        title="Delete this ledger entry?"
+        message={pendingLedger ? `${pendingLedger.referenceId}: ${pendingLedger.description}` : ''}
+        details={['Only the entry is removed. The customer balance is not recalculated; adjust it manually if needed.']}
+        confirmLabel="Delete Entry"
+        onConfirm={() => {
+          if (pendingLedgerId) deleteLedgerEntry(pendingLedgerId);
+          setPendingLedgerId(null);
+        }}
+        onCancel={() => setPendingLedgerId(null)}
+      />
+    </>
   );
 };

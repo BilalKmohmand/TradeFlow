@@ -12,8 +12,8 @@ import {
   AuditLogEntry,
 } from '../types';
 import { formatCurrency } from '../utils/formatters';
-import { loadAllData } from '../lib/database';
-import { supabase } from '../lib/supabaseClient';
+import { loadAllData, deleteRows, clearTable, clearAllTables, TableName } from '../lib/database';
+import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import {
   initialCustomers,
   initialSuppliers,
@@ -46,6 +46,19 @@ interface TradingContextType {
   updateSupplier: (id: string, data: Partial<Supplier>) => void;
   addProduct: (product: Omit<Product, 'id'>) => Product;
   updateProduct: (id: string, data: Partial<Product>) => void;
+  updateBooking: (id: string, data: Partial<Booking>) => void;
+
+  // Admin: destructive deletes (cascade + reverse ledger/stock effects, synced to Supabase)
+  deleteCustomer: (id: string) => DeleteSummary;
+  deleteSupplier: (id: string) => DeleteSummary;
+  deleteProduct: (id: string) => DeleteSummary;
+  deleteBooking: (id: string) => DeleteSummary;
+  deleteDispatch: (id: string) => DeleteSummary;
+  deleteLedgerEntry: (id: string) => void;
+  deleteWhatsAppMessage: (id: string) => void;
+  purgeTable: (table: TableName) => void;
+  isCloudSyncEnabled: boolean;
+  isCloudSyncReady: boolean;
   
   createBooking: (bookingData: {
     customerId: string;
@@ -96,6 +109,35 @@ interface TradingContextType {
   importSystemBackup: (jsonContent: string) => { success: boolean; message: string };
   factoryResetAllData: () => void;
 }
+
+export interface DeleteSummary {
+  customers: number;
+  suppliers: number;
+  products: number;
+  bookings: number;
+  dispatches: number;
+  ledger: number;
+  whatsappMessages: number;
+}
+
+const emptySummary = (): DeleteSummary => ({
+  customers: 0,
+  suppliers: 0,
+  products: 0,
+  bookings: 0,
+  dispatches: 0,
+  ledger: 0,
+  whatsappMessages: 0,
+});
+
+/** Collision-safe id generator (Date.now() alone repeats when called in a tight loop). */
+let idCounter = 0;
+export const uid = (prefix: string): string => {
+  idCounter = (idCounter + 1) % 100000;
+  return `${prefix}-${Date.now().toString(36)}${idCounter.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+};
+
+const round2 = (n: number) => Number(n.toFixed(2));
 
 const TradingContext = createContext<TradingContextType | undefined>(undefined);
 
@@ -180,10 +222,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   const [recentWhatsAppAlert, setRecentWhatsAppAlert] = useState<WhatsAppMessage | null>(null);
 
+  // Cloud sync is only enabled once the initial Supabase load succeeds. Before that, pushing the
+  // (possibly stale) localStorage snapshot up would resurrect rows that were deleted elsewhere.
+  const [isCloudSyncReady, setIsCloudSyncReady] = useState<boolean>(false);
+
   // Load live data from Supabase on mount (falls back to localStorage/empty if no tables or network error)
   useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    let cancelled = false;
     loadAllData()
       .then((data) => {
+        if (cancelled) return;
         setCustomers(data.customers);
         setSuppliers(data.suppliers);
         setProducts(data.products);
@@ -191,10 +240,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setDispatches(data.dispatches);
         setLedger(data.ledger);
         setWhatsappMessages(data.whatsappMessages);
+        setIsCloudSyncReady(true);
       })
       .catch((err) => {
-        console.warn('Supabase load failed; using local/empty data:', err?.message || err);
+        console.warn('Supabase load failed; running in local-only mode:', err?.message || err);
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Persistence to localStorage
@@ -227,7 +280,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [whatsappMessages]);
 
   const syncToSupabase = async (table: string, rows: unknown[]) => {
-    if (rows.length === 0) return;
+    if (!isCloudSyncReady || rows.length === 0) return;
     try {
       const { error } = await supabase.from(table).upsert(rows as any[], { onConflict: 'id' });
       if (error) console.warn(`Supabase ${table} upsert error:`, error.message);
@@ -236,17 +289,24 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  useEffect(() => { void syncToSupabase('customers', customers); }, [customers]);
-  useEffect(() => { void syncToSupabase('suppliers', suppliers); }, [suppliers]);
-  useEffect(() => { void syncToSupabase('products', products); }, [products]);
-  useEffect(() => { void syncToSupabase('bookings', bookings); }, [bookings]);
-  useEffect(() => { void syncToSupabase('dispatches', dispatches); }, [dispatches]);
-  useEffect(() => { void syncToSupabase('ledger', ledger); }, [ledger]);
-  useEffect(() => { void syncToSupabase('whatsapp_messages', whatsappMessages); }, [whatsappMessages]);
+  useEffect(() => { void syncToSupabase('customers', customers); }, [customers, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('suppliers', suppliers); }, [suppliers, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('products', products); }, [products, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('bookings', bookings); }, [bookings, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('dispatches', dispatches); }, [dispatches, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('ledger', ledger); }, [ledger, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('whatsapp_messages', whatsappMessages); }, [whatsappMessages, isCloudSyncReady]);
+
+  /** Remote delete helper; only touches Supabase when cloud sync is live. */
+  const removeRemote = (table: TableName, ids: string[]) => {
+    if (!isCloudSyncReady) return;
+    void deleteRows(table, ids);
+  };
 
   const clearRecentAlert = () => setRecentWhatsAppAlert(null);
 
   const resetToSampleData = () => {
+    if (isCloudSyncReady) void clearAllTables();
     setCustomers(initialCustomers);
     setSuppliers(initialSuppliers);
     setProducts(initialProducts);
@@ -254,13 +314,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDispatches(initialDispatches);
     setLedger(initialLedgerEntries);
     setWhatsappMessages(initialWhatsAppMessages);
-    localStorage.clear();
+    logAuditEvent('Sample Data Loaded', 'All business data replaced with the built-in sample dataset.', 'warning');
   };
 
   const addCustomer = (data: Omit<Customer, 'id' | 'createdAt' | 'totalDue'>): Customer => {
     const newCust: Customer = {
       ...data,
-      id: `cust-${Date.now()}`,
+      id: uid('cust'),
       totalDue: 0,
       createdAt: new Date().toISOString().split('T')[0],
     };
@@ -275,7 +335,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const addSupplier = (data: Omit<Supplier, 'id' | 'createdAt' | 'totalOwed'>): Supplier => {
     const newSup: Supplier = {
       ...data,
-      id: `sup-${Date.now()}`,
+      id: uid('sup'),
       totalOwed: 0,
       createdAt: new Date().toISOString().split('T')[0],
     };
@@ -290,7 +350,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const addProduct = (data: Omit<Product, 'id'>): Product => {
     const newProd: Product = {
       ...data,
-      id: `prod-${Date.now()}`,
+      id: uid('prod'),
     };
     setProducts((prev) => [newProd, ...prev]);
     return newProd;
@@ -298,6 +358,268 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateProduct = (id: string, data: Partial<Product>) => {
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
+  };
+
+  const updateBooking = (id: string, data: Partial<Booking>) => {
+    setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, ...data } : b)));
+  };
+
+  // ---------------------------------------------------------------------------
+  // Admin deletes
+  // ---------------------------------------------------------------------------
+
+  /** Ledger references a dispatch by its dispatch number (billing + immediate payment rows). */
+  const ledgerRefsForDispatch = (d: Dispatch) => new Set([d.dispatchNumber, `PAY-${d.dispatchNumber}`]);
+
+  /**
+   * Reverse the side effects of a set of dispatches (stock, customer dues, booking progress) and
+   * remove every derived row (ledger + WhatsApp). Shared by deleteDispatch and deleteBooking.
+   * Booking fields are only reversed when `reverseBookings` is true (deleteBooking removes them anyway).
+   */
+  const reverseDispatches = (targets: Dispatch[], reverseBookings: boolean): { ledgerIds: string[]; waIds: string[] } => {
+    if (targets.length === 0) return { ledgerIds: [], waIds: [] };
+    const dispatchIds = new Set(targets.map((d) => d.id));
+    const refs = new Set<string>();
+    targets.forEach((d) => ledgerRefsForDispatch(d).forEach((r) => refs.add(r)));
+
+    const ledgerIds = ledger.filter((l) => refs.has(l.referenceId)).map((l) => l.id);
+    const waIds = whatsappMessages.filter((m) => m.dispatchId && dispatchIds.has(m.dispatchId)).map((m) => m.id);
+
+    // Stock back into the warehouse
+    const stockDelta = new Map<string, number>();
+    targets.forEach((d) => stockDelta.set(d.productId, (stockDelta.get(d.productId) || 0) + d.tons));
+    setProducts((prev) =>
+      prev.map((p) => (stockDelta.has(p.id) ? { ...p, stockTons: round2(p.stockTons + (stockDelta.get(p.id) || 0)) } : p))
+    );
+
+    // Unpaid dispatch amounts come off the customer's outstanding balance
+    const dueDelta = new Map<string, number>();
+    targets
+      .filter((d) => !d.paymentReceivedImmediately)
+      .forEach((d) => dueDelta.set(d.customerId, (dueDelta.get(d.customerId) || 0) + d.amount));
+    setCustomers((prev) =>
+      prev.map((c) =>
+        dueDelta.has(c.id) ? { ...c, totalDue: Math.max(0, round2(c.totalDue - (dueDelta.get(c.id) || 0))) } : c
+      )
+    );
+
+    if (reverseBookings) {
+      const byBooking = new Map<string, Dispatch[]>();
+      targets.forEach((d) => byBooking.set(d.bookingId, [...(byBooking.get(d.bookingId) || []), d]));
+      setBookings((prev) =>
+        prev.map((b) => {
+          const ds = byBooking.get(b.id);
+          if (!ds) return b;
+          const tons = ds.reduce((a, d) => a + d.tons, 0);
+          const paid = ds.filter((d) => d.paymentReceivedImmediately).reduce((a, d) => a + d.amount, 0);
+          const dispatchedTons = Math.max(0, round2(b.dispatchedTons - tons));
+          const remainingTons = Math.max(0, round2(b.totalTons - dispatchedTons));
+          const paidAmount = Math.max(0, round2(b.paidAmount - paid));
+          const paymentStatus = paidAmount <= 0 ? 'unpaid' : paidAmount >= b.totalAmount ? 'paid' : 'partial';
+          return {
+            ...b,
+            dispatchedTons,
+            remainingTons,
+            paidAmount,
+            paymentStatus,
+            status: b.status === 'cancelled' ? 'cancelled' : remainingTons === 0 ? 'completed' : 'active',
+          };
+        })
+      );
+    }
+
+    setLedger((prev) => prev.filter((l) => !refs.has(l.referenceId)));
+    setWhatsappMessages((prev) => prev.filter((m) => !(m.dispatchId && dispatchIds.has(m.dispatchId))));
+    setDispatches((prev) => prev.filter((d) => !dispatchIds.has(d.id)));
+
+    removeRemote('ledger', ledgerIds);
+    removeRemote('whatsapp_messages', waIds);
+    removeRemote('dispatches', Array.from(dispatchIds));
+
+    return { ledgerIds, waIds };
+  };
+
+  const deleteDispatch = (id: string): DeleteSummary => {
+    const summary = emptySummary();
+    const target = dispatches.find((d) => d.id === id);
+    if (!target) return summary;
+    const { ledgerIds, waIds } = reverseDispatches([target], true);
+    summary.dispatches = 1;
+    summary.ledger = ledgerIds.length;
+    summary.whatsappMessages = waIds.length;
+    logAuditEvent(
+      'Dispatch Deleted',
+      `${target.dispatchNumber} (${target.tons} T, ${formatCurrency(target.amount)}) removed; stock, booking progress and customer balance reversed.`,
+      'danger'
+    );
+    return summary;
+  };
+
+  /** Removes bookings and everything hanging off them. Returns the summary of removed rows. */
+  const removeBookings = (targets: Booking[]): DeleteSummary => {
+    const summary = emptySummary();
+    if (targets.length === 0) return summary;
+    const bookingIds = new Set(targets.map((b) => b.id));
+    const bookingNumbers = new Set(targets.map((b) => b.bookingNumber));
+
+    const relatedDispatches = dispatches.filter((d) => bookingIds.has(d.bookingId));
+    const rev = reverseDispatches(relatedDispatches, false);
+
+    const bookingLedgerIds = ledger
+      .filter((l) => bookingNumbers.has(l.referenceId) || bookingIds.has(l.referenceId))
+      .map((l) => l.id);
+    const bookingWaIds = whatsappMessages.filter((m) => m.bookingId && bookingIds.has(m.bookingId)).map((m) => m.id);
+
+    setLedger((prev) => prev.filter((l) => !(bookingNumbers.has(l.referenceId) || bookingIds.has(l.referenceId))));
+    setWhatsappMessages((prev) => prev.filter((m) => !(m.bookingId && bookingIds.has(m.bookingId))));
+    setBookings((prev) => prev.filter((b) => !bookingIds.has(b.id)));
+
+    removeRemote('ledger', bookingLedgerIds);
+    removeRemote('whatsapp_messages', bookingWaIds);
+    removeRemote('bookings', Array.from(bookingIds));
+
+    summary.bookings = targets.length;
+    summary.dispatches = relatedDispatches.length;
+    summary.ledger = rev.ledgerIds.length + bookingLedgerIds.length;
+    summary.whatsappMessages = rev.waIds.length + bookingWaIds.length;
+    return summary;
+  };
+
+  const deleteBooking = (id: string): DeleteSummary => {
+    const target = bookings.find((b) => b.id === id);
+    if (!target) return emptySummary();
+    const summary = removeBookings([target]);
+    logAuditEvent(
+      'Booking Deleted',
+      `${target.bookingNumber} removed with ${summary.dispatches} dispatch(es) and ${summary.ledger} ledger row(s); stock and balances reversed.`,
+      'danger'
+    );
+    return summary;
+  };
+
+  const deleteCustomer = (id: string): DeleteSummary => {
+    const target = customers.find((c) => c.id === id);
+    if (!target) return emptySummary();
+
+    const summary = removeBookings(bookings.filter((b) => b.customerId === id));
+
+    // Remaining rows that point at the customer directly (payments, reminders, stray dispatches)
+    const strayDispatchIds = dispatches.filter((d) => d.customerId === id).map((d) => d.id);
+    const ledgerIds = ledger.filter((l) => l.entityType === 'customer' && l.entityId === id).map((l) => l.id);
+    const cleanPhone = target.phone.replace(/[^0-9]/g, '');
+    const waIds = whatsappMessages
+      .filter((m) => m.recipientType === 'customer' && m.recipientPhone.replace(/[^0-9]/g, '') === cleanPhone)
+      .map((m) => m.id);
+
+    setDispatches((prev) => prev.filter((d) => d.customerId !== id));
+    setLedger((prev) => prev.filter((l) => !(l.entityType === 'customer' && l.entityId === id)));
+    setWhatsappMessages((prev) => prev.filter((m) => !waIds.includes(m.id)));
+    setCustomers((prev) => prev.filter((c) => c.id !== id));
+    if (selectedCustomerId === id) setSelectedCustomerId(null);
+
+    removeRemote('dispatches', strayDispatchIds);
+    removeRemote('ledger', ledgerIds);
+    removeRemote('whatsapp_messages', waIds);
+    removeRemote('customers', [id]);
+
+    summary.customers = 1;
+    summary.dispatches += strayDispatchIds.length;
+    summary.ledger += ledgerIds.length;
+    summary.whatsappMessages += waIds.length;
+    logAuditEvent(
+      'Customer Deleted',
+      `${target.name} (${target.company}) removed with ${summary.bookings} booking(s), ${summary.dispatches} dispatch(es), ${summary.ledger} ledger row(s).`,
+      'danger'
+    );
+    return summary;
+  };
+
+  const deleteSupplier = (id: string): DeleteSummary => {
+    const summary = emptySummary();
+    const target = suppliers.find((s) => s.id === id);
+    if (!target) return summary;
+
+    const ledgerIds = ledger.filter((l) => l.entityType === 'supplier' && l.entityId === id).map((l) => l.id);
+    const cleanPhone = target.phone.replace(/[^0-9]/g, '');
+    const waIds = whatsappMessages
+      .filter((m) => m.recipientType === 'supplier' && m.recipientPhone.replace(/[^0-9]/g, '') === cleanPhone)
+      .map((m) => m.id);
+
+    // Products stay; they just lose their primary supplier link.
+    setProducts((prev) => prev.map((p) => (p.supplierId === id ? { ...p, supplierId: null } : p)));
+    setLedger((prev) => prev.filter((l) => !(l.entityType === 'supplier' && l.entityId === id)));
+    setWhatsappMessages((prev) => prev.filter((m) => !waIds.includes(m.id)));
+    setSuppliers((prev) => prev.filter((s) => s.id !== id));
+    if (selectedSupplierId === id) setSelectedSupplierId(null);
+
+    removeRemote('ledger', ledgerIds);
+    removeRemote('whatsapp_messages', waIds);
+    removeRemote('suppliers', [id]);
+
+    summary.suppliers = 1;
+    summary.ledger = ledgerIds.length;
+    summary.whatsappMessages = waIds.length;
+    summary.products = products.filter((p) => p.supplierId === id).length;
+    logAuditEvent(
+      'Supplier Deleted',
+      `${target.name} (${target.company}) removed; ${summary.products} product(s) unlinked, ${summary.ledger} ledger row(s) removed.`,
+      'danger'
+    );
+    return summary;
+  };
+
+  const deleteProduct = (id: string): DeleteSummary => {
+    const target = products.find((p) => p.id === id);
+    if (!target) return emptySummary();
+
+    const summary = removeBookings(bookings.filter((b) => b.productId === id));
+    const strayDispatchIds = dispatches.filter((d) => d.productId === id).map((d) => d.id);
+
+    setDispatches((prev) => prev.filter((d) => d.productId !== id));
+    setProducts((prev) => prev.filter((p) => p.id !== id));
+    removeRemote('dispatches', strayDispatchIds);
+    removeRemote('products', [id]);
+
+    summary.products = 1;
+    summary.dispatches += strayDispatchIds.length;
+    logAuditEvent(
+      'Product Deleted',
+      `${target.name} removed with ${summary.bookings} booking(s) and ${summary.dispatches} dispatch(es).`,
+      'danger'
+    );
+    return summary;
+  };
+
+  const deleteLedgerEntry = (id: string) => {
+    const target = ledger.find((l) => l.id === id);
+    if (!target) return;
+    setLedger((prev) => prev.filter((l) => l.id !== id));
+    removeRemote('ledger', [id]);
+    logAuditEvent('Ledger Entry Deleted', `${target.referenceId}: ${target.description}`, 'danger');
+  };
+
+  const deleteWhatsAppMessage = (id: string) => {
+    const target = whatsappMessages.find((m) => m.id === id);
+    if (!target) return;
+    setWhatsappMessages((prev) => prev.filter((m) => m.id !== id));
+    removeRemote('whatsapp_messages', [id]);
+    logAuditEvent('WhatsApp Log Deleted', `${target.type} to ${target.recipientName} removed.`, 'warning');
+  };
+
+  /** Wipe a whole table (local + cloud) without any cascade or reversal. */
+  const purgeTable = (table: TableName) => {
+    const setters: Record<TableName, () => void> = {
+      customers: () => setCustomers([]),
+      suppliers: () => setSuppliers([]),
+      products: () => setProducts([]),
+      bookings: () => setBookings([]),
+      dispatches: () => setDispatches([]),
+      ledger: () => setLedger([]),
+      whatsapp_messages: () => setWhatsappMessages([]),
+    };
+    setters[table]();
+    if (isCloudSyncReady) void clearTable(table);
+    logAuditEvent('Table Purged', `Administrator emptied the "${table}" table.`, 'danger');
   };
 
   const createBooking = ({
@@ -318,7 +640,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const bookingNum = `BK-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
     const totalAmount = totalTons * pricePerTon;
     const newBooking: Booking = {
-      id: `book-${Date.now()}`,
+      id: uid('book'),
       bookingNumber: bookingNum,
       customerId,
       productId,
@@ -344,7 +666,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const msgText = `📑 *Sarmaya Booking Confirmed*\n\nHello ${customer.name},\nYour booking *${bookingNum}* for *${totalTons.toLocaleString()} Tons* of *${product.name}* has been scheduled at *${formatCurrency(pricePerTon)}/Ton* (Total: *${formatCurrency(totalAmount)}*).\n\nDispatches will be notified automatically with truck & driver details upon release. Thank you for your business!`;
 
       const waMsg: WhatsAppMessage = {
-        id: `wa-${Date.now()}`,
+        id: uid('wa'),
         type: 'booking_confirmation',
         recipientName: customer.name,
         recipientPhone: customer.phone,
@@ -400,7 +722,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     const newDispatch: Dispatch = {
-      id: `disp-${Date.now()}`,
+      id: uid('disp'),
       dispatchNumber: dispatchNum,
       bookingId,
       customerId: booking.customerId,
@@ -459,7 +781,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // 4. Create Ledger Entries
     const currentCustomerDue = customer ? customer.totalDue : 0;
     const billedLedger: LedgerEntry = {
-      id: `led-${Date.now()}-1`,
+      id: uid('led'),
       entityType: 'customer',
       entityId: booking.customerId,
       type: 'dispatch_billed',
@@ -476,7 +798,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (paymentReceivedImmediately) {
       const paymentLedger: LedgerEntry = {
-        id: `led-${Date.now()}-2`,
+        id: uid('led'),
         entityType: 'customer',
         entityId: booking.customerId,
         type: 'payment_received',
@@ -497,7 +819,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     let waMessage: WhatsAppMessage | undefined;
     if (sendWhatsApp && customer) {
       waMessage = {
-        id: `wa-${Date.now()}`,
+        id: uid('wa'),
         type: 'dispatch_alert',
         recipientName: customer.name,
         recipientPhone: customer.phone,
@@ -529,7 +851,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const payRef = `PAY-${Math.floor(1000 + Math.random() * 9000)}`;
     const newLedger: LedgerEntry = {
-      id: `led-${Date.now()}`,
+      id: uid('led'),
       entityType: 'customer',
       entityId: customerId,
       type: 'payment_received',
@@ -547,7 +869,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const msgText = `💳 *Payment Acknowledgment*\n\nHello ${customer.name},\nWe have successfully received your payment of *${formatCurrency(amount)}* (Ref: ${payRef}).\n\nYour current outstanding balance is: *${formatCurrency(newTotalDue)}*.\nThank you for your prompt settlement!`;
 
     const waMsg: WhatsAppMessage = {
-      id: `wa-${Date.now()}`,
+      id: uid('wa'),
       type: 'payment_reminder',
       recipientName: customer.name,
       recipientPhone: customer.phone,
@@ -574,7 +896,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const payRef = `SUP-PAY-${Math.floor(1000 + Math.random() * 9000)}`;
     const newLedger: LedgerEntry = {
-      id: `led-${Date.now()}`,
+      id: uid('led'),
       entityType: 'supplier',
       entityId: supplierId,
       type: 'payment_made',
@@ -598,7 +920,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const messageContent = customText || defaultMsg;
 
     const waMsg: WhatsAppMessage = {
-      id: `wa-${Date.now()}`,
+      id: uid('wa'),
       type: 'payment_reminder',
       recipientName: customer.name,
       recipientPhone: customer.phone,
@@ -638,7 +960,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const logAuditEvent = (action: string, details: string, severity: 'info' | 'warning' | 'danger' = 'info') => {
     const newEntry: AuditLogEntry = {
-      id: `audit-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      id: uid('audit'),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       action,
       details,
@@ -726,6 +1048,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (!data || typeof data !== 'object') {
         return { success: false, message: 'Invalid JSON backup format.' };
       }
+      // Backup replaces the dataset, so rows missing from the backup must go from the cloud too.
+      if (isCloudSyncReady) void clearAllTables();
       if (Array.isArray(data.customers)) setCustomers(data.customers);
       if (Array.isArray(data.suppliers)) setSuppliers(data.suppliers);
       if (Array.isArray(data.products)) setProducts(data.products);
@@ -743,6 +1067,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const factoryResetAllData = () => {
+    if (isCloudSyncReady) void clearAllTables();
     setCustomers([]);
     setSuppliers([]);
     setProducts([]);
@@ -782,6 +1107,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updateSupplier,
         addProduct,
         updateProduct,
+        updateBooking,
+        deleteCustomer,
+        deleteSupplier,
+        deleteProduct,
+        deleteBooking,
+        deleteDispatch,
+        deleteLedgerEntry,
+        deleteWhatsAppMessage,
+        purgeTable,
+        isCloudSyncEnabled: isSupabaseConfigured,
+        isCloudSyncReady,
         createBooking,
         logDispatch,
         recordCustomerPayment,

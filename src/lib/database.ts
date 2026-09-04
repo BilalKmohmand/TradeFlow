@@ -55,3 +55,47 @@ export const loadAllData = async (): Promise<AppData> => {
     whatsappMessages: (whatsappMessages.data || []) as WhatsAppMessage[],
   };
 };
+
+export type TableName =
+  | 'customers'
+  | 'suppliers'
+  | 'products'
+  | 'bookings'
+  | 'dispatches'
+  | 'ledger'
+  | 'whatsapp_messages';
+
+/** Delete rows by id from a Supabase table. Silently no-ops when Supabase is not configured. */
+export const deleteRows = async (table: TableName, ids: string[]): Promise<void> => {
+  if (ids.length === 0) return;
+  try {
+    const { error } = await supabase.from(table).delete().in('id', ids);
+    if (error) console.warn(`Supabase ${table} delete error:`, error.message);
+  } catch (err: any) {
+    console.warn(`Supabase ${table} delete failed:`, err?.message || err);
+  }
+};
+
+/** Remove every row from a Supabase table. Silently no-ops when Supabase is not configured. */
+export const clearTable = async (table: TableName): Promise<void> => {
+  try {
+    const { error } = await supabase.from(table).delete().neq('id', '');
+    if (error) console.warn(`Supabase ${table} clear error:`, error.message);
+  } catch (err: any) {
+    console.warn(`Supabase ${table} clear failed:`, err?.message || err);
+  }
+};
+
+export const ALL_TABLES: TableName[] = [
+  'customers',
+  'suppliers',
+  'products',
+  'bookings',
+  'dispatches',
+  'ledger',
+  'whatsapp_messages',
+];
+
+export const clearAllTables = async (): Promise<void> => {
+  await Promise.all(ALL_TABLES.map((t) => clearTable(t)));
+};

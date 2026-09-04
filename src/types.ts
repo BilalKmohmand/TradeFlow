@@ -31,7 +31,7 @@ export interface Product {
   unitPricePerTon: number;
   stockTons: number;
   minThresholdTons: number;
-  supplierId?: string;
+  supplierId?: string | null;
   description?: string;
 }
 
@@ -102,7 +102,7 @@ export interface WhatsAppMessage {
   dispatchId?: string;
 }
 
-export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'reports';
+export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'reports' | 'admin';
 
 export interface AuditLogEntry {
   id: string;
