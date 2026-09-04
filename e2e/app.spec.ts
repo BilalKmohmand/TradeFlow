@@ -24,6 +24,14 @@ test.describe.serial('Sarmaya end-to-end', () => {
     await unlock(page);
     const desktopOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(desktopOverflow, 'desktop must not scroll horizontally').toBeLessThanOrEqual(0);
+    // Header must fit at common laptop widths: the Lock button is the right-most control.
+    for (const width of [1280, 1360, 1536]) {
+      await page.setViewportSize({ width, height: 900 });
+      const box = await page.getByRole('button', { name: /Lock/ }).first().boundingBox();
+      expect(box, `lock button visible at ${width}`).not.toBeNull();
+      expect(box!.x + box!.width, `lock button inside viewport at ${width}`).toBeLessThanOrEqual(width);
+    }
+    await page.setViewportSize({ width: 1360, height: 900 });
     await shot(page, '01-dashboard-empty');
 
     // Wipe any cached data so the run is deterministic
