@@ -138,6 +138,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({ bookingI
                     Cancelled{booking.cancelledAt ? ` on ${formatDate(booking.cancelledAt)}` : ''}{booking.cancelReason ? `: ${booking.cancelReason}` : ''}. {formatKg(booking.remainingKg)} was never dispatched.
                   </p>
                 )}
+                {booking.brokerName && (
+                  <p className="text-[11px] text-[#6B7280] font-mono">Broker: {booking.brokerName}{booking.brokerCommissionPerKg ? ` @ Rs. ${booking.brokerCommissionPerKg}/kg (${formatCurrency(booking.dispatchedKg * booking.brokerCommissionPerKg)} accrued)` : ''}</p>
+                )}
                 {booking.targetDeliveryDate && (
                   <p className="text-[11px] text-[#6B7280] font-mono">Target delivery: {formatDate(booking.targetDeliveryDate)}</p>
                 )}

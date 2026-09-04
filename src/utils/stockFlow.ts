@@ -1,9 +1,10 @@
-import { Dispatch, Purchase, PriceHistoryEntry, Customer, Supplier, Product, Booking } from '../types';
+import { Dispatch, Purchase, PriceHistoryEntry, Customer, Supplier, Product, Booking, StockAdjustment, StockReturn } from '../types';
 
 /** A single stock movement, normalised across purchases (in) and dispatches (out). */
 export interface StockMovement {
   id: string;
   direction: 'in' | 'out';
+  kind?: 'purchase' | 'dispatch' | 'adjustment' | 'return';
   date: string;
   reference: string;
   kg: number;
@@ -40,7 +41,7 @@ const byDateDesc = (a: { date: string }, b: { date: string }) => (a.date < b.dat
 export const buildMovements = (
   purchases: Purchase[],
   dispatches: Dispatch[],
-  lookups: { customers: Customer[]; suppliers: Supplier[]; products: Product[]; bookings: Booking[] }
+  lookups: { customers: Customer[]; suppliers: Supplier[]; products: Product[]; bookings: Booking[]; adjustments?: StockAdjustment[]; returns?: StockReturn[] }
 ): StockMovement[] => {
   const productName = (id: string) => lookups.products.find((p) => p.id === id)?.name || 'Unknown product';
   const incoming: StockMovement[] = purchases.map((p) => {
@@ -84,7 +85,41 @@ export const buildMovements = (
       notes: d.notes,
     };
   });
-  return [...incoming, ...outgoing].sort(byDateDesc);
+  const adjustments: StockMovement[] = (lookups.adjustments || []).map((a) => ({
+    id: `adj-${a.id}`,
+    kind: 'adjustment',
+    direction: a.deltaKg >= 0 ? 'in' : 'out',
+    date: a.date,
+    reference: `ADJ • ${a.reason}`,
+    kg: Math.abs(a.deltaKg),
+    amount: 0,
+    pricePerKg: 0,
+    productId: a.productId,
+    productName: productName(a.productId),
+    notes: a.note,
+  }));
+  const rets: StockMovement[] = (lookups.returns || []).map((r) => {
+    const cust = lookups.customers.find((c) => c.id === r.customerId);
+    const sup = lookups.suppliers.find((s) => s.id === r.supplierId);
+    return {
+      id: `ret-${r.id}`,
+      kind: 'return',
+      direction: r.kind === 'sales' ? 'in' : 'out',
+      date: r.date,
+      reference: r.returnNumber,
+      kg: r.kg,
+      amount: r.amount,
+      pricePerKg: r.pricePerKg,
+      productId: r.productId,
+      productName: productName(r.productId),
+      customerId: r.customerId || undefined,
+      customerName: cust?.name,
+      supplierId: r.supplierId || undefined,
+      supplierName: sup?.company,
+      notes: r.reason,
+    };
+  });
+  return [...incoming.map((m) => ({ ...m, kind: 'purchase' as const })), ...outgoing.map((m) => ({ ...m, kind: 'dispatch' as const })), ...adjustments, ...rets].sort(byDateDesc);
 };
 
 /** Group movements by day, filling every day in [from, to] so the log has no gaps. */

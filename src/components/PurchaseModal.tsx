@@ -10,6 +10,7 @@ interface PurchaseModalProps {
   onClose: () => void;
   preselectedSupplierId?: string | null;
   preselectedProductId?: string | null;
+  preselectedPurchaseOrderId?: string | null;
 }
 
 const inputCls =
@@ -22,8 +23,21 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
   onClose,
   preselectedSupplierId,
   preselectedProductId,
+  preselectedPurchaseOrderId,
 }) => {
-  const { suppliers, products, addPurchase } = useTrading();
+  const { suppliers, products, addPurchase, purchaseOrders } = useTrading();
+  const [poId, setPoId] = useState<string>('');
+  const openPOs = purchaseOrders.filter((p) => p.status === 'open' || p.status === 'partial');
+  const applyPO = (id: string) => {
+    setPoId(id);
+    const po = purchaseOrders.find((p) => p.id === id);
+    if (po) {
+      setSupplierId(po.supplierId);
+      setProductId(po.productId);
+      setPricePerKg(String(po.pricePerKg));
+      setKg(String(Math.max(0, po.kg - po.receivedKg)));
+    }
+  };
 
   const [supplierId, setSupplierId] = useState<string>('');
   const [productId, setProductId] = useState<string>('');
@@ -63,6 +77,17 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
     setTareKg('');
     setIsSuccess(false);
     setError(null);
+    setPoId('');
+    if (preselectedPurchaseOrderId) {
+      const po = purchaseOrders.find((p) => p.id === preselectedPurchaseOrderId);
+      if (po) {
+        setPoId(po.id);
+        setSupplierId(po.supplierId);
+        setProductId(po.productId);
+        setPricePerKg(String(po.pricePerKg));
+        setKg(String(Math.max(0, po.kg - po.receivedKg)));
+      }
+    }
   }, [isOpen, preselectedSupplierId, preselectedProductId, products, suppliers]);
 
   const product = products.find((p) => p.id === productId);
@@ -107,6 +132,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
         paymentMadeImmediately: paid,
         grossKg: grossKg ? parseFloat(grossKg) : null,
         tareKg: tareKg ? parseFloat(tareKg) : null,
+        purchaseOrderId: poId || null,
       });
       setIsSuccess(true);
       setTimeout(() => {
@@ -157,6 +183,15 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {openPOs.length > 0 && (
+                <div>
+                  <label className={labelCls}>Against purchase order</label>
+                  <select value={poId} onChange={(e) => applyPO(e.target.value)} className={inputCls}>
+                    <option value="">— No PO —</option>
+                    {openPOs.map((po) => <option key={po.id} value={po.id}>{po.poNumber} • {suppliers.find((s) => s.id === po.supplierId)?.company} • {formatKg(po.kg - po.receivedKg)} outstanding</option>)}
+                  </select>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={labelCls}>Supplier *</label>

@@ -20,6 +20,7 @@ export const SupplierModal: React.FC<SupplierModalProps> = ({ isOpen, onClose, e
   const [materialCategory, setMaterialCategory] = useState<string>('Cement & Building Materials');
   const [address, setAddress] = useState<string>('');
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
+  const [dupError, setDupError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -35,6 +36,13 @@ export const SupplierModal: React.FC<SupplierModalProps> = ({ isOpen, onClose, e
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !company || !phone) return;
+    const digits = phone.replace(/[^0-9]/g, '');
+    const dup = suppliers.find((s) => s.id !== editId && s.phone.replace(/[^0-9]/g, '') === digits);
+    if (dup) {
+      setDupError(`${dup.company} already uses this phone number.`);
+      return;
+    }
+    setDupError(null);
 
     if (editing) {
       updateSupplier(editing.id, { name: name.trim(), company: company.trim(), phone: phone.trim(), email: email.trim(), materialCategory, address: address.trim() });
@@ -187,6 +195,7 @@ export const SupplierModal: React.FC<SupplierModalProps> = ({ isOpen, onClose, e
               />
             </div>
 
+            {dupError && <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">{dupError}</div>}
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"

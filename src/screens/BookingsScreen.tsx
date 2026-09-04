@@ -16,6 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { QuotationsPanel, ReturnsPanel } from '../components/TradeDocsPanels';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
@@ -32,7 +33,11 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
   onOpenDispatchForBooking,
   onOpenCustomer,
 }) => {
-  const { bookings, customers, products, dispatches, deleteBooking, openBooking, can } = useTrading();
+  const { bookings, customers, products, dispatches, deleteBooking, openBooking, can, quotations, returns, requestedBookingsView } = useTrading();
+  const [view, setView] = React.useState<'orders' | 'quotations' | 'returns'>(requestedBookingsView || 'orders');
+  React.useEffect(() => {
+    if (requestedBookingsView) setView(requestedBookingsView);
+  }, [requestedBookingsView]);
   const [pendingDelete, setPendingDelete] = useState<Booking | null>(null);
   const pendingDispatches = pendingDelete ? dispatches.filter((d) => d.bookingId === pendingDelete.id) : [];
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -94,6 +99,17 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
         </div>
       </div>
 
+      {/* Orders / Quotations / Returns */}
+      <div className="bg-[#FAF9F6] p-1.5 rounded-full border border-[#E5E5E1] shadow-xs text-xs font-semibold flex flex-wrap items-center gap-1 w-fit max-w-full">
+        {([['orders', `Orders (${bookings.length})`], ['quotations', `Quotations (${quotations.filter((q) => q.status !== 'converted' && q.status !== 'rejected').length})`], ['returns', `Returns (${returns.length})`]] as const).map(([id, label]) => (
+          <button key={id} onClick={() => setView(id)} className={`px-4 py-1.5 rounded-full whitespace-nowrap transition-colors ${view === id ? 'bg-[#111827] text-white shadow-xs font-bold' : 'text-[#6B7280] hover:text-[#111827] hover:bg-[#F4F3EF]'}`}>{label}</button>
+        ))}
+      </div>
+
+      {view === 'quotations' && <QuotationsPanel />}
+      {view === 'returns' && <ReturnsPanel />}
+
+      {view === 'orders' && (<>
       {/* Filter and Search Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         {/* Status Filters */}
@@ -290,6 +306,8 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
           })
         )}
       </div>
+
+      </>)}
 
       <ConfirmDialog
         isOpen={Boolean(pendingDelete)}

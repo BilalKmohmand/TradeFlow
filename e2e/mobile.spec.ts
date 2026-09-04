@@ -71,6 +71,21 @@ test('every screen and modal on a phone', async ({ page }) => {
     await noOverflow(page, name);
     await shot(page, `02-${name.toLowerCase()}`);
   }
+  // Sub-views: purchase orders, quotations, returns
+  await page.getByRole('button', { name: 'Suppliers', exact: true }).click();
+  await page.getByRole('button', { name: /Purchase Orders/ }).click();
+  await expect(page.getByRole('button', { name: 'New Purchase Order' })).toBeVisible();
+  await noOverflow(page, 'purchase orders');
+  await shot(page, '02b-purchase-orders');
+  await page.getByRole('button', { name: 'Bookings', exact: true }).click();
+  await page.getByRole('button', { name: /Quotations/ }).click();
+  await expect(page.getByRole('button', { name: 'New Quotation' })).toBeVisible();
+  await noOverflow(page, 'quotations');
+  await shot(page, '02c-quotations');
+  await page.getByRole('button', { name: /Returns/ }).click();
+  await expect(page.getByRole('button', { name: 'Sales return' })).toBeVisible();
+  await noOverflow(page, 'returns');
+  await shot(page, '02d-returns');
 
   await page.getByRole('button', { name: 'Reports', exact: true }).click();
   for (const tab of ['Daily Report', 'Monthly Report', 'Stock Flow', 'Profit & Loss', 'Aging', 'Balance Sheet', 'Cash Book']) {
@@ -80,7 +95,7 @@ test('every screen and modal on a phone', async ({ page }) => {
   }
 
   await page.getByRole('button', { name: 'Ops', exact: true }).click();
-  for (const tab of ['Alerts', 'Fleet', 'Expenses']) {
+  for (const tab of ['Alerts', 'Fleet', 'Expenses', 'Follow-ups']) {
     await page.getByRole('button', { name: new RegExp(`^${tab}`) }).click();
     await noOverflow(page, tab);
     await shot(page, `04-ops-${tab.toLowerCase()}`);

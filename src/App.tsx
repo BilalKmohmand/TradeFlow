@@ -70,9 +70,11 @@ function MainApp() {
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState<boolean>(false);
   const [purchaseSupplierId, setPurchaseSupplierId] = useState<string | null>(null);
   const [purchaseProductId, setPurchaseProductId] = useState<string | null>(null);
-  const handleOpenPurchase = (opts?: { supplierId?: string | null; productId?: string | null }) => {
+  const [purchaseOrderId, setPurchaseOrderId] = useState<string | null>(null);
+  const handleOpenPurchase = (opts?: { supplierId?: string | null; productId?: string | null; purchaseOrderId?: string | null }) => {
     setPurchaseSupplierId(opts?.supplierId ?? null);
     setPurchaseProductId(opts?.productId ?? null);
+    setPurchaseOrderId(opts?.purchaseOrderId ?? null);
     setIsPurchaseModalOpen(true);
   };
 
@@ -150,6 +152,7 @@ function MainApp() {
                 onSelectSupplier={(sId) => setSelectedSupplierId(sId)}
                 onOpenAddSupplier={() => setIsSupplierModalOpen(true)}
                 onOpenPayment={handleOpenSupplierPayment}
+                onReceiveStock={(opts) => handleOpenPurchase(opts)}
               />
             )}
 
@@ -267,6 +270,7 @@ function MainApp() {
         isOpen={isPurchaseModalOpen}
         onClose={() => setIsPurchaseModalOpen(false)}
         preselectedSupplierId={purchaseSupplierId}
+        preselectedPurchaseOrderId={purchaseOrderId}
         preselectedProductId={purchaseProductId}
       />
 

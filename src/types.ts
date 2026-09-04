@@ -56,6 +56,10 @@ export interface Booking {
   notes?: string;
   cancelledAt?: string;
   cancelReason?: string;
+  /** Broker / agent who brought the deal and their commission per kg dispatched. */
+  brokerName?: string;
+  brokerCommissionPerKg?: number;
+  quotationId?: string | null;
 }
 
 export interface Dispatch {
@@ -101,7 +105,9 @@ export type TransactionType =
   | 'dispatch_billed'
   | 'payment_received'
   | 'payment_made'
-  | 'purchase_received';
+  | 'purchase_received'
+  | 'credit_note'
+  | 'debit_note';
 
 export interface LedgerEntry {
   id: string;
@@ -146,6 +152,7 @@ export interface Purchase {
   createdAt: string;
   grossKg?: number | null;
   tareKg?: number | null;
+  purchaseOrderId?: string | null;
 }
 
 export type PriceSource = 'product_created' | 'price_update' | 'manual' | 'booking' | 'purchase';
@@ -162,7 +169,7 @@ export interface PriceHistoryEntry {
 }
 
 export type ReportsTab = 'daily' | 'monthly' | 'flow' | 'pnl' | 'aging' | 'balance' | 'cashbook';
-export type OpsTab = 'fleet' | 'expenses' | 'alerts';
+export type OpsTab = 'fleet' | 'expenses' | 'alerts' | 'tasks';
 
 export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'reports' | 'ops' | 'admin';
 
@@ -190,6 +197,7 @@ export type ExpenseCategory =
   | 'salaries'
   | 'maintenance'
   | 'tax'
+  | 'commission'
   | 'other';
 
 export const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string }[] = [
@@ -202,6 +210,7 @@ export const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string }[] = [
   { id: 'salaries', label: 'Salaries' },
   { id: 'maintenance', label: 'Vehicle Maintenance' },
   { id: 'tax', label: 'Taxes & Duties' },
+  { id: 'commission', label: 'Broker Commission' },
   { id: 'other', label: 'Other' },
 ];
 
@@ -310,7 +319,101 @@ export const DEFAULT_SETTINGS: AppSettings = {
   monthlyTargetRs: 0,
 };
 
-export type AlertKind = 'low_stock' | 'overdue_receivable' | 'overdue_payable' | 'late_delivery' | 'credit_exceeded' | 'truck_maintenance' | 'undelivered';
+export type QuotationStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired' | 'converted';
+
+export interface Quotation {
+  id: string;
+  quoteNumber: string;
+  customerId: string;
+  productId: string;
+  kg: number;
+  pricePerKg: number;
+  amount: number;
+  validUntil: string;
+  status: QuotationStatus;
+  notes?: string;
+  createdAt: string;
+  createdBy?: string;
+  bookingId?: string | null;
+}
+
+export type PurchaseOrderStatus = 'open' | 'partial' | 'received' | 'cancelled';
+
+export interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  supplierId: string;
+  productId: string;
+  kg: number;
+  pricePerKg: number;
+  amount: number;
+  expectedDate?: string;
+  status: PurchaseOrderStatus;
+  receivedKg: number;
+  notes?: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export type ReturnKind = 'sales' | 'purchase';
+
+/** Goods returned by a customer (sales return, credit note) or to a supplier (purchase return, debit note). */
+export interface StockReturn {
+  id: string;
+  returnNumber: string;
+  kind: ReturnKind;
+  customerId?: string | null;
+  supplierId?: string | null;
+  productId: string;
+  dispatchId?: string | null;
+  purchaseId?: string | null;
+  kg: number;
+  pricePerKg: number;
+  amount: number;
+  reason: string;
+  date: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export type AdjustmentReason = 'count' | 'wastage' | 'moisture' | 'damage' | 'theft' | 'other';
+export const ADJUSTMENT_REASONS: { id: AdjustmentReason; label: string }[] = [
+  { id: 'count', label: 'Physical count correction' },
+  { id: 'wastage', label: 'Handling wastage' },
+  { id: 'moisture', label: 'Moisture loss / gain' },
+  { id: 'damage', label: 'Damaged / unsaleable' },
+  { id: 'theft', label: 'Shortage / theft' },
+  { id: 'other', label: 'Other' },
+];
+
+export interface StockAdjustment {
+  id: string;
+  productId: string;
+  deltaKg: number;
+  reason: AdjustmentReason;
+  note?: string;
+  date: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export type TaskLinkType = 'customer' | 'supplier' | 'booking' | 'product' | 'truck';
+
+/** Follow-up / to-do, optionally attached to a record. */
+export interface Task {
+  id: string;
+  title: string;
+  dueDate: string;
+  status: 'open' | 'done';
+  linkType?: TaskLinkType | null;
+  linkId?: string | null;
+  note?: string;
+  createdAt: string;
+  createdBy?: string;
+  doneAt?: string | null;
+}
+
+export type AlertKind = 'low_stock' | 'overdue_receivable' | 'overdue_payable' | 'late_delivery' | 'credit_exceeded' | 'truck_maintenance' | 'undelivered' | 'task_due' | 'quote_expiring' | 'po_overdue';
 
 export interface AppAlert {
   id: string;
@@ -319,5 +422,5 @@ export interface AppAlert {
   title: string;
   detail: string;
   /** Click-through target */
-  link?: { type: 'customer' | 'supplier' | 'product' | 'booking' | 'truck'; id: string; dispatchId?: string };
+  link?: { type: 'customer' | 'supplier' | 'product' | 'booking' | 'truck' | 'task' | 'quotation' | 'po'; id: string; dispatchId?: string };
 }

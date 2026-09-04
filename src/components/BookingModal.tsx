@@ -36,6 +36,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
   );
   const [notes, setNotes] = useState<string>('');
+  const [brokerName, setBrokerName] = useState<string>('');
+  const [brokerRate, setBrokerRate] = useState<string>('');
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
 
   useEffect(() => {
@@ -63,6 +65,11 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       setPricePerKg(String(editing.pricePerKg));
       setTargetDeliveryDate(editing.targetDeliveryDate || '');
       setNotes(editing.notes || '');
+      setBrokerName(editing.brokerName || '');
+      setBrokerRate(editing.brokerCommissionPerKg ? String(editing.brokerCommissionPerKg) : '');
+    } else {
+      setBrokerName('');
+      setBrokerRate('');
     }
   }, [isOpen, editBookingId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -104,6 +111,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         pricePerKg: can('edit_prices') ? parsedPrice : editing.pricePerKg,
         targetDeliveryDate: targetDeliveryDate || undefined,
         notes: notes.trim() || undefined,
+        brokerName: brokerName.trim() || undefined,
+        brokerCommissionPerKg: parseFloat(brokerRate) || undefined,
       });
       setIsSuccess(true);
       setTimeout(() => {
@@ -120,6 +129,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       pricePerKg: parsedPrice,
       targetDeliveryDate,
       notes: notes.trim(),
+      brokerName: brokerName.trim() || undefined,
+      brokerCommissionPerKg: parseFloat(brokerRate) || undefined,
     });
 
     setIsSuccess(true);
@@ -296,6 +307,19 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 Quantity cannot be below the {formatKg(minKg)} already dispatched.
               </div>
             )}
+
+            {/* Broker / agent */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-[#8E9299] mb-1.5 uppercase tracking-widest">Broker / agent</label>
+                <input value={brokerName} onChange={(e) => setBrokerName(e.target.value)} placeholder="Optional" className="w-full bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl px-4 py-2.5 text-xs text-[#111827] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-[#8E9299] mb-1.5 uppercase tracking-widest">Commission (Rs./kg)</label>
+                <input type="number" min="0" step="0.01" value={brokerRate} onChange={(e) => setBrokerRate(e.target.value)} placeholder="0" className="w-full bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl px-4 py-2.5 text-xs font-mono font-bold text-[#111827] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600" />
+                {parseFloat(brokerRate) > 0 && <p className="text-[10px] text-[#8E9299] mt-1 font-mono">≈ {formatCurrency(parsedKg * (parseFloat(brokerRate) || 0))} on the full order, accrued as dispatched</p>}
+              </div>
+            </div>
 
             {/* Target Date & Notes */}
             <div>

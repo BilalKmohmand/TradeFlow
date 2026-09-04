@@ -73,6 +73,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     can,
     currentUser,
     settings,
+    adjustments,
+    returns,
+    tasks,
+    quotations,
+    purchaseOrders,
   } = useTrading();
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -96,16 +101,16 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   // 4. Stock movements: incoming purchases vs outgoing dispatches
   const movements = useMemo(
-    () => buildMovements(purchases, dispatches, { customers, suppliers, products, bookings }),
-    [purchases, dispatches, customers, suppliers, products, bookings]
+    () => buildMovements(purchases, dispatches, { customers, suppliers, products, bookings, adjustments, returns }),
+    [purchases, dispatches, customers, suppliers, products, bookings, adjustments, returns]
   );
   const last7 = useMemo(() => groupByDay(movements, shiftDate(todayStr, -6), todayStr), [movements, todayStr]);
   const todayFlow = last7.find((d) => d.date === todayStr) || { inKg: 0, inAmount: 0, outKg: 0, outAmount: 0, netKg: 0, movements: [] };
   const recentMovements = movements.slice(0, 6);
 
   // Month-to-date P&L and live alerts
-  const pnl = useMemo(() => computeMonthlyPnL(currentMonthKey(), dispatches, purchases, expenses, products), [dispatches, purchases, expenses, products]);
-  const alerts = useMemo(() => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger, dispatches }, todayStr), [products, customers, suppliers, bookings, trucks, ledger, dispatches, todayStr]);
+  const pnl = useMemo(() => computeMonthlyPnL(currentMonthKey(), dispatches, purchases, expenses, products, bookings), [dispatches, purchases, expenses, products, bookings]);
+  const alerts = useMemo(() => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders }, todayStr), [products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders, todayStr]);
   const topAlerts = alerts.slice(0, 3);
   const topCustomers = useMemo(() => {
     const m = new Map<string, number>();

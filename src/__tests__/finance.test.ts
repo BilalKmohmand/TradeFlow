@@ -220,3 +220,29 @@ describe('undelivered alert', () => {
     expect(alerts[0].link?.dispatchId).toBe('d');
   });
 });
+
+describe('workflow alerts', () => {
+  it('surfaces due tasks, expiring quotes, overdue POs and days-of-stock', () => {
+    const alerts = computeAlerts(
+      {
+        products: [{ id: 'p1', name: 'Cement', category: 'x', unitPricePerKg: 40, stockKg: 600, minThresholdKg: 1000 }] as any,
+        customers: [{ id: 'c1', name: 'Ali', company: 'A', phone: '1', totalDue: 0, creditLimit: 0 } as any],
+        suppliers: [{ id: 's1', name: 'S', company: 'Lucky', phone: '2', totalOwed: 0 } as any],
+        bookings: [], trucks: [], ledger: [],
+        dispatches: [{ id: 'd', dispatchNumber: 'D', bookingId: 'b', customerId: 'c1', productId: 'p1', kg: 3000, amount: 1, truckNumber: 'X', date: '2026-09-01', whatsappSent: false, status: 'delivered' }],
+        tasks: [{ id: 't1', title: 'Call Ali', dueDate: '2026-09-02', status: 'open', createdAt: '' }, { id: 't2', title: 'done', dueDate: '2026-09-01', status: 'done', createdAt: '' }],
+        quotations: [{ id: 'q1', quoteNumber: 'QT-1', customerId: 'c1', productId: 'p1', kg: 1, pricePerKg: 1, amount: 1, validUntil: '2026-09-05', status: 'sent', createdAt: '' }],
+        purchaseOrders: [{ id: 'po1', poNumber: 'PO-1', supplierId: 's1', productId: 'p1', kg: 100, pricePerKg: 1, amount: 100, expectedDate: '2026-09-01', status: 'open', receivedKg: 0, createdAt: '' }],
+      },
+      '2026-09-04'
+    );
+    const kinds = alerts.map((a) => a.kind);
+    expect(kinds).toContain('task_due');
+    expect(kinds).toContain('quote_expiring');
+    expect(kinds).toContain('po_overdue');
+    const low = alerts.find((a) => a.kind === 'low_stock')!;
+    expect(low.detail).toMatch(/About 6 day/); // 3000 kg / 30 days = 100/day -> 600 kg = 6 days
+    expect(low.severity).toBe('warning');
+    expect(alerts.filter((a) => a.kind === 'task_due')).toHaveLength(1);
+  });
+});

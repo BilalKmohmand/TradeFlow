@@ -23,6 +23,14 @@ import {
   DEFAULT_SETTINGS,
   dispatchBilledTotal,
   DispatchStatus,
+  Quotation,
+  QuotationStatus,
+  PurchaseOrder,
+  StockReturn,
+  StockAdjustment,
+  AdjustmentReason,
+  Task,
+  TaskLinkType,
   UserRole,
   Permission,
   ROLE_PERMISSIONS,
@@ -78,6 +86,11 @@ interface TradingContextType {
   clearRequestedReportsTab: () => void;
   openOps: (tab: OpsTab) => void;
   requestedOpsTab: OpsTab | null;
+  /** Bookings screen sub-view (orders / quotations / returns) and Suppliers sub-view (suppliers / purchase orders). */
+  requestedBookingsView: 'orders' | 'quotations' | 'returns' | null;
+  openBookingsView: (view: 'orders' | 'quotations' | 'returns') => void;
+  requestedSuppliersView: 'suppliers' | 'orders' | null;
+  openSuppliersView: (view: 'suppliers' | 'orders') => void;
   /** Cross-cutting UI requests handled by App: which record to edit / which document to print. */
   editRequest: EditRequest | null;
   setEditRequest: (r: EditRequest | null) => void;
@@ -157,6 +170,9 @@ interface TradingContextType {
     pricePerKg: number;
     targetDeliveryDate?: string;
     notes?: string;
+    brokerName?: string;
+    brokerCommissionPerKg?: number;
+    quotationId?: string | null;
   }) => Booking;
   
   logDispatch: (dispatchData: {
@@ -236,6 +252,9 @@ export type EditRequest = { type: 'customer' | 'supplier' | 'product' | 'booking
 /** Mirrors PrintRequest in components/PrintDocument.tsx without importing a component into the context. */
 export type PrintRequestLike =
   | { type: 'voucher'; ledgerId: string }
+  | { type: 'quotation'; quotationId: string }
+  | { type: 'po'; purchaseOrderId: string }
+  | { type: 'note'; returnId: string }
   | { type: 'invoice'; dispatchId: string }
   | { type: 'challan'; dispatchId: string }
   | { type: 'statement'; customerId: string; from: string; to: string }
@@ -293,6 +312,11 @@ const STORAGE_KEYS = {
   USERS: 'tradeflow_users_v2',
   CASH: 'tradeflow_cash_entries_v2',
   SETTINGS: 'tradeflow_settings_v2',
+  QUOTES: 'tradeflow_quotations_v2',
+  POS: 'tradeflow_purchase_orders_v2',
+  RETURNS: 'tradeflow_returns_v2',
+  ADJUSTMENTS: 'tradeflow_adjustments_v2',
+  TASKS: 'tradeflow_tasks_v2',
   LEDGER: 'tradeflow_ledger_v2',
   MESSAGES: 'tradeflow_whatsapp_v2',
   ADMIN_PIN: 'sarmaya_admin_pin_v1',
@@ -332,6 +356,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [trucks, setTrucks] = useState<Truck[]>(() => loadLocal(STORAGE_KEYS.TRUCKS, []));
   const [users, setUsers] = useState<AppUser[]>(() => loadLocal(STORAGE_KEYS.USERS, []));
   const [cashEntries, setCashEntries] = useState<CashEntry[]>(() => loadLocal(STORAGE_KEYS.CASH, []));
+  const [quotations, setQuotations] = useState<Quotation[]>(() => loadLocal(STORAGE_KEYS.QUOTES, []));
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => loadLocal(STORAGE_KEYS.POS, []));
+  const [returns, setReturns] = useState<StockReturn[]>(() => loadLocal(STORAGE_KEYS.RETURNS, []));
+  const [adjustments, setAdjustments] = useState<StockAdjustment[]>(() => loadLocal(STORAGE_KEYS.ADJUSTMENTS, []));
+  const [tasks, setTasks] = useState<Task[]>(() => loadLocal(STORAGE_KEYS.TASKS, []));
   const [settings, setSettings] = useState<AppSettings>(() => ({
     ...DEFAULT_SETTINGS,
     ...safeParse<Partial<AppSettings>>(localStorage.getItem(STORAGE_KEYS.SETTINGS), {}),
@@ -356,6 +385,16 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const openOps = (tab: OpsTab) => {
     setRequestedOpsTab(tab);
     setActiveScreen('ops');
+  };
+  const [requestedBookingsView, setRequestedBookingsView] = useState<'orders' | 'quotations' | 'returns' | null>(null);
+  const openBookingsView = (view: 'orders' | 'quotations' | 'returns') => {
+    setRequestedBookingsView(view);
+    setActiveScreen('bookings');
+  };
+  const [requestedSuppliersView, setRequestedSuppliersView] = useState<'suppliers' | 'orders' | null>(null);
+  const openSuppliersView = (view: 'suppliers' | 'orders') => {
+    setRequestedSuppliersView(view);
+    setActiveScreen('suppliers');
   };
 
   const openBooking = (bookingId: string | null, dispatchId: string | null = null) => {
@@ -392,6 +431,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setTrucks(data.trucks);
         setUsers(data.users);
         setCashEntries(data.cashEntries);
+        setQuotations(data.quotations);
+        setPurchaseOrders(data.purchaseOrders);
+        setReturns(data.returns);
+        setAdjustments(data.adjustments);
+        setTasks(data.tasks);
         if (data.settings) setSettings((prev) => ({ ...DEFAULT_SETTINGS, ...prev, ...data.settings, id: 'default' }));
         setLedger(data.ledger);
         setWhatsappMessages(data.whatsappMessages);
@@ -453,6 +497,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   }, [settings]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.QUOTES, JSON.stringify(quotations)); }, [quotations]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.POS, JSON.stringify(purchaseOrders)); }, [purchaseOrders]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.RETURNS, JSON.stringify(returns)); }, [returns]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.ADJUSTMENTS, JSON.stringify(adjustments)); }, [adjustments]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks)); }, [tasks]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(ledger));
@@ -484,6 +533,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { void syncToSupabase('users', users); }, [users, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('cash_entries', cashEntries); }, [cashEntries, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('settings', [settings]); }, [settings, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('quotations', quotations); }, [quotations, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('purchase_orders', purchaseOrders); }, [purchaseOrders, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('returns', returns); }, [returns, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('stock_adjustments', adjustments); }, [adjustments, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('tasks', tasks); }, [tasks, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('ledger', ledger); }, [ledger, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('whatsapp_messages', whatsappMessages); }, [whatsappMessages, isCloudSyncReady]);
 
@@ -601,6 +655,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     paymentMadeImmediately = false,
     grossKg = null,
     tareKg = null,
+    purchaseOrderId = null,
   }: {
     supplierId: string;
     productId: string;
@@ -612,6 +667,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     paymentMadeImmediately?: boolean;
     grossKg?: number | null;
     tareKg?: number | null;
+    purchaseOrderId?: string | null;
   }): Purchase => {
     const supplier = suppliers.find((s) => s.id === supplierId);
     const product = products.find((p) => p.id === productId);
@@ -635,7 +691,18 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdAt: todayISO(),
       grossKg,
       tareKg,
+      purchaseOrderId,
     };
+
+    if (purchaseOrderId) {
+      setPurchaseOrders((prev) =>
+        prev.map((po) => {
+          if (po.id !== purchaseOrderId) return po;
+          const receivedKg = round2(po.receivedKg + kg);
+          return { ...po, receivedKg, status: receivedKg >= po.kg ? 'received' : 'partial' };
+        })
+      );
+    }
 
     // 1. Stock in
     setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, stockKg: round2(p.stockKg + kg) } : p)));
@@ -897,6 +964,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLedger((prev) => prev.filter((l) => !(l.entityType === 'customer' && l.entityId === id)));
     setWhatsappMessages((prev) => prev.filter((m) => !waIds.includes(m.id)));
     setCustomers((prev) => prev.filter((c) => c.id !== id));
+    const custQuoteIds = quotations.filter((q) => q.customerId === id).map((q) => q.id);
+    setQuotations((prev) => prev.filter((q) => q.customerId !== id));
+    removeRemote('quotations', custQuoteIds);
+    setTasks((prev) => prev.filter((t) => !(t.linkType === 'customer' && t.linkId === id)));
     if (selectedCustomerId === id) setSelectedCustomerId(null);
 
     removeRemote('dispatches', strayDispatchIds);
@@ -943,6 +1014,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLedger((prev) => prev.filter((l) => !(l.entityType === 'supplier' && l.entityId === id)));
     setWhatsappMessages((prev) => prev.filter((m) => !waIds.includes(m.id)));
     setSuppliers((prev) => prev.filter((s) => s.id !== id));
+    const supPoIds = purchaseOrders.filter((p) => p.supplierId === id).map((p) => p.id);
+    setPurchaseOrders((prev) => prev.filter((p) => p.supplierId !== id));
+    removeRemote('purchase_orders', supPoIds);
+    setTasks((prev) => prev.filter((t) => !(t.linkType === 'supplier' && t.linkId === id)));
     if (selectedSupplierId === id) setSelectedSupplierId(null);
 
     removeRemote('ledger', ledgerIds);
@@ -972,6 +1047,18 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const purchaseIds = purchases.filter((p) => p.productId === id).map((p) => p.id);
     const priceIds = priceHistory.filter((e) => e.productId === id).map((e) => e.id);
+    const quoteIds = quotations.filter((q) => q.productId === id).map((q) => q.id);
+    const poIds = purchaseOrders.filter((p) => p.productId === id).map((p) => p.id);
+    const retIds = returns.filter((r) => r.productId === id).map((r) => r.id);
+    const adjIds = adjustments.filter((a) => a.productId === id).map((a) => a.id);
+    setQuotations((prev) => prev.filter((q) => q.productId !== id));
+    setPurchaseOrders((prev) => prev.filter((p) => p.productId !== id));
+    setReturns((prev) => prev.filter((r) => r.productId !== id));
+    setAdjustments((prev) => prev.filter((a) => a.productId !== id));
+    removeRemote('quotations', quoteIds);
+    removeRemote('purchase_orders', poIds);
+    removeRemote('returns', retIds);
+    removeRemote('stock_adjustments', adjIds);
     setDispatches((prev) => prev.filter((d) => d.productId !== id));
     setPurchases((prev) => prev.filter((p) => p.productId !== id));
     setPriceHistory((prev) => prev.filter((e) => e.productId !== id));
@@ -1024,6 +1111,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       trucks: () => setTrucks([]),
       users: () => setUsers([]),
       cash_entries: () => setCashEntries([]),
+      quotations: () => setQuotations([]),
+      purchase_orders: () => setPurchaseOrders([]),
+      returns: () => setReturns([]),
+      stock_adjustments: () => setAdjustments([]),
+      tasks: () => setTasks([]),
       settings: () => setSettings({ ...DEFAULT_SETTINGS, cashOpeningDate: todayISO() }),
       ledger: () => setLedger([]),
       whatsapp_messages: () => setWhatsappMessages([]),
@@ -1040,6 +1132,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     pricePerKg,
     targetDeliveryDate,
     notes,
+    brokerName,
+    brokerCommissionPerKg,
+    quotationId = null,
   }: {
     customerId: string;
     productId: string;
@@ -1047,6 +1142,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     pricePerKg: number;
     targetDeliveryDate?: string;
     notes?: string;
+    brokerName?: string;
+    brokerCommissionPerKg?: number;
+    quotationId?: string | null;
   }): Booking => {
     const bookingNum = `BK-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
     const totalAmount = totalKg * pricePerKg;
@@ -1066,6 +1164,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdAt: new Date().toISOString().split('T')[0],
       targetDeliveryDate,
       notes,
+      brokerName: brokerName?.trim() || undefined,
+      brokerCommissionPerKg: brokerCommissionPerKg && brokerCommissionPerKg > 0 ? round2(brokerCommissionPerKg) : undefined,
+      quotationId,
     };
 
     setBookings((prev) => [newBooking, ...prev]);
@@ -1560,6 +1661,200 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   // ---------------------------------------------------------------------------
+  // Quotations
+  // ---------------------------------------------------------------------------
+  const addQuotation = (data: { customerId: string; productId: string; kg: number; pricePerKg: number; validUntil: string; notes?: string }): Quotation => {
+    const q: Quotation = {
+      id: uid('quote'),
+      quoteNumber: `QT-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      customerId: data.customerId,
+      productId: data.productId,
+      kg: round2(data.kg),
+      pricePerKg: round2(data.pricePerKg),
+      amount: round2(data.kg * data.pricePerKg),
+      validUntil: data.validUntil,
+      status: 'draft',
+      notes: data.notes?.trim() || undefined,
+      createdAt: todayISO(),
+      createdBy: currentUser?.name,
+      bookingId: null,
+    };
+    setQuotations((prev) => [q, ...prev]);
+    logAuditEvent('Quotation Created', `${q.quoteNumber}: ${q.kg.toLocaleString()} kg @ Rs. ${q.pricePerKg}/kg (${formatCurrency(q.amount)}).`, 'info');
+    return q;
+  };
+
+  const setQuotationStatus = (id: string, status: QuotationStatus) => {
+    const q = quotations.find((x) => x.id === id);
+    if (!q) return;
+    setQuotations((prev) => prev.map((x) => (x.id === id ? { ...x, status } : x)));
+    logAuditEvent('Quotation Updated', `${q.quoteNumber} marked ${status}.`, 'info');
+  };
+
+  const convertQuotation = (id: string, targetDeliveryDate?: string): Booking | null => {
+    const q = quotations.find((x) => x.id === id);
+    if (!q || q.status === 'converted') return null;
+    const booking = createBooking({ customerId: q.customerId, productId: q.productId, totalKg: q.kg, pricePerKg: q.pricePerKg, targetDeliveryDate, notes: q.notes ? `From ${q.quoteNumber}: ${q.notes}` : `From ${q.quoteNumber}`, quotationId: q.id });
+    setQuotations((prev) => prev.map((x) => (x.id === id ? { ...x, status: 'converted', bookingId: booking.id } : x)));
+    logAuditEvent('Quotation Converted', `${q.quoteNumber} became booking ${booking.bookingNumber}.`, 'info');
+    return booking;
+  };
+
+  const deleteQuotation = (id: string) => {
+    const q = quotations.find((x) => x.id === id);
+    if (!q) return;
+    setQuotations((prev) => prev.filter((x) => x.id !== id));
+    removeRemote('quotations', [id]);
+    logAuditEvent('Quotation Deleted', `${q.quoteNumber} removed.`, 'danger');
+  };
+
+  // ---------------------------------------------------------------------------
+  // Purchase orders
+  // ---------------------------------------------------------------------------
+  const addPurchaseOrder = (data: { supplierId: string; productId: string; kg: number; pricePerKg: number; expectedDate?: string; notes?: string }): PurchaseOrder => {
+    const po: PurchaseOrder = {
+      id: uid('po'),
+      poNumber: `PO-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      supplierId: data.supplierId,
+      productId: data.productId,
+      kg: round2(data.kg),
+      pricePerKg: round2(data.pricePerKg),
+      amount: round2(data.kg * data.pricePerKg),
+      expectedDate: data.expectedDate || undefined,
+      status: 'open',
+      receivedKg: 0,
+      notes: data.notes?.trim() || undefined,
+      createdAt: todayISO(),
+      createdBy: currentUser?.name,
+    };
+    setPurchaseOrders((prev) => [po, ...prev]);
+    logAuditEvent('Purchase Order Created', `${po.poNumber}: ${po.kg.toLocaleString()} kg @ Rs. ${po.pricePerKg}/kg from ${suppliers.find((s) => s.id === data.supplierId)?.company || 'supplier'}.`, 'info');
+    return po;
+  };
+
+  const cancelPurchaseOrder = (id: string) => {
+    const po = purchaseOrders.find((x) => x.id === id);
+    if (!po) return;
+    setPurchaseOrders((prev) => prev.map((x) => (x.id === id ? { ...x, status: 'cancelled' } : x)));
+    logAuditEvent('Purchase Order Cancelled', `${po.poNumber} cancelled with ${(po.kg - po.receivedKg).toLocaleString()} kg outstanding.`, 'warning');
+  };
+
+  const deletePurchaseOrder = (id: string) => {
+    const po = purchaseOrders.find((x) => x.id === id);
+    if (!po) return;
+    setPurchaseOrders((prev) => prev.filter((x) => x.id !== id));
+    setPurchases((prev) => prev.map((p) => (p.purchaseOrderId === id ? { ...p, purchaseOrderId: null } : p)));
+    removeRemote('purchase_orders', [id]);
+    logAuditEvent('Purchase Order Deleted', `${po.poNumber} removed.`, 'danger');
+  };
+
+  // ---------------------------------------------------------------------------
+  // Returns (sales -> credit note, purchase -> debit note)
+  // ---------------------------------------------------------------------------
+  const addReturn = (data: { kind: 'sales' | 'purchase'; customerId?: string; supplierId?: string; productId: string; dispatchId?: string | null; purchaseId?: string | null; kg: number; pricePerKg: number; reason: string; date?: string }): StockReturn => {
+    const onDate = data.date || todayISO();
+    const amount = round2(data.kg * data.pricePerKg);
+    const product = products.find((p) => p.id === data.productId);
+    const r: StockReturn = {
+      id: uid('ret'),
+      returnNumber: `${data.kind === 'sales' ? 'CN' : 'DN'}-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      kind: data.kind,
+      customerId: data.customerId || null,
+      supplierId: data.supplierId || null,
+      productId: data.productId,
+      dispatchId: data.dispatchId || null,
+      purchaseId: data.purchaseId || null,
+      kg: round2(data.kg),
+      pricePerKg: round2(data.pricePerKg),
+      amount,
+      reason: data.reason.trim(),
+      date: onDate,
+      createdAt: todayISO(),
+      createdBy: currentUser?.name,
+    };
+    if (data.kind === 'sales' && data.customerId) {
+      const customer = customers.find((c) => c.id === data.customerId);
+      setProducts((prev) => prev.map((p) => (p.id === data.productId ? { ...p, stockKg: round2(p.stockKg + data.kg) } : p)));
+      setCustomers((prev) => prev.map((c) => (c.id === data.customerId ? { ...c, totalDue: Math.max(0, round2(c.totalDue - amount)) } : c)));
+      setLedger((prev) => [
+        { id: uid('led'), entityType: 'customer', entityId: data.customerId!, type: 'credit_note', referenceId: r.returnNumber, date: onDate, description: `Credit note ${r.returnNumber}: ${data.kg.toLocaleString()} kg ${product?.name || 'goods'} returned — ${r.reason}`, debit: 0, credit: amount, balanceAfter: Math.max(0, round2((customer?.totalDue || 0) - amount)), kg: data.kg },
+        ...prev,
+      ]);
+    } else if (data.kind === 'purchase' && data.supplierId) {
+      const supplier = suppliers.find((s) => s.id === data.supplierId);
+      setProducts((prev) => prev.map((p) => (p.id === data.productId ? { ...p, stockKg: Math.max(0, round2(p.stockKg - data.kg)) } : p)));
+      setSuppliers((prev) => prev.map((s) => (s.id === data.supplierId ? { ...s, totalOwed: Math.max(0, round2(s.totalOwed - amount)) } : s)));
+      setLedger((prev) => [
+        { id: uid('led'), entityType: 'supplier', entityId: data.supplierId!, type: 'debit_note', referenceId: r.returnNumber, date: onDate, description: `Debit note ${r.returnNumber}: ${data.kg.toLocaleString()} kg ${product?.name || 'goods'} returned — ${r.reason}`, debit: 0, credit: amount, balanceAfter: Math.max(0, round2((supplier?.totalOwed || 0) - amount)), kg: data.kg },
+        ...prev,
+      ]);
+    }
+    setReturns((prev) => [r, ...prev]);
+    logAuditEvent(data.kind === 'sales' ? 'Sales Return' : 'Purchase Return', `${r.returnNumber}: ${data.kg.toLocaleString()} kg ${product?.name || ''} (${formatCurrency(amount)}) — ${r.reason}`, 'warning');
+    return r;
+  };
+
+  const deleteReturn = (id: string) => {
+    const r = returns.find((x) => x.id === id);
+    if (!r) return;
+    const ledgerIds = ledger.filter((l) => l.referenceId === r.returnNumber).map((l) => l.id);
+    if (r.kind === 'sales' && r.customerId) {
+      setProducts((prev) => prev.map((p) => (p.id === r.productId ? { ...p, stockKg: Math.max(0, round2(p.stockKg - r.kg)) } : p)));
+      setCustomers((prev) => prev.map((c) => (c.id === r.customerId ? { ...c, totalDue: round2(c.totalDue + r.amount) } : c)));
+    } else if (r.kind === 'purchase' && r.supplierId) {
+      setProducts((prev) => prev.map((p) => (p.id === r.productId ? { ...p, stockKg: round2(p.stockKg + r.kg) } : p)));
+      setSuppliers((prev) => prev.map((s) => (s.id === r.supplierId ? { ...s, totalOwed: round2(s.totalOwed + r.amount) } : s)));
+    }
+    setLedger((prev) => prev.filter((l) => l.referenceId !== r.returnNumber));
+    setReturns((prev) => prev.filter((x) => x.id !== id));
+    removeRemote('ledger', ledgerIds);
+    removeRemote('returns', [id]);
+    logAuditEvent('Return Deleted', `${r.returnNumber} removed; stock and balance reversed.`, 'danger');
+  };
+
+  // ---------------------------------------------------------------------------
+  // Stock adjustments
+  // ---------------------------------------------------------------------------
+  const adjustStock = (productId: string, newStockKg: number, reason: AdjustmentReason, note?: string): StockAdjustment | null => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return null;
+    const deltaKg = round2(newStockKg - product.stockKg);
+    if (deltaKg === 0) return null;
+    const adj: StockAdjustment = { id: uid('adj'), productId, deltaKg, reason, note: note?.trim() || undefined, date: todayISO(), createdAt: todayISO(), createdBy: currentUser?.name };
+    setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, stockKg: Math.max(0, round2(newStockKg)) } : p)));
+    setAdjustments((prev) => [adj, ...prev]);
+    logAuditEvent('Stock Adjusted', `${product.name}: ${deltaKg > 0 ? '+' : ''}${deltaKg.toLocaleString()} kg (${reason})${note ? ` — ${note}` : ''}.`, 'warning');
+    return adj;
+  };
+
+  const deleteAdjustment = (id: string) => {
+    const adj = adjustments.find((a) => a.id === id);
+    if (!adj) return;
+    setProducts((prev) => prev.map((p) => (p.id === adj.productId ? { ...p, stockKg: Math.max(0, round2(p.stockKg - adj.deltaKg)) } : p)));
+    setAdjustments((prev) => prev.filter((a) => a.id !== id));
+    removeRemote('stock_adjustments', [id]);
+    logAuditEvent('Stock Adjustment Deleted', `${adj.deltaKg > 0 ? '+' : ''}${adj.deltaKg.toLocaleString()} kg reversed.`, 'danger');
+  };
+
+  // ---------------------------------------------------------------------------
+  // Tasks / follow-ups
+  // ---------------------------------------------------------------------------
+  const addTask = (data: { title: string; dueDate: string; linkType?: TaskLinkType | null; linkId?: string | null; note?: string }): Task => {
+    const t: Task = { id: uid('task'), title: data.title.trim(), dueDate: data.dueDate, status: 'open', linkType: data.linkType || null, linkId: data.linkId || null, note: data.note?.trim() || undefined, createdAt: todayISO(), createdBy: currentUser?.name, doneAt: null };
+    setTasks((prev) => [t, ...prev]);
+    return t;
+  };
+
+  const completeTask = (id: string, done = true) => {
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: done ? 'done' : 'open', doneAt: done ? todayISO() : null } : t)));
+  };
+
+  const deleteTask = (id: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    removeRemote('tasks', [id]);
+  };
+
+  // ---------------------------------------------------------------------------
   // Booking lifecycle
   // ---------------------------------------------------------------------------
   const cancelBooking = (id: string, reason?: string) => {
@@ -1609,6 +1904,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       users,
       cashEntries,
       settings,
+      quotations,
+      purchaseOrders,
+      returns,
+      adjustments,
+      tasks,
       ledger,
       whatsappMessages,
       auditLogs,
@@ -1650,6 +1950,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (Array.isArray(data.trucks)) setTrucks(data.trucks);
       if (Array.isArray(data.users)) setUsers(data.users);
       if (Array.isArray(data.cashEntries)) setCashEntries(data.cashEntries);
+      if (Array.isArray(data.quotations)) setQuotations(data.quotations);
+      if (Array.isArray(data.purchaseOrders)) setPurchaseOrders(data.purchaseOrders);
+      if (Array.isArray(data.returns)) setReturns(data.returns);
+      if (Array.isArray(data.adjustments)) setAdjustments(data.adjustments);
+      if (Array.isArray(data.tasks)) setTasks(data.tasks);
       if (data.settings && typeof data.settings === 'object') setSettings({ ...data.settings, id: 'default' });
       if (Array.isArray(data.ledger)) setLedger(data.ledger.map(normalizeLedger));
       if (Array.isArray(data.whatsappMessages)) setWhatsappMessages(data.whatsappMessages);
@@ -1674,8 +1979,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setExpenses([]);
     setTrucks([]);
     setCashEntries([]);
+    setQuotations([]);
+    setPurchaseOrders([]);
+    setReturns([]);
+    setAdjustments([]);
+    setTasks([]);
     setLedger([]);
     setWhatsappMessages([]);
+    [STORAGE_KEYS.QUOTES, STORAGE_KEYS.POS, STORAGE_KEYS.RETURNS, STORAGE_KEYS.ADJUSTMENTS, STORAGE_KEYS.TASKS].forEach((k) => localStorage.removeItem(k));
     localStorage.removeItem(STORAGE_KEYS.CASH);
     localStorage.removeItem(STORAGE_KEYS.EXPENSES);
     localStorage.removeItem(STORAGE_KEYS.TRUCKS);
@@ -1719,6 +2030,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         clearRequestedReportsTab,
         openOps,
         requestedOpsTab,
+        requestedBookingsView,
+        openBookingsView,
+        requestedSuppliersView,
+        openSuppliersView,
         editRequest,
         setEditRequest,
         printRequest,
@@ -1768,6 +2083,25 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         deleteCashEntry,
         settings,
         updateSettings,
+        quotations,
+        addQuotation,
+        setQuotationStatus,
+        convertQuotation,
+        deleteQuotation,
+        purchaseOrders,
+        addPurchaseOrder,
+        cancelPurchaseOrder,
+        deletePurchaseOrder,
+        returns,
+        addReturn,
+        deleteReturn,
+        adjustments,
+        adjustStock,
+        deleteAdjustment,
+        tasks,
+        addTask,
+        completeTask,
+        deleteTask,
         createBooking,
         logDispatch,
         recordCustomerPayment,

@@ -49,6 +49,20 @@ A localised bulk-trading operations dashboard built for Pakistani commodity trad
 - **Dashboard**: month-to-date revenue, gross profit, expenses and net profit, top customers, and a "Needs Attention" panel with the top alerts.
 - **Exports**: Admin → Data Exports for customers, suppliers, products and the full ledger as CSV.
 
+## Trade documents & workflow
+
+- **Quotations** (Bookings → Quotations): quote a price, mark it sent / accepted / rejected, print it, and convert it to a booking in one click. Quotes expiring within two days appear in alerts.
+- **Purchase orders** (Suppliers → Purchase Orders): raise a PO to a supplier; each Receive Stock against it fills the order (partial / received). Overdue POs appear in alerts.
+- **Returns** (Bookings → Returns): a sales return puts goods back in stock and issues a printable **credit note**; a purchase return sends goods back and raises a **debit note**. Deleting a return reverses everything.
+- **Stock adjustments**: the "Adjust" link on a product asks for a reason (count, wastage, moisture, damage, theft, other) and a note. Adjustments appear in the stock flow and the audit log.
+- **Follow-ups** (Ops → Follow-ups): to-dos with due dates attached to a customer, supplier, booking, product or vehicle; due and overdue items show in alerts and on the dashboard.
+- **Broker commission**: a booking can carry a broker name and Rs./kg commission which accrues into the P&L as dispatches happen.
+- **Sales tax & freight** apply per dispatch (rate under Admin → Company & Invoicing); invoices show goods, freight, tax and total. **Weighbridge** gross/tare fields compute net kg on dispatches and receipts.
+- **Delivery status**: every dispatch is in transit until marked delivered with received-by and proof-of-delivery note; fleet vehicles go on trip and return to available automatically. Dispatches not delivered after two days appear in alerts.
+- **Daily cash book** (Reports → Cash Book) and **balance sheet** (Reports → Balance Sheet), with an opening cash balance setting and manual cash entries.
+- Printable **receipt / payment vouchers**, **quotation**, **purchase order**, **credit / debit notes** alongside invoices, challans and statements.
+- Duplicate phone numbers are rejected when adding customers or suppliers.
+
 ## Testing
 
 ```bash
@@ -70,6 +84,9 @@ Run the SQL files in `supabase/` in this order on an existing project:
 
 1. `migrate_tons_to_kg.sql` (once) — tons → kg, purchases and price_history tables.
 2. `migrate_v3_enterprise.sql` (once) — expenses, trucks, users tables; booking cancellation and dispatch→truck columns.
+3. `migrate_v4_cashbook.sql` (once) — cash entries and settings.
+4. `migrate_v5_dispatch_tax_delivery.sql` (once) — weighbridge, freight, tax, delivery status, trip expenses, company profile.
+5. `migrate_v6_trade_documents.sql` (once) — quotations, purchase orders, returns, stock adjustments, tasks, broker commission.
 
 New projects can run `schema.sql` instead, which already contains everything.
 

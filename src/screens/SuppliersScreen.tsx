@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Supplier } from '../types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { PurchaseOrdersPanel } from '../components/TradeDocsPanels';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
@@ -22,14 +23,20 @@ interface SuppliersScreenProps {
   onSelectSupplier: (supplierId: string) => void;
   onOpenAddSupplier: () => void;
   onOpenPayment: (supplierId: string) => void;
+  onReceiveStock: (opts: { supplierId?: string; productId?: string; purchaseOrderId?: string }) => void;
 }
 
 export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
   onSelectSupplier,
   onOpenAddSupplier,
   onOpenPayment,
+  onReceiveStock,
 }) => {
-  const { suppliers, products, deleteSupplier, can, setEditRequest } = useTrading();
+  const { suppliers, products, deleteSupplier, can, setEditRequest, purchaseOrders, requestedSuppliersView } = useTrading();
+  const [view, setView] = React.useState<'suppliers' | 'orders'>(requestedSuppliersView || 'suppliers');
+  React.useEffect(() => {
+    if (requestedSuppliersView) setView(requestedSuppliersView);
+  }, [requestedSuppliersView]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null);
   const pendingProducts = pendingDelete ? products.filter((p) => p.supplierId === pendingDelete.id) : [];
@@ -79,6 +86,15 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
         </div>
       </div>
 
+      <div className="bg-[#FAF9F6] p-1.5 rounded-full border border-[#E5E5E1] shadow-xs text-xs font-semibold flex flex-wrap items-center gap-1 w-fit max-w-full">
+        {([['suppliers', `Suppliers (${suppliers.length})`], ['orders', `Purchase Orders (${purchaseOrders.filter((p) => p.status === 'open' || p.status === 'partial').length} open)`]] as const).map(([id, label]) => (
+          <button key={id} onClick={() => setView(id)} className={`px-4 py-1.5 rounded-full whitespace-nowrap transition-colors ${view === id ? 'bg-[#111827] text-white shadow-xs font-bold' : 'text-[#6B7280] hover:text-[#111827] hover:bg-[#F4F3EF]'}`}>{label}</button>
+        ))}
+      </div>
+
+      {view === 'orders' && <PurchaseOrdersPanel onReceive={onReceiveStock} />}
+
+      {view === 'suppliers' && (<>
       {/* Search Bar */}
       <div className="relative">
         <Search className="w-4 h-4 text-[#8E9299] absolute left-4 top-3.5" />
@@ -201,6 +217,8 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
           })
         )}
       </div>
+
+      </>)}
 
       <ConfirmDialog
         isOpen={Boolean(pendingDelete)}

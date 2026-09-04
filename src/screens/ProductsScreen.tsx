@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Product } from '../types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { StockAdjustDialog } from '../components/TradeDocsPanels';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
@@ -31,14 +32,13 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
   onOpenBooking,
   onReceiveStock,
 }) => {
-  const { products, suppliers, updateProduct, bookings, dispatches, deleteProduct, setSelectedProductId, can, setEditRequest } = useTrading();
+  const { products, suppliers, bookings, dispatches, deleteProduct, setSelectedProductId, can, setEditRequest } = useTrading();
   const [pendingDelete, setPendingDelete] = useState<Product | null>(null);
   const pendingBookings = pendingDelete ? bookings.filter((b) => b.productId === pendingDelete.id) : [];
   const pendingDispatches = pendingDelete ? dispatches.filter((d) => d.productId === pendingDelete.id) : [];
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [editingStockId, setEditingStockId] = useState<string | null>(null);
-  const [newStockVal, setNewStockVal] = useState<string>('');
+  const [adjustId, setAdjustId] = useState<string | null>(null);
 
   const categories = ['All', ...Array.from(new Set(products.map((p) => p.category)))];
 
@@ -53,13 +53,6 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
   const totalWarehouseKg = products.reduce((acc, p) => acc + p.stockKg, 0);
   const totalStockValue = products.reduce((acc, p) => acc + p.stockKg * p.unitPricePerKg, 0);
 
-  const handleSaveStock = (productId: string) => {
-    const val = parseFloat(newStockVal);
-    if (!isNaN(val) && val >= 0) {
-      updateProduct(productId, { stockKg: val });
-    }
-    setEditingStockId(null);
-  };
 
   return (
     <div className="space-y-6 pb-12">
@@ -207,32 +200,13 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
 
                   <div className="flex justify-between items-center pt-1.5 border-t border-[#E5E5E1] text-xs">
                     <span className="text-[#8E9299]">Warehouse Stock:</span>
-                    {editingStockId === prod.id ? (
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          value={newStockVal}
-                          onChange={(e) => setNewStockVal(e.target.value)}
-                          className="w-20 bg-white border border-teal-600 rounded-lg px-2 py-0.5 font-mono text-xs text-[#111827]"
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => handleSaveStock(prod.id)}
-                          className="px-2.5 py-0.5 bg-[#111827] text-white rounded-lg text-[10px] font-bold"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    ) : (
+                    {(
                       <div className="flex items-center gap-2">
                         <span className="font-bold font-mono text-[#111827]">
                           {prod.stockKg.toLocaleString()} kg
                         </span>
                         <button
-                          onClick={() => {
-                            setEditingStockId(prod.id);
-                            setNewStockVal(prod.stockKg.toString());
-                          }}
+                          onClick={() => setAdjustId(prod.id)}
                           className="text-[10px] text-teal-700 hover:text-teal-800 underline font-semibold"
                         >
                           Adjust
@@ -301,6 +275,8 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
           );
         })}
       </div>
+
+      <StockAdjustDialog productId={adjustId} onClose={() => setAdjustId(null)} />
 
       <ConfirmDialog
         isOpen={Boolean(pendingDelete)}

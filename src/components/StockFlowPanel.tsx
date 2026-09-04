@@ -43,6 +43,8 @@ export const StockFlowPanel: React.FC<StockFlowPanelProps> = ({ onReceiveStock, 
     deletePurchase,
     deleteDispatch,
     can,
+    adjustments,
+    returns,
   } = useTrading();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
@@ -57,8 +59,8 @@ export const StockFlowPanel: React.FC<StockFlowPanelProps> = ({ onReceiveStock, 
   const from = range === 'custom' ? customFrom : shiftDate(todayISO(), -(Number(range) - 1));
 
   const movements = useMemo(
-    () => buildMovements(purchases, dispatches, { customers, suppliers, products, bookings }),
-    [purchases, dispatches, customers, suppliers, products, bookings]
+    () => buildMovements(purchases, dispatches, { customers, suppliers, products, bookings, adjustments, returns }),
+    [purchases, dispatches, customers, suppliers, products, bookings, adjustments, returns]
   );
   const days = useMemo(() => groupByDay(movements, from, to), [movements, from, to]);
 
@@ -254,7 +256,7 @@ export const StockFlowPanel: React.FC<StockFlowPanelProps> = ({ onReceiveStock, 
                       <div key={m.id} className="bg-white dark:bg-[#101A26] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl p-3.5 flex flex-col md:flex-row md:items-center gap-3">
                         <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 w-fit ${m.direction === 'in' ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-900 dark:text-teal-300 border-teal-200 dark:border-teal-800' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-200 dark:border-amber-800'}`}>
                           {m.direction === 'in' ? <ArrowDownLeft className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
-                          {m.direction === 'in' ? 'IN' : 'OUT'}
+                          {m.kind === 'adjustment' ? 'ADJ' : m.kind === 'return' ? (m.direction === 'in' ? 'RET IN' : 'RET OUT') : m.direction === 'in' ? 'IN' : 'OUT'}
                         </span>
                         <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs">
                           <div className="min-w-0">
@@ -284,7 +286,7 @@ export const StockFlowPanel: React.FC<StockFlowPanelProps> = ({ onReceiveStock, 
                             <span className="block text-[10px] text-[#8E9299]">@ Rs. {m.pricePerKg.toFixed(2)}/kg</span>
                           </div>
                         </div>
-                        {can('delete_records') && (<button onClick={() => setPending(m)} title={m.direction === 'in' ? 'Delete receipt (admin)' : 'Delete dispatch (admin)'} className="p-1.5 rounded-lg text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0 self-end md:self-center">
+                        {can('delete_records') && (m.kind === 'purchase' || m.kind === 'dispatch') && (<button onClick={() => setPending(m)} title={m.direction === 'in' ? 'Delete receipt (admin)' : 'Delete dispatch (admin)'} className="p-1.5 rounded-lg text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0 self-end md:self-center">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>)}
                       </div>

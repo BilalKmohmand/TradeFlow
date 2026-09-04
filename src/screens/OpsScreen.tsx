@@ -21,6 +21,7 @@ import { monthKey, currentMonthKey, monthLabel, shiftMonth } from '../utils/fina
 import { todayISO } from '../utils/stockFlow';
 import { EXPENSE_CATEGORIES, ExpenseCategory, OpsTab, Truck, TruckStatus, Expense } from '../types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { TasksPanel } from '../components/TradeDocsPanels';
 
 interface OpsScreenProps {
   initialTab?: OpsTab;
@@ -65,6 +66,11 @@ export const OpsScreen: React.FC<OpsScreenProps> = ({ initialTab = 'alerts' }) =
     setSelectedProductId,
     openBooking,
     openReports,
+    tasks,
+    quotations,
+    purchaseOrders,
+    openBookingsView,
+    openSuppliersView,
   } = useTrading();
 
   const [tab, setTab] = useState<OpsTab>(initialTab);
@@ -150,7 +156,7 @@ export const OpsScreen: React.FC<OpsScreenProps> = ({ initialTab = 'alerts' }) =
   };
 
   // ---- Alerts ----
-  const alerts = useMemo(() => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger, dispatches }, todayISO()), [products, customers, suppliers, bookings, trucks, ledger, dispatches]);
+  const alerts = useMemo(() => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders }, todayISO()), [products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders]);
   const followAlert = (a: (typeof alerts)[number]) => {
     if (!a.link) return;
     switch (a.link.type) {
@@ -159,6 +165,9 @@ export const OpsScreen: React.FC<OpsScreenProps> = ({ initialTab = 'alerts' }) =
       case 'product': setSelectedProductId(a.link.id); break;
       case 'booking': openBooking(a.link.id, a.link.dispatchId || null); break;
       case 'truck': setTab('fleet'); break;
+      case 'task': setTab('tasks'); break;
+      case 'quotation': openBookingsView('quotations'); break;
+      case 'po': openSuppliersView('orders'); break;
     }
   };
 
@@ -190,6 +199,7 @@ export const OpsScreen: React.FC<OpsScreenProps> = ({ initialTab = 'alerts' }) =
           {tabBtn('alerts', 'Alerts', <Bell className="w-3.5 h-3.5" />, alerts.length)}
           {tabBtn('fleet', 'Fleet', <TruckIcon className="w-3.5 h-3.5" />)}
           {tabBtn('expenses', 'Expenses', <Receipt className="w-3.5 h-3.5" />)}
+          {tabBtn('tasks', 'Follow-ups', <CheckCircle2 className="w-3.5 h-3.5" />, tasks.filter((t) => t.status === 'open' && t.dueDate <= todayISO()).length)}
         </div>
       </div>
 
@@ -318,6 +328,8 @@ export const OpsScreen: React.FC<OpsScreenProps> = ({ initialTab = 'alerts' }) =
       )}
 
       {/* ================= EXPENSES ================= */}
+      {tab === 'tasks' && <TasksPanel />}
+
       {tab === 'expenses' && (
         <div className="space-y-4">
           {can('manage_expenses') && (

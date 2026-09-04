@@ -21,6 +21,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, e
   const [address, setAddress] = useState<string>('');
   const [creditLimit, setCreditLimit] = useState<string>('100000');
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
+  const [dupError, setDupError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -36,6 +37,13 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, e
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !company || !phone) return;
+    const digits = phone.replace(/[^0-9]/g, '');
+    const dup = customers.find((c) => c.id !== editId && c.phone.replace(/[^0-9]/g, '') === digits);
+    if (dup) {
+      setDupError(`${dup.name} (${dup.company}) already uses this phone number.`);
+      return;
+    }
+    setDupError(null);
 
     if (editing) {
       updateCustomer(editing.id, {
@@ -192,6 +200,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, e
               />
             </div>
 
+            {dupError && <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">{dupError}</div>}
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"

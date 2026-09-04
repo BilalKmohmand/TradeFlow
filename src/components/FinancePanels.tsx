@@ -28,13 +28,13 @@ const downloadCsv = (name: string, csv: string, onDone?: (f: string) => void) =>
 // Profit & Loss
 // ===========================================================================
 export const PnLPanel: React.FC<{ onDownload?: (f: string) => void; onOpenExpenses: () => void }> = ({ onDownload, onOpenExpenses }) => {
-  const { dispatches, purchases, expenses, products, setSelectedProductId } = useTrading();
+  const { dispatches, purchases, expenses, products, bookings, setSelectedProductId } = useTrading();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
   const [month, setMonth] = useState(currentMonthKey());
 
-  const pnl = useMemo(() => computeMonthlyPnL(month, dispatches, purchases, expenses, products), [month, dispatches, purchases, expenses, products]);
-  const trend = useMemo(() => pnlTrend(month, 6, dispatches, purchases, expenses, products), [month, dispatches, purchases, expenses, products]);
+  const pnl = useMemo(() => computeMonthlyPnL(month, dispatches, purchases, expenses, products, bookings), [month, dispatches, purchases, expenses, products, bookings]);
+  const trend = useMemo(() => pnlTrend(month, 6, dispatches, purchases, expenses, products, bookings), [month, dispatches, purchases, expenses, products, bookings]);
   const prev = trend[trend.length - 2];
   const delta = prev && prev.netProfit !== 0 ? ((pnl.netProfit - prev.netProfit) / Math.abs(prev.netProfit)) * 100 : null;
 

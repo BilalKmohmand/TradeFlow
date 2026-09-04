@@ -65,7 +65,8 @@ export const computeMonthlyPnL = (
   dispatches: Dispatch[],
   purchases: Purchase[],
   expenses: Expense[],
-  products: Product[]
+  products: Product[],
+  bookings: { id: string; brokerCommissionPerKg?: number }[] = []
 ): MonthlyPnL => {
   const inMonth = dispatches.filter((d) => monthKey(d.date) === month);
   const byProduct = new Map<string, ProductMargin>();
@@ -115,7 +116,10 @@ export const computeMonthlyPnL = (
   monthExpenses.forEach((e) => {
     expensesByCategory[e.category] = round2((expensesByCategory[e.category] || 0) + e.amount);
   });
-  const expenseTotal = round2(monthExpenses.reduce((a, e) => a + e.amount, 0));
+  // Broker commission accrues on dispatched kg for bookings that carry a rate
+  const commission = round2(inMonth.reduce((a, d) => a + d.kg * (bookings.find((b) => b.id === d.bookingId)?.brokerCommissionPerKg || 0), 0));
+  if (commission > 0) expensesByCategory.commission = round2((expensesByCategory.commission || 0) + commission);
+  const expenseTotal = round2(monthExpenses.reduce((a, e) => a + e.amount, 0) + commission);
   const netProfit = round2(grossProfit - expenseTotal);
 
   const monthPurchases = purchases.filter((p) => monthKey(p.date) === month);
@@ -146,11 +150,12 @@ export const pnlTrend = (
   dispatches: Dispatch[],
   purchases: Purchase[],
   expenses: Expense[],
-  products: Product[]
+  products: Product[],
+  bookings: { id: string; brokerCommissionPerKg?: number }[] = []
 ): MonthlyPnL[] => {
   const out: MonthlyPnL[] = [];
   for (let i = months - 1; i >= 0; i--) {
-    out.push(computeMonthlyPnL(shiftMonth(endMonth, -i), dispatches, purchases, expenses, products));
+    out.push(computeMonthlyPnL(shiftMonth(endMonth, -i), dispatches, purchases, expenses, products, bookings));
   }
   return out;
 };

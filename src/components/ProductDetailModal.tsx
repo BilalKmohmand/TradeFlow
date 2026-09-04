@@ -91,6 +91,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ productI
     openBooking,
     setEditRequest,
     can,
+    adjustments,
+    returns,
   } = useTrading();
 
   const [tab, setTab] = useState<'price' | 'sales' | 'movements' | 'bookings'>('price');
@@ -116,9 +118,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ productI
       buildMovements(
         purchases.filter((p) => p.productId === productId),
         dispatches.filter((d) => d.productId === productId),
-        { customers, suppliers, products, bookings }
+        { customers, suppliers, products, bookings, adjustments: adjustments.filter((a) => a.productId === productId), returns: returns.filter((r) => r.productId === productId) }
       ),
-    [purchases, dispatches, productId, customers, suppliers, products, bookings]
+    [purchases, dispatches, productId, customers, suppliers, products, bookings, adjustments, returns]
   );
   const productBookings = useMemo(() => bookings.filter((b) => b.productId === productId), [bookings, productId]);
   const sales = useMemo(() => (productId ? productSalesHistory(dispatches, productId, currentMonthKey(), 12) : []), [dispatches, productId]);

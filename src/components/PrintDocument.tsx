@@ -8,6 +8,9 @@ import { dispatchBilledTotal } from '../types';
 
 export type PrintRequest =
   | { type: 'voucher'; ledgerId: string }
+  | { type: 'quotation'; quotationId: string }
+  | { type: 'po'; purchaseOrderId: string }
+  | { type: 'note'; returnId: string }
   | { type: 'invoice'; dispatchId: string }
   | { type: 'challan'; dispatchId: string }
   | { type: 'statement'; customerId: string; from: string; to: string }
@@ -24,7 +27,7 @@ interface PrintDocumentProps {
  * print dialog, with CSS in index.css that prints only #print-root.
  */
 export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }) => {
-  const { dispatches, bookings, customers, suppliers, products, ledger, trucks, currentUser, settings } = useTrading();
+  const { dispatches, bookings, customers, suppliers, products, ledger, trucks, currentUser, settings, quotations, purchaseOrders, returns } = useTrading();
   const COMPANY = {
     name: settings.companyName || 'Sarmaya',
     tagline: settings.companyTagline || '',
@@ -120,6 +123,60 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
           </>
         ),
       };
+    }
+
+    const simpleDoc = (opts: { title: string; number: string; date: string; partyLabel: string; party?: { company?: string; name?: string; address?: string; phone?: string } | null; lines: { label: string; sub?: string; kg: number; rate: number; amount: number }[]; footer?: React.ReactNode; signatures?: [string, string] }) => ({
+      title: opts.title,
+      number: opts.number,
+      date: opts.date,
+      body: (
+        <>
+          <div className="grid grid-cols-2 gap-6 text-xs">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">{opts.partyLabel}</div>
+              <div className="font-bold text-sm">{opts.party?.company}</div>
+              <div>{opts.party?.name}</div>
+              <div>{opts.party?.address}</div>
+              <div className="font-mono">{opts.party?.phone}</div>
+            </div>
+          </div>
+          <table className="w-full text-xs mt-6 border-collapse">
+            <thead><tr className="border-b-2 border-gray-900 text-[10px] uppercase tracking-widest text-gray-600"><th className="text-left py-2">Description</th><th className="text-right py-2">Quantity</th><th className="text-right py-2">Rate (Rs./kg)</th><th className="text-right py-2">Amount</th></tr></thead>
+            <tbody>
+              {opts.lines.map((l, i) => (
+                <tr key={i} className="border-b border-gray-200"><td className="py-3"><div className="font-bold">{l.label}</div>{l.sub && <div className="text-gray-500">{l.sub}</div>}</td><td className="py-3 text-right font-mono">{formatKg(l.kg)}</td><td className="py-3 text-right font-mono">{l.rate.toFixed(2)}</td><td className="py-3 text-right font-mono font-bold">{formatCurrency(l.amount)}</td></tr>
+              ))}
+            </tbody>
+            <tfoot><tr><td colSpan={3} className="pt-4 text-right font-bold uppercase tracking-widest text-[10px] text-gray-600">Total</td><td className="pt-4 text-right font-mono font-extrabold text-base">{formatCurrency(opts.lines.reduce((a, l) => a + l.amount, 0))}</td></tr></tfoot>
+          </table>
+          {opts.footer && <div className="mt-4 text-xs text-gray-600">{opts.footer}</div>}
+          {opts.signatures && (
+            <div className="grid grid-cols-2 gap-10 mt-16 text-xs"><div className="border-t border-gray-900 pt-2">{opts.signatures[0]}</div><div className="border-t border-gray-900 pt-2">{opts.signatures[1]}</div></div>
+          )}
+        </>
+      ),
+    });
+
+    if (request.type === 'quotation') {
+      const q = quotations.find((x) => x.id === request.quotationId);
+      if (!q) return null;
+      const cust = customers.find((c) => c.id === q.customerId);
+      const prod = products.find((p) => p.id === q.productId);
+      return simpleDoc({ title: 'QUOTATION', number: q.quoteNumber, date: q.createdAt, partyLabel: 'Quotation for', party: cust, lines: [{ label: prod?.name || 'Goods', sub: prod?.category, kg: q.kg, rate: q.pricePerKg, amount: q.amount }], footer: <>Valid until <b>{formatDate(q.validUntil)}</b>.{q.notes ? ` ${q.notes}` : ''} Prices exclusive of {settings.taxLabel || 'sales tax'}{settings.taxRatePct ? ` (${settings.taxRatePct}%)` : ''}.</>, signatures: [`For ${COMPANY.name}`, 'Accepted by customer'] });
+    }
+    if (request.type === 'po') {
+      const po = purchaseOrders.find((x) => x.id === request.purchaseOrderId);
+      if (!po) return null;
+      const sup = suppliers.find((s) => s.id === po.supplierId);
+      const prod = products.find((p) => p.id === po.productId);
+      return simpleDoc({ title: 'PURCHASE ORDER', number: po.poNumber, date: po.createdAt, partyLabel: 'To supplier', party: sup, lines: [{ label: prod?.name || 'Goods', sub: prod?.category, kg: po.kg, rate: po.pricePerKg, amount: po.amount }], footer: <>{po.expectedDate ? <>Deliver by <b>{formatDate(po.expectedDate)}</b>. </> : null}{po.notes || ''} Received so far: {formatKg(po.receivedKg)}.</>, signatures: [`Authorised for ${COMPANY.name}`, 'Supplier acknowledgement'] });
+    }
+    if (request.type === 'note') {
+      const r = returns.find((x) => x.id === request.returnId);
+      if (!r) return null;
+      const party = r.kind === 'sales' ? customers.find((c) => c.id === r.customerId) : suppliers.find((s) => s.id === r.supplierId);
+      const prod = products.find((p) => p.id === r.productId);
+      return simpleDoc({ title: r.kind === 'sales' ? 'CREDIT NOTE' : 'DEBIT NOTE', number: r.returnNumber, date: r.date, partyLabel: r.kind === 'sales' ? 'Credit to customer' : 'Debit against supplier', party: party, lines: [{ label: `${prod?.name || 'Goods'} returned`, sub: r.reason, kg: r.kg, rate: r.pricePerKg, amount: r.amount }], footer: <>{r.kind === 'sales' ? 'This amount has been credited to your account.' : 'This amount has been deducted from the balance payable to you.'}</>, signatures: [`For ${COMPANY.name}`, r.kind === 'sales' ? 'Customer' : 'Supplier'] });
     }
 
     if (request.type === 'voucher') {
@@ -235,7 +292,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       };
     }
     return null;
-  }, [request, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings]);
+  }, [request, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns]);
 
   if (!request) return null;
 
