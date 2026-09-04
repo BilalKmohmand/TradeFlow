@@ -156,6 +156,49 @@ export const pnlTrend = (
 };
 
 // ---------------------------------------------------------------------------
+// Product sales history: kg and revenue per month with same-month-last-year comparison.
+// ---------------------------------------------------------------------------
+export interface MonthlySalesRow {
+  month: string;
+  label: string;
+  kg: number;
+  revenue: number;
+  dispatches: number;
+  avgPricePerKg: number | null;
+  lastYearKg: number;
+  lastYearRevenue: number;
+  kgChangePct: number | null;
+}
+
+export const productSalesHistory = (dispatches: Dispatch[], productId: string, endMonth: string, months = 12): MonthlySalesRow[] => {
+  const mine = dispatches.filter((d) => d.productId === productId);
+  const agg = (m: string) => {
+    const rows = mine.filter((d) => monthKey(d.date) === m);
+    const kg = rows.reduce((a, d) => a + d.kg, 0);
+    const revenue = round2(rows.reduce((a, d) => a + d.amount, 0));
+    return { kg, revenue, count: rows.length };
+  };
+  const out: MonthlySalesRow[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const m = shiftMonth(endMonth, -i);
+    const cur = agg(m);
+    const prev = agg(shiftMonth(m, -12));
+    out.push({
+      month: m,
+      label: monthLabel(m),
+      kg: cur.kg,
+      revenue: cur.revenue,
+      dispatches: cur.count,
+      avgPricePerKg: cur.kg > 0 ? round2(cur.revenue / cur.kg) : null,
+      lastYearKg: prev.kg,
+      lastYearRevenue: prev.revenue,
+      kgChangePct: prev.kg > 0 ? round2(((cur.kg - prev.kg) / prev.kg) * 100) : null,
+    });
+  }
+  return out;
+};
+
+// ---------------------------------------------------------------------------
 // Aging: apply credits (payments) FIFO against debits (invoices) from the ledger,
 // then bucket whatever is still open by age in days.
 // ---------------------------------------------------------------------------

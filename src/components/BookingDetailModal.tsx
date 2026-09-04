@@ -4,6 +4,7 @@ import { X, User, Package, Truck, Calendar, Trash2, CreditCard, ArrowUpRight, Pe
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useEscape } from '../hooks/useEscape';
 
 interface BookingDetailModalProps {
   bookingId: string | null;
@@ -32,6 +33,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({ bookingI
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [pendingDispatchId, setPendingDispatchId] = useState<string | null>(null);
+  useEscape(Boolean(bookingId) && !confirmDelete && !confirmCancel && !pendingDispatchId, onClose);
 
   const booking = bookings.find((b) => b.id === bookingId);
   if (!booking) return null;

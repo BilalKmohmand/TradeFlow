@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
+import { useEscape } from '../hooks/useEscape';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -35,14 +36,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     if (isOpen) setTyped('');
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, onCancel]);
+  useEscape(isOpen, onCancel);
 
   const canConfirm = !requireText || typed.trim() === requireText;
 

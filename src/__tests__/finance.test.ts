@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { costPerKgOn, computeMonthlyPnL, ageLedger, receivablesAging, creditExposure, shiftMonth, pnlTrend } from '../utils/finance';
+import { costPerKgOn, computeMonthlyPnL, ageLedger, receivablesAging, creditExposure, shiftMonth, pnlTrend, productSalesHistory } from '../utils/finance';
 import { computeAlerts } from '../utils/alerts';
 import { LedgerEntry } from '../types';
 
@@ -119,5 +119,25 @@ describe('alerts', () => {
     expect(kinds).toContain('late_delivery');
     expect(kinds).toContain('truck_maintenance');
     expect(alerts[0].severity).toBe('danger');
+  });
+});
+
+describe('product sales history', () => {
+  it('reports kg and revenue per month with same-month-last-year comparison', () => {
+    const ds = [
+      ...dispatches,
+      { id: 'old', dispatchNumber: 'D0', bookingId: 'b0', customerId: 'c1', productId: 'p1', kg: 250, amount: 8000, truckNumber: 'X', date: '2025-09-10', whatsappSent: false },
+    ];
+    const rows = productSalesHistory(ds, 'p1', '2026-09', 12);
+    expect(rows).toHaveLength(12);
+    expect(rows[0].month).toBe('2025-10');
+    const sep = rows[rows.length - 1];
+    expect(sep.month).toBe('2026-09');
+    expect(sep.kg).toBe(500);
+    expect(sep.revenue).toBe(20000);
+    expect(sep.avgPricePerKg).toBe(40);
+    expect(sep.lastYearKg).toBe(250);
+    expect(sep.kgChangePct).toBe(100);
+    expect(rows[0].kgChangePct).toBeNull();
   });
 });

@@ -211,7 +211,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, e
                     <span>Customer Created!</span>
                   </>
                 ) : (
-                  <span>Create Account</span>
+                  <span>{editing ? 'Save Changes' : 'Create Account'}</span>
                 )}
               </button>
             </div>

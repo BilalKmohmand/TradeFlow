@@ -172,8 +172,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, edi
                 </label>
                 <input
                   type="number"
-                  step="0.5"
-                  min="0.1"
+                  step="0.01"
+                  min="0.01"
                   value={unitPricePerKg}
                   onChange={(e) => setUnitPricePerKg(e.target.value)}
                   disabled={Boolean(editing) && !can('edit_prices')}

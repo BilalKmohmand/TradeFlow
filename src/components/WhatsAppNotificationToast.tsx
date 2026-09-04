@@ -1,10 +1,24 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageSquare, CheckCheck, ExternalLink, X, Send } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 
 export const WhatsAppNotificationToast: React.FC = () => {
   const { recentWhatsAppAlert, clearRecentAlert, sendWhatsAppDirect } = useTrading();
+
+  // Auto-dismiss so the toast never sits over page controls; Escape closes it early.
+  useEffect(() => {
+    if (!recentWhatsAppAlert) return;
+    const timer = setTimeout(clearRecentAlert, 8000);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') clearRecentAlert();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [recentWhatsAppAlert, clearRecentAlert]);
 
   if (!recentWhatsAppAlert) return null;
 
@@ -15,7 +29,8 @@ export const WhatsAppNotificationToast: React.FC = () => {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.95 }}
         transition={{ duration: 0.25, ease: 'easeOut' }}
-        className="fixed bottom-6 right-6 z-50 max-w-md w-full mx-4 sm:mx-0 shadow-2xl rounded-2xl bg-white border border-emerald-100 overflow-hidden"
+        role="status"
+        className="fixed bottom-6 right-6 z-40 max-w-md w-full mx-4 sm:mx-0 shadow-2xl rounded-2xl bg-white border border-emerald-100 overflow-hidden"
       >
         <div className="bg-[#111827] px-5 py-3.5 text-white flex items-center justify-between border-b border-[#262626]">
           <div className="flex items-center space-x-3">

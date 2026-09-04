@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useEscape } from '../hooks/useEscape';
 import { formatCurrency, formatDate, formatKg } from '../utils/formatters';
 import { AnimatedNumber } from './AnimatedNumber';
 
@@ -37,6 +38,7 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
 }) => {
   const { suppliers, products, ledger, purchases, deleteSupplier, setSelectedProductId, setEditRequest, setPrintRequest, can } = useTrading();
   const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
+  useEscape(Boolean(supplierId) && !confirmDelete, onClose);
 
   const supplier = suppliers.find((s) => s.id === supplierId);
 

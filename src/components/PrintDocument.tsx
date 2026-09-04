@@ -3,6 +3,7 @@ import { X, Printer, Truck } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
 import { todayISO } from '../utils/stockFlow';
+import { useEscape } from '../hooks/useEscape';
 
 export type PrintRequest =
   | { type: 'invoice'; dispatchId: string }
@@ -27,6 +28,7 @@ const COMPANY = {
  */
 export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }) => {
   const { dispatches, bookings, customers, suppliers, products, ledger, trucks, currentUser } = useTrading();
+  useEscape(Boolean(request), onClose);
 
   const content = useMemo(() => {
     if (!request) return null;
@@ -199,7 +201,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
           <span className="text-xs text-white/80">Preview • use "Print / Save PDF" to print or export.</span>
           <div className="flex items-center gap-2">
             <button onClick={() => window.print()} className="px-4 py-2 bg-white text-[#111827] text-xs font-bold rounded-2xl flex items-center gap-1.5 shadow-sm hover:bg-slate-100"><Printer className="w-3.5 h-3.5 text-teal-700" /> Print / Save PDF</button>
-            <button onClick={onClose} className="p-2 rounded-2xl bg-white/10 text-white hover:bg-white/20"><X className="w-4 h-4" /></button>
+            <button onClick={onClose} aria-label="Close preview" className="p-2 rounded-2xl bg-white/10 text-white hover:bg-white/20"><X className="w-4 h-4" /></button>
           </div>
         </div>
 

@@ -26,7 +26,7 @@ const checkIsNightTime = (): boolean => {
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null;
-    return saved === 'light' || saved === 'dark' || saved === 'auto' ? saved : 'auto';
+    return saved === 'light' || saved === 'dark' || saved === 'auto' ? saved : 'light'; // default light: most screens are styled light-first
   });
 
   const [isNightTime, setIsNightTime] = useState<boolean>(checkIsNightTime());

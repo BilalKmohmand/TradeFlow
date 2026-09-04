@@ -26,10 +26,14 @@ import {
   ResponsiveContainer,
   CartesianGrid,
   ReferenceLine,
+  Bar,
+  Legend,
 } from 'recharts';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
 import { buildMovements, priceSeries, yearOverYear, todayISO } from '../utils/stockFlow';
+import { productSalesHistory, currentMonthKey } from '../utils/finance';
+import { useEscape } from '../hooks/useEscape';
 import { PriceSource } from '../types';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -89,7 +93,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ productI
     can,
   } = useTrading();
 
-  const [tab, setTab] = useState<'price' | 'movements' | 'bookings'>('price');
+  const [tab, setTab] = useState<'price' | 'sales' | 'movements' | 'bookings'>('price');
   const [newPrice, setNewPrice] = useState('');
   const [newPriceNote, setNewPriceNote] = useState('');
   const [histDate, setHistDate] = useState(() => {
@@ -100,6 +104,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ productI
   const [histPrice, setHistPrice] = useState('');
   const [histNote, setHistNote] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  useEscape(Boolean(productId) && !pendingDeleteId, onClose);
 
   const product = products.find((p) => p.id === productId);
 
@@ -116,6 +121,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ productI
     [purchases, dispatches, productId, customers, suppliers, products, bookings]
   );
   const productBookings = useMemo(() => bookings.filter((b) => b.productId === productId), [bookings, productId]);
+  const sales = useMemo(() => (productId ? productSalesHistory(dispatches, productId, currentMonthKey(), 12) : []), [dispatches, productId]);
+  const salesTotals = useMemo(() => ({
+    kg: sales.reduce((a, r) => a + r.kg, 0),
+    revenue: sales.reduce((a, r) => a + r.revenue, 0),
+    lastYearKg: sales.reduce((a, r) => a + r.lastYearKg, 0),
+    lastYearRevenue: sales.reduce((a, r) => a + r.lastYearRevenue, 0),
+    bestMonth: sales.reduce((best, r) => (r.kg > (best?.kg ?? -1) ? r : best), null as null | (typeof sales)[number]),
+  }), [sales]);
 
   if (!product) return null;
 
@@ -219,6 +232,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ productI
             {/* Tabs */}
             <div className="px-6 sm:px-7 border-b border-[#E5E5E1] flex gap-4 text-xs font-bold bg-white overflow-x-auto">
               {tabBtn('price', `Price History (${entries.length})`)}
+              {tabBtn('sales', 'Sales by Month')}
               {tabBtn('movements', `Stock In / Out (${movements.length})`)}
               {tabBtn('bookings', `Bookings (${productBookings.length})`)}
             </div>
@@ -365,6 +379,81 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ productI
                                 </tr>
                               ))
                           )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {tab === 'sales' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="bg-[#111827] text-white p-4 rounded-2xl min-w-0">
+                      <div className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest">Sold, last 12 months</div>
+                      <div className="text-xl font-bold font-mono text-teal-300 mt-1 truncate">{formatKg(salesTotals.kg)}</div>
+                      <div className="text-[11px] text-[#9CA3AF] font-mono truncate">{formatCurrency(salesTotals.revenue)}</div>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-[#E5E5E1] shadow-xs min-w-0">
+                      <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Same 12 months, year before</div>
+                      <div className="text-xl font-bold font-mono text-[#111827] mt-1 truncate">{formatKg(salesTotals.lastYearKg)}</div>
+                      <div className="text-[11px] text-[#8E9299] font-mono truncate">{formatCurrency(salesTotals.lastYearRevenue)}</div>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-[#E5E5E1] shadow-xs min-w-0">
+                      <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Volume vs year before</div>
+                      <div className="mt-1.5"><ChangeBadge change={salesTotals.lastYearKg > 0 ? ((salesTotals.kg - salesTotals.lastYearKg) / salesTotals.lastYearKg) * 100 : null} /></div>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-[#E5E5E1] shadow-xs min-w-0">
+                      <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Best month</div>
+                      <div className="text-xl font-bold font-mono text-[#111827] mt-1 truncate">{salesTotals.bestMonth && salesTotals.bestMonth.kg > 0 ? salesTotals.bestMonth.label : '—'}</div>
+                      <div className="text-[11px] text-[#8E9299] font-mono truncate">{salesTotals.bestMonth && salesTotals.bestMonth.kg > 0 ? formatKg(salesTotals.bestMonth.kg) : 'no sales yet'}</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-[#E5E5E1] p-5 shadow-xs">
+                    <h4 className="text-sm font-bold text-[#111827]">Kilograms sold per month</h4>
+                    <p className="text-[11px] text-[#8E9299] mb-3">Last 12 months against the same month one year earlier</p>
+                    <div className="h-64 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={sales.map((r) => ({ label: r.label.split(' ')[0], 'This year': r.kg, 'Last year': r.lastYearKg, revenue: r.revenue }))} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={2}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                          <XAxis dataKey="label" stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} />
+                          <YAxis stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} width={55} tickFormatter={(v) => `${Number(v).toLocaleString()}kg`} />
+                          <Tooltip cursor={{ fill: '#FAF9F6' }} contentStyle={{ borderRadius: 16, fontSize: 12 }} formatter={(v: number, name: string) => [`${Number(v).toLocaleString()} kg`, name]} />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                          <Bar dataKey="Last year" fill="#CBD5E1" radius={[6, 6, 0, 0]} />
+                          <Bar dataKey="This year" fill="#0d9488" radius={[6, 6, 0, 0]} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-[#E5E5E1] overflow-hidden shadow-xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-[#FAF9F6] border-b border-[#E5E5E1] text-[#8E9299] uppercase tracking-widest font-bold text-[10px]">
+                          <tr>
+                            <th className="py-3 px-4">Month</th>
+                            <th className="py-3 px-4 text-right">Sold (kg)</th>
+                            <th className="py-3 px-4 text-right">Revenue</th>
+                            <th className="py-3 px-4 text-right">Avg Rs./kg</th>
+                            <th className="py-3 px-4 text-right">Dispatches</th>
+                            <th className="py-3 px-4 text-right">Same month last year</th>
+                            <th className="py-3 px-4 text-right">Change</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#FAF9F6] font-mono">
+                          {[...sales].reverse().map((r) => (
+                            <tr key={r.month} className={`hover:bg-[#FAF9F6] ${r.kg === 0 && r.lastYearKg === 0 ? 'opacity-50' : ''}`}>
+                              <td className="py-2.5 px-4 font-sans font-semibold text-[#111827] whitespace-nowrap">{r.label}</td>
+                              <td className="py-2.5 px-4 text-right font-bold text-[#111827]">{r.kg > 0 ? formatKg(r.kg) : '—'}</td>
+                              <td className="py-2.5 px-4 text-right text-[#111827]">{r.revenue > 0 ? formatCurrency(r.revenue) : '—'}</td>
+                              <td className="py-2.5 px-4 text-right text-[#6B7280]">{r.avgPricePerKg != null ? `Rs. ${r.avgPricePerKg}` : '—'}</td>
+                              <td className="py-2.5 px-4 text-right text-[#6B7280]">{r.dispatches || '—'}</td>
+                              <td className="py-2.5 px-4 text-right text-[#6B7280]">{r.lastYearKg > 0 ? `${formatKg(r.lastYearKg)} • ${formatCurrency(r.lastYearRevenue)}` : '—'}</td>
+                              <td className="py-2.5 px-4 text-right"><ChangeBadge change={r.kgChangePct} /></td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>

@@ -231,8 +231,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 </label>
                 <input
                   type="number"
-                  step="0.5"
-                  min="0.1"
+                  step="0.01"
+                  min="0.01"
                   value={pricePerKg}
                   onChange={(e) => setPricePerKg(e.target.value)}
                   disabled={Boolean(editing) && !can('edit_prices')}

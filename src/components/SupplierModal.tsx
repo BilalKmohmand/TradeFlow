@@ -206,7 +206,7 @@ export const SupplierModal: React.FC<SupplierModalProps> = ({ isOpen, onClose, e
                     <span>Supplier Created!</span>
                   </>
                 ) : (
-                  <span>Create Supplier</span>
+                  <span>{editing ? 'Save Changes' : 'Create Supplier'}</span>
                 )}
               </button>
             </div>

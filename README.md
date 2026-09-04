@@ -54,10 +54,13 @@ A localised bulk-trading operations dashboard built for Pakistani commodity trad
 ```bash
 npm test          # run the Vitest suite once
 npm run test:watch
-npm run check     # type-check + tests (what CI should run)
+npm run test:e2e  # real-browser end-to-end flow in the installed Google Chrome (Playwright)
+npm run check     # type-check + unit tests + e2e (what CI should run)
 ```
 
-Tests live in `src/__tests__/` and cover the finance maths (cost basis, P&L, aging, credit exposure), stock-flow grouping, price-history comparisons, alerts, and an integration suite that drives the real `TradingProvider` through bookings, dispatches, purchases, payments, cascading deletes with reversals, booking edits/cancellation, roles and permissions.
+The end-to-end suite (`e2e/app.spec.ts`) unlocks the app, factory-resets, creates a user, supplier, product, customer and vehicle, books, dispatches with a fleet vehicle, receives stock, records an expense, checks the dashboard, P&L, aging, stock flow, invoice preview, price history and monthly sales, then signs in as an operator to verify hidden admin/delete controls, and checks the mobile layout. Screenshots land in `e2e/screenshots/`.
+
+Unit and integration tests live in `src/__tests__/` and cover the finance maths (cost basis, P&L, aging, credit exposure), stock-flow grouping, price-history comparisons, alerts, and an integration suite that drives the real `TradingProvider` through bookings, dispatches, purchases, payments, cascading deletes with reversals, booking edits/cancellation, roles and permissions, plus App-level tests for navigation, the print preview and Escape handling.
 
 In VS Code, install the recommended **Vitest** extension (`.vscode/extensions.json`) to run and debug individual tests from the Testing sidebar, or use the "Vitest: run all tests" and "Dev server" launch configurations from the Run and Debug panel.
 

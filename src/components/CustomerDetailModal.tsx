@@ -21,6 +21,7 @@ import {
   Printer,
 } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useEscape } from '../hooks/useEscape';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
 import { AnimatedNumber } from './AnimatedNumber';
@@ -57,6 +58,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   const [reminderSent, setReminderSent] = useState<boolean>(false);
   const [confirmDeleteCustomer, setConfirmDeleteCustomer] = useState<boolean>(false);
   const [pendingLedgerId, setPendingLedgerId] = useState<string | null>(null);
+  useEscape(Boolean(customerId) && !confirmDeleteCustomer && !pendingLedgerId, onClose);
 
   const customer = customers.find((c) => c.id === customerId);
 
