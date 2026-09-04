@@ -73,6 +73,7 @@ export const AdminScreen: React.FC = () => {
     expenses,
     trucks,
     users,
+    cashEntries,
     addUser,
     updateUser,
     deleteUser,
@@ -176,6 +177,7 @@ export const AdminScreen: React.FC = () => {
     { table: 'price_history', label: 'Price History', count: priceHistory.length, icon: <History className="w-4 h-4" /> },
     { table: 'expenses', label: 'Expenses', count: expenses.length, icon: <Receipt className="w-4 h-4" /> },
     { table: 'trucks', label: 'Fleet', count: trucks.length, icon: <TruckIcon className="w-4 h-4" /> },
+    { table: 'cash_entries', label: 'Cash Entries', count: cashEntries.length, icon: <Receipt className="w-4 h-4" /> },
     { table: 'ledger', label: 'Ledger Entries', count: ledger.length, icon: <BookOpen className="w-4 h-4" /> },
     { table: 'whatsapp_messages', label: 'WhatsApp Logs', count: whatsappMessages.length, icon: <MessageSquare className="w-4 h-4" /> },
   ];

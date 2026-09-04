@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { TrendingUp, TrendingDown, AlertTriangle, Download, Receipt, Scale, Landmark } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, Download, Receipt, Scale, Landmark, Wallet, ChevronDown, ChevronRight, Plus, Trash2, ArrowDownLeft, ArrowUpRight, Settings2 } from 'lucide-react';
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { useTrading } from '../context/TradingContext';
 import { useTheme } from '../context/ThemeContext';
 import { formatCurrency, formatKg, formatDate, formatNumber } from '../utils/formatters';
-import { computeMonthlyPnL, pnlTrend, currentMonthKey, monthLabel, shiftMonth, receivablesAging, payablesAging, sumAging, AgingRow, computeBalanceSheet } from '../utils/finance';
-import { todayISO } from '../utils/stockFlow';
+import { computeMonthlyPnL, pnlTrend, currentMonthKey, monthLabel, shiftMonth, receivablesAging, payablesAging, sumAging, AgingRow, computeBalanceSheet, collectCashMovements, buildCashBook, CashMovement } from '../utils/finance';
+import { todayISO, shiftDate } from '../utils/stockFlow';
+import { ConfirmDialog } from './ConfirmDialog';
 import { EXPENSE_CATEGORIES, ExpenseCategory } from '../types';
 
 const card = 'bg-white dark:bg-[#101A26] rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs';
@@ -250,9 +251,9 @@ export const AgingPanel: React.FC<{ onDownload?: (f: string) => void }> = ({ onD
 // Balance sheet
 // ===========================================================================
 export const BalanceSheetPanel: React.FC<{ onDownload?: (f: string) => void }> = ({ onDownload }) => {
-  const { products, purchases, customers, suppliers, ledger, expenses, setSelectedProductId } = useTrading();
+  const { products, purchases, customers, suppliers, ledger, expenses, cashEntries, settings, setSelectedProductId } = useTrading();
   const [asOf, setAsOf] = useState(todayISO());
-  const bs = useMemo(() => computeBalanceSheet({ products, purchases, customers, suppliers, ledger, expenses }, asOf), [products, purchases, customers, suppliers, ledger, expenses, asOf]);
+  const bs = useMemo(() => computeBalanceSheet({ products, purchases, customers, suppliers, ledger, expenses, cashEntries, settings }, asOf), [products, purchases, customers, suppliers, ledger, expenses, cashEntries, settings, asOf]);
 
   const exportCsv = () => {
     let csv = `Balance sheet as at ${bs.asOf}\n\nASSETS\nInventory at cost,${bs.inventory.atCost}\nReceivables,${bs.receivables}\nCash & bank (net movements),${bs.cashNet.net}\nTotal assets,${bs.totalAssets}\n\nLIABILITIES\nPayables,${bs.payables}\nAccrued expenses,${bs.accruedExpenses}\nTotal liabilities,${bs.totalLiabilities}\n\nEQUITY,${bs.equity}\n\nInventory detail\nProduct,kg,Cost Rs./kg,Value\n`;
@@ -291,7 +292,7 @@ export const BalanceSheetPanel: React.FC<{ onDownload?: (f: string) => void }> =
           <h3 className="text-sm font-bold text-[#111827] dark:text-white mb-2">Assets</h3>
           {row('Inventory at cost', bs.inventory.atCost, { sub: `${formatKg(bs.inventory.kg)} on hand • ${formatCurrency(bs.inventory.atSellingPrice)} at selling price${bs.inventory.uncostedKg > 0 ? ` • ${formatKg(bs.inventory.uncostedKg)} without purchase cost` : ''}` })}
           {row('Receivables from customers', bs.receivables, { sub: `${customers.filter((c) => c.totalDue > 0).length} customer(s) owing` })}
-          {row('Cash & bank (net of recorded movements)', bs.cashNet.net, { sub: `Received ${formatCurrency(bs.cashNet.received)} − paid suppliers ${formatCurrency(bs.cashNet.paidToSuppliers)} − expenses ${formatCurrency(bs.cashNet.expensesPaid)}`, tone: bs.cashNet.net >= 0 ? 'text-[#111827] dark:text-white' : 'text-rose-700' })}
+          {row('Cash & bank (per cash book)', bs.cashNet.net, { sub: `Opening ${formatCurrency(settings.cashOpeningBalance)} + received ${formatCurrency(bs.cashNet.received)} − paid suppliers ${formatCurrency(bs.cashNet.paidToSuppliers)} − expenses ${formatCurrency(bs.cashNet.expensesPaid)} ± manual entries`, tone: bs.cashNet.net >= 0 ? 'text-[#111827] dark:text-white' : 'text-rose-700' })}
           {row('Total assets', bs.totalAssets, { bold: true })}
         </div>
         <div className="space-y-6">
@@ -331,6 +332,202 @@ export const BalanceSheetPanel: React.FC<{ onDownload?: (f: string) => void }> =
         </div>
       </div>
       <p className="text-[11px] text-[#8E9299]">Simplified management balance sheet built from the app's records. Cash has no opening balance and reflects only payments and expenses recorded here; fixed assets, loans and tax are not tracked.</p>
+    </div>
+  );
+};
+
+// ===========================================================================
+// Daily cash book
+// ===========================================================================
+const SOURCE_LABEL: Record<CashMovement['source'], string> = {
+  customer_payment: 'Customer payment',
+  supplier_payment: 'Supplier payment',
+  expense: 'Expense',
+  manual: 'Manual entry',
+};
+
+export const CashBookPanel: React.FC<{ onDownload?: (f: string) => void }> = ({ onDownload }) => {
+  const { ledger, expenses, cashEntries, customers, suppliers, settings, updateSettings, addCashEntry, deleteCashEntry, deleteExpense, deleteLedgerEntry, setSelectedCustomerId, setSelectedSupplierId, can } = useTrading();
+  const [range, setRange] = useState<'7' | '30' | 'month' | 'custom'>('7');
+  const [customFrom, setCustomFrom] = useState(shiftDate(todayISO(), -6));
+  const [customTo, setCustomTo] = useState(todayISO());
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([todayISO()]));
+  const [showSettings, setShowSettings] = useState(false);
+  const [openingInput, setOpeningInput] = useState(String(settings.cashOpeningBalance));
+  const [openingDate, setOpeningDate] = useState(settings.cashOpeningDate);
+  const [entry, setEntry] = useState<{ direction: 'in' | 'out'; date: string; amount: string; description: string; method: string }>({ direction: 'in', date: todayISO(), amount: '', description: '', method: 'Cash' });
+  const [pending, setPending] = useState<CashMovement | null>(null);
+
+  const to = range === 'custom' ? customTo : todayISO();
+  const from = range === 'custom' ? customFrom : range === 'month' ? `${currentMonthKey()}-01` : shiftDate(todayISO(), -(Number(range) - 1));
+  const movements = useMemo(() => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), [ledger, expenses, cashEntries, customers, suppliers]);
+  const book = useMemo(() => buildCashBook(movements, settings, from, to), [movements, settings, from, to]);
+  const byMethod = useMemo(() => {
+    const m = new Map<string, number>();
+    book.days.forEach((d) => d.movements.forEach((mv) => m.set(mv.method || 'Unspecified', (m.get(mv.method || 'Unspecified') || 0) + (mv.direction === 'in' ? mv.amount : -mv.amount))));
+    return Array.from(m.entries()).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+  }, [book]);
+
+  const toggle = (d: string) => setExpanded((p) => { const n = new Set(p); n.has(d) ? n.delete(d) : n.add(d); return n; });
+
+  const submitEntry = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseFloat(entry.amount);
+    if (!amount || amount <= 0 || !entry.description.trim()) return;
+    addCashEntry({ direction: entry.direction, date: entry.date, amount, description: entry.description.trim(), method: entry.method });
+    setEntry((f) => ({ ...f, amount: '', description: '' }));
+  };
+
+  const saveSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateSettings({ cashOpeningBalance: parseFloat(openingInput) || 0, cashOpeningDate: openingDate });
+    setShowSettings(false);
+  };
+
+  const exportCsv = () => {
+    let csv = `Cash book ${book.from} to ${book.to}\nOpening balance,${book.openingBalance}\n\nDate,Type,Counterparty,Description,Reference,Method,Receipt,Payment,Balance\n`;
+    [...book.days].reverse().forEach((d) => {
+      let run = d.opening;
+      d.movements.forEach((m) => {
+        run = m.direction === 'in' ? run + m.amount : run - m.amount;
+        csv += `"${m.date}","${SOURCE_LABEL[m.source]}","${m.counterparty || ''}","${m.description.replace(/"/g, '""')}","${m.reference || ''}","${m.method || ''}",${m.direction === 'in' ? m.amount : ''},${m.direction === 'out' ? m.amount : ''},${run.toFixed(2)}\n`;
+      });
+    });
+    csv += `\nTotal receipts,${book.totalReceipts}\nTotal payments,${book.totalPayments}\nClosing balance,${book.closingBalance}\n`;
+    downloadCsv(`sarmaya-cashbook-${book.from}-to-${book.to}.csv`, csv, onDownload);
+  };
+
+  const removeMovement = (m: CashMovement) => {
+    if (m.source === 'manual') deleteCashEntry(m.sourceId);
+    else if (m.source === 'expense') deleteExpense(m.sourceId);
+    else deleteLedgerEntry(m.sourceId);
+  };
+
+  const rangeBtn = (k: typeof range, label: string) => (
+    <button onClick={() => setRange(k)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${range === k ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs' : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'}`}>{label}</button>
+  );
+  const inputCls = 'w-full bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl px-3.5 py-2.5 text-xs font-mono font-bold text-[#111827] dark:text-white focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600';
+  const labelCls = 'block text-[10px] font-bold text-[#8E9299] mb-1.5 uppercase tracking-widest';
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="bg-[#FAF9F6] dark:bg-[#162436] p-1 rounded-full border border-[#E5E5E1] dark:border-[#203248] flex flex-wrap items-center gap-0.5">
+            {rangeBtn('7', '7 days')}
+            {rangeBtn('30', '30 days')}
+            {rangeBtn('month', 'This month')}
+            {rangeBtn('custom', 'Custom')}
+          </div>
+          {range === 'custom' && (
+            <div className="flex items-center gap-2 text-xs">
+              <input type="date" value={customFrom} max={customTo} onChange={(e) => setCustomFrom(e.target.value)} className="bg-white dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-xl px-3 py-1.5 font-mono text-[#111827] dark:text-white" />
+              <span className="text-[#8E9299]">to</span>
+              <input type="date" value={customTo} min={customFrom} max={todayISO()} onChange={(e) => setCustomTo(e.target.value)} className="bg-white dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-xl px-3 py-1.5 font-mono text-[#111827] dark:text-white" />
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => { setOpeningInput(String(settings.cashOpeningBalance)); setOpeningDate(settings.cashOpeningDate); setShowSettings((v) => !v); }} className="px-3.5 py-2 bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold rounded-2xl flex items-center gap-1.5 text-[#111827] dark:text-white"><Settings2 className="w-3.5 h-3.5" /> Opening balance</button>
+          <button onClick={exportCsv} className="px-4 py-2 bg-[#111827] dark:bg-white text-white dark:text-[#111827] text-xs font-bold rounded-2xl flex items-center gap-1.5"><Download className="w-3.5 h-3.5 text-teal-400 dark:text-teal-700" /> Export</button>
+        </div>
+      </div>
+
+      {showSettings && (
+        <form onSubmit={saveSettings} className={`${card} p-5 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end`}>
+          <div><label className={labelCls}>Opening cash & bank balance (Rs.)</label><input type="number" step="0.01" value={openingInput} onChange={(e) => setOpeningInput(e.target.value)} className={inputCls} /></div>
+          <div><label className={labelCls}>Counting from</label><input type="date" value={openingDate} max={todayISO()} onChange={(e) => setOpeningDate(e.target.value)} className={inputCls} /></div>
+          <div className="flex gap-2"><button type="submit" className="px-4 py-2.5 rounded-2xl bg-[#111827] dark:bg-white text-white dark:text-[#111827] text-xs font-bold">Save</button><button type="button" onClick={() => setShowSettings(false)} className="px-4 py-2.5 rounded-2xl text-xs font-semibold text-[#6B7280]">Cancel</button></div>
+          <p className="sm:col-span-3 text-[11px] text-[#8E9299]">Movements dated before the "counting from" date are ignored; the opening balance is the cash and bank total on that date.</p>
+        </form>
+      )}
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className={`${card} p-4 min-w-0`}><div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Opening</div><div className="text-sm sm:text-xl font-bold font-mono text-[#111827] dark:text-white mt-1 break-words">{formatCurrency(book.openingBalance)}</div><div className="text-[10px] text-[#8E9299] font-mono">{formatDate(book.from)}</div></div>
+        <div className={`${card} p-4 min-w-0`}><div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest flex items-center gap-1"><ArrowDownLeft className="w-3 h-3 text-teal-600" /> Receipts</div><div className="text-sm sm:text-xl font-bold font-mono text-teal-800 dark:text-teal-400 mt-1 break-words">{formatCurrency(book.totalReceipts)}</div></div>
+        <div className={`${card} p-4 min-w-0`}><div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest flex items-center gap-1"><ArrowUpRight className="w-3 h-3 text-amber-600" /> Payments</div><div className="text-sm sm:text-xl font-bold font-mono text-amber-800 dark:text-amber-400 mt-1 break-words">{formatCurrency(book.totalPayments)}</div></div>
+        <div className="rounded-[28px] border border-[#111827] dark:border-white shadow-xs p-4 min-w-0 bg-[#111827] dark:bg-white text-white dark:text-[#111827]"><div className="text-[10px] font-bold uppercase tracking-widest opacity-70 flex items-center gap-1"><Wallet className="w-3 h-3" /> Closing</div><div className={`text-sm sm:text-xl font-bold font-mono mt-1 break-words ${book.closingBalance >= 0 ? 'text-teal-300 dark:text-teal-700' : 'text-rose-400'}`}>{formatCurrency(book.closingBalance)}</div><div className="text-[10px] opacity-70 font-mono">{formatDate(book.to)}</div></div>
+      </div>
+
+      {byMethod.length > 0 && (
+        <div className="flex flex-wrap gap-2 text-[11px]">
+          <span className="font-bold uppercase tracking-widest text-[10px] text-[#8E9299] self-center">Net by method</span>
+          {byMethod.map(([m, v]) => (
+            <span key={m} className="px-2.5 py-1 rounded-full bg-white dark:bg-[#101A26] border border-[#E5E5E1] dark:border-[#203248] font-mono text-[#374151] dark:text-[#CBD5E1]">{m}: <span className={v >= 0 ? 'text-teal-800 dark:text-teal-400' : 'text-rose-700'}>{v >= 0 ? '+' : '−'}{formatCurrency(Math.abs(v))}</span></span>
+          ))}
+        </div>
+      )}
+
+      {can('manage_expenses') && (
+        <form onSubmit={submitEntry} className={`${card} p-5 space-y-3`}>
+          <h3 className="text-sm font-bold text-[#111827] dark:text-white flex items-center gap-1.5"><Plus className="w-4 h-4 text-teal-700" /> Manual cash entry</h3>
+          <p className="text-[11px] text-[#8E9299] -mt-1">For money that is not a customer payment, supplier payment or expense: owner capital, drawings, loans, bank charges, interest.</p>
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+            <div><label className={labelCls}>Direction</label><select value={entry.direction} onChange={(e) => setEntry({ ...entry, direction: e.target.value as 'in' | 'out' })} className={inputCls}><option value="in">Cash in</option><option value="out">Cash out</option></select></div>
+            <div><label className={labelCls}>Date</label><input type="date" value={entry.date} max={todayISO()} onChange={(e) => setEntry({ ...entry, date: e.target.value })} className={inputCls} required /></div>
+            <div><label className={labelCls}>Amount (Rs.)</label><input type="number" min="1" step="0.01" value={entry.amount} onChange={(e) => setEntry({ ...entry, amount: e.target.value })} className={inputCls} required /></div>
+            <div className="col-span-2 lg:col-span-2"><label className={labelCls}>Description</label><input value={entry.description} onChange={(e) => setEntry({ ...entry, description: e.target.value })} className={inputCls} placeholder="Owner capital injection" required /></div>
+            <div><label className={labelCls}>Method</label><select value={entry.method} onChange={(e) => setEntry({ ...entry, method: e.target.value })} className={inputCls}>{['Cash', 'Bank Transfer', 'Cheque', 'Card'].map((m) => <option key={m}>{m}</option>)}</select></div>
+          </div>
+          <div className="flex justify-end"><button type="submit" className="px-5 py-2 bg-[#111827] dark:bg-white text-white dark:text-[#111827] text-xs font-bold rounded-2xl">Add entry</button></div>
+        </form>
+      )}
+
+      <div className={`${card} overflow-hidden`}>
+        <div className="p-5 sm:p-6 border-b border-[#E5E5E1] dark:border-[#203248]"><h3 className="text-sm font-bold text-[#111827] dark:text-white">Daily cash book</h3><p className="text-[11px] text-[#8E9299]">Newest day first. Expand a day for each receipt and payment with a running balance.</p></div>
+        <div className="divide-y divide-[#F0F0EE] dark:divide-[#1E2E40]">
+          {book.days.map((d) => {
+            const isOpen = expanded.has(d.date);
+            const quiet = d.movements.length === 0;
+            let run = d.opening;
+            return (
+              <div key={d.date}>
+                <button onClick={() => !quiet && toggle(d.date)} className={`w-full px-5 sm:px-6 py-3 grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_repeat(3,minmax(0,130px))] items-center gap-3 text-left ${quiet ? 'opacity-50 cursor-default' : 'hover:bg-[#FAF9F6] dark:hover:bg-[#162436]'}`}>
+                  <span className="text-[#8E9299]">{quiet ? <span className="w-4 h-4 block" /> : isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</span>
+                  <span className="min-w-0"><span className="text-xs font-bold text-[#111827] dark:text-white">{formatDate(d.date)}</span><span className="block text-[10px] text-[#8E9299] font-mono">{d.date === todayISO() ? 'Today • ' : ''}{d.movements.length} entr{d.movements.length === 1 ? 'y' : 'ies'}</span></span>
+                  <span className="hidden sm:block text-right font-mono text-xs text-teal-800 dark:text-teal-400 font-bold">{d.receipts > 0 ? `+${formatCurrency(d.receipts)}` : '—'}</span>
+                  <span className="hidden sm:block text-right font-mono text-xs text-amber-800 dark:text-amber-400 font-bold">{d.payments > 0 ? `−${formatCurrency(d.payments)}` : '—'}</span>
+                  <span className="text-right font-mono text-xs"><span className={`font-bold ${d.closing >= 0 ? 'text-[#111827] dark:text-white' : 'text-rose-700'}`}>{formatCurrency(d.closing)}</span><span className="block text-[10px] text-[#8E9299]">closing</span></span>
+                </button>
+                {isOpen && !quiet && (
+                  <div className="px-5 sm:px-6 pb-4 space-y-2 bg-[#FAF9F6]/60 dark:bg-[#0D1520]/40">
+                    <div className="text-[10px] font-mono text-[#8E9299] pt-1">Opening {formatCurrency(d.opening)}</div>
+                    {d.movements.map((m) => {
+                      run = m.direction === 'in' ? run + m.amount : run - m.amount;
+                      return (
+                        <div key={m.id} className="bg-white dark:bg-[#101A26] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 w-fit ${m.direction === 'in' ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-900 dark:text-teal-300 border-teal-200 dark:border-teal-800' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-200 dark:border-amber-800'}`}>{m.direction === 'in' ? <ArrowDownLeft className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}{m.direction === 'in' ? 'RECEIPT' : 'PAYMENT'}</span>
+                          <span className="flex-1 min-w-0 text-xs">
+                            {m.link ? (
+                              <button onClick={() => (m.link!.type === 'customer' ? setSelectedCustomerId(m.link!.id) : setSelectedSupplierId(m.link!.id))} className="font-bold text-[#111827] dark:text-white hover:text-teal-800 hover:underline">{m.counterparty}</button>
+                            ) : (
+                              <span className="font-bold text-[#111827] dark:text-white">{SOURCE_LABEL[m.source]}{m.counterparty ? ` • ${m.counterparty}` : ''}</span>
+                            )}
+                            <span className="block text-[11px] text-[#6B7280] dark:text-[#94A3B8] truncate">{m.description}</span>
+                            <span className="block text-[10px] text-[#8E9299] font-mono">{[m.reference, m.method, m.recordedBy ? `by ${m.recordedBy}` : ''].filter(Boolean).join(' • ')}</span>
+                          </span>
+                          <span className="text-right font-mono shrink-0"><span className={`font-bold ${m.direction === 'in' ? 'text-teal-800 dark:text-teal-400' : 'text-amber-800 dark:text-amber-400'}`}>{m.direction === 'in' ? '+' : '−'}{formatCurrency(m.amount)}</span><span className="block text-[10px] text-[#8E9299]">bal {formatCurrency(run)}</span></span>
+                          {can('delete_records') && (<button onClick={() => setPending(m)} title="Delete entry (admin)" className="p-1.5 rounded-lg text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 shrink-0 self-end sm:self-center"><Trash2 className="w-3.5 h-3.5" /></button>)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <ConfirmDialog
+        isOpen={Boolean(pending)}
+        title="Delete this cash book entry?"
+        message={pending ? `${SOURCE_LABEL[pending.source]}: ${formatCurrency(pending.amount)} — ${pending.description}` : ''}
+        details={pending?.source === 'customer_payment' || pending?.source === 'supplier_payment' ? ['Only the ledger row is removed; the customer/supplier balance is not recalculated.'] : undefined}
+        confirmLabel="Delete Entry"
+        onConfirm={() => { if (pending) removeMovement(pending); setPending(null); }}
+        onCancel={() => setPending(null)}
+      />
     </div>
   );
 };

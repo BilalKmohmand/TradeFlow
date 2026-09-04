@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { costPerKgOn, computeMonthlyPnL, ageLedger, receivablesAging, creditExposure, shiftMonth, pnlTrend, productSalesHistory, computeBalanceSheet } from '../utils/finance';
+import { costPerKgOn, computeMonthlyPnL, ageLedger, receivablesAging, creditExposure, shiftMonth, pnlTrend, productSalesHistory, computeBalanceSheet, collectCashMovements, buildCashBook, cashBalanceOn } from '../utils/finance';
 import { computeAlerts } from '../utils/alerts';
 import { LedgerEntry } from '../types';
 
@@ -166,5 +166,45 @@ describe('balance sheet', () => {
     expect(bs.payables).toBe(15000);
     expect(bs.accruedExpenses).toBe(5000);
     expect(bs.equity).toBe(bs.totalAssets - bs.totalLiabilities);
+  });
+});
+
+describe('cash book', () => {
+  const settings = { id: 'default' as const, cashOpeningBalance: 10000, cashOpeningDate: '2026-09-01' };
+  const ledgerRows = [
+    { id: 'p1', entityType: 'customer' as const, entityId: 'c1', type: 'payment_received' as const, referenceId: 'PAY-1', date: '2026-09-02', description: 'Payment received: Cash at Terminal - slip 4', debit: 0, credit: 5000, balanceAfter: 0 },
+    { id: 'p2', entityType: 'supplier' as const, entityId: 's1', type: 'payment_made' as const, referenceId: 'SUP-PAY-1', date: '2026-09-03', description: 'Supplier payment made: Company Cheque', debit: 0, credit: 2000, balanceAfter: 0 },
+    { id: 'old', entityType: 'customer' as const, entityId: 'c1', type: 'payment_received' as const, referenceId: 'PAY-0', date: '2026-08-20', description: 'before opening', debit: 0, credit: 99999, balanceAfter: 0 },
+    { id: 'inv', entityType: 'customer' as const, entityId: 'c1', type: 'dispatch_billed' as const, referenceId: 'D1', date: '2026-09-02', description: 'invoice, not cash', debit: 7000, credit: 0, balanceAfter: 0 },
+  ];
+  const exp = [
+    { id: 'e1', date: '2026-09-03', category: 'fuel' as const, amount: 500, description: 'diesel', paidVia: 'Cash', createdAt: '2026-09-03' },
+    { id: 'e2', date: '2026-09-03', category: 'rent' as const, amount: 9000, description: 'rent on credit', paidVia: 'Credit (unpaid)', createdAt: '2026-09-03' },
+  ];
+  const manual = [{ id: 'm1', date: '2026-09-04', direction: 'in' as const, amount: 1000, description: 'capital', method: 'Bank Transfer', createdAt: '2026-09-04' }];
+  const customers = [{ id: 'c1', name: 'Ali' } as any];
+  const suppliers = [{ id: 's1', company: 'Lucky' } as any];
+
+  it('collects only real money movements with counterparty and method', () => {
+    const mv = collectCashMovements(ledgerRows, exp, manual, customers, suppliers);
+    expect(mv.map((m) => m.source)).toEqual(['customer_payment', 'customer_payment', 'supplier_payment', 'expense', 'manual']);
+    expect(mv.find((m) => m.id === 'cm-p1')?.method).toBe('Cash at Terminal');
+    expect(mv.find((m) => m.id === 'cm-p1')?.counterparty).toBe('Ali');
+    expect(mv.some((m) => m.sourceId === 'e2')).toBe(false); // unpaid expense is not cash
+  });
+
+  it('builds day rows with running balances from the opening balance', () => {
+    const mv = collectCashMovements(ledgerRows, exp, manual, customers, suppliers);
+    const book = buildCashBook(mv, settings, '2026-09-02', '2026-09-04');
+    expect(book.openingBalance).toBe(10000); // pre-opening-date payment ignored
+    expect(book.totalReceipts).toBe(6000);
+    expect(book.totalPayments).toBe(2500);
+    expect(book.closingBalance).toBe(13500);
+    const d3 = book.days.find((d) => d.date === '2026-09-03')!;
+    expect(d3.opening).toBe(15000);
+    expect(d3.payments).toBe(2500);
+    expect(d3.closing).toBe(12500);
+    expect(book.days[0].date).toBe('2026-09-04');
+    expect(cashBalanceOn(mv, settings, '2026-09-03')).toBe(12500);
   });
 });

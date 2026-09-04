@@ -139,7 +139,7 @@ export interface PriceHistoryEntry {
   referenceId?: string;
 }
 
-export type ReportsTab = 'daily' | 'monthly' | 'flow' | 'pnl' | 'aging' | 'balance';
+export type ReportsTab = 'daily' | 'monthly' | 'flow' | 'pnl' | 'aging' | 'balance' | 'cashbook';
 export type OpsTab = 'fleet' | 'expenses' | 'alerts';
 
 export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'reports' | 'ops' | 'admin';
@@ -241,6 +241,24 @@ export interface SessionUser {
   id: string;
   name: string;
   role: UserRole;
+}
+
+/** Manual cash movement not tied to a customer, supplier or expense (capital, drawings, loans, bank charges). */
+export interface CashEntry {
+  id: string;
+  date: string;
+  direction: 'in' | 'out';
+  amount: number;
+  description: string;
+  method?: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export interface AppSettings {
+  id: 'default';
+  cashOpeningBalance: number;
+  cashOpeningDate: string;
 }
 
 export type AlertKind = 'low_stock' | 'overdue_receivable' | 'overdue_payable' | 'late_delivery' | 'credit_exceeded' | 'truck_maintenance';

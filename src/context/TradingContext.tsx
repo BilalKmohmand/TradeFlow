@@ -18,6 +18,8 @@ import {
   Expense,
   Truck,
   AppUser,
+  CashEntry,
+  AppSettings,
   UserRole,
   Permission,
   ROLE_PERMISSIONS,
@@ -137,6 +139,11 @@ interface TradingContextType {
   can: (permission: Permission) => boolean;
   unlockAsUser: (userId: string, pin: string) => boolean;
   cancelBooking: (id: string, reason?: string) => void;
+  cashEntries: CashEntry[];
+  addCashEntry: (data: Omit<CashEntry, 'id' | 'createdAt' | 'createdBy'>) => CashEntry;
+  deleteCashEntry: (id: string) => void;
+  settings: AppSettings;
+  updateSettings: (data: Partial<Omit<AppSettings, 'id'>>) => void;
   
   createBooking: (bookingData: {
     customerId: string;
@@ -273,6 +280,8 @@ const STORAGE_KEYS = {
   EXPENSES: 'tradeflow_expenses_v2',
   TRUCKS: 'tradeflow_trucks_v2',
   USERS: 'tradeflow_users_v2',
+  CASH: 'tradeflow_cash_entries_v2',
+  SETTINGS: 'tradeflow_settings_v2',
   LEDGER: 'tradeflow_ledger_v2',
   MESSAGES: 'tradeflow_whatsapp_v2',
   ADMIN_PIN: 'sarmaya_admin_pin_v1',
@@ -311,6 +320,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [expenses, setExpenses] = useState<Expense[]>(() => loadLocal(STORAGE_KEYS.EXPENSES, []));
   const [trucks, setTrucks] = useState<Truck[]>(() => loadLocal(STORAGE_KEYS.TRUCKS, []));
   const [users, setUsers] = useState<AppUser[]>(() => loadLocal(STORAGE_KEYS.USERS, []));
+  const [cashEntries, setCashEntries] = useState<CashEntry[]>(() => loadLocal(STORAGE_KEYS.CASH, []));
+  const [settings, setSettings] = useState<AppSettings>(() =>
+    safeParse<AppSettings>(localStorage.getItem(STORAGE_KEYS.SETTINGS), { id: 'default', cashOpeningBalance: 0, cashOpeningDate: todayISO() })
+  );
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>(() => loadLocal(STORAGE_KEYS.LEDGER, initialLedgerEntries, normalizeLedger));
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>(() =>
@@ -365,6 +378,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setExpenses(data.expenses);
         setTrucks(data.trucks);
         setUsers(data.users);
+        setCashEntries(data.cashEntries);
+        if (data.settings) setSettings({ ...data.settings, id: 'default' });
         setLedger(data.ledger);
         setWhatsappMessages(data.whatsappMessages);
         setIsCloudSyncReady(true);
@@ -419,6 +434,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [users]);
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.CASH, JSON.stringify(cashEntries));
+  }, [cashEntries]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+  }, [settings]);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(ledger));
   }, [ledger]);
 
@@ -446,6 +469,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { void syncToSupabase('expenses', expenses); }, [expenses, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('trucks', trucks); }, [trucks, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('users', users); }, [users, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('cash_entries', cashEntries); }, [cashEntries, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('settings', [settings]); }, [settings, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('ledger', ledger); }, [ledger, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('whatsapp_messages', whatsappMessages); }, [whatsappMessages, isCloudSyncReady]);
 
@@ -468,6 +493,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setPriceHistory([]);
     setExpenses([]);
     setTrucks([]);
+    setCashEntries([]);
     setLedger(initialLedgerEntries);
     setWhatsappMessages(initialWhatsAppMessages);
     logAuditEvent('Sample Data Loaded', 'All business data replaced with the built-in sample dataset.', 'warning');
@@ -959,6 +985,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       expenses: () => setExpenses([]),
       trucks: () => setTrucks([]),
       users: () => setUsers([]),
+      cash_entries: () => setCashEntries([]),
+      settings: () => setSettings({ id: 'default', cashOpeningBalance: 0, cashOpeningDate: todayISO() }),
       ledger: () => setLedger([]),
       whatsapp_messages: () => setWhatsappMessages([]),
     };
@@ -1450,6 +1478,29 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   // ---------------------------------------------------------------------------
+  // Cash book
+  // ---------------------------------------------------------------------------
+  const addCashEntry = (data: Omit<CashEntry, 'id' | 'createdAt' | 'createdBy'>): CashEntry => {
+    const entry: CashEntry = { ...data, amount: round2(data.amount), id: uid('cash'), createdAt: todayISO(), createdBy: currentUser?.name };
+    setCashEntries((prev) => [entry, ...prev]);
+    logAuditEvent('Cash Entry Recorded', `${data.direction === 'in' ? 'Cash in' : 'Cash out'} ${formatCurrency(entry.amount)} — ${data.description}`, 'info');
+    return entry;
+  };
+
+  const deleteCashEntry = (id: string) => {
+    const existing = cashEntries.find((e) => e.id === id);
+    if (!existing) return;
+    setCashEntries((prev) => prev.filter((e) => e.id !== id));
+    removeRemote('cash_entries', [id]);
+    logAuditEvent('Cash Entry Deleted', `${existing.direction === 'in' ? 'Cash in' : 'Cash out'} ${formatCurrency(existing.amount)} — ${existing.description}`, 'danger');
+  };
+
+  const updateSettings = (data: Partial<Omit<AppSettings, 'id'>>) => {
+    setSettings((prev) => ({ ...prev, ...data, id: 'default' }));
+    logAuditEvent('Settings Updated', Object.keys(data).join(', '), 'warning');
+  };
+
+  // ---------------------------------------------------------------------------
   // Booking lifecycle
   // ---------------------------------------------------------------------------
   const cancelBooking = (id: string, reason?: string) => {
@@ -1497,6 +1548,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       expenses,
       trucks,
       users,
+      cashEntries,
+      settings,
       ledger,
       whatsappMessages,
       auditLogs,
@@ -1537,6 +1590,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (Array.isArray(data.expenses)) setExpenses(data.expenses);
       if (Array.isArray(data.trucks)) setTrucks(data.trucks);
       if (Array.isArray(data.users)) setUsers(data.users);
+      if (Array.isArray(data.cashEntries)) setCashEntries(data.cashEntries);
+      if (data.settings && typeof data.settings === 'object') setSettings({ ...data.settings, id: 'default' });
       if (Array.isArray(data.ledger)) setLedger(data.ledger.map(normalizeLedger));
       if (Array.isArray(data.whatsappMessages)) setWhatsappMessages(data.whatsappMessages);
       if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
@@ -1559,8 +1614,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setPriceHistory([]);
     setExpenses([]);
     setTrucks([]);
+    setCashEntries([]);
     setLedger([]);
     setWhatsappMessages([]);
+    localStorage.removeItem(STORAGE_KEYS.CASH);
     localStorage.removeItem(STORAGE_KEYS.EXPENSES);
     localStorage.removeItem(STORAGE_KEYS.TRUCKS);
     localStorage.removeItem(STORAGE_KEYS.PURCHASES);
@@ -1645,6 +1702,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         can,
         unlockAsUser,
         cancelBooking,
+        cashEntries,
+        addCashEntry,
+        deleteCashEntry,
+        settings,
+        updateSettings,
         createBooking,
         logDispatch,
         recordCustomerPayment,

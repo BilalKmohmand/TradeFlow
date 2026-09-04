@@ -73,7 +73,7 @@ test('every screen and modal on a phone', async ({ page }) => {
   }
 
   await page.getByRole('button', { name: 'Reports', exact: true }).click();
-  for (const tab of ['Daily Report', 'Monthly Report', 'Stock Flow', 'Profit & Loss', 'Aging', 'Balance Sheet']) {
+  for (const tab of ['Daily Report', 'Monthly Report', 'Stock Flow', 'Profit & Loss', 'Aging', 'Balance Sheet', 'Cash Book']) {
     await page.getByRole('button', { name: tab }).click();
     await noOverflow(page, tab);
     await shot(page, `03-reports-${tab.toLowerCase().replace(/[^a-z]+/g, '-')}`);

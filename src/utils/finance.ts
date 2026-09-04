@@ -1,4 +1,4 @@
-import { Customer, Dispatch, Expense, ExpenseCategory, LedgerEntry, Product, Purchase, Supplier } from '../types';
+import { AppSettings, CashEntry, Customer, Dispatch, Expense, ExpenseCategory, LedgerEntry, Product, Purchase, Supplier } from '../types';
 
 const round2 = (n: number) => Number(n.toFixed(2));
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -325,7 +325,7 @@ export interface BalanceSheet {
 }
 
 export const computeBalanceSheet = (
-  data: { products: Product[]; purchases: Purchase[]; customers: Customer[]; suppliers: Supplier[]; ledger: LedgerEntry[]; expenses: Expense[] },
+  data: { products: Product[]; purchases: Purchase[]; customers: Customer[]; suppliers: Supplier[]; ledger: LedgerEntry[]; expenses: Expense[]; cashEntries?: CashEntry[]; settings?: AppSettings },
   asOf: string
 ): BalanceSheet => {
   const lines = data.products.map((p) => {
@@ -346,9 +346,113 @@ export const computeBalanceSheet = (
   const expUpTo = data.expenses.filter((e) => e.date <= asOf);
   const expensesPaid = round2(expUpTo.filter((e) => e.paidVia !== 'Credit (unpaid)').reduce((a, e) => a + e.amount, 0));
   const accruedExpenses = round2(expUpTo.filter((e) => e.paidVia === 'Credit (unpaid)').reduce((a, e) => a + e.amount, 0));
-  const cashNet = { received, paidToSuppliers, expensesPaid, net: round2(received - paidToSuppliers - expensesPaid) };
+  const manual = (data.cashEntries || []).filter((c) => c.date <= asOf);
+  const manualNet = round2(manual.reduce((a, c) => a + (c.direction === 'in' ? c.amount : -c.amount), 0));
+  const opening = data.settings && data.settings.cashOpeningDate <= asOf ? data.settings.cashOpeningBalance : 0;
+  const cashNet = { received, paidToSuppliers, expensesPaid, net: round2(opening + manualNet + received - paidToSuppliers - expensesPaid) };
   const payables = round2(data.suppliers.reduce((a, s) => a + s.totalOwed, 0));
   const totalAssets = round2(inventory.atCost + receivables + cashNet.net);
   const totalLiabilities = round2(payables + accruedExpenses);
   return { asOf, inventory, receivables, cashNet, totalAssets, payables, accruedExpenses, totalLiabilities, equity: round2(totalAssets - totalLiabilities) };
 };
+
+// ---------------------------------------------------------------------------
+// Daily cash book: every money movement recorded in the app, day by day, with a running balance.
+// Receipts: customer payments (incl. paid-on-dispatch), manual cash-in entries.
+// Payments: supplier payments, expenses paid (not "Credit (unpaid)"), manual cash-out entries.
+// ---------------------------------------------------------------------------
+export interface CashMovement {
+  id: string;
+  date: string;
+  direction: 'in' | 'out';
+  amount: number;
+  description: string;
+  source: 'customer_payment' | 'supplier_payment' | 'expense' | 'manual';
+  counterparty?: string;
+  reference?: string;
+  method?: string;
+  link?: { type: 'customer' | 'supplier'; id: string };
+  recordedBy?: string;
+  /** id of the underlying record so it can be deleted from the cash book */
+  sourceId: string;
+}
+
+export interface CashDay {
+  date: string;
+  opening: number;
+  receipts: number;
+  payments: number;
+  closing: number;
+  movements: CashMovement[];
+}
+
+export interface CashBook {
+  from: string;
+  to: string;
+  openingBalance: number;
+  totalReceipts: number;
+  totalPayments: number;
+  closingBalance: number;
+  days: CashDay[];
+}
+
+const methodFromDescription = (d: string): string | undefined => {
+  const m = d.match(/:\s*([^-]+?)(?:\s-\s|$)/);
+  return m ? m[1].trim() : undefined;
+};
+
+export const collectCashMovements = (
+  ledger: LedgerEntry[],
+  expenses: Expense[],
+  cashEntries: CashEntry[],
+  customers: Customer[],
+  suppliers: Supplier[]
+): CashMovement[] => {
+  const out: CashMovement[] = [];
+  ledger.forEach((l) => {
+    if (l.entityType === 'customer' && l.type === 'payment_received' && l.credit > 0) {
+      const c = customers.find((x) => x.id === l.entityId);
+      out.push({ id: `cm-${l.id}`, date: l.date, direction: 'in', amount: l.credit, description: l.description, source: 'customer_payment', counterparty: c?.name || 'Customer', reference: l.referenceId, method: methodFromDescription(l.description), link: c ? { type: 'customer', id: c.id } : undefined, sourceId: l.id });
+    }
+    if (l.entityType === 'supplier' && l.type === 'payment_made' && l.credit > 0) {
+      const s = suppliers.find((x) => x.id === l.entityId);
+      out.push({ id: `cm-${l.id}`, date: l.date, direction: 'out', amount: l.credit, description: l.description, source: 'supplier_payment', counterparty: s?.company || 'Supplier', reference: l.referenceId, method: methodFromDescription(l.description), link: s ? { type: 'supplier', id: s.id } : undefined, sourceId: l.id });
+    }
+  });
+  expenses.filter((e) => e.paidVia !== 'Credit (unpaid)').forEach((e) => {
+    out.push({ id: `cm-${e.id}`, date: e.date, direction: 'out', amount: e.amount, description: e.description, source: 'expense', counterparty: e.category, method: e.paidVia, recordedBy: e.createdBy, sourceId: e.id });
+  });
+  cashEntries.forEach((c) => {
+    out.push({ id: `cm-${c.id}`, date: c.date, direction: c.direction, amount: c.amount, description: c.description, source: 'manual', method: c.method, recordedBy: c.createdBy, sourceId: c.id });
+  });
+  return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+};
+
+export const buildCashBook = (movements: CashMovement[], settings: AppSettings, from: string, to: string): CashBook => {
+  const counted = movements.filter((m) => m.date >= settings.cashOpeningDate);
+  const before = counted.filter((m) => m.date < from);
+  let balance = round2(settings.cashOpeningBalance + before.reduce((a, m) => a + (m.direction === 'in' ? m.amount : -m.amount), 0));
+  const openingBalance = balance;
+  const days: CashDay[] = [];
+  const cursor = new Date(from + 'T00:00:00Z');
+  const end = new Date(to + 'T00:00:00Z');
+  let totalReceipts = 0;
+  let totalPayments = 0;
+  while (cursor <= end) {
+    const key = cursor.toISOString().split('T')[0];
+    const todays = counted.filter((m) => m.date === key);
+    const receipts = round2(todays.filter((m) => m.direction === 'in').reduce((a, m) => a + m.amount, 0));
+    const payments = round2(todays.filter((m) => m.direction === 'out').reduce((a, m) => a + m.amount, 0));
+    const opening = balance;
+    balance = round2(balance + receipts - payments);
+    totalReceipts += receipts;
+    totalPayments += payments;
+    days.push({ date: key, opening, receipts, payments, closing: balance, movements: todays });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return { from, to, openingBalance, totalReceipts: round2(totalReceipts), totalPayments: round2(totalPayments), closingBalance: balance, days: days.reverse() };
+};
+
+/** Cash on hand as of a date (opening balance + all movements since the opening date). */
+export const cashBalanceOn = (movements: CashMovement[], settings: AppSettings, asOf: string): number =>
+  round2(settings.cashOpeningBalance + movements.filter((m) => m.date >= settings.cashOpeningDate && m.date <= asOf).reduce((a, m) => a + (m.direction === 'in' ? m.amount : -m.amount), 0));
