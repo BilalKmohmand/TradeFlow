@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingBag, X, CheckCircle, Calculator, Package, User } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
+import { useEscape } from '../hooks/useEscape';
 import { formatCurrency, formatKg } from '../utils/formatters';
 import { creditExposure } from '../utils/finance';
 import { AlertTriangle, ShieldAlert } from 'lucide-react';
@@ -22,6 +23,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 }) => {
   const { customers, products, bookings, createBooking, updateBooking, can, logAuditEvent } = useTrading();
   const editing = editBookingId ? bookings.find((b) => b.id === editBookingId) : undefined;
+  useEscape(isOpen, onClose);
   const [overrideCredit, setOverrideCredit] = useState<boolean>(false);
 
   const [customerId, setCustomerId] = useState<string>(

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Package, X, CheckCircle } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
+import { useEscape } from '../hooks/useEscape';
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface ProductModalProps {
 export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, editId }) => {
   const { suppliers, addProduct, updateProduct, products, can } = useTrading();
   const editing = editId ? products.find((p) => p.id === editId) : undefined;
+  useEscape(isOpen, onClose);
 
   const [name, setName] = useState<string>('');
   const [category, setCategory] = useState<string>('Construction & Cement');

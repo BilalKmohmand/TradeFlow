@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Layers, X, CheckCircle } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
+import { useEscape } from '../hooks/useEscape';
 
 interface SupplierModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface SupplierModalProps {
 export const SupplierModal: React.FC<SupplierModalProps> = ({ isOpen, onClose, editId }) => {
   const { addSupplier, updateSupplier, suppliers } = useTrading();
   const editing = editId ? suppliers.find((s) => s.id === editId) : undefined;
+  useEscape(isOpen, onClose);
 
   const [name, setName] = useState<string>('');
   const [company, setCompany] = useState<string>('');

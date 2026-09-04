@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, PackagePlus, CheckCircle, AlertCircle, Truck } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
+import { useEscape } from '../hooks/useEscape';
 import { formatCurrency, formatKg } from '../utils/formatters';
 import { todayISO } from '../utils/stockFlow';
 
@@ -26,6 +27,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
   preselectedPurchaseOrderId,
 }) => {
   const { suppliers, products, addPurchase, purchaseOrders } = useTrading();
+  useEscape(isOpen, onClose);
   const [poId, setPoId] = useState<string>('');
   const openPOs = purchaseOrders.filter((p) => p.status === 'open' || p.status === 'partial');
   const applyPO = (id: string) => {

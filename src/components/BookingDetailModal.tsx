@@ -72,7 +72,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({ bookingI
             initial={{ opacity: 0, scale: 0.96, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 15 }}
-            className="relative bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden z-10 my-8 max-h-[92vh] flex flex-col"
+            className="relative bg-white rounded-3xl max-w-5xl w-full shadow-2xl border border-slate-200 overflow-hidden z-10 my-8 max-h-[92vh] flex flex-col"
           >
             <div className="p-6 sm:p-7 bg-[#111827] text-white flex items-start justify-between gap-4">
               <div className="space-y-1.5 min-w-0">
@@ -161,7 +161,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({ bookingI
                     <table className="w-full text-left text-xs">
                       <thead className="bg-[#FAF9F6] border-b border-[#E5E5E1] text-[#8E9299] uppercase tracking-widest font-bold text-[10px]">
                         <tr>
-                          <th className="py-3 px-4">Dispatch #</th>
+                          <th className="py-3 px-4 whitespace-nowrap">Dispatch #</th>
                           <th className="py-3 px-4">Date</th>
                           <th className="py-3 px-4">Truck</th>
                           <th className="py-3 px-4 text-right">kg</th>
@@ -178,11 +178,11 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({ bookingI
                         ) : (
                           bookingDispatches.map((d) => (
                             <tr key={d.id} className={`transition-colors ${d.id === highlightDispatchId ? 'bg-teal-50 ring-1 ring-inset ring-teal-300' : 'hover:bg-[#FAF9F6]'}`}>
-                              <td className="py-2.5 px-4 font-bold text-[#111827]">{d.dispatchNumber}</td>
+                              <td className="py-2.5 px-4 font-bold text-[#111827] whitespace-nowrap">{d.dispatchNumber}</td>
                               <td className="py-2.5 px-4 text-[#6B7280] whitespace-nowrap">{formatDate(d.date)}</td>
-                              <td className="py-2.5 px-4 text-[#374151]">{d.truckNumber}{d.driverPhone && <span className="block text-[10px] text-[#8E9299]">{d.driverPhone}</span>}</td>
-                              <td className="py-2.5 px-4 text-right font-bold text-amber-800">{formatKg(d.kg)}</td>
-                              <td className="py-2.5 px-4 text-right text-[#111827]">{formatCurrency(d.amount)}</td>
+                              <td className="py-2.5 px-4 text-[#374151] whitespace-nowrap">{d.truckNumber}{d.driverPhone && <span className="block text-[10px] text-[#8E9299]">{d.driverPhone}</span>}</td>
+                              <td className="py-2.5 px-4 text-right font-bold text-amber-800 whitespace-nowrap">{formatKg(d.kg)}</td>
+                              <td className="py-2.5 px-4 text-right text-[#111827] whitespace-nowrap">{formatCurrency(d.amount)}</td>
                               <td className="py-2.5 px-4 text-right text-[#111827] whitespace-nowrap">{formatCurrency(dispatchBilledTotal(d))}{(d.taxAmount || 0) + (d.freightCharge || 0) > 0 && <span className="block text-[10px] text-[#8E9299]">incl. {[(d.freightCharge || 0) > 0 ? 'freight' : '', (d.taxAmount || 0) > 0 ? 'tax' : ''].filter(Boolean).join(' + ')}</span>}{(() => { const trip = expenses.filter((e) => e.dispatchId === d.id).reduce((a, e) => a + e.amount, 0); return trip > 0 ? <span className="block text-[10px] text-amber-700">trip cost {formatCurrency(trip)}</span> : null; })()}</td>
                               <td className="py-2.5 px-4 text-center font-sans">{d.paymentReceivedImmediately ? <span className="text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">Yes</span> : <span className="text-[#8E9299]">—</span>}</td>
                               <td className="py-2.5 px-4 font-sans whitespace-nowrap">
@@ -193,7 +193,10 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({ bookingI
                                     <button onClick={() => reopenDispatch(d.id)} className="text-[10px] text-[#8E9299] hover:text-amber-700 hover:underline text-left">reopen</button>
                                   </span>
                                 ) : (
-                                  <button onClick={() => { setDeliverId(d.id); setReceivedBy(''); setPodNote(''); }} className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:bg-amber-100">In transit • mark delivered</button>
+                                  <span className="inline-flex flex-col gap-1">
+                                    <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full w-fit">In transit</span>
+                                    <button onClick={() => { setDeliverId(d.id); setReceivedBy(''); setPodNote(''); }} className="text-[10px] font-bold text-teal-800 hover:underline text-left">Mark delivered</button>
+                                  </span>
                                 )}
                               </td>
                               <td className="py-2.5 px-2 text-right whitespace-nowrap">

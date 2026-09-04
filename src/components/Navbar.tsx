@@ -97,6 +97,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                   key={item.id}
                   onClick={() => setActiveScreen(item.id)}
                   title={item.label}
+                  aria-label={item.label}
+                  aria-current={isActive ? 'page' : undefined}
                   className={`flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
                     isActive
                       ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
@@ -104,7 +106,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }`}
                 >
                   <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-teal-400 dark:text-teal-700' : 'text-[#8E9299] dark:text-[#64748B]'}`} />
-                  <span className="hidden 2xl:inline">{item.label}</span>
+                  <span className="hidden xl:inline">{item.label}</span>
                   {item.id === 'ops' && alertCount > 0 && (
                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/20' : 'bg-rose-100 text-rose-700'}`}>{alertCount}</span>
                   )}
@@ -241,7 +243,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {currentUser && (
               <div
                 title={`Signed in as ${currentUser.name} (${currentUser.role})`}
-                className="hidden xl:flex items-center gap-1.5 px-2.5 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] max-w-36"
+                className="hidden 2xl:flex items-center gap-1.5 px-2.5 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] max-w-44"
               >
                 <UserCircle2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
                 <span className="truncate">{currentUser.name}</span>

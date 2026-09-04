@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CreditCard, X, CheckCircle, ArrowDownLeft, ArrowUpRight, DollarSign } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
+import { useEscape } from '../hooks/useEscape';
 import { formatCurrency } from '../utils/formatters';
 
 interface PaymentModalProps {
@@ -24,6 +25,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     recordSupplierPayment,
   } = useTrading();
 
+  useEscape(isOpen, onClose);
   const [selectedId, setSelectedId] = useState<string>(
     preselectedEntityId || (entityType === 'customer' ? customers[0]?.id || '' : suppliers[0]?.id || '')
   );

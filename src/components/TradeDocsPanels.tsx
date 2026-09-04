@@ -17,6 +17,7 @@ import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
 import { todayISO, shiftDate } from '../utils/stockFlow';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useEscape } from '../hooks/useEscape';
 import { ADJUSTMENT_REASONS, AdjustmentReason, Quotation, PurchaseOrder, QuotationStatus, StockReturn, Task, TaskLinkType } from '../types';
 
 const card = 'bg-white dark:bg-[#101A26] rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs';
@@ -419,6 +420,7 @@ export const TasksPanel: React.FC<{ initialLink?: { type: TaskLinkType; id: stri
 export const StockAdjustDialog: React.FC<{ productId: string | null; onClose: () => void }> = ({ productId, onClose }) => {
   const { products, adjustStock } = useTrading();
   const product = products.find((p) => p.id === productId);
+  useEscape(Boolean(productId), onClose);
   const [newStock, setNewStock] = useState('');
   const [reason, setReason] = useState<AdjustmentReason>('count');
   const [note, setNote] = useState('');

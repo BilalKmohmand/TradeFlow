@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useTrading } from '../context/TradingContext';
+import { useEscape } from '../hooks/useEscape';
 import { Booking } from '../types';
 import { formatCurrency, formatKg } from '../utils/formatters';
 
@@ -28,6 +29,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   preselectedBookingId,
 }) => {
   const { bookings, customers, products, trucks, logDispatch, settings } = useTrading();
+  useEscape(isOpen, onClose);
 
   const activeBookings = bookings.filter((b) => b.status === 'active' && b.remainingKg > 0);
 
@@ -214,19 +216,19 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                     <div>
                       <div className="text-[10px] text-[#9CA3AF] uppercase font-bold tracking-wider">Total Booked</div>
                       <div className="text-sm font-bold text-white font-mono mt-0.5">
-                        {currentBooking.totalKg} kg
+                        {currentBooking.totalKg.toLocaleString()} kg
                       </div>
                     </div>
                     <div className="border-x border-white/10">
                       <div className="text-[10px] text-amber-300 uppercase font-bold tracking-wider">This Dispatch</div>
                       <div className="text-sm font-bold text-amber-300 font-mono mt-0.5">
-                        +{dispatchKg || 0} kg
+                        +{(dispatchKg || 0).toLocaleString()} kg
                       </div>
                     </div>
                     <div>
                       <div className="text-[10px] text-teal-300 uppercase font-bold tracking-wider">New Remaining</div>
                       <div className="text-sm font-bold text-teal-300 font-mono mt-0.5">
-                        {remainingAfter} kg
+                        {remainingAfter.toLocaleString()} kg
                       </div>
                     </div>
                   </div>
