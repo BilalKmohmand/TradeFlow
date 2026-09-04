@@ -13,9 +13,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose }) =
 
   const [name, setName] = useState<string>('');
   const [category, setCategory] = useState<string>('Construction & Cement');
-  const [unitPricePerTon, setUnitPricePerTon] = useState<string>('150');
-  const [stockTons, setStockTons] = useState<string>('500');
-  const [minThresholdTons, setMinThresholdTons] = useState<string>('100');
+  const [unitPricePerKg, setUnitPricePerKg] = useState<string>('25');
+  const [stockKg, setStockKg] = useState<string>('500000');
+  const [minThresholdKg, setMinThresholdKg] = useState<string>('100000');
   const [supplierId, setSupplierId] = useState<string>(suppliers[0]?.id || '');
   const [description, setDescription] = useState<string>('');
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
@@ -28,14 +28,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose }) =
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !unitPricePerTon || !stockTons) return;
+    if (!name || !unitPricePerKg || !stockKg) return;
 
     addProduct({
       name: name.trim(),
       category,
-      unitPricePerTon: parseFloat(unitPricePerTon) || 0,
-      stockTons: parseFloat(stockTons) || 0,
-      minThresholdTons: parseFloat(minThresholdTons) || 0,
+      unitPricePerKg: parseFloat(unitPricePerKg) || 0,
+      stockKg: parseFloat(stockKg) || 0,
+      minThresholdKg: parseFloat(minThresholdKg) || 0,
       supplierId: supplierId || undefined,
       description: description.trim(),
     });
@@ -136,14 +136,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose }) =
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] font-bold text-[#8E9299] mb-1.5 uppercase tracking-widest">
-                  Unit Price (Rs./Ton) *
+                  Unit Price (Rs./kg) *
                 </label>
                 <input
                   type="number"
                   step="0.5"
                   min="0.1"
-                  value={unitPricePerTon}
-                  onChange={(e) => setUnitPricePerTon(e.target.value)}
+                  value={unitPricePerKg}
+                  onChange={(e) => setUnitPricePerKg(e.target.value)}
                   className="w-full bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl px-4 py-2 text-xs font-mono font-bold text-[#111827] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600"
                   required
                 />
@@ -151,14 +151,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose }) =
 
               <div>
                 <label className="block text-[10px] font-bold text-[#8E9299] mb-1.5 uppercase tracking-widest">
-                  Current Stock (Tons) *
+                  Current Stock (kg) *
                 </label>
                 <input
                   type="number"
                   step="1"
                   min="0"
-                  value={stockTons}
-                  onChange={(e) => setStockTons(e.target.value)}
+                  value={stockKg}
+                  onChange={(e) => setStockKg(e.target.value)}
                   className="w-full bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl px-4 py-2 text-xs font-mono font-bold text-[#111827] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600"
                   required
                 />

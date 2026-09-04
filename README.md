@@ -5,8 +5,11 @@ A localised bulk-trading operations dashboard built for Pakistani commodity trad
 ## Features
 
 - **Customer & Supplier CRM** with Pakistani contact defaults (`+92` phones, `.com.pk` emails, local berths).
-- **Commodity / Product inventory** with stock tonnage and low-stock alerts.
-- **Bulk Bookings** in tons with live remaining-balance tracking.
+- **Commodity / Product inventory** in kilograms with low-stock alerts.
+- **Bulk Bookings** in kg with live remaining-balance tracking.
+- **Incoming stock (Receive Stock)** — goods receipts from suppliers that add to stock and the supplier payable.
+- **Daily Stock Flow tracker** — incoming vs outgoing per day (kg and Rs.) on the Dashboard and as a running log under Reports → Stock Flow, with every entry linked to its booking, dispatch, supplier, customer and product.
+- **Product Price History** — every price change is recorded; each product shows a price chart plus comparisons against the same month, same quarter and same day last year with % change.
 - **Dispatch Logging** per truck with driver, vehicle number and WhatsApp dispatch alert.
 - **Ledger** for customer receivables and supplier payables.
 - **Reports** with daily / monthly CSV export and charts.
@@ -14,6 +17,20 @@ A localised bulk-trading operations dashboard built for Pakistani commodity trad
 - **PKR Currency** formatting and localised `en-PK` numbers.
 - **Light / Dark mode** with automatic time-based switching.
 - **Admin Control Center** (PIN-protected) — change the master PIN, delete any customer / supplier / product / booking / dispatch / ledger row, purge whole tables, export & import JSON backups, factory reset, and review the audit log.
+
+## Units
+
+- Quantities: **kg** everywhere (forms, cards, charts, tables, CSV exports, WhatsApp messages).
+- Prices: **Rs./kg**. Amounts remain in Rs.
+- Booking and dispatch forms accept and store kg directly.
+
+## Stock Flow, Purchases & Price History
+
+- **Receive Stock** (Products header, Dashboard, Supplier modal, ⌘K) books incoming goods from a supplier: stock goes up, a `purchase_received` ledger row is written for the supplier and their payable increases unless "paid on receipt" is ticked.
+- **Dashboard → Today's Stock Movement** shows incoming / outgoing / net kg and Rs. for today plus the latest movements. "Full Log" opens **Reports → Stock Flow**, a day-by-day running log (7 / 30 / 90 days or a custom range) with a chart, totals and CSV export.
+- Every movement links to its source: dispatch → booking (with the dispatch highlighted), receipt → supplier, and product → product detail. Bookings open from anywhere their number appears.
+- **Product detail** (click a product name or "History") has three tabs: Price History (chart, log, year-over-year comparison cards, "set new price" and "add a past price point" for back-filling last year's prices), Stock In / Out, and Bookings.
+- Price points are recorded automatically when a product is created, when its price is changed, and when a booking is agreed (shown as dots; only listed prices drive the comparisons).
 
 ## Admin Access
 
@@ -46,6 +63,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
 Create the tables in your Supabase SQL Editor by running the contents of `supabase/schema.sql`.
+
+### Upgrading an existing database from tons to kg
+
+All quantities are now stored in **kilograms** and unit prices in **Rs. per kg** (1 ton = 1000 kg). If your Supabase project was created with the old tons-based schema, run `supabase/migrate_tons_to_kg.sql` **once** in the SQL editor. It renames the columns, multiplies quantities by 1000, divides prices by 1000, and creates the new `purchases` and `price_history` tables. Until it has been run the app still loads old rows (converted on read) but cannot write to those tables, so run it before using the new version in production.
+
+Data cached in the browser from the old version is converted automatically the first time the new version opens.
 
 Start the dev server:
 

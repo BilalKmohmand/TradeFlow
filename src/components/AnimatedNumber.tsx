@@ -3,7 +3,7 @@ import { motion, useSpring, useTransform } from 'motion/react';
 
 interface AnimatedNumberProps {
   value: number;
-  format?: 'currency' | 'tons' | 'integer' | 'decimal';
+  format?: 'currency' | 'kg' | 'integer' | 'decimal';
   className?: string;
 }
 
@@ -32,12 +32,12 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
             maximumFractionDigits: 0,
           }).format(Math.round(num))
         );
-      } else if (format === 'tons') {
+      } else if (format === 'kg') {
         setDisplayValue(
           `${new Intl.NumberFormat('en-PK', {
             minimumFractionDigits: 0,
-            maximumFractionDigits: 1,
-          }).format(num)} T`
+            maximumFractionDigits: 0,
+          }).format(num)} kg`
         );
       } else if (format === 'decimal') {
         setDisplayValue(
@@ -58,11 +58,11 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
     if (format === 'currency') {
       return `Rs. ${new Intl.NumberFormat('en-PK').format(Math.round(value))}`;
     }
-    if (format === 'tons') {
+    if (format === 'kg') {
       return `${new Intl.NumberFormat('en-PK', {
         minimumFractionDigits: 0,
-        maximumFractionDigits: 1,
-      }).format(value)} T`;
+        maximumFractionDigits: 0,
+      }).format(value)} kg`;
     }
     if (format === 'decimal') {
       return new Intl.NumberFormat('en-PK', {

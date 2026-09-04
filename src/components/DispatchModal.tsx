@@ -14,7 +14,7 @@ import {
 import confetti from 'canvas-confetti';
 import { useTrading } from '../context/TradingContext';
 import { Booking } from '../types';
-import { formatCurrency, formatTons } from '../utils/formatters';
+import { formatCurrency, formatKg } from '../utils/formatters';
 
 interface DispatchModalProps {
   isOpen: boolean;
@@ -29,10 +29,10 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 }) => {
   const { bookings, customers, products, logDispatch } = useTrading();
 
-  const activeBookings = bookings.filter((b) => b.status === 'active' && b.remainingTons > 0);
+  const activeBookings = bookings.filter((b) => b.status === 'active' && b.remainingKg > 0);
 
   const [selectedBookingId, setSelectedBookingId] = useState<string>('');
-  const [tonsInput, setTonsInput] = useState<string>('45');
+  const [kgInput, setKgInput] = useState<string>('20000');
   const [truckNumber, setTruckNumber] = useState<string>('LES-8921-A');
   const [driverPhone, setDriverPhone] = useState<string>('+92 300 1234567');
   const [notes, setNotes] = useState<string>('');
@@ -52,30 +52,30 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   const customer = currentBooking ? customers.find((c) => c.id === currentBooking.customerId) : null;
   const product = currentBooking ? products.find((p) => p.id === currentBooking.productId) : null;
 
-  const dispatchTons = Math.max(0, parseFloat(tonsInput) || 0);
+  const dispatchKg = Math.max(0, parseFloat(kgInput) || 0);
   const remainingAfter = currentBooking
-    ? Math.max(0, Number((currentBooking.remainingTons - dispatchTons).toFixed(2)))
+    ? Math.max(0, Number((currentBooking.remainingKg - dispatchKg).toFixed(2)))
     : 0;
-  const dispatchAmount = currentBooking ? dispatchTons * currentBooking.pricePerTon : 0;
+  const dispatchAmount = currentBooking ? dispatchKg * currentBooking.pricePerKg : 0;
   const progressPercentBefore = currentBooking
-    ? (currentBooking.dispatchedTons / currentBooking.totalTons) * 100
+    ? (currentBooking.dispatchedKg / currentBooking.totalKg) * 100
     : 0;
   const progressPercentAfter = currentBooking
-    ? Math.min(100, ((currentBooking.dispatchedTons + dispatchTons) / currentBooking.totalTons) * 100)
+    ? Math.min(100, ((currentBooking.dispatchedKg + dispatchKg) / currentBooking.totalKg) * 100)
     : 0;
 
-  const isTonsValid =
+  const isKgValid =
     currentBooking &&
-    dispatchTons > 0 &&
-    dispatchTons <= currentBooking.remainingTons;
+    dispatchKg > 0 &&
+    dispatchKg <= currentBooking.remainingKg;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentBooking || !isTonsValid) return;
+    if (!currentBooking || !isKgValid) return;
 
     logDispatch({
       bookingId: currentBooking.id,
-      tons: dispatchTons,
+      kg: dispatchKg,
       truckNumber: truckNumber.trim() || 'TR-GENERIC',
       driverPhone: driverPhone.trim(),
       notes: notes.trim(),
@@ -172,7 +172,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                     const prod = products.find((p) => p.id === b.productId);
                     return (
                       <option key={b.id} value={b.id}>
-                        {b.bookingNumber} • {cust?.name} ({cust?.company}) — {prod?.name} (Rem: {b.remainingTons} T)
+                        {b.bookingNumber} • {cust?.name} ({cust?.company}) — {prod?.name} (Rem: {b.remainingKg} kg)
                       </option>
                     );
                   })}
@@ -187,7 +187,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                       <Package className="w-3.5 h-3.5" />
                       {product.name}
                     </span>
-                    <span className="font-mono">Rate: {formatCurrency(currentBooking.pricePerTon)}/Ton</span>
+                    <span className="font-mono">Rate: {formatCurrency(currentBooking.pricePerKg)}/kg</span>
                   </div>
 
                   {/* Visual Calculation Metric */}
@@ -195,19 +195,19 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                     <div>
                       <div className="text-[10px] text-[#9CA3AF] uppercase font-bold tracking-wider">Total Booked</div>
                       <div className="text-sm font-bold text-white font-mono mt-0.5">
-                        {currentBooking.totalTons} T
+                        {currentBooking.totalKg} kg
                       </div>
                     </div>
                     <div className="border-x border-white/10">
                       <div className="text-[10px] text-amber-300 uppercase font-bold tracking-wider">This Dispatch</div>
                       <div className="text-sm font-bold text-amber-300 font-mono mt-0.5">
-                        +{dispatchTons || 0} T
+                        +{dispatchKg || 0} kg
                       </div>
                     </div>
                     <div>
                       <div className="text-[10px] text-teal-300 uppercase font-bold tracking-wider">New Remaining</div>
                       <div className="text-sm font-bold text-teal-300 font-mono mt-0.5">
-                        {remainingAfter} T
+                        {remainingAfter} kg
                       </div>
                     </div>
                   </div>
@@ -242,29 +242,29 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-[#8E9299] mb-1.5 uppercase tracking-widest">
-                    Dispatch Quantity (Tons) *
+                    Dispatch Quantity (kg) *
                   </label>
                   <div className="relative">
                     <input
                       type="number"
-                      step="0.1"
-                      min="0.1"
-                      max={currentBooking?.remainingTons || 1000}
-                      value={tonsInput}
-                      onChange={(e) => setTonsInput(e.target.value)}
-                      placeholder="e.g. 45"
+                      step="1"
+                      min="1"
+                      max={currentBooking?.remainingKg || undefined}
+                      value={kgInput}
+                      onChange={(e) => setKgInput(e.target.value)}
+                      placeholder="e.g. 20000"
                       className={`w-full bg-[#FAF9F6] border rounded-2xl px-4 py-2.5 text-xs font-mono font-bold text-[#111827] focus:outline-hidden focus:bg-white transition-all ${
-                        !isTonsValid ? 'border-amber-500 focus:ring-1 focus:ring-amber-500' : 'border-[#E5E5E1] focus:border-teal-600 focus:ring-1 focus:ring-teal-600'
+                        !isKgValid ? 'border-amber-500 focus:ring-1 focus:ring-amber-500' : 'border-[#E5E5E1] focus:border-teal-600 focus:ring-1 focus:ring-teal-600'
                       }`}
                       required
                     />
                     <span className="absolute right-3.5 top-2.5 text-[10px] font-bold text-[#8E9299]">
-                      TONS
+                      KG
                     </span>
                   </div>
-                  {currentBooking && dispatchTons > currentBooking.remainingTons && (
+                  {currentBooking && dispatchKg > currentBooking.remainingKg && (
                     <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" /> Cannot exceed remaining {currentBooking.remainingTons} Tons
+                      <AlertCircle className="w-3 h-3" /> Cannot exceed remaining {currentBooking.remainingKg} kg
                     </p>
                   )}
                 </div>
@@ -322,7 +322,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                       Auto-send WhatsApp dispatch alert & payment inquiry
                     </span>
                     <span className="text-[11px] text-[#6B7280] block mt-0.5">
-                      Instantly alerts {customer?.name || 'customer'} with tons dispatched, remaining balance & polite payment request.
+                      Instantly alerts {customer?.name || 'customer'} with kg dispatched, remaining balance & polite payment request.
                     </span>
                   </div>
                 </label>
@@ -356,7 +356,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={!isTonsValid || isSuccess}
+                  disabled={!isKgValid || isSuccess}
                   className="px-6 py-2.5 bg-[#111827] hover:bg-black text-white text-xs font-bold rounded-2xl shadow-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all active:scale-95 border border-[#111827]"
                 >
                   {isSuccess ? (
@@ -367,7 +367,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                   ) : (
                     <>
                       <Truck className="w-4 h-4 text-teal-400" />
-                      <span>Confirm & Dispatch ({dispatchTons} T)</span>
+                      <span>Confirm & Dispatch ({dispatchKg} kg)</span>
                     </>
                   )}
                 </button>

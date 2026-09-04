@@ -1,5 +1,7 @@
--- Run this in the Supabase SQL Editor to create tables matching the Sarmaya app types.
--- Column names mirror the TypeScript interfaces (camelCase).
+-- Sarmaya / TradeFlow schema. Run in the Supabase SQL editor on a fresh project.
+-- Column names mirror the TypeScript interfaces (camelCase). All quantities are in KILOGRAMS
+-- and all unit prices are Rs. per kg. If you are upgrading from the older tons-based schema,
+-- run migrate_tons_to_kg.sql instead of this file.
 
 CREATE TABLE IF NOT EXISTS customers (
   id TEXT PRIMARY KEY,
@@ -29,9 +31,9 @@ CREATE TABLE IF NOT EXISTS products (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   category TEXT,
-  "unitPricePerTon" NUMERIC DEFAULT 0,
-  "stockTons" NUMERIC DEFAULT 0,
-  "minThresholdTons" NUMERIC DEFAULT 0,
+  "unitPricePerKg" NUMERIC DEFAULT 0,
+  "stockKg" NUMERIC DEFAULT 0,
+  "minThresholdKg" NUMERIC DEFAULT 0,
   "supplierId" TEXT,
   description TEXT
 );
@@ -41,10 +43,10 @@ CREATE TABLE IF NOT EXISTS bookings (
   "bookingNumber" TEXT NOT NULL,
   "customerId" TEXT,
   "productId" TEXT,
-  "totalTons" NUMERIC DEFAULT 0,
-  "dispatchedTons" NUMERIC DEFAULT 0,
-  "remainingTons" NUMERIC DEFAULT 0,
-  "pricePerTon" NUMERIC DEFAULT 0,
+  "totalKg" NUMERIC DEFAULT 0,
+  "dispatchedKg" NUMERIC DEFAULT 0,
+  "remainingKg" NUMERIC DEFAULT 0,
+  "pricePerKg" NUMERIC DEFAULT 0,
   "totalAmount" NUMERIC DEFAULT 0,
   "paidAmount" NUMERIC DEFAULT 0,
   status TEXT DEFAULT 'active',
@@ -60,7 +62,7 @@ CREATE TABLE IF NOT EXISTS dispatches (
   "bookingId" TEXT,
   "customerId" TEXT,
   "productId" TEXT,
-  tons NUMERIC DEFAULT 0,
+  kg NUMERIC DEFAULT 0,
   amount NUMERIC DEFAULT 0,
   "truckNumber" TEXT,
   "driverPhone" TEXT,
@@ -69,6 +71,33 @@ CREATE TABLE IF NOT EXISTS dispatches (
   "whatsappSent" BOOLEAN DEFAULT FALSE,
   "whatsappMessage" TEXT,
   "paymentReceivedImmediately" BOOLEAN DEFAULT FALSE
+);
+
+-- Incoming stock from suppliers (goods receipts)
+CREATE TABLE IF NOT EXISTS purchases (
+  id TEXT PRIMARY KEY,
+  "receiptNumber" TEXT NOT NULL,
+  "supplierId" TEXT,
+  "productId" TEXT,
+  kg NUMERIC DEFAULT 0,
+  "pricePerKg" NUMERIC DEFAULT 0,
+  amount NUMERIC DEFAULT 0,
+  date TEXT,
+  "truckNumber" TEXT,
+  notes TEXT,
+  "paymentMadeImmediately" BOOLEAN DEFAULT FALSE,
+  "createdAt" TEXT
+);
+
+-- Selling price observations per product over time
+CREATE TABLE IF NOT EXISTS price_history (
+  id TEXT PRIMARY KEY,
+  "productId" TEXT,
+  "pricePerKg" NUMERIC DEFAULT 0,
+  date TEXT,
+  source TEXT,
+  note TEXT,
+  "referenceId" TEXT
 );
 
 CREATE TABLE IF NOT EXISTS ledger (
@@ -82,7 +111,7 @@ CREATE TABLE IF NOT EXISTS ledger (
   debit NUMERIC DEFAULT 0,
   credit NUMERIC DEFAULT 0,
   "balanceAfter" NUMERIC DEFAULT 0,
-  tons NUMERIC
+  kg NUMERIC
 );
 
 CREATE TABLE IF NOT EXISTS whatsapp_messages (
@@ -98,11 +127,17 @@ CREATE TABLE IF NOT EXISTS whatsapp_messages (
   "dispatchId" TEXT
 );
 
--- Disable Row Level Security for the public/anon key so the app can read and write
+CREATE INDEX IF NOT EXISTS dispatches_date_idx ON dispatches (date);
+CREATE INDEX IF NOT EXISTS purchases_date_idx ON purchases (date);
+CREATE INDEX IF NOT EXISTS price_history_product_idx ON price_history ("productId", date);
+
+-- Internal tool: RLS disabled so the anon key can read/write. Keep the key private.
 ALTER TABLE customers DISABLE ROW LEVEL SECURITY;
 ALTER TABLE suppliers DISABLE ROW LEVEL SECURITY;
 ALTER TABLE products DISABLE ROW LEVEL SECURITY;
 ALTER TABLE bookings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE dispatches DISABLE ROW LEVEL SECURITY;
+ALTER TABLE purchases DISABLE ROW LEVEL SECURITY;
+ALTER TABLE price_history DISABLE ROW LEVEL SECURITY;
 ALTER TABLE ledger DISABLE ROW LEVEL SECURITY;
 ALTER TABLE whatsapp_messages DISABLE ROW LEVEL SECURITY;

@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useTrading } from '../context/TradingContext';
-import { formatCurrency, formatTons, formatDate } from '../utils/formatters';
+import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
 import { AnimatedNumber } from './AnimatedNumber';
 
 interface CustomerDetailModalProps {
@@ -45,6 +45,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     dispatches,
     deleteCustomer,
     deleteLedgerEntry,
+    openBooking,
   } = useTrading();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'ledger' | 'bookings'>('overview');
@@ -140,7 +141,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 {customerBookings.filter((b) => b.status === 'active').length} Orders
               </div>
               <div className="text-[11px] text-[#8E9299] mt-1 font-mono">
-                {customerBookings.reduce((acc, b) => acc + b.remainingTons, 0)} Tons pending dispatch
+                {customerBookings.reduce((acc, b) => acc + b.remainingKg, 0)} kg pending dispatch
               </div>
             </div>
 
@@ -266,7 +267,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     <div className="space-y-3">
                       {customerBookings.slice(0, 3).map((b) => {
                         const prod = products.find((p) => p.id === b.productId);
-                        const progress = (b.dispatchedTons / b.totalTons) * 100;
+                        const progress = (b.dispatchedKg / b.totalKg) * 100;
                         return (
                           <div
                             key={b.id}
@@ -288,7 +289,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                                 </span>
                               </div>
                               <div className="text-xs text-[#6B7280]">
-                                {prod?.name} • {b.totalTons} Tons (@ Rs. {b.pricePerTon}/T)
+                                {prod?.name} • {b.totalKg} kg (@ Rs. {b.pricePerKg}/kg)
                               </div>
                               <div className="w-36 h-1.5 bg-[#E5E5E1] rounded-full overflow-hidden mt-1">
                                 <div
@@ -300,9 +301,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
                             <div className="text-right flex flex-col items-end gap-1.5">
                               <div className="text-xs font-mono font-bold text-[#111827]">
-                                Rem: {b.remainingTons} T
+                                Rem: {b.remainingKg} kg
                               </div>
-                              {b.remainingTons > 0 && onOpenDispatchForBooking && (
+                              {b.remainingKg > 0 && onOpenDispatchForBooking && (
                                 <button
                                   onClick={() => {
                                     onClose();
@@ -328,7 +329,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
               <div className="space-y-3">
                 {customerBookings.map((b) => {
                   const prod = products.find((p) => p.id === b.productId);
-                  const progress = (b.dispatchedTons / b.totalTons) * 100;
+                  const progress = (b.dispatchedKg / b.totalKg) * 100;
                   return (
                     <div
                       key={b.id}
@@ -340,9 +341,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                             <Package className="w-4 h-4" />
                           </div>
                           <div>
-                            <span className="text-sm font-bold text-[#111827]">
-                              {b.bookingNumber}
-                            </span>
+                            <button onClick={() => { onClose(); openBooking(b.id); }} title="Open booking details" className="text-sm font-bold text-[#111827] hover:text-teal-800 hover:underline underline-offset-2">{b.bookingNumber}</button>
                             <span className="text-xs text-[#8E9299] block font-mono">
                               Booked on {formatDate(b.createdAt)}
                             </span>
@@ -353,7 +352,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                             {formatCurrency(b.totalAmount)}
                           </span>
                           <span className="text-[11px] text-[#8E9299] block font-mono">
-                            Rs. {b.pricePerTon}/Ton
+                            Rs. {b.pricePerKg}/kg
                           </span>
                         </div>
                       </div>
@@ -361,15 +360,15 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       <div className="bg-[#FAF9F6] p-3.5 rounded-2xl border border-[#E5E5E1] grid grid-cols-3 gap-2 text-center text-xs">
                         <div>
                           <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-wider">Total Booked</div>
-                          <div className="font-bold text-[#111827] font-mono mt-0.5">{b.totalTons} T</div>
+                          <div className="font-bold text-[#111827] font-mono mt-0.5">{b.totalKg} kg</div>
                         </div>
                         <div>
                           <div className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Dispatched</div>
-                          <div className="font-bold text-teal-800 font-mono mt-0.5">{b.dispatchedTons} T</div>
+                          <div className="font-bold text-teal-800 font-mono mt-0.5">{b.dispatchedKg} kg</div>
                         </div>
                         <div>
                           <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Remaining</div>
-                          <div className="font-bold text-amber-800 font-mono mt-0.5">{b.remainingTons} T</div>
+                          <div className="font-bold text-amber-800 font-mono mt-0.5">{b.remainingKg} kg</div>
                         </div>
                       </div>
 
@@ -392,7 +391,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                         </p>
                       )}
 
-                      {b.remainingTons > 0 && onOpenDispatchForBooking && (
+                      {b.remainingKg > 0 && onOpenDispatchForBooking && (
                         <div className="pt-1 flex justify-end">
                           <button
                             onClick={() => {
@@ -442,9 +441,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                               </td>
                               <td className="py-3 px-4 font-sans font-medium text-[#111827]">
                                 {item.description}
-                                {item.tons && (
+                                {item.kg && (
                                   <span className="ml-1 text-[10px] text-teal-700 font-mono font-bold">
-                                    ({item.tons} T)
+                                    ({item.kg} kg)
                                   </span>
                                 )}
                               </td>

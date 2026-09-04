@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   BarChart3,
@@ -33,17 +33,42 @@ import {
 } from 'recharts';
 import { useTrading } from '../context/TradingContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { Dispatch } from '../types';
+import { Dispatch, ReportsTab } from '../types';
+import { StockFlowPanel } from '../components/StockFlowPanel';
 import { useTheme } from '../context/ThemeContext';
-import { formatCurrency, formatTons, formatDate, formatNumber } from '../utils/formatters';
+import { formatCurrency, formatKg, formatDate, formatNumber } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
 
-export const ReportsScreen: React.FC = () => {
-  const { dispatches, ledger, bookings, customers, products, deleteDispatch } = useTrading();
+interface ReportsScreenProps {
+  onReceiveStock: () => void;
+}
+
+export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) => {
+  const {
+    dispatches,
+    ledger,
+    bookings,
+    customers,
+    products,
+    deleteDispatch,
+    openBooking,
+    setSelectedCustomerId,
+    setSelectedProductId,
+    requestedReportsTab,
+    clearRequestedReportsTab,
+  } = useTrading();
   const [pendingDispatch, setPendingDispatch] = useState<Dispatch | null>(null);
   const { resolvedTheme } = useTheme();
 
-  const [reportTab, setReportTab] = useState<'daily' | 'monthly'>('daily');
+  const [reportTab, setReportTab] = useState<ReportsTab>(requestedReportsTab || 'daily');
+
+  // Dashboard drill-downs can ask for a specific tab.
+  useEffect(() => {
+    if (requestedReportsTab) {
+      setReportTab(requestedReportsTab);
+      clearRequestedReportsTab();
+    }
+  }, [requestedReportsTab, clearRequestedReportsTab]);
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -56,7 +81,7 @@ export const ReportsScreen: React.FC = () => {
     () => dispatches.filter((d) => d.date === selectedDate),
     [dispatches, selectedDate]
   );
-  const dailyTonsDispatched = dailyDispatches.reduce((acc, d) => acc + d.tons, 0);
+  const dailyKgDispatched = dailyDispatches.reduce((acc, d) => acc + d.kg, 0);
   const dailyRevenueBilled = dailyDispatches.reduce((acc, d) => acc + d.amount, 0);
 
   const dailyPaymentsCollected = ledger
@@ -73,13 +98,13 @@ export const ReportsScreen: React.FC = () => {
   dailyDispatches.forEach((d) => {
     const prod = products.find((p) => p.id === d.productId);
     const name = prod?.name || 'Other';
-    dailyProductMap[name] = (dailyProductMap[name] || 0) + d.tons;
+    dailyProductMap[name] = (dailyProductMap[name] || 0) + d.kg;
   });
 
   const dailyChartData = Object.keys(dailyProductMap).map((name) => ({
     name: name.split(' ')[0],
     fullName: name,
-    tons: dailyProductMap[name],
+    kg: dailyProductMap[name],
   }));
 
   // --- Monthly Rollup ---
@@ -87,7 +112,7 @@ export const ReportsScreen: React.FC = () => {
     () => dispatches.filter((d) => d.date.startsWith(selectedMonth)),
     [dispatches, selectedMonth]
   );
-  const monthlyTonsDispatched = monthlyDispatches.reduce((acc, d) => acc + d.tons, 0);
+  const monthlyKgDispatched = monthlyDispatches.reduce((acc, d) => acc + d.kg, 0);
   const monthlyRevenueBilled = monthlyDispatches.reduce((acc, d) => acc + d.amount, 0);
 
   const monthlyPaymentsCollected = ledger
@@ -107,17 +132,17 @@ export const ReportsScreen: React.FC = () => {
   // Monthly breakdown by commodity
   const monthlyCommodityData = products
     .map((prod) => {
-      const tons = monthlyDispatches
+      const kg = monthlyDispatches
         .filter((d) => d.productId === prod.id)
-        .reduce((acc, d) => acc + d.tons, 0);
+        .reduce((acc, d) => acc + d.kg, 0);
       return {
         name: prod.name.split(' ')[0],
         fullName: prod.name,
-        tons,
-        value: tons * prod.unitPricePerTon,
+        kg,
+        value: kg * prod.unitPricePerKg,
       };
     })
-    .filter((c) => c.tons > 0);
+    .filter((c) => c.kg > 0);
 
   // --- Monthly Granular Daily Trend Data for Volume Line Chart with Rich Hover States ---
   const monthlyVolumeTrendData = useMemo(() => {
@@ -131,27 +156,27 @@ export const ReportsScreen: React.FC = () => {
       day: number;
       dateKey: string;
       displayDate: string;
-      tons: number;
+      kg: number;
       revenue: number;
       trucksCount: number;
-      avgPricePerTon: number;
-      cumulativeTons: number;
+      avgPricePerKg: number;
+      cumulativeKg: number;
       dispatches: typeof monthlyDispatches;
     }[] = [];
 
-    let runningCumulativeTons = 0;
+    let runningCumulativeKg = 0;
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dayFormatted = d < 10 ? `0${d}` : `${d}`;
       const dateKey = `${selectedMonth}-${dayFormatted}`;
 
       const dayDispatches = monthlyDispatches.filter((disp) => disp.date === dateKey);
-      const tons = dayDispatches.reduce((sum, item) => sum + item.tons, 0);
+      const kg = dayDispatches.reduce((sum, item) => sum + item.kg, 0);
       const revenue = dayDispatches.reduce((sum, item) => sum + item.amount, 0);
       const trucksCount = dayDispatches.length;
-      const avgPricePerTon = tons > 0 ? Math.round(revenue / tons) : 0;
+      const avgPricePerKg = kg > 0 ? Number((revenue / kg).toFixed(2)) : 0;
 
-      runningCumulativeTons += tons;
+      runningCumulativeKg += kg;
 
       // Only format nice date label
       const dateObj = new Date(year, month - 1, d);
@@ -162,11 +187,11 @@ export const ReportsScreen: React.FC = () => {
         day: d,
         dateKey,
         displayDate,
-        tons,
+        kg,
         revenue,
         trucksCount,
-        avgPricePerTon,
-        cumulativeTons: runningCumulativeTons,
+        avgPricePerKg,
+        cumulativeKg: runningCumulativeKg,
         dispatches: dayDispatches,
       });
     }
@@ -184,20 +209,20 @@ export const ReportsScreen: React.FC = () => {
       csvContent += `Timestamp,${new Date().toISOString()}\n\n`;
 
       csvContent += `--- SUMMARY FINANCIAL METRICS ---\n`;
-      csvContent += `Total Metric Tons Dispatched,${dailyTonsDispatched}\n`;
+      csvContent += `Total Metric kg Dispatched,${dailyKgDispatched}\n`;
       csvContent += `Total Gross Sales Invoiced (Rs.),${dailyRevenueBilled}\n`;
       csvContent += `Total Cash Payments Cleared (Rs.),${dailyPaymentsCollected}\n`;
       csvContent += `Net Daily Receivable Balance Change (Rs.),${dailyRevenueBilled - dailyPaymentsCollected}\n`;
       csvContent += `Total Truck Loads Delivered,${dailyDispatches.length}\n\n`;
 
       csvContent += `--- DISPATCH AUDIT TRAIL ---\n`;
-      csvContent += `Dispatch #,Date,Customer Name,Customer Company,Commodity,Truck / Vehicle #,Driver Phone,Quantity (Tons),Unit Price (Rs./T),Gross Billed (Rs.),WhatsApp Sent Status\n`;
+      csvContent += `Dispatch #,Date,Customer Name,Customer Company,Commodity,Truck / Vehicle #,Driver Phone,Quantity (kg),Unit Price (Rs./kg),Gross Billed (Rs.),WhatsApp Sent Status\n`;
 
       dailyDispatches.forEach((d) => {
         const cust = customers.find((c) => c.id === d.customerId);
         const prod = products.find((p) => p.id === d.productId);
-        const unitPrice = d.tons > 0 ? (d.amount / d.tons).toFixed(2) : '0';
-        csvContent += `"${d.dispatchNumber}","${d.date}","${cust?.name || ''}","${cust?.company || ''}","${prod?.name || ''}","${d.truckNumber}","${d.driverPhone || 'N/A'}",${d.tons},${unitPrice},${d.amount},"${d.whatsappSent ? 'SENT' : 'PENDING'}"\n`;
+        const unitPrice = d.kg > 0 ? (d.amount / d.kg).toFixed(2) : '0';
+        csvContent += `"${d.dispatchNumber}","${d.date}","${cust?.name || ''}","${cust?.company || ''}","${prod?.name || ''}","${d.truckNumber}","${d.driverPhone || 'N/A'}",${d.kg},${unitPrice},${d.amount},"${d.whatsappSent ? 'SENT' : 'PENDING'}"\n`;
       });
     } else {
       csvContent += `SARMAYA MONTHLY FINANCIAL & COMMODITY ROLLUP\n`;
@@ -205,31 +230,31 @@ export const ReportsScreen: React.FC = () => {
       csvContent += `Timestamp,${new Date().toISOString()}\n\n`;
 
       csvContent += `--- EXECUTIVE MONTHLY SUMMARY ---\n`;
-      csvContent += `Total Monthly Tonnage Dispatched (T),${monthlyTonsDispatched}\n`;
+      csvContent += `Total Monthly Volume Dispatched (kg),${monthlyKgDispatched}\n`;
       csvContent += `Total Gross Revenue Billed (Rs.),${monthlyRevenueBilled}\n`;
       csvContent += `Total Payments Cleared (Rs.),${monthlyPaymentsCollected}\n`;
       csvContent += `Collection Efficiency Rate,${collectionRate.toFixed(2)}%\n`;
       csvContent += `Total Truck Trips Executed,${monthlyDispatches.length}\n\n`;
 
       csvContent += `--- COMMODITY SUMMARY BREAKDOWN ---\n`;
-      csvContent += `Commodity Name,Category,Dispatched Tons,Gross Value (Rs.)\n`;
+      csvContent += `Commodity Name,Category,Dispatched kg,Gross Value (Rs.)\n`;
       products.forEach((p) => {
-        const tons = monthlyDispatches
+        const kg = monthlyDispatches
           .filter((d) => d.productId === p.id)
-          .reduce((acc, d) => acc + d.tons, 0);
-        if (tons > 0) {
-          csvContent += `"${p.name}","${p.category}",${tons},${tons * p.unitPricePerTon}\n`;
+          .reduce((acc, d) => acc + d.kg, 0);
+        if (kg > 0) {
+          csvContent += `"${p.name}","${p.category}",${kg},${kg * p.unitPricePerKg}\n`;
         }
       });
       csvContent += `\n`;
 
       csvContent += `--- DETAILED DISPATCH RECORDS FOR ${selectedMonth} ---\n`;
-      csvContent += `Date,Dispatch #,Customer,Company,Commodity,Truck #,Driver Phone,Quantity (Tons),Gross Invoiced (Rs.)\n`;
+      csvContent += `Date,Dispatch #,Customer,Company,Commodity,Truck #,Driver Phone,Quantity (kg),Gross Invoiced (Rs.)\n`;
 
       monthlyDispatches.forEach((d) => {
         const cust = customers.find((c) => c.id === d.customerId);
         const prod = products.find((p) => p.id === d.productId);
-        csvContent += `"${d.date}","${d.dispatchNumber}","${cust?.name || ''}","${cust?.company || ''}","${prod?.name || ''}","${d.truckNumber}","${d.driverPhone || 'N/A'}",${d.tons},${d.amount}\n`;
+        csvContent += `"${d.date}","${d.dispatchNumber}","${cust?.name || ''}","${cust?.company || ''}","${prod?.name || ''}","${d.truckNumber}","${d.driverPhone || 'N/A'}",${d.kg},${d.amount}\n`;
       });
     }
 
@@ -311,9 +336,20 @@ export const ReportsScreen: React.FC = () => {
             >
               Monthly Report
             </button>
+            <button
+              onClick={() => setReportTab('flow')}
+              className={`px-4 py-1.5 rounded-full transition-all ${
+                reportTab === 'flow'
+                  ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
+                  : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'
+              }`}
+            >
+              Stock Flow
+            </button>
           </div>
 
           {/* Prominent Download Report Button */}
+          {reportTab !== 'flow' && (
           <button
             onClick={handleDownloadReport}
             title="Download CSV for local bookkeeping"
@@ -325,10 +361,12 @@ export const ReportsScreen: React.FC = () => {
               .CSV
             </span>
           </button>
+          )}
         </div>
       </div>
 
       {/* Date / Month Picker Filter */}
+      {reportTab !== 'flow' && (
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0 bg-white dark:bg-[#101A26] p-4 px-6 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] shadow-xs transition-colors">
         <div className="flex items-center gap-3 text-xs font-semibold text-[#111827] dark:text-[#F1F5F9]">
           <Calendar className="w-4 h-4 text-teal-700 dark:text-teal-400" />
@@ -357,8 +395,19 @@ export const ReportsScreen: React.FC = () => {
           Real-time reconciliation • Filtered Dataset
         </span>
       </div>
+      )}
 
-      {/* DAILY REPORT VIEW */}
+      {/* STOCK FLOW VIEW */}
+      {reportTab === 'flow' && (
+        <StockFlowPanel
+          onReceiveStock={onReceiveStock}
+          onDownload={(fileName) => {
+            setDownloadSuccessToast(fileName);
+            setTimeout(() => setDownloadSuccessToast(null), 4000);
+          }}
+        />
+      )}
+
       {reportTab === 'daily' && (
         <div className="space-y-6">
           {/* Summary Cards */}
@@ -368,7 +417,7 @@ export const ReportsScreen: React.FC = () => {
                 Dispatched Today
               </span>
               <div className="text-3xl font-extrabold font-mono text-[#111827] dark:text-white mt-2">
-                <AnimatedNumber value={dailyTonsDispatched} format="tons" />
+                <AnimatedNumber value={dailyKgDispatched} format="kg" />
               </div>
               <div className="text-xs text-[#8E9299] dark:text-[#64748B] mt-1">
                 {dailyDispatches.length} truck dispatches logged
@@ -447,18 +496,22 @@ export const ReportsScreen: React.FC = () => {
                           className="hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"
                         >
                           <td className="py-3.5 px-6 font-bold text-[#111827] dark:text-white">
-                            {d.dispatchNumber}
+                            <button onClick={() => openBooking(d.bookingId, d.id)} title="Open booking" className="hover:text-teal-700 hover:underline underline-offset-2">
+                              {d.dispatchNumber}
+                            </button>
                           </td>
                           <td className="py-3.5 px-6 font-sans">
-                            <div className="font-semibold text-[#111827] dark:text-white">
+                            <button onClick={() => cust && setSelectedCustomerId(cust.id)} className="font-semibold text-[#111827] dark:text-white hover:text-teal-700 hover:underline underline-offset-2 text-left">
                               {cust?.name}
-                            </div>
+                            </button>
                             <div className="text-[11px] text-[#8E9299] dark:text-[#94A3B8]">
                               {cust?.company}
                             </div>
                           </td>
                           <td className="py-3.5 px-6 font-sans text-[#4B5563] dark:text-[#CBD5E1]">
-                            {prod?.name}
+                            <button onClick={() => prod && setSelectedProductId(prod.id)} className="hover:text-teal-700 hover:underline underline-offset-2 text-left">
+                              {prod?.name}
+                            </button>
                           </td>
                           <td className="py-3.5 px-6 text-[#4B5563] dark:text-[#CBD5E1]">
                             <div className="font-bold text-[#111827] dark:text-white">
@@ -471,7 +524,7 @@ export const ReportsScreen: React.FC = () => {
                             )}
                           </td>
                           <td className="py-3.5 px-6 text-right font-bold text-[#111827] dark:text-white">
-                            {d.tons} Tons
+                            {d.kg} kg
                           </td>
                           <td className="py-3.5 px-6 text-right font-bold text-teal-800 dark:text-teal-400">
                             {formatCurrency(d.amount)}
@@ -514,10 +567,10 @@ export const ReportsScreen: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 min-w-0">
             <div className="min-w-0 bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
               <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
-                Monthly Tonnage
+                Monthly Volume
               </span>
               <div className="text-3xl font-extrabold font-mono text-[#111827] dark:text-white mt-2">
-                <AnimatedNumber value={monthlyTonsDispatched} format="tons" />
+                <AnimatedNumber value={monthlyKgDispatched} format="kg" />
               </div>
               <div className="text-xs text-[#8E9299] dark:text-[#64748B] mt-1">
                 Across {monthlyDispatches.length} total dispatches
@@ -575,7 +628,7 @@ export const ReportsScreen: React.FC = () => {
                   Monthly Trading Volume & Revenue Progression
                 </h3>
                 <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
-                  Interactive hover inspection: Mouse over any point along the line to inspect granular tonnage, gross billing, average price per ton, and truck counts.
+                  Interactive hover inspection: Mouse over any point along the line to inspect granular volume, gross billing, average price per kg, and truck counts.
                 </p>
               </div>
 
@@ -599,7 +652,7 @@ export const ReportsScreen: React.FC = () => {
                       : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'
                   }`}
                 >
-                  Tons Only
+                  kg Only
                 </button>
                 <button
                   onClick={() => setChartMetric('revenue')}
@@ -647,7 +700,7 @@ export const ReportsScreen: React.FC = () => {
                     tickFormatter={(val) => `${val}`}
                   />
 
-                  {/* Left YAxis: Volume (Tons) */}
+                  {/* Left YAxis: Volume (kg) */}
                   {(chartMetric === 'composite' || chartMetric === 'volume') && (
                     <YAxis
                       yAxisId="left"
@@ -656,7 +709,7 @@ export const ReportsScreen: React.FC = () => {
                       tickLine={false}
                       axisLine={false}
                       width={45}
-                      tickFormatter={(v) => `${formatNumber(v)}T`}
+                      tickFormatter={(v) => `${formatNumber(v)}kg`}
                     />
                   )}
 
@@ -704,7 +757,7 @@ export const ReportsScreen: React.FC = () => {
                                   Daily Volume:
                                 </span>
                                 <span className="font-extrabold text-white text-sm">
-                                  {data.tons} Tons
+                                  {data.kg} kg
                                 </span>
                               </div>
 
@@ -718,11 +771,11 @@ export const ReportsScreen: React.FC = () => {
                                 </span>
                               </div>
 
-                              {data.tons > 0 && (
+                              {data.kg > 0 && (
                                 <div className="flex items-center justify-between">
-                                  <span className="text-[#9CA3AF]">Average Rs./Ton:</span>
+                                  <span className="text-[#9CA3AF]">Average Rs./kg:</span>
                                   <span className="font-bold text-white">
-                                    Rs. {data.avgPricePerTon}/Ton
+                                    Rs. {data.avgPricePerKg}/kg
                                   </span>
                                 </div>
                               )}
@@ -730,7 +783,7 @@ export const ReportsScreen: React.FC = () => {
                               <div className="flex items-center justify-between border-t border-gray-800 pt-1.5 text-[11px]">
                                 <span className="text-[#9CA3AF]">Cumulative MTD:</span>
                                 <span className="text-gray-300 font-bold">
-                                  {data.cumulativeTons} Tons
+                                  {data.cumulativeKg} kg
                                 </span>
                               </div>
                             </div>
@@ -754,7 +807,7 @@ export const ReportsScreen: React.FC = () => {
                                           {disp.truckNumber} • {cust?.name}
                                         </span>
                                         <span className="text-teal-300 font-mono font-bold">
-                                          {disp.tons}T ({formatCurrency(disp.amount)})
+                                          {disp.kg}kg ({formatCurrency(disp.amount)})
                                         </span>
                                       </div>
                                     );
@@ -774,8 +827,8 @@ export const ReportsScreen: React.FC = () => {
                     <Area
                       yAxisId="left"
                       type="monotone"
-                      dataKey="tons"
-                      name="Daily Volume (Tons)"
+                      dataKey="kg"
+                      name="Daily Volume (kg)"
                       stroke="#0d9488"
                       strokeWidth={3}
                       fillOpacity={1}
@@ -824,10 +877,10 @@ export const ReportsScreen: React.FC = () => {
             <div className="bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs space-y-4">
               <div>
                 <h3 className="font-serif italic text-xl font-normal text-[#111827] dark:text-white">
-                  Monthly Commodity Tonnage Distribution
+                  Monthly Commodity Volume Distribution
                 </h3>
                 <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
-                  Volume sold per commodity in tons
+                  Volume sold per commodity in kg
                 </p>
               </div>
 
@@ -855,7 +908,7 @@ export const ReportsScreen: React.FC = () => {
                         tickLine={false}
                         axisLine={false}
                         width={45}
-                        tickFormatter={(v) => `${formatNumber(v)}T`}
+                        tickFormatter={(v) => `${formatNumber(v)}kg`}
                       />
                       <Tooltip
                         content={({ active, payload }) => {
@@ -865,7 +918,7 @@ export const ReportsScreen: React.FC = () => {
                                 <div className="font-bold text-teal-300">
                                   {payload[0]?.payload?.fullName}
                                 </div>
-                                <div>Tons: {payload[0]?.value} Tons</div>
+                                <div>kg: {payload[0]?.value} kg</div>
                                 <div>Value: {formatCurrency((payload[0]?.payload?.value as number) || 0)}</div>
                               </div>
                             );
@@ -873,7 +926,7 @@ export const ReportsScreen: React.FC = () => {
                           return null;
                         }}
                       />
-                      <Bar dataKey="tons" fill="#0d9488" radius={[8, 8, 0, 0]} />
+                      <Bar dataKey="kg" fill="#0d9488" radius={[8, 8, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -893,9 +946,9 @@ export const ReportsScreen: React.FC = () => {
 
               <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
                 {customers.map((cust) => {
-                  const custTons = monthlyDispatches
+                  const custKg = monthlyDispatches
                     .filter((d) => d.customerId === cust.id)
-                    .reduce((acc, d) => acc + d.tons, 0);
+                    .reduce((acc, d) => acc + d.kg, 0);
                   const custRevenue = monthlyDispatches
                     .filter((d) => d.customerId === cust.id)
                     .reduce((acc, d) => acc + d.amount, 0);
@@ -913,7 +966,7 @@ export const ReportsScreen: React.FC = () => {
                       </div>
                       <div className="text-right font-mono">
                         <div className="font-bold text-teal-800 dark:text-teal-400">
-                          {custTons} Tons
+                          {custKg} kg
                         </div>
                         <div className="text-[11px] text-[#8E9299] dark:text-[#94A3B8]">
                           {formatCurrency(custRevenue)}
@@ -933,7 +986,7 @@ export const ReportsScreen: React.FC = () => {
         title={`Delete dispatch ${pendingDispatch?.dispatchNumber ?? ''}?`}
         message="The dispatch will be permanently removed from this device and the cloud database."
         details={[
-          `${pendingDispatch?.tons ?? 0} T is returned to warehouse stock and to the booking's remaining balance.`,
+          `${pendingDispatch?.kg ?? 0} kg is returned to warehouse stock and to the booking's remaining balance.`,
           pendingDispatch?.paymentReceivedImmediately
             ? 'The immediate payment recorded with it is reversed on the booking.'
             : `${formatCurrency(pendingDispatch?.amount ?? 0)} is removed from the customer's outstanding balance.`,

@@ -21,9 +21,9 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     preselectedCustomerId || (customers[0]?.id || '')
   );
   const [productId, setProductId] = useState<string>(products[0]?.id || '');
-  const [tons, setTons] = useState<string>('150');
-  const [pricePerTon, setPricePerTon] = useState<string>(
-    products[0]?.unitPricePerTon.toString() || '120'
+  const [kg, setKg] = useState<string>('50000');
+  const [pricePerKg, setPricePerKg] = useState<string>(
+    products[0]?.unitPricePerKg.toString() || '25'
   );
   const [targetDeliveryDate, setTargetDeliveryDate] = useState<string>(
     new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
@@ -40,7 +40,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   useEffect(() => {
     if (!productId && products.length > 0) {
       setProductId(products[0].id);
-      setPricePerTon(products[0].unitPricePerTon.toString());
+      setPricePerKg(products[0].unitPricePerKg.toString());
     }
   }, [products, productId]);
 
@@ -50,23 +50,23 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     setProductId(prodId);
     const prod = products.find((p) => p.id === prodId);
     if (prod) {
-      setPricePerTon(prod.unitPricePerTon.toString());
+      setPricePerKg(prod.unitPricePerKg.toString());
     }
   };
 
-  const parsedTons = Math.max(0, parseFloat(tons) || 0);
-  const parsedPrice = Math.max(0, parseFloat(pricePerTon) || 0);
-  const totalContractAmount = parsedTons * parsedPrice;
+  const parsedKg = Math.max(0, parseFloat(kg) || 0);
+  const parsedPrice = Math.max(0, parseFloat(pricePerKg) || 0);
+  const totalContractAmount = parsedKg * parsedPrice;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerId || !productId || parsedTons <= 0 || parsedPrice <= 0) return;
+    if (!customerId || !productId || parsedKg <= 0 || parsedPrice <= 0) return;
 
     createBooking({
       customerId,
       productId,
-      totalTons: parsedTons,
-      pricePerTon: parsedPrice,
+      totalKg: parsedKg,
+      pricePerKg: parsedPrice,
       targetDeliveryDate,
       notes: notes.trim(),
     });
@@ -151,24 +151,24 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               >
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} ({p.category}) — Stock: {p.stockTons} T
+                    {p.name} ({p.category}) — Stock: {p.stockKg} kg
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Tons & Rate */}
+            {/* kg & Rate */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-bold text-[#8E9299] mb-1.5 uppercase tracking-widest">
-                  Total Order Quantity (Tons) *
+                  Total Order Quantity (kg) *
                 </label>
                 <input
                   type="number"
                   step="1"
                   min="1"
-                  value={tons}
-                  onChange={(e) => setTons(e.target.value)}
+                  value={kg}
+                  onChange={(e) => setKg(e.target.value)}
                   className="w-full bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl px-4 py-2.5 text-xs font-mono font-bold text-[#111827] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600"
                   required
                 />
@@ -176,14 +176,14 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
               <div>
                 <label className="block text-[10px] font-bold text-[#8E9299] mb-1.5 uppercase tracking-widest">
-                  Agreed Rate (Rs./Ton) *
+                  Agreed Rate (Rs./kg) *
                 </label>
                 <input
                   type="number"
                   step="0.5"
                   min="0.1"
-                  value={pricePerTon}
-                  onChange={(e) => setPricePerTon(e.target.value)}
+                  value={pricePerKg}
+                  onChange={(e) => setPricePerKg(e.target.value)}
                   className="w-full bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl px-4 py-2.5 text-xs font-mono font-bold text-[#111827] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600"
                   required
                 />
@@ -201,8 +201,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 </span>
               </div>
               <div className="text-right text-xs text-[#6B7280]">
-                <span className="font-mono text-[#111827] font-bold">{parsedTons} Tons</span>
-                <span className="block text-[11px]">@ Rs. {parsedPrice}/Ton</span>
+                <span className="font-mono text-[#111827] font-bold">{parsedKg} kg</span>
+                <span className="block text-[11px]">@ Rs. {parsedPrice}/kg</span>
               </div>
             </div>
 
@@ -227,7 +227,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Delivery in 50-ton tipper trucks to central terminal berth."
+                placeholder="e.g. Delivery in 50-kg tipper trucks to central terminal berth."
                 className="w-full bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl px-4 py-2.5 text-xs text-[#111827] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600"
               />
             </div>

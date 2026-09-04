@@ -28,9 +28,9 @@ export interface Product {
   id: string;
   name: string;
   category: string;
-  unitPricePerTon: number;
-  stockTons: number;
-  minThresholdTons: number;
+  unitPricePerKg: number;
+  stockKg: number;
+  minThresholdKg: number;
   supplierId?: string | null;
   description?: string;
 }
@@ -43,10 +43,10 @@ export interface Booking {
   bookingNumber: string;
   customerId: string;
   productId: string;
-  totalTons: number;
-  dispatchedTons: number;
-  remainingTons: number;
-  pricePerTon: number;
+  totalKg: number;
+  dispatchedKg: number;
+  remainingKg: number;
+  pricePerKg: number;
   totalAmount: number;
   paidAmount: number;
   status: BookingStatus;
@@ -62,7 +62,7 @@ export interface Dispatch {
   bookingId: string;
   customerId: string;
   productId: string;
-  tons: number;
+  kg: number;
   amount: number;
   truckNumber: string;
   driverPhone?: string;
@@ -73,7 +73,12 @@ export interface Dispatch {
   paymentReceivedImmediately?: boolean;
 }
 
-export type TransactionType = 'booking_invoice' | 'dispatch_billed' | 'payment_received' | 'payment_made';
+export type TransactionType =
+  | 'booking_invoice'
+  | 'dispatch_billed'
+  | 'payment_received'
+  | 'payment_made'
+  | 'purchase_received';
 
 export interface LedgerEntry {
   id: string;
@@ -86,7 +91,7 @@ export interface LedgerEntry {
   debit: number;   // For customer: invoices increase debt
   credit: number;  // For customer: payments reduce debt
   balanceAfter: number;
-  tons?: number;
+  kg?: number;
 }
 
 export interface WhatsAppMessage {
@@ -101,6 +106,37 @@ export interface WhatsAppMessage {
   bookingId?: string;
   dispatchId?: string;
 }
+
+/** Incoming stock from a supplier (a purchase / goods receipt). All quantities in kg. */
+export interface Purchase {
+  id: string;
+  receiptNumber: string;
+  supplierId: string;
+  productId: string;
+  kg: number;
+  pricePerKg: number;
+  amount: number;
+  date: string;
+  truckNumber?: string;
+  notes?: string;
+  paymentMadeImmediately?: boolean;
+  createdAt: string;
+}
+
+export type PriceSource = 'product_created' | 'price_update' | 'manual' | 'booking' | 'purchase';
+
+/** One observed selling price for a product on a date. Powers the Price History view. */
+export interface PriceHistoryEntry {
+  id: string;
+  productId: string;
+  pricePerKg: number;
+  date: string;
+  source: PriceSource;
+  note?: string;
+  referenceId?: string;
+}
+
+export type ReportsTab = 'daily' | 'monthly' | 'flow';
 
 export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'reports' | 'admin';
 

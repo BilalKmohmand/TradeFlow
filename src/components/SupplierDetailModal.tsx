@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
   Trash2,
+  PackagePlus,
+  ArrowDownLeft,
   Phone,
   Mail,
   MapPin,
@@ -15,21 +17,23 @@ import {
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { ConfirmDialog } from './ConfirmDialog';
-import { formatCurrency, formatDate } from '../utils/formatters';
+import { formatCurrency, formatDate, formatKg } from '../utils/formatters';
 import { AnimatedNumber } from './AnimatedNumber';
 
 interface SupplierDetailModalProps {
   supplierId: string | null;
   onClose: () => void;
   onOpenPayment?: (supplierId: string) => void;
+  onReceiveStock?: (supplierId: string) => void;
 }
 
 export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
   supplierId,
   onClose,
   onOpenPayment,
+  onReceiveStock,
 }) => {
-  const { suppliers, products, ledger, deleteSupplier } = useTrading();
+  const { suppliers, products, ledger, purchases, deleteSupplier, setSelectedProductId } = useTrading();
   const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
 
   const supplier = suppliers.find((s) => s.id === supplierId);
@@ -40,6 +44,11 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
   const supplierLedger = ledger.filter(
     (l) => l.entityType === 'supplier' && l.entityId === supplier.id
   );
+  const supplierPurchases = purchases
+    .filter((p) => p.supplierId === supplier.id)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  const receivedKg = supplierPurchases.reduce((a, p) => a + p.kg, 0);
+  const receivedValue = supplierPurchases.reduce((a, p) => a + p.amount, 0);
 
   return (
     <>
@@ -117,13 +126,25 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
                   <ExternalLink className="w-3 h-3" />
                 </button>
               </div>
-              <button
-                onClick={() => onOpenPayment?.(supplier.id)}
-                className="w-full mt-3 bg-[#111827] hover:bg-black text-white font-bold text-xs py-2.5 px-4 rounded-2xl flex items-center justify-center gap-1.5 shadow-xs transition-all border border-[#111827]"
-              >
-                <CreditCard className="w-3.5 h-3.5 text-teal-400" />
-                <span>Pay Supplier ({formatCurrency(supplier.totalOwed)})</span>
-              </button>
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <button
+                  onClick={() => onOpenPayment?.(supplier.id)}
+                  className="w-full bg-[#111827] hover:bg-black text-white font-bold text-xs py-2.5 px-3 rounded-2xl flex items-center justify-center gap-1.5 shadow-xs transition-all border border-[#111827]"
+                >
+                  <CreditCard className="w-3.5 h-3.5 text-teal-400" />
+                  <span>Pay ({formatCurrency(supplier.totalOwed)})</span>
+                </button>
+                <button
+                  onClick={() => {
+                    onClose();
+                    onReceiveStock?.(supplier.id);
+                  }}
+                  className="w-full bg-[#FAF9F6] hover:bg-[#F0F0EE] text-[#111827] font-bold text-xs py-2.5 px-3 rounded-2xl flex items-center justify-center gap-1.5 border border-[#E5E5E1] transition-colors"
+                >
+                  <PackagePlus className="w-3.5 h-3.5 text-teal-700" />
+                  <span>Receive Stock</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -165,19 +186,76 @@ export const SupplierDetailModal: React.FC<SupplierDetailModalProps> = ({
                 Supplied Commodities
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {supplierProducts.length === 0 && (
+                  <div className="sm:col-span-2 text-xs text-[#8E9299] bg-white p-4 rounded-2xl border border-[#E5E5E1]">No products are linked to this supplier yet.</div>
+                )}
                 {supplierProducts.map((p) => (
                   <div
                     key={p.id}
-                    className="bg-white p-5 rounded-2xl border border-[#E5E5E1] shadow-xs space-y-1.5"
+                    onClick={() => {
+                      onClose();
+                      setSelectedProductId(p.id);
+                    }}
+                    title="Open product price history"
+                    className="bg-white p-5 rounded-2xl border border-[#E5E5E1] shadow-xs space-y-1.5 cursor-pointer hover:border-teal-600/50 transition-colors"
                   >
                     <div className="font-bold text-xs text-[#111827]">{p.name}</div>
                     <div className="text-[11px] text-[#8E9299]">{p.category}</div>
                     <div className="flex items-center justify-between text-xs font-mono pt-1 text-teal-800 font-bold">
-                      <span>Rs. {p.unitPricePerTon}/Ton</span>
-                      <span>Stock: {p.stockTons} T</span>
+                      <span>Rs. {p.unitPricePerKg}/kg</span>
+                      <span>Stock: {p.stockKg} kg</span>
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Stock received from this supplier */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest flex items-center gap-1.5">
+                  <ArrowDownLeft className="w-3.5 h-3.5 text-teal-700" /> Stock Received ({supplierPurchases.length})
+                </h4>
+                <span className="text-[11px] font-mono text-[#6B7280]">{formatKg(receivedKg)} • {formatCurrency(receivedValue)}</span>
+              </div>
+              <div className="bg-white rounded-2xl border border-[#E5E5E1] overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#FAF9F6] border-b border-[#E5E5E1] text-[#8E9299] uppercase tracking-widest font-bold text-[10px]">
+                      <tr>
+                        <th className="py-3 px-4">Receipt #</th>
+                        <th className="py-3 px-4">Date</th>
+                        <th className="py-3 px-4">Product</th>
+                        <th className="py-3 px-4 text-right">kg</th>
+                        <th className="py-3 px-4 text-right">Rs./kg</th>
+                        <th className="py-3 px-4 text-right">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#FAF9F6] font-mono">
+                      {supplierPurchases.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-6 text-center text-[#8E9299] font-sans">No stock received from this supplier yet.</td>
+                        </tr>
+                      ) : (
+                        supplierPurchases.map((p) => {
+                          const prod = products.find((x) => x.id === p.productId);
+                          return (
+                            <tr key={p.id} className="hover:bg-[#FAF9F6] transition-colors">
+                              <td className="py-2.5 px-4 font-bold text-[#111827]">{p.receiptNumber}{p.truckNumber && <span className="block text-[10px] text-[#8E9299] font-normal">{p.truckNumber}</span>}</td>
+                              <td className="py-2.5 px-4 text-[#6B7280] whitespace-nowrap">{formatDate(p.date)}</td>
+                              <td className="py-2.5 px-4 font-sans">
+                                <button onClick={() => { onClose(); setSelectedProductId(p.productId); }} className="text-[#111827] hover:text-teal-800 hover:underline">{prod?.name || 'Unknown'}</button>
+                              </td>
+                              <td className="py-2.5 px-4 text-right font-bold text-teal-800">+{formatKg(p.kg)}</td>
+                              <td className="py-2.5 px-4 text-right text-[#374151]">{p.pricePerKg}</td>
+                              <td className="py-2.5 px-4 text-right text-[#111827]">{formatCurrency(p.amount)}{p.paymentMadeImmediately && <span className="block text-[10px] text-teal-700 font-sans">paid</span>}</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 

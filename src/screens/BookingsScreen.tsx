@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useTrading } from '../context/TradingContext';
-import { formatCurrency, formatTons, formatDate } from '../utils/formatters';
+import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
 import { BookingStatus, Booking } from '../types';
 
@@ -32,7 +32,7 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
   onOpenDispatchForBooking,
   onOpenCustomer,
 }) => {
-  const { bookings, customers, products, dispatches, deleteBooking } = useTrading();
+  const { bookings, customers, products, dispatches, deleteBooking, openBooking } = useTrading();
   const [pendingDelete, setPendingDelete] = useState<Booking | null>(null);
   const pendingDispatches = pendingDelete ? dispatches.filter((d) => d.bookingId === pendingDelete.id) : [];
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -53,9 +53,9 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
     return matchesSearch && matchesStatus;
   });
 
-  const totalContractTons = bookings.reduce((acc, b) => acc + b.totalTons, 0);
-  const totalDispatchedTons = bookings.reduce((acc, b) => acc + b.dispatchedTons, 0);
-  const totalRemainingTons = bookings.reduce((acc, b) => acc + b.remainingTons, 0);
+  const totalContractKg = bookings.reduce((acc, b) => acc + b.totalKg, 0);
+  const totalDispatchedKg = bookings.reduce((acc, b) => acc + b.dispatchedKg, 0);
+  const totalRemainingKg = bookings.reduce((acc, b) => acc + b.remainingKg, 0);
 
   return (
     <div className="space-y-6 pb-12">
@@ -80,7 +80,7 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
               Pending Remaining
             </span>
             <span className="text-xl font-bold font-mono text-amber-800">
-              <AnimatedNumber value={totalRemainingTons} format="tons" />
+              <AnimatedNumber value={totalRemainingKg} format="kg" />
             </span>
           </div>
 
@@ -138,8 +138,8 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
           filteredBookings.map((b) => {
             const cust = customers.find((c) => c.id === b.customerId);
             const prod = products.find((p) => p.id === b.productId);
-            const progress = (b.dispatchedTons / b.totalTons) * 100;
-            const isFullyDispatched = b.remainingTons === 0;
+            const progress = (b.dispatchedKg / b.totalKg) * 100;
+            const isFullyDispatched = b.remainingKg === 0;
 
             return (
               <motion.div
@@ -152,9 +152,13 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                   {/* Top Bar: Booking ID & Status */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-sm font-mono text-[#111827]">
+                      <button
+                        onClick={() => openBooking(b.id)}
+                        title="Open booking details"
+                        className="font-extrabold text-sm font-mono text-[#111827] hover:text-teal-800 hover:underline underline-offset-2"
+                      >
                         {b.bookingNumber}
-                      </span>
+                      </button>
                       <span
                         className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
                           isFullyDispatched
@@ -202,12 +206,12 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                       </span>
                       <div className="font-bold text-xs text-[#111827]">{prod?.name}</div>
                       <div className="text-[11px] text-teal-800 font-mono font-semibold">
-                        Rs. {b.pricePerTon}/Ton
+                        Rs. {b.pricePerKg}/kg
                       </div>
                     </div>
                   </div>
 
-                  {/* Smart Real-time Progress Bar & Tons Counter */}
+                  {/* Smart Real-time Progress Bar & kg Counter */}
                   <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#E5E5E1] space-y-3">
                     <div className="grid grid-cols-3 gap-2 text-center">
                       <div>
@@ -215,7 +219,7 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                           Total Order
                         </div>
                         <div className="text-xs font-bold text-[#111827] font-mono mt-0.5">
-                          {b.totalTons} T
+                          {b.totalKg} kg
                         </div>
                       </div>
                       <div className="border-x border-[#E5E5E1]">
@@ -223,7 +227,7 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                           Dispatched
                         </div>
                         <div className="text-xs font-bold text-teal-800 font-mono mt-0.5">
-                          {b.dispatchedTons} T
+                          {b.dispatchedKg} kg
                         </div>
                       </div>
                       <div>
@@ -231,7 +235,7 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                           Remaining
                         </div>
                         <div className="text-xs font-bold text-amber-800 font-mono mt-0.5">
-                          {b.remainingTons} T
+                          {b.remainingKg} kg
                         </div>
                       </div>
                     </div>
@@ -266,13 +270,13 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                     </span>
                   </div>
 
-                  {b.remainingTons > 0 ? (
+                  {b.remainingKg > 0 ? (
                     <button
                       onClick={() => onOpenDispatchForBooking(b.id)}
                       className="px-4 py-2 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 active:scale-95 transition-all border border-[#111827]"
                     >
                       <Truck className="w-3.5 h-3.5 text-teal-400" />
-                      <span>Log Dispatch ({b.remainingTons} T left)</span>
+                      <span>Log Dispatch ({b.remainingKg} kg left)</span>
                     </button>
                   ) : (
                     <span className="text-xs font-semibold text-teal-900 bg-teal-50 border border-teal-200/80 px-3 py-1 rounded-full flex items-center gap-1">
@@ -293,7 +297,7 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
         message="The booking will be permanently removed from this device and the cloud database."
         details={[
           `${pendingDispatches.length} dispatch(es) under this booking will be deleted.`,
-          `${pendingDispatches.reduce((a, d) => a + d.tons, 0)} T of dispatched stock goes back into the warehouse.`,
+          `${pendingDispatches.reduce((a, d) => a + d.kg, 0)} kg of dispatched stock goes back into the warehouse.`,
           'Unpaid dispatch amounts are removed from the customer balance and the ledger.',
         ]}
         confirmLabel="Delete Booking"

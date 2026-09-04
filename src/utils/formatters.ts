@@ -8,11 +8,11 @@ export const formatCurrency = (amount: number): string => {
   }).format(amount);
 };
 
-export const formatTons = (tons: number): string => {
+export const formatKg = (kg: number): string => {
   return `${new Intl.NumberFormat('en-PK', {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 1,
-  }).format(tons)} Tons`;
+    maximumFractionDigits: 0,
+  }).format(kg)} kg`;
 };
 
 export const formatNumber = (num: number): string => {

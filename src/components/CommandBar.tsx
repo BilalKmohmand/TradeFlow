@@ -20,10 +20,11 @@ import {
   Plus,
   ShieldCheck,
   Lock,
+  PackagePlus,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { useTheme } from '../context/ThemeContext';
-import { formatCurrency, formatTons } from '../utils/formatters';
+import { formatCurrency, formatKg } from '../utils/formatters';
 
 interface CommandBarProps {
   isOpen: boolean;
@@ -37,6 +38,7 @@ interface CommandBarProps {
   onOpenSupplierModal: () => void;
   onOpenProductModal: () => void;
   onOpenWhatsAppDrawer: () => void;
+  onOpenPurchaseModal: () => void;
 }
 
 type CommandItem = {
@@ -62,6 +64,7 @@ export const CommandBar: React.FC<CommandBarProps> = ({
   onOpenSupplierModal,
   onOpenProductModal,
   onOpenWhatsAppDrawer,
+  onOpenPurchaseModal,
 }) => {
   const {
     customers,
@@ -70,6 +73,8 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     bookings,
     setActiveScreen,
     lockAdmin,
+    setSelectedProductId,
+    openBooking,
   } = useTrading();
 
   const { themeMode, setThemeMode, cycleTheme, resolvedTheme } = useTheme();
@@ -136,6 +141,20 @@ export const CommandBar: React.FC<CommandBarProps> = ({
       perform: () => {
         onClose();
         onOpenBooking();
+      },
+    });
+
+    items.push({
+      id: 'action-receive-stock',
+      category: 'actions',
+      title: 'Receive Stock from Supplier',
+      subtitle: 'Book incoming goods: adds to warehouse stock and supplier payable',
+      badge: 'Incoming',
+      badgeType: 'success',
+      icon: PackagePlus,
+      perform: () => {
+        onClose();
+        onOpenPurchaseModal();
       },
     });
 
@@ -289,13 +308,13 @@ export const CommandBar: React.FC<CommandBarProps> = ({
         id: `product-${p.id}`,
         category: 'products',
         title: `${p.name} (${p.category})`,
-        subtitle: `Price: Rs. ${p.unitPricePerTon}/Ton • Threshold: ${p.minThresholdTons}T`,
-        badge: `Stock: ${formatTons(p.stockTons)}`,
-        badgeType: p.stockTons < p.minThresholdTons ? 'warning' : 'info',
+        subtitle: `Price: Rs. ${p.unitPricePerKg}/kg • Threshold: ${p.minThresholdKg}kg`,
+        badge: `Stock: ${formatKg(p.stockKg)}`,
+        badgeType: p.stockKg < p.minThresholdKg ? 'warning' : 'info',
         icon: Package,
         perform: () => {
           onClose();
-          setActiveScreen('products');
+          setSelectedProductId(p.id);
         },
       });
     });
@@ -308,17 +327,13 @@ export const CommandBar: React.FC<CommandBarProps> = ({
         id: `booking-${b.id}`,
         category: 'bookings',
         title: `Order ${b.bookingNumber} • ${cust?.name || 'Customer'}`,
-        subtitle: `${prod?.name} • ${b.totalTons} Tons (Rs. ${b.pricePerTon}/T) • Created: ${b.createdAt}`,
-        badge: b.remainingTons > 0 ? `${b.remainingTons}T Remaining` : 'Completed',
-        badgeType: b.remainingTons > 0 ? 'info' : 'success',
+        subtitle: `${prod?.name} • ${b.totalKg} kg (Rs. ${b.pricePerKg}/kg) • Created: ${b.createdAt}`,
+        badge: b.remainingKg > 0 ? `${b.remainingKg}kg Remaining` : 'Completed',
+        badgeType: b.remainingKg > 0 ? 'info' : 'success',
         icon: ShoppingBag,
         perform: () => {
           onClose();
-          if (b.remainingTons > 0) {
-            onOpenDispatch(b.id);
-          } else {
-            setActiveScreen('bookings');
-          }
+          openBooking(b.id);
         },
       });
     });

@@ -10,23 +10,27 @@ import {
   DollarSign,
   Building,
   Trash2,
+  PackagePlus,
+  History,
 } from 'lucide-react';
 import { Product } from '../types';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useTrading } from '../context/TradingContext';
-import { formatCurrency, formatTons } from '../utils/formatters';
+import { formatCurrency, formatKg } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
 
 interface ProductsScreenProps {
   onOpenAddProduct: () => void;
   onOpenBooking: () => void;
+  onReceiveStock: (productId?: string) => void;
 }
 
 export const ProductsScreen: React.FC<ProductsScreenProps> = ({
   onOpenAddProduct,
   onOpenBooking,
+  onReceiveStock,
 }) => {
-  const { products, suppliers, updateProduct, bookings, dispatches, deleteProduct } = useTrading();
+  const { products, suppliers, updateProduct, bookings, dispatches, deleteProduct, setSelectedProductId } = useTrading();
   const [pendingDelete, setPendingDelete] = useState<Product | null>(null);
   const pendingBookings = pendingDelete ? bookings.filter((b) => b.productId === pendingDelete.id) : [];
   const pendingDispatches = pendingDelete ? dispatches.filter((d) => d.productId === pendingDelete.id) : [];
@@ -45,13 +49,13 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
     return matchesSearch && matchesCat;
   });
 
-  const totalWarehouseTons = products.reduce((acc, p) => acc + p.stockTons, 0);
-  const totalStockValue = products.reduce((acc, p) => acc + p.stockTons * p.unitPricePerTon, 0);
+  const totalWarehouseKg = products.reduce((acc, p) => acc + p.stockKg, 0);
+  const totalStockValue = products.reduce((acc, p) => acc + p.stockKg * p.unitPricePerKg, 0);
 
   const handleSaveStock = (productId: string) => {
     const val = parseFloat(newStockVal);
     if (!isNaN(val) && val >= 0) {
-      updateProduct(productId, { stockTons: val });
+      updateProduct(productId, { stockKg: val });
     }
     setEditingStockId(null);
   };
@@ -69,7 +73,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
           </div>
           <h2 className="text-3xl sm:text-4xl font-serif italic font-normal tracking-tight text-[#111827] mt-1.5">Products</h2>
           <p className="text-xs text-[#6B7280] mt-1">
-            Commodity catalog with live warehouse stock tracking and Rs./ton market pricing.
+            Commodity catalog with live warehouse stock tracking and Rs./kg market pricing.
           </p>
         </div>
 
@@ -79,10 +83,17 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
               Total Stock on Hand
             </span>
             <span className="text-xl font-bold font-mono text-teal-800">
-              <AnimatedNumber value={totalWarehouseTons} format="tons" />
+              <AnimatedNumber value={totalWarehouseKg} format="kg" />
             </span>
           </div>
 
+          <button
+            onClick={() => onReceiveStock()}
+            className="px-4 py-2.5 bg-[#FAF9F6] hover:bg-[#F4F3EF] text-[#111827] font-semibold text-xs rounded-2xl border border-[#E5E5E1] flex items-center gap-1.5 transition-colors"
+          >
+            <PackagePlus className="w-4 h-4 text-teal-700" />
+            <span>Receive Stock</span>
+          </button>
           <button
             onClick={onOpenAddProduct}
             className="px-5 py-2.5 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-2xl shadow-xs flex items-center gap-2 active:scale-95 transition-all border border-[#111827]"
@@ -129,11 +140,11 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0">
         {filteredProducts.map((prod) => {
           const supplier = suppliers.find((s) => s.id === prod.supplierId);
-          const activeBookedTons = bookings
+          const activeBookedKg = bookings
             .filter((b) => b.productId === prod.id && b.status === 'active')
-            .reduce((acc, b) => acc + b.remainingTons, 0);
+            .reduce((acc, b) => acc + b.remainingKg, 0);
 
-          const isLowStock = prod.stockTons <= prod.minThresholdTons;
+          const isLowStock = prod.stockKg <= prod.minThresholdKg;
 
           return (
             <motion.div
@@ -148,7 +159,13 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                     <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#FAF9F6] text-[#6B7280] border border-[#E5E5E1] uppercase tracking-wider">
                       {prod.category}
                     </span>
-                    <h3 className="font-bold text-base text-[#111827] mt-2">{prod.name}</h3>
+                    <h3
+                      onClick={() => setSelectedProductId(prod.id)}
+                      title="Open price history & stock movements"
+                      className="font-bold text-base text-[#111827] mt-2 cursor-pointer hover:text-teal-800 transition-colors"
+                    >
+                      {prod.name}
+                    </h3>
                   </div>
 
                   <span
@@ -183,7 +200,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                   <div className="flex justify-between items-baseline">
                     <span className="text-xs text-[#8E9299]">Market Trading Rate:</span>
                     <span className="text-base font-bold font-mono text-teal-800">
-                      Rs. {prod.unitPricePerTon}/Ton
+                      Rs. {prod.unitPricePerKg}/kg
                     </span>
                   </div>
 
@@ -208,12 +225,12 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                     ) : (
                       <div className="flex items-center gap-2">
                         <span className="font-bold font-mono text-[#111827]">
-                          {prod.stockTons.toLocaleString()} Tons
+                          {prod.stockKg.toLocaleString()} kg
                         </span>
                         <button
                           onClick={() => {
                             setEditingStockId(prod.id);
-                            setNewStockVal(prod.stockTons.toString());
+                            setNewStockVal(prod.stockKg.toString());
                           }}
                           className="text-[10px] text-teal-700 hover:text-teal-800 underline font-semibold"
                         >
@@ -226,7 +243,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                   <div className="flex justify-between text-[11px] text-[#8E9299] pt-1">
                     <span>Committed in Active Orders:</span>
                     <span className="font-mono font-medium text-[#111827]">
-                      {activeBookedTons} Tons
+                      {activeBookedKg} kg
                     </span>
                   </div>
                 </div>
@@ -241,10 +258,19 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
 
               <div className="pt-2 border-t border-[#F0F0EE] flex items-center justify-between gap-2">
                 <span className="text-[11px] font-mono text-[#8E9299] truncate">
-                  Total Value: {formatCurrency(prod.stockTons * prod.unitPricePerTon)}
+                  Total Value: {formatCurrency(prod.stockKg * prod.unitPricePerKg)}
                 </span>
 
                 <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProductId(prod.id)}
+                    title="Price history & stock movements"
+                    className="px-2.5 py-1.5 rounded-xl text-[#6B7280] hover:text-teal-800 hover:bg-teal-50 border border-[#E5E5E1] text-xs font-semibold flex items-center gap-1 transition-colors"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    <span className="hidden xl:inline">History</span>
+                  </button>
                   <button
                         type="button"
                         onClick={() => setPendingDelete(prod)}

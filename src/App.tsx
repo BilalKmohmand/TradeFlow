@@ -14,6 +14,9 @@ import { SupplierModal } from './components/SupplierModal';
 import { ProductModal } from './components/ProductModal';
 import { CustomerDetailModal } from './components/CustomerDetailModal';
 import { SupplierDetailModal } from './components/SupplierDetailModal';
+import { ProductDetailModal } from './components/ProductDetailModal';
+import { BookingDetailModal } from './components/BookingDetailModal';
+import { PurchaseModal } from './components/PurchaseModal';
 
 // Screens
 import { DashboardScreen } from './screens/DashboardScreen';
@@ -32,6 +35,11 @@ function MainApp() {
     setSelectedCustomerId,
     selectedSupplierId,
     setSelectedSupplierId,
+    selectedProductId,
+    setSelectedProductId,
+    selectedBookingId,
+    highlightDispatchId,
+    openBooking,
     isAdminUnlocked,
   } = useTrading();
 
@@ -50,6 +58,16 @@ function MainApp() {
   const [paymentPreselectedId, setPaymentPreselectedId] = useState<string | null>(null);
 
   const [isWhatsAppDrawerOpen, setIsWhatsAppDrawerOpen] = useState<boolean>(false);
+
+  // Receive Stock (purchase) modal
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState<boolean>(false);
+  const [purchaseSupplierId, setPurchaseSupplierId] = useState<string | null>(null);
+  const [purchaseProductId, setPurchaseProductId] = useState<string | null>(null);
+  const handleOpenPurchase = (opts?: { supplierId?: string | null; productId?: string | null }) => {
+    setPurchaseSupplierId(opts?.supplierId ?? null);
+    setPurchaseProductId(opts?.productId ?? null);
+    setIsPurchaseModalOpen(true);
+  };
 
   // Global keydown listener for CMD+K / Ctrl+K
   useEffect(() => {
@@ -108,6 +126,7 @@ function MainApp() {
                 onOpenBooking={() => setIsBookingModalOpen(true)}
                 onOpenCustomer={(cId) => setSelectedCustomerId(cId)}
                 onOpenWhatsAppDrawer={() => setIsWhatsAppDrawerOpen(true)}
+                onReceiveStock={() => handleOpenPurchase()}
               />
             )}
 
@@ -131,6 +150,7 @@ function MainApp() {
               <ProductsScreen
                 onOpenAddProduct={() => setIsProductModalOpen(true)}
                 onOpenBooking={() => setIsBookingModalOpen(true)}
+                onReceiveStock={(productId) => handleOpenPurchase({ productId })}
               />
             )}
 
@@ -142,7 +162,7 @@ function MainApp() {
               />
             )}
 
-            {activeScreen === 'reports' && <ReportsScreen />}
+            {activeScreen === 'reports' && <ReportsScreen onReceiveStock={() => handleOpenPurchase()} />}
 
             {activeScreen === 'admin' && <AdminScreen />}
           </motion.div>
@@ -170,6 +190,7 @@ function MainApp() {
         onOpenSupplierModal={() => setIsSupplierModalOpen(true)}
         onOpenProductModal={() => setIsProductModalOpen(true)}
         onOpenWhatsAppDrawer={() => setIsWhatsAppDrawerOpen(true)}
+        onOpenPurchaseModal={() => handleOpenPurchase()}
       />
 
       {/* Toast Alert for background automated WhatsApp delivery */}
@@ -210,6 +231,30 @@ function MainApp() {
         supplierId={selectedSupplierId}
         onClose={() => setSelectedSupplierId(null)}
         onOpenPayment={handleOpenSupplierPayment}
+        onReceiveStock={(supplierId) => handleOpenPurchase({ supplierId })}
+      />
+
+      {/* Product Detail: price history, stock in/out, bookings */}
+      <ProductDetailModal
+        productId={selectedProductId}
+        onClose={() => setSelectedProductId(null)}
+        onReceiveStock={(productId) => handleOpenPurchase({ productId })}
+      />
+
+      {/* Booking Detail: dispatches + ledger with cross-links */}
+      <BookingDetailModal
+        bookingId={selectedBookingId}
+        highlightDispatchId={highlightDispatchId}
+        onClose={() => openBooking(null)}
+        onOpenDispatchForBooking={handleOpenDispatch}
+      />
+
+      {/* Receive Stock (incoming purchase) */}
+      <PurchaseModal
+        isOpen={isPurchaseModalOpen}
+        onClose={() => setIsPurchaseModalOpen(false)}
+        preselectedSupplierId={purchaseSupplierId}
+        preselectedProductId={purchaseProductId}
       />
 
       {/* Payment Modal */}

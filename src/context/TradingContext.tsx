@@ -10,9 +10,23 @@ import {
   WhatsAppMessage,
   ActiveScreen,
   AuditLogEntry,
+  Purchase,
+  PriceHistoryEntry,
+  PriceSource,
+  ReportsTab,
 } from '../types';
 import { formatCurrency } from '../utils/formatters';
-import { loadAllData, deleteRows, clearTable, clearAllTables, TableName } from '../lib/database';
+import {
+  loadAllData,
+  deleteRows,
+  clearTable,
+  clearAllTables,
+  TableName,
+  normalizeProduct,
+  normalizeBooking,
+  normalizeDispatch,
+  normalizeLedger,
+} from '../lib/database';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import {
   initialCustomers,
@@ -38,6 +52,17 @@ interface TradingContextType {
   setSelectedCustomerId: (id: string | null) => void;
   selectedSupplierId: string | null;
   setSelectedSupplierId: (id: string | null) => void;
+  purchases: Purchase[];
+  priceHistory: PriceHistoryEntry[];
+  selectedProductId: string | null;
+  setSelectedProductId: (id: string | null) => void;
+  selectedBookingId: string | null;
+  highlightDispatchId: string | null;
+  openBooking: (bookingId: string | null, dispatchId?: string | null) => void;
+  /** Navigate to Reports with a specific tab open (used by dashboard drill-downs). */
+  openReports: (tab: ReportsTab) => void;
+  requestedReportsTab: ReportsTab | null;
+  clearRequestedReportsTab: () => void;
   
   // Actions
   addCustomer: (customer: Omit<Customer, 'id' | 'createdAt' | 'totalDue'>) => Customer;
@@ -47,6 +72,26 @@ interface TradingContextType {
   addProduct: (product: Omit<Product, 'id'>) => Product;
   updateProduct: (id: string, data: Partial<Product>) => void;
   updateBooking: (id: string, data: Partial<Booking>) => void;
+
+  // Incoming stock (purchases from suppliers)
+  addPurchase: (data: {
+    supplierId: string;
+    productId: string;
+    kg: number;
+    pricePerKg: number;
+    date?: string;
+    truckNumber?: string;
+    notes?: string;
+    paymentMadeImmediately?: boolean;
+  }) => Purchase;
+  deletePurchase: (id: string) => DeleteSummary;
+
+  // Price history
+  /** Set a new current selling price and record it in the history. */
+  updateProductPrice: (productId: string, pricePerKg: number, note?: string) => void;
+  /** Record a historical price point (e.g. back-filling last year's prices) without touching the current price. */
+  addPricePoint: (productId: string, pricePerKg: number, date: string, note?: string) => PriceHistoryEntry;
+  deletePricePoint: (id: string) => void;
 
   // Admin: destructive deletes (cascade + reverse ledger/stock effects, synced to Supabase)
   deleteCustomer: (id: string) => DeleteSummary;
@@ -63,15 +108,15 @@ interface TradingContextType {
   createBooking: (bookingData: {
     customerId: string;
     productId: string;
-    totalTons: number;
-    pricePerTon: number;
+    totalKg: number;
+    pricePerKg: number;
     targetDeliveryDate?: string;
     notes?: string;
   }) => Booking;
   
   logDispatch: (dispatchData: {
     bookingId: string;
-    tons: number;
+    kg: number;
     truckNumber: string;
     driverPhone?: string;
     notes?: string;
@@ -116,6 +161,8 @@ export interface DeleteSummary {
   products: number;
   bookings: number;
   dispatches: number;
+  purchases: number;
+  priceHistory: number;
   ledger: number;
   whatsappMessages: number;
 }
@@ -126,9 +173,13 @@ const emptySummary = (): DeleteSummary => ({
   products: 0,
   bookings: 0,
   dispatches: 0,
+  purchases: 0,
+  priceHistory: 0,
   ledger: 0,
   whatsappMessages: 0,
 });
+
+export const todayISO = () => new Date().toISOString().split('T')[0];
 
 /** Collision-safe id generator (Date.now() alone repeats when called in a tight loop). */
 let idCounter = 0;
@@ -164,21 +215,37 @@ const initialAuditLogs: AuditLogEntry[] = [
     id: 'log-init-2',
     timestamp: new Date(Date.now() - 1800000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
     action: 'Ledger Audit Verified',
-    details: 'Calculated and balanced customer receivables against delivered tonnage.',
+    details: 'Calculated and balanced customer receivables against delivered volume.',
     severity: 'info',
   },
 ];
 
 const STORAGE_KEYS = {
-  CUSTOMERS: 'tradeflow_customers_v1',
-  SUPPLIERS: 'tradeflow_suppliers_v1',
-  PRODUCTS: 'tradeflow_products_v1',
-  BOOKINGS: 'tradeflow_bookings_v1',
-  DISPATCHES: 'tradeflow_dispatches_v1',
-  LEDGER: 'tradeflow_ledger_v1',
-  MESSAGES: 'tradeflow_whatsapp_v1',
+  CUSTOMERS: 'tradeflow_customers_v2',
+  SUPPLIERS: 'tradeflow_suppliers_v2',
+  PRODUCTS: 'tradeflow_products_v2',
+  BOOKINGS: 'tradeflow_bookings_v2',
+  DISPATCHES: 'tradeflow_dispatches_v2',
+  PURCHASES: 'tradeflow_purchases_v2',
+  PRICE_HISTORY: 'tradeflow_price_history_v2',
+  LEDGER: 'tradeflow_ledger_v2',
+  MESSAGES: 'tradeflow_whatsapp_v2',
   ADMIN_PIN: 'sarmaya_admin_pin_v1',
   AUDIT_LOGS: 'sarmaya_audit_logs_v1',
+};
+
+/**
+ * Read a v2 (kg) collection from localStorage. If only the old v1 (tons) snapshot exists,
+ * convert it once via the given normaliser so nothing is lost on upgrade.
+ */
+const loadLocal = <T,>(key: string, fallback: T[], normalise?: (row: any) => T): T[] => {
+  const current = localStorage.getItem(key);
+  if (current) return safeParse(current, fallback);
+  const legacyKey = key.replace('_v2', '_v1');
+  const legacy = localStorage.getItem(legacyKey);
+  if (!legacy) return fallback;
+  const rows = safeParse<any[]>(legacy, []);
+  return normalise ? rows.map(normalise) : (rows as T[]);
 };
 
 export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -189,37 +256,36 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() =>
     safeParse(localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS), initialAuditLogs)
   );
-  const [customers, setCustomers] = useState<Customer[]>(() =>
-    safeParse(localStorage.getItem(STORAGE_KEYS.CUSTOMERS), initialCustomers)
-  );
-
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() =>
-    safeParse(localStorage.getItem(STORAGE_KEYS.SUPPLIERS), initialSuppliers)
-  );
-
-  const [products, setProducts] = useState<Product[]>(() =>
-    safeParse(localStorage.getItem(STORAGE_KEYS.PRODUCTS), initialProducts)
-  );
-
-  const [bookings, setBookings] = useState<Booking[]>(() =>
-    safeParse(localStorage.getItem(STORAGE_KEYS.BOOKINGS), initialBookings)
-  );
-
-  const [dispatches, setDispatches] = useState<Dispatch[]>(() =>
-    safeParse(localStorage.getItem(STORAGE_KEYS.DISPATCHES), initialDispatches)
-  );
-
-  const [ledger, setLedger] = useState<LedgerEntry[]>(() =>
-    safeParse(localStorage.getItem(STORAGE_KEYS.LEDGER), initialLedgerEntries)
-  );
-
+  const [customers, setCustomers] = useState<Customer[]>(() => loadLocal(STORAGE_KEYS.CUSTOMERS, initialCustomers));
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadLocal(STORAGE_KEYS.SUPPLIERS, initialSuppliers));
+  const [products, setProducts] = useState<Product[]>(() => loadLocal(STORAGE_KEYS.PRODUCTS, initialProducts, normalizeProduct));
+  const [bookings, setBookings] = useState<Booking[]>(() => loadLocal(STORAGE_KEYS.BOOKINGS, initialBookings, normalizeBooking));
+  const [dispatches, setDispatches] = useState<Dispatch[]>(() => loadLocal(STORAGE_KEYS.DISPATCHES, initialDispatches, normalizeDispatch));
+  const [purchases, setPurchases] = useState<Purchase[]>(() => loadLocal(STORAGE_KEYS.PURCHASES, []));
+  const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>(() => loadLocal(STORAGE_KEYS.PRICE_HISTORY, []));
+  const [ledger, setLedger] = useState<LedgerEntry[]>(() => loadLocal(STORAGE_KEYS.LEDGER, initialLedgerEntries, normalizeLedger));
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>(() =>
-    safeParse(localStorage.getItem(STORAGE_KEYS.MESSAGES), initialWhatsAppMessages)
+    loadLocal(STORAGE_KEYS.MESSAGES, initialWhatsAppMessages)
   );
 
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>('dashboard');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [highlightDispatchId, setHighlightDispatchId] = useState<string | null>(null);
+  const [requestedReportsTab, setRequestedReportsTab] = useState<ReportsTab | null>(null);
+
+  const openBooking = (bookingId: string | null, dispatchId: string | null = null) => {
+    setSelectedBookingId(bookingId);
+    setHighlightDispatchId(bookingId ? dispatchId : null);
+  };
+
+  const openReports = (tab: ReportsTab) => {
+    setRequestedReportsTab(tab);
+    setActiveScreen('reports');
+  };
+  const clearRequestedReportsTab = () => setRequestedReportsTab(null);
   const [recentWhatsAppAlert, setRecentWhatsAppAlert] = useState<WhatsAppMessage | null>(null);
 
   // Cloud sync is only enabled once the initial Supabase load succeeds. Before that, pushing the
@@ -238,6 +304,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setProducts(data.products);
         setBookings(data.bookings);
         setDispatches(data.dispatches);
+        setPurchases(data.purchases);
+        setPriceHistory(data.priceHistory);
         setLedger(data.ledger);
         setWhatsappMessages(data.whatsappMessages);
         setIsCloudSyncReady(true);
@@ -272,6 +340,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [dispatches]);
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases));
+  }, [purchases]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.PRICE_HISTORY, JSON.stringify(priceHistory));
+  }, [priceHistory]);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(ledger));
   }, [ledger]);
 
@@ -294,6 +370,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { void syncToSupabase('products', products); }, [products, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('bookings', bookings); }, [bookings, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('dispatches', dispatches); }, [dispatches, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('purchases', purchases); }, [purchases, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('price_history', priceHistory); }, [priceHistory, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('ledger', ledger); }, [ledger, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('whatsapp_messages', whatsappMessages); }, [whatsappMessages, isCloudSyncReady]);
 
@@ -312,6 +390,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setProducts(initialProducts);
     setBookings(initialBookings);
     setDispatches(initialDispatches);
+    setPurchases([]);
+    setPriceHistory([]);
     setLedger(initialLedgerEntries);
     setWhatsappMessages(initialWhatsAppMessages);
     logAuditEvent('Sample Data Loaded', 'All business data replaced with the built-in sample dataset.', 'warning');
@@ -347,17 +427,161 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setSuppliers((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
   };
 
+  const recordPrice = (productId: string, pricePerKg: number, date: string, source: PriceSource, note?: string, referenceId?: string) => {
+    const entry: PriceHistoryEntry = { id: uid('price'), productId, pricePerKg: round2(pricePerKg), date, source, note, referenceId };
+    setPriceHistory((prev) => [entry, ...prev]);
+    return entry;
+  };
+
   const addProduct = (data: Omit<Product, 'id'>): Product => {
     const newProd: Product = {
       ...data,
       id: uid('prod'),
     };
     setProducts((prev) => [newProd, ...prev]);
+    recordPrice(newProd.id, newProd.unitPricePerKg, todayISO(), 'product_created', 'Initial listed price');
     return newProd;
   };
 
   const updateProduct = (id: string, data: Partial<Product>) => {
+    const existing = products.find((p) => p.id === id);
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
+    if (existing && data.unitPricePerKg != null && round2(data.unitPricePerKg) !== round2(existing.unitPricePerKg)) {
+      recordPrice(id, data.unitPricePerKg, todayISO(), 'price_update', `Changed from Rs. ${existing.unitPricePerKg}/kg`);
+    }
+  };
+
+  const updateProductPrice = (productId: string, pricePerKg: number, note?: string) => {
+    const existing = products.find((p) => p.id === productId);
+    if (!existing) return;
+    const clean = round2(pricePerKg);
+    setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, unitPricePerKg: clean } : p)));
+    recordPrice(productId, clean, todayISO(), 'price_update', note || `Changed from Rs. ${existing.unitPricePerKg}/kg`);
+    logAuditEvent('Product Price Updated', `${existing.name}: Rs. ${existing.unitPricePerKg}/kg → Rs. ${clean}/kg`, 'info');
+  };
+
+  const addPricePoint = (productId: string, pricePerKg: number, date: string, note?: string): PriceHistoryEntry => {
+    const entry = recordPrice(productId, pricePerKg, date, 'manual', note);
+    logAuditEvent('Price Point Recorded', `${products.find((p) => p.id === productId)?.name || productId}: Rs. ${round2(pricePerKg)}/kg on ${date}`, 'info');
+    return entry;
+  };
+
+  const deletePricePoint = (id: string) => {
+    setPriceHistory((prev) => prev.filter((e) => e.id !== id));
+    removeRemote('price_history', [id]);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Incoming stock (purchases)
+  // ---------------------------------------------------------------------------
+
+  const addPurchase = ({
+    supplierId,
+    productId,
+    kg,
+    pricePerKg,
+    date,
+    truckNumber,
+    notes,
+    paymentMadeImmediately = false,
+  }: {
+    supplierId: string;
+    productId: string;
+    kg: number;
+    pricePerKg: number;
+    date?: string;
+    truckNumber?: string;
+    notes?: string;
+    paymentMadeImmediately?: boolean;
+  }): Purchase => {
+    const supplier = suppliers.find((s) => s.id === supplierId);
+    const product = products.find((p) => p.id === productId);
+    if (!supplier || !product) throw new Error('Supplier or product not found');
+
+    const onDate = date || todayISO();
+    const amount = round2(kg * pricePerKg);
+    const receiptNumber = `GRN-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+    const purchase: Purchase = {
+      id: uid('pur'),
+      receiptNumber,
+      supplierId,
+      productId,
+      kg: round2(kg),
+      pricePerKg: round2(pricePerKg),
+      amount,
+      date: onDate,
+      truckNumber: truckNumber?.toUpperCase() || undefined,
+      notes,
+      paymentMadeImmediately,
+      createdAt: todayISO(),
+    };
+
+    // 1. Stock in
+    setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, stockKg: round2(p.stockKg + kg) } : p)));
+
+    // 2. Supplier payable
+    const newOwed = paymentMadeImmediately ? supplier.totalOwed : round2(supplier.totalOwed + amount);
+    setSuppliers((prev) => prev.map((s) => (s.id === supplierId ? { ...s, totalOwed: newOwed } : s)));
+
+    // 3. Ledger
+    const entries: LedgerEntry[] = [
+      {
+        id: uid('led'),
+        entityType: 'supplier',
+        entityId: supplierId,
+        type: 'purchase_received',
+        referenceId: receiptNumber,
+        date: onDate,
+        description: `Stock received ${receiptNumber}: ${kg.toLocaleString()} kg ${product.name}`,
+        debit: amount,
+        credit: 0,
+        balanceAfter: round2(supplier.totalOwed + amount),
+        kg,
+      },
+    ];
+    if (paymentMadeImmediately) {
+      entries.push({
+        id: uid('led'),
+        entityType: 'supplier',
+        entityId: supplierId,
+        type: 'payment_made',
+        referenceId: `PAY-${receiptNumber}`,
+        date: onDate,
+        description: `Paid on receipt for ${receiptNumber}`,
+        debit: 0,
+        credit: amount,
+        balanceAfter: supplier.totalOwed,
+      });
+    }
+    setLedger((prev) => [...entries, ...prev]);
+    setPurchases((prev) => [purchase, ...prev]);
+
+    logAuditEvent('Stock Received', `${receiptNumber}: ${kg.toLocaleString()} kg ${product.name} from ${supplier.company} (${formatCurrency(amount)})`, 'info');
+    return purchase;
+  };
+
+  const deletePurchase = (id: string): DeleteSummary => {
+    const summary = emptySummary();
+    const target = purchases.find((p) => p.id === id);
+    if (!target) return summary;
+    const refs = new Set([target.receiptNumber, `PAY-${target.receiptNumber}`]);
+    const ledgerIds = ledger.filter((l) => refs.has(l.referenceId)).map((l) => l.id);
+
+    setProducts((prev) => prev.map((p) => (p.id === target.productId ? { ...p, stockKg: Math.max(0, round2(p.stockKg - target.kg)) } : p)));
+    if (!target.paymentMadeImmediately) {
+      setSuppliers((prev) =>
+        prev.map((s) => (s.id === target.supplierId ? { ...s, totalOwed: Math.max(0, round2(s.totalOwed - target.amount)) } : s))
+      );
+    }
+    setLedger((prev) => prev.filter((l) => !refs.has(l.referenceId)));
+    setPurchases((prev) => prev.filter((p) => p.id !== id));
+    removeRemote('ledger', ledgerIds);
+    removeRemote('purchases', [id]);
+
+    summary.purchases = 1;
+    summary.ledger = ledgerIds.length;
+    logAuditEvent('Stock Receipt Deleted', `${target.receiptNumber} (${target.kg.toLocaleString()} kg, ${formatCurrency(target.amount)}) removed; stock and supplier balance reversed.`, 'danger');
+    return summary;
   };
 
   const updateBooking = (id: string, data: Partial<Booking>) => {
@@ -387,9 +611,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     // Stock back into the warehouse
     const stockDelta = new Map<string, number>();
-    targets.forEach((d) => stockDelta.set(d.productId, (stockDelta.get(d.productId) || 0) + d.tons));
+    targets.forEach((d) => stockDelta.set(d.productId, (stockDelta.get(d.productId) || 0) + d.kg));
     setProducts((prev) =>
-      prev.map((p) => (stockDelta.has(p.id) ? { ...p, stockTons: round2(p.stockTons + (stockDelta.get(p.id) || 0)) } : p))
+      prev.map((p) => (stockDelta.has(p.id) ? { ...p, stockKg: round2(p.stockKg + (stockDelta.get(p.id) || 0)) } : p))
     );
 
     // Unpaid dispatch amounts come off the customer's outstanding balance
@@ -410,19 +634,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         prev.map((b) => {
           const ds = byBooking.get(b.id);
           if (!ds) return b;
-          const tons = ds.reduce((a, d) => a + d.tons, 0);
+          const kg = ds.reduce((a, d) => a + d.kg, 0);
           const paid = ds.filter((d) => d.paymentReceivedImmediately).reduce((a, d) => a + d.amount, 0);
-          const dispatchedTons = Math.max(0, round2(b.dispatchedTons - tons));
-          const remainingTons = Math.max(0, round2(b.totalTons - dispatchedTons));
+          const dispatchedKg = Math.max(0, round2(b.dispatchedKg - kg));
+          const remainingKg = Math.max(0, round2(b.totalKg - dispatchedKg));
           const paidAmount = Math.max(0, round2(b.paidAmount - paid));
           const paymentStatus = paidAmount <= 0 ? 'unpaid' : paidAmount >= b.totalAmount ? 'paid' : 'partial';
           return {
             ...b,
-            dispatchedTons,
-            remainingTons,
+            dispatchedKg,
+            remainingKg,
             paidAmount,
             paymentStatus,
-            status: b.status === 'cancelled' ? 'cancelled' : remainingTons === 0 ? 'completed' : 'active',
+            status: b.status === 'cancelled' ? 'cancelled' : remainingKg === 0 ? 'completed' : 'active',
           };
         })
       );
@@ -449,7 +673,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     summary.whatsappMessages = waIds.length;
     logAuditEvent(
       'Dispatch Deleted',
-      `${target.dispatchNumber} (${target.tons} T, ${formatCurrency(target.amount)}) removed; stock, booking progress and customer balance reversed.`,
+      `${target.dispatchNumber} (${target.kg} kg, ${formatCurrency(target.amount)}) removed; stock, booking progress and customer balance reversed.`,
       'danger'
     );
     return summary;
@@ -473,6 +697,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLedger((prev) => prev.filter((l) => !(bookingNumbers.has(l.referenceId) || bookingIds.has(l.referenceId))));
     setWhatsappMessages((prev) => prev.filter((m) => !(m.bookingId && bookingIds.has(m.bookingId))));
     setBookings((prev) => prev.filter((b) => !bookingIds.has(b.id)));
+    if (selectedBookingId && bookingIds.has(selectedBookingId)) openBooking(null);
 
     removeRemote('ledger', bookingLedgerIds);
     removeRemote('whatsapp_messages', bookingWaIds);
@@ -545,6 +770,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       .filter((m) => m.recipientType === 'supplier' && m.recipientPhone.replace(/[^0-9]/g, '') === cleanPhone)
       .map((m) => m.id);
 
+    // Purchases from this supplier go too (stock stays as received; only the payable is written off).
+    const purchaseIds = purchases.filter((p) => p.supplierId === id).map((p) => p.id);
+    const purchaseRefs = new Set<string>();
+    purchases.filter((p) => p.supplierId === id).forEach((p) => { purchaseRefs.add(p.receiptNumber); purchaseRefs.add(`PAY-${p.receiptNumber}`); });
+    const purchaseLedgerIds = ledger.filter((l) => purchaseRefs.has(l.referenceId)).map((l) => l.id);
+    setPurchases((prev) => prev.filter((p) => p.supplierId !== id));
+    setLedger((prev) => prev.filter((l) => !purchaseRefs.has(l.referenceId)));
+    removeRemote('purchases', purchaseIds);
+    removeRemote('ledger', purchaseLedgerIds);
+    summary.purchases = purchaseIds.length;
+
     // Products stay; they just lose their primary supplier link.
     setProducts((prev) => prev.map((p) => (p.supplierId === id ? { ...p, supplierId: null } : p)));
     setLedger((prev) => prev.filter((l) => !(l.entityType === 'supplier' && l.entityId === id)));
@@ -575,12 +811,21 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const summary = removeBookings(bookings.filter((b) => b.productId === id));
     const strayDispatchIds = dispatches.filter((d) => d.productId === id).map((d) => d.id);
 
+    const purchaseIds = purchases.filter((p) => p.productId === id).map((p) => p.id);
+    const priceIds = priceHistory.filter((e) => e.productId === id).map((e) => e.id);
     setDispatches((prev) => prev.filter((d) => d.productId !== id));
+    setPurchases((prev) => prev.filter((p) => p.productId !== id));
+    setPriceHistory((prev) => prev.filter((e) => e.productId !== id));
     setProducts((prev) => prev.filter((p) => p.id !== id));
+    if (selectedProductId === id) setSelectedProductId(null);
     removeRemote('dispatches', strayDispatchIds);
+    removeRemote('purchases', purchaseIds);
+    removeRemote('price_history', priceIds);
     removeRemote('products', [id]);
 
     summary.products = 1;
+    summary.purchases = purchaseIds.length;
+    summary.priceHistory = priceIds.length;
     summary.dispatches += strayDispatchIds.length;
     logAuditEvent(
       'Product Deleted',
@@ -614,6 +859,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       products: () => setProducts([]),
       bookings: () => setBookings([]),
       dispatches: () => setDispatches([]),
+      purchases: () => setPurchases([]),
+      price_history: () => setPriceHistory([]),
       ledger: () => setLedger([]),
       whatsapp_messages: () => setWhatsappMessages([]),
     };
@@ -625,29 +872,29 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const createBooking = ({
     customerId,
     productId,
-    totalTons,
-    pricePerTon,
+    totalKg,
+    pricePerKg,
     targetDeliveryDate,
     notes,
   }: {
     customerId: string;
     productId: string;
-    totalTons: number;
-    pricePerTon: number;
+    totalKg: number;
+    pricePerKg: number;
     targetDeliveryDate?: string;
     notes?: string;
   }): Booking => {
     const bookingNum = `BK-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
-    const totalAmount = totalTons * pricePerTon;
+    const totalAmount = totalKg * pricePerKg;
     const newBooking: Booking = {
       id: uid('book'),
       bookingNumber: bookingNum,
       customerId,
       productId,
-      totalTons,
-      dispatchedTons: 0,
-      remainingTons: totalTons,
-      pricePerTon,
+      totalKg,
+      dispatchedKg: 0,
+      remainingKg: totalKg,
+      pricePerKg,
       totalAmount,
       paidAmount: 0,
       status: 'active',
@@ -658,12 +905,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     setBookings((prev) => [newBooking, ...prev]);
+    recordPrice(productId, pricePerKg, newBooking.createdAt, 'booking', `Agreed in ${bookingNum}`, newBooking.id);
 
     // Send instant WhatsApp booking confirmation
     const customer = customers.find((c) => c.id === customerId);
     const product = products.find((p) => p.id === productId);
     if (customer && product) {
-      const msgText = `📑 *Sarmaya Booking Confirmed*\n\nHello ${customer.name},\nYour booking *${bookingNum}* for *${totalTons.toLocaleString()} Tons* of *${product.name}* has been scheduled at *${formatCurrency(pricePerTon)}/Ton* (Total: *${formatCurrency(totalAmount)}*).\n\nDispatches will be notified automatically with truck & driver details upon release. Thank you for your business!`;
+      const msgText = `📑 *Sarmaya Booking Confirmed*\n\nHello ${customer.name},\nYour booking *${bookingNum}* for *${totalKg.toLocaleString()} kg* of *${product.name}* has been scheduled at *${formatCurrency(pricePerKg)}/kg* (Total: *${formatCurrency(totalAmount)}*).\n\nDispatches will be notified automatically with truck & driver details upon release. Thank you for your business!`;
 
       const waMsg: WhatsAppMessage = {
         id: uid('wa'),
@@ -686,7 +934,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const logDispatch = ({
     bookingId,
-    tons,
+    kg,
     truckNumber,
     driverPhone,
     notes,
@@ -694,7 +942,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     sendWhatsApp = true,
   }: {
     bookingId: string;
-    tons: number;
+    kg: number;
     truckNumber: string;
     driverPhone?: string;
     notes?: string;
@@ -707,18 +955,18 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const customer = customers.find((c) => c.id === booking.customerId);
     const product = products.find((p) => p.id === booking.productId);
     const today = new Date().toISOString().split('T')[0];
-    const dispatchAmount = tons * booking.pricePerTon;
+    const dispatchAmount = kg * booking.pricePerKg;
 
-    // Recalculate tons
-    const newDispatchedTons = Number((booking.dispatchedTons + tons).toFixed(2));
-    const newRemainingTons = Math.max(0, Number((booking.totalTons - newDispatchedTons).toFixed(2)));
-    const newStatus: BookingStatus = newRemainingTons === 0 ? 'completed' : 'active';
+    // Recalculate kg
+    const newDispatchedKg = Number((booking.dispatchedKg + kg).toFixed(2));
+    const newRemainingKg = Math.max(0, Number((booking.totalKg - newDispatchedKg).toFixed(2)));
+    const newStatus: BookingStatus = newRemainingKg === 0 ? 'completed' : 'active';
 
     const dispatchNum = `DSP-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
 
     let generatedMessage = '';
     if (customer && product) {
-      generatedMessage = `🚚 *Sarmaya Dispatch Alert*\n\nHello ${customer.name},\nTruck *${truckNumber.toUpperCase()}* carrying *${tons.toFixed(1)} Tons* of *${product.name}* is on its way to your destination.\n\n📊 *Booking Status (${booking.bookingNumber})*:\n• Dispatched Now: ${tons.toFixed(1)} Tons\n• Remaining Balance: ${newRemainingTons.toFixed(1)} Tons\n• Invoice for this dispatch: *${formatCurrency(dispatchAmount)}*\n\n💳 Kindly confirm once payment has been initiated for this shipment.\nThank you for trading with us!`;
+      generatedMessage = `🚚 *Sarmaya Dispatch Alert*\n\nHello ${customer.name},\nTruck *${truckNumber.toUpperCase()}* carrying *${kg.toLocaleString()} kg* of *${product.name}* is on its way to your destination.\n\n📊 *Booking Status (${booking.bookingNumber})*:\n• Dispatched Now: ${kg.toLocaleString()} kg\n• Remaining Balance: ${newRemainingKg.toLocaleString()} kg\n• Invoice for this dispatch: *${formatCurrency(dispatchAmount)}*\n\n💳 Kindly confirm once payment has been initiated for this shipment.\nThank you for trading with us!`;
     }
 
     const newDispatch: Dispatch = {
@@ -727,7 +975,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       bookingId,
       customerId: booking.customerId,
       productId: booking.productId,
-      tons,
+      kg,
       amount: dispatchAmount,
       truckNumber: truckNumber.toUpperCase(),
       driverPhone,
@@ -744,12 +992,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         b.id === bookingId
           ? {
               ...b,
-              dispatchedTons: newDispatchedTons,
-              remainingTons: newRemainingTons,
+              dispatchedKg: newDispatchedKg,
+              remainingKg: newRemainingKg,
               status: newStatus,
               paidAmount: paymentReceivedImmediately ? b.paidAmount + dispatchAmount : b.paidAmount,
               paymentStatus:
-                paymentReceivedImmediately && newDispatchedTons >= b.totalTons
+                paymentReceivedImmediately && newDispatchedKg >= b.totalKg
                   ? 'paid'
                   : paymentReceivedImmediately
                   ? 'partial'
@@ -763,7 +1011,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setProducts((prev) =>
       prev.map((p) =>
         p.id === booking.productId
-          ? { ...p, stockTons: Math.max(0, Number((p.stockTons - tons).toFixed(2))) }
+          ? { ...p, stockKg: Math.max(0, Number((p.stockKg - kg).toFixed(2))) }
           : p
       )
     );
@@ -787,11 +1035,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       type: 'dispatch_billed',
       referenceId: dispatchNum,
       date: today,
-      description: `Dispatch ${dispatchNum}: ${tons} tons ${product?.name || 'goods'}`,
+      description: `Dispatch ${dispatchNum}: ${kg} kg ${product?.name || 'goods'}`,
       debit: dispatchAmount,
       credit: 0,
       balanceAfter: Number((currentCustomerDue + dispatchAmount).toFixed(2)),
-      tons,
+      kg,
     };
 
     const newLedgerEntries = [billedLedger];
@@ -1020,6 +1268,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       products,
       bookings,
       dispatches,
+      purchases,
+      priceHistory,
       ledger,
       whatsappMessages,
       auditLogs,
@@ -1052,10 +1302,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (isCloudSyncReady) void clearAllTables();
       if (Array.isArray(data.customers)) setCustomers(data.customers);
       if (Array.isArray(data.suppliers)) setSuppliers(data.suppliers);
-      if (Array.isArray(data.products)) setProducts(data.products);
-      if (Array.isArray(data.bookings)) setBookings(data.bookings);
-      if (Array.isArray(data.dispatches)) setDispatches(data.dispatches);
-      if (Array.isArray(data.ledger)) setLedger(data.ledger);
+      if (Array.isArray(data.products)) setProducts(data.products.map(normalizeProduct));
+      if (Array.isArray(data.bookings)) setBookings(data.bookings.map(normalizeBooking));
+      if (Array.isArray(data.dispatches)) setDispatches(data.dispatches.map(normalizeDispatch));
+      if (Array.isArray(data.purchases)) setPurchases(data.purchases);
+      if (Array.isArray(data.priceHistory)) setPriceHistory(data.priceHistory);
+      if (Array.isArray(data.ledger)) setLedger(data.ledger.map(normalizeLedger));
       if (Array.isArray(data.whatsappMessages)) setWhatsappMessages(data.whatsappMessages);
       if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
 
@@ -1073,8 +1325,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setProducts([]);
     setBookings([]);
     setDispatches([]);
+    setPurchases([]);
+    setPriceHistory([]);
     setLedger([]);
     setWhatsappMessages([]);
+    localStorage.removeItem(STORAGE_KEYS.PURCHASES);
+    localStorage.removeItem(STORAGE_KEYS.PRICE_HISTORY);
     localStorage.removeItem(STORAGE_KEYS.CUSTOMERS);
     localStorage.removeItem(STORAGE_KEYS.SUPPLIERS);
     localStorage.removeItem(STORAGE_KEYS.PRODUCTS);
@@ -1101,6 +1357,21 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setSelectedCustomerId,
         selectedSupplierId,
         setSelectedSupplierId,
+        purchases,
+        priceHistory,
+        selectedProductId,
+        setSelectedProductId,
+        selectedBookingId,
+        highlightDispatchId,
+        openBooking,
+        openReports,
+        requestedReportsTab,
+        clearRequestedReportsTab,
+        addPurchase,
+        deletePurchase,
+        updateProductPrice,
+        addPricePoint,
+        deletePricePoint,
         addCustomer,
         updateCustomer,
         addSupplier,

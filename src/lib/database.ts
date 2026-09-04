@@ -5,6 +5,8 @@ import {
   Product,
   Booking,
   Dispatch,
+  Purchase,
+  PriceHistoryEntry,
   LedgerEntry,
   WhatsAppMessage,
 } from '../types';
@@ -15,24 +17,99 @@ export interface AppData {
   products: Product[];
   bookings: Booking[];
   dispatches: Dispatch[];
+  purchases: Purchase[];
+  priceHistory: PriceHistoryEntry[];
   ledger: LedgerEntry[];
   whatsappMessages: WhatsAppMessage[];
 }
 
+export type TableName =
+  | 'customers'
+  | 'suppliers'
+  | 'products'
+  | 'bookings'
+  | 'dispatches'
+  | 'purchases'
+  | 'price_history'
+  | 'ledger'
+  | 'whatsapp_messages';
+
+export const ALL_TABLES: TableName[] = [
+  'customers',
+  'suppliers',
+  'products',
+  'bookings',
+  'dispatches',
+  'purchases',
+  'price_history',
+  'ledger',
+  'whatsapp_messages',
+];
+
+// ---------------------------------------------------------------------------
+// Legacy (tons) -> kg shim
+// Rows written by the old schema carry *Tons / *PerTon columns. Until the SQL migration in
+// supabase/migrate_tons_to_kg.sql has been run, normalise them on read so the UI never sees
+// undefined quantities. 1 ton = 1000 kg; Rs./ton / 1000 = Rs./kg.
+// ---------------------------------------------------------------------------
+const KG_PER_TON = 1000;
+const num = (v: unknown): number => (typeof v === 'number' && !isNaN(v) ? v : Number(v) || 0);
+
+export const normalizeProduct = (r: any): Product => ({
+  ...r,
+  stockKg: r.stockKg ?? num(r.stockTons) * KG_PER_TON,
+  minThresholdKg: r.minThresholdKg ?? num(r.minThresholdTons) * KG_PER_TON,
+  unitPricePerKg: r.unitPricePerKg ?? num(r.unitPricePerTon) / KG_PER_TON,
+});
+
+export const normalizeBooking = (r: any): Booking => ({
+  ...r,
+  totalKg: r.totalKg ?? num(r.totalTons) * KG_PER_TON,
+  dispatchedKg: r.dispatchedKg ?? num(r.dispatchedTons) * KG_PER_TON,
+  remainingKg: r.remainingKg ?? num(r.remainingTons) * KG_PER_TON,
+  pricePerKg: r.pricePerKg ?? num(r.pricePerTon) / KG_PER_TON,
+});
+
+export const normalizeDispatch = (r: any): Dispatch => ({
+  ...r,
+  kg: r.kg ?? num(r.tons) * KG_PER_TON,
+});
+
+export const normalizeLedger = (r: any): LedgerEntry => ({
+  ...r,
+  kg: r.kg ?? (r.tons != null ? num(r.tons) * KG_PER_TON : undefined),
+});
+
+const stripLegacy = <T,>(rows: T[]): T[] =>
+  rows.map((r) => {
+    const { stockTons, minThresholdTons, unitPricePerTon, totalTons, dispatchedTons, remainingTons, pricePerTon, tons, ...rest } =
+      r as any;
+    return rest as T;
+  });
+
+/** Tables that may be missing on a project that has not run the migration yet. */
+const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history'];
+
 export const loadAllData = async (): Promise<AppData> => {
-  const [customers, suppliers, products, bookings, dispatches, ledger, whatsappMessages] =
+  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, ledger, whatsappMessages] =
     await Promise.all([
       supabase.from('customers').select('*'),
       supabase.from('suppliers').select('*'),
       supabase.from('products').select('*'),
       supabase.from('bookings').select('*'),
       supabase.from('dispatches').select('*'),
+      supabase.from('purchases').select('*'),
+      supabase.from('price_history').select('*'),
       supabase.from('ledger').select('*'),
       supabase.from('whatsapp_messages').select('*'),
     ]);
 
-  const maybeThrow = (result: { error?: { message: string } | null }, label: string) => {
+  const maybeThrow = (result: { error?: { message: string } | null }, label: TableName) => {
     if (result.error) {
+      if (OPTIONAL_TABLES.includes(label)) {
+        console.warn(`Supabase table "${label}" unavailable (run supabase/migrate_tons_to_kg.sql):`, result.error.message);
+        return;
+      }
       throw new Error(`${label}: ${result.error.message}`);
     }
   };
@@ -42,28 +119,23 @@ export const loadAllData = async (): Promise<AppData> => {
   maybeThrow(products, 'products');
   maybeThrow(bookings, 'bookings');
   maybeThrow(dispatches, 'dispatches');
+  maybeThrow(purchases, 'purchases');
+  maybeThrow(priceHistory, 'price_history');
   maybeThrow(ledger, 'ledger');
   maybeThrow(whatsappMessages, 'whatsapp_messages');
 
   return {
     customers: (customers.data || []) as Customer[],
     suppliers: (suppliers.data || []) as Supplier[],
-    products: (products.data || []) as Product[],
-    bookings: (bookings.data || []) as Booking[],
-    dispatches: (dispatches.data || []) as Dispatch[],
-    ledger: (ledger.data || []) as LedgerEntry[],
+    products: stripLegacy((products.data || []).map(normalizeProduct)),
+    bookings: stripLegacy((bookings.data || []).map(normalizeBooking)),
+    dispatches: stripLegacy((dispatches.data || []).map(normalizeDispatch)),
+    purchases: (purchases.data || []) as Purchase[],
+    priceHistory: (priceHistory.data || []) as PriceHistoryEntry[],
+    ledger: stripLegacy((ledger.data || []).map(normalizeLedger)),
     whatsappMessages: (whatsappMessages.data || []) as WhatsAppMessage[],
   };
 };
-
-export type TableName =
-  | 'customers'
-  | 'suppliers'
-  | 'products'
-  | 'bookings'
-  | 'dispatches'
-  | 'ledger'
-  | 'whatsapp_messages';
 
 /** Delete rows by id from a Supabase table. Silently no-ops when Supabase is not configured. */
 export const deleteRows = async (table: TableName, ids: string[]): Promise<void> => {
@@ -85,16 +157,6 @@ export const clearTable = async (table: TableName): Promise<void> => {
     console.warn(`Supabase ${table} clear failed:`, err?.message || err);
   }
 };
-
-export const ALL_TABLES: TableName[] = [
-  'customers',
-  'suppliers',
-  'products',
-  'bookings',
-  'dispatches',
-  'ledger',
-  'whatsapp_messages',
-];
 
 export const clearAllTables = async (): Promise<void> => {
   await Promise.all(ALL_TABLES.map((t) => clearTable(t)));

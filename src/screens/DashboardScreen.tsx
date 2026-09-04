@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
 import {
   Truck,
@@ -14,6 +14,10 @@ import {
   Plus,
   ArrowRight,
   Package,
+  PackagePlus,
+  Building,
+  User,
+  Scale,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -26,14 +30,16 @@ import {
   Bar,
 } from 'recharts';
 import { useTrading } from '../context/TradingContext';
-import { formatCurrency, formatTons, formatDate, formatNumber } from '../utils/formatters';
+import { formatCurrency, formatKg, formatDate, formatNumber } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
+import { buildMovements, groupByDay, shiftDate } from '../utils/stockFlow';
 
 interface DashboardScreenProps {
   onOpenDispatch: (bookingId?: string) => void;
   onOpenBooking: () => void;
   onOpenCustomer: (customerId: string) => void;
   onOpenWhatsAppDrawer: () => void;
+  onReceiveStock: () => void;
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({
@@ -41,6 +47,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onOpenBooking,
   onOpenCustomer,
   onOpenWhatsAppDrawer,
+  onReceiveStock,
 }) => {
   const {
     customers,
@@ -48,22 +55,26 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     products,
     bookings,
     dispatches,
+    purchases,
     whatsappMessages,
-    sendWhatsAppDirect,
+    openBooking,
+    openReports,
+    setSelectedSupplierId,
+    setSelectedProductId,
   } = useTrading();
 
   const todayStr = new Date().toISOString().split('T')[0];
 
   // 1. Today's dispatches
   const todayDispatches = dispatches.filter((d) => d.date === todayStr);
-  const todayDispatchedTons = todayDispatches.reduce((acc, d) => acc + d.tons, 0);
+  const todayDispatchedKg = todayDispatches.reduce((acc, d) => acc + d.kg, 0);
   const todayDispatchedValue = todayDispatches.reduce((acc, d) => acc + d.amount, 0);
 
-  // 2. Pending bookings (remaining tons)
-  const activeBookings = bookings.filter((b) => b.status === 'active' && b.remainingTons > 0);
-  const totalPendingTons = activeBookings.reduce((acc, b) => acc + b.remainingTons, 0);
+  // 2. Pending bookings (remaining kg)
+  const activeBookings = bookings.filter((b) => b.status === 'active' && b.remainingKg > 0);
+  const totalPendingKg = activeBookings.reduce((acc, b) => acc + b.remainingKg, 0);
   const totalPendingValue = activeBookings.reduce(
-    (acc, b) => acc + b.remainingTons * b.pricePerTon,
+    (acc, b) => acc + b.remainingKg * b.pricePerKg,
     0
   );
 
@@ -71,20 +82,22 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const totalReceivables = customers.reduce((acc, c) => acc + c.totalDue, 0);
   const totalPayables = suppliers.reduce((acc, s) => acc + s.totalOwed, 0);
 
-  // 4. Quick sales trend chart data (last 7 days)
-  const chartData = [
-    { day: 'Mon', tons: 140, sales: 22400 },
-    { day: 'Tue', tons: 190, sales: 31200 },
-    { day: 'Wed', tons: 230, sales: 38900 },
-    { day: 'Thu', tons: 160, sales: 25600 },
-    { day: 'Fri', tons: 280, sales: 46200 },
-    { day: 'Sat', tons: 110, sales: 18400 },
-    {
-      day: 'Today',
-      tons: todayDispatchedTons > 0 ? todayDispatchedTons : 210,
-      sales: todayDispatchedValue > 0 ? todayDispatchedValue : 34800,
-    },
-  ];
+  // 4. Stock movements: incoming purchases vs outgoing dispatches
+  const movements = useMemo(
+    () => buildMovements(purchases, dispatches, { customers, suppliers, products, bookings }),
+    [purchases, dispatches, customers, suppliers, products, bookings]
+  );
+  const last7 = useMemo(() => groupByDay(movements, shiftDate(todayStr, -6), todayStr), [movements, todayStr]);
+  const todayFlow = last7.find((d) => d.date === todayStr) || { inKg: 0, inAmount: 0, outKg: 0, outAmount: 0, netKg: 0, movements: [] };
+  const recentMovements = movements.slice(0, 6);
+
+  // Real last-7-day trend (oldest -> newest)
+  const chartData = [...last7].reverse().map((d) => ({
+    day: d.date === todayStr ? 'Today' : new Date(d.date + 'T00:00:00Z').toLocaleDateString('en-PK', { weekday: 'short', timeZone: 'UTC' }),
+    kg: d.outKg,
+    inKg: d.inKg,
+    sales: d.outAmount,
+  }));
 
   return (
     <div className="space-y-6 pb-12">
@@ -138,7 +151,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </span>
             <div className="mt-3">
               <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
-                <AnimatedNumber value={todayDispatchedTons} format="tons" />
+                <AnimatedNumber value={todayDispatchedKg} format="kg" />
               </div>
               <div className="text-xs text-teal-800 font-medium font-mono mt-1.5 flex items-center gap-1">
                 <span>Value:</span>
@@ -148,7 +161,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-[#E5E5E1]/60 flex items-center justify-between">
-            <span className="text-[11px] text-[#8E9299]">Daily Tonnage</span>
+            <span className="text-[11px] text-[#8E9299]">Daily Volume</span>
             <div className="w-8 h-8 rounded-xl bg-[#FAF9F6] border border-[#E5E5E1] text-teal-700 flex items-center justify-center">
               <Truck className="w-4 h-4" />
             </div>
@@ -168,7 +181,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </span>
             <div className="mt-3">
               <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
-                <AnimatedNumber value={totalPendingTons} format="tons" />
+                <AnimatedNumber value={totalPendingKg} format="kg" />
               </div>
               <div className="text-xs text-amber-800 font-medium font-mono mt-1.5">
                 <span>Contract value: </span>
@@ -241,19 +254,97 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </motion.div>
       </div>
 
+      {/* Daily Incoming / Outgoing Tracker */}
+      <div className="bg-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-serif italic font-normal text-2xl text-[#111827]">Today's Stock Movement</h3>
+            <p className="text-xs text-[#8E9299] mt-0.5">Incoming from suppliers vs outgoing to customers, updated as receipts and dispatches are logged</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onReceiveStock} className="px-4 py-2 bg-[#FAF9F6] hover:bg-[#F4F3EF] text-[#111827] font-semibold text-xs rounded-2xl border border-[#E5E5E1] flex items-center gap-1.5 transition-colors">
+              <PackagePlus className="w-3.5 h-3.5 text-teal-700" /> Receive Stock
+            </button>
+            <button onClick={() => openReports('flow')} className="px-4 py-2 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-2xl flex items-center gap-1.5 shadow-xs">
+              Full Log <ArrowRight className="w-3.5 h-3.5 text-teal-400" />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="bg-teal-50/60 border border-teal-200/70 rounded-2xl p-4">
+            <div className="text-[10px] font-bold text-teal-900 uppercase tracking-widest flex items-center gap-1.5"><ArrowDownLeft className="w-3.5 h-3.5" /> Incoming today</div>
+            <div className="text-xl font-bold font-mono text-teal-900 mt-1"><AnimatedNumber value={todayFlow.inKg} format="kg" /></div>
+            <div className="text-[11px] text-teal-800/80 font-mono mt-0.5">{formatCurrency(todayFlow.inAmount)} • {todayFlow.movements.filter((m) => m.direction === 'in').length} receipt(s)</div>
+          </div>
+          <div className="bg-amber-50/60 border border-amber-200/70 rounded-2xl p-4">
+            <div className="text-[10px] font-bold text-amber-900 uppercase tracking-widest flex items-center gap-1.5"><ArrowUpRight className="w-3.5 h-3.5" /> Outgoing today</div>
+            <div className="text-xl font-bold font-mono text-amber-900 mt-1"><AnimatedNumber value={todayFlow.outKg} format="kg" /></div>
+            <div className="text-[11px] text-amber-800/80 font-mono mt-0.5">{formatCurrency(todayFlow.outAmount)} • {todayFlow.movements.filter((m) => m.direction === 'out').length} dispatch(es)</div>
+          </div>
+          <div className="bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4">
+            <div className="text-[10px] font-bold text-[#6B7280] uppercase tracking-widest flex items-center gap-1.5"><Scale className="w-3.5 h-3.5" /> Net today</div>
+            <div className={`text-xl font-bold font-mono mt-1 ${todayFlow.netKg >= 0 ? 'text-[#111827]' : 'text-rose-700'}`}>{todayFlow.netKg >= 0 ? '+' : '−'}{formatKg(Math.abs(todayFlow.netKg))}</div>
+            <div className="text-[11px] text-[#6B7280] font-mono mt-0.5">Stock on hand: {formatKg(products.reduce((a, p) => a + p.stockKg, 0))}</div>
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest mb-2">Latest movements</div>
+          {recentMovements.length === 0 ? (
+            <div className="text-xs text-[#8E9299] bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-5 text-center">
+              No stock movements yet. Log a dispatch or receive stock to start the daily log.
+            </div>
+          ) : (
+            <div className="divide-y divide-[#F0F0EE] border border-[#E5E5E1] rounded-2xl overflow-hidden">
+              {recentMovements.map((m) => (
+                <div key={m.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs hover:bg-[#FAF9F6] transition-colors">
+                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 w-fit ${m.direction === 'in' ? 'bg-teal-50 text-teal-900 border-teal-200' : 'bg-amber-50 text-amber-900 border-amber-200'}`}>
+                    {m.direction === 'in' ? <ArrowDownLeft className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
+                    {m.direction === 'in' ? 'IN' : 'OUT'}
+                  </span>
+                  <span className="font-mono text-[#8E9299] shrink-0 w-24">{formatDate(m.date)}</span>
+                  <span className="flex-1 min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    {m.direction === 'out' && m.bookingId ? (
+                      <button onClick={() => openBooking(m.bookingId!, m.dispatchId)} className="font-mono font-bold text-[#111827] hover:text-teal-800 hover:underline flex items-center gap-1"><ShoppingBag className="w-3 h-3 text-[#8E9299]" />{m.reference}</button>
+                    ) : (
+                      <span className="font-mono font-bold text-[#111827]">{m.reference}</span>
+                    )}
+                    {m.direction === 'in' && m.supplierId ? (
+                      <button onClick={() => setSelectedSupplierId(m.supplierId!)} className="text-[#374151] hover:text-teal-800 hover:underline flex items-center gap-1"><Building className="w-3 h-3 text-[#8E9299]" />{m.supplierName}</button>
+                    ) : m.customerId ? (
+                      <button onClick={() => onOpenCustomer(m.customerId!)} className="text-[#374151] hover:text-teal-800 hover:underline flex items-center gap-1"><User className="w-3 h-3 text-[#8E9299]" />{m.customerName}</button>
+                    ) : null}
+                    <button onClick={() => setSelectedProductId(m.productId)} className="text-[#6B7280] hover:text-teal-800 hover:underline flex items-center gap-1"><Package className="w-3 h-3" />{m.productName}</button>
+                  </span>
+                  <span className="text-right font-mono shrink-0">
+                    <span className={`font-bold ${m.direction === 'in' ? 'text-teal-800' : 'text-amber-800'}`}>{m.direction === 'in' ? '+' : '−'}{formatKg(m.kg)}</span>
+                    <span className="block text-[10px] text-[#8E9299]">{formatCurrency(m.amount)}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Main Grid: Quick Sales Chart + Active Bookings Quick Dispatch */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
         {/* Left 2 Cols: Minimal Clean Sales & Dispatch Chart */}
         <div className="lg:col-span-2 min-w-0 bg-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-5">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-serif italic font-normal text-2xl text-[#111827]">Weekly Dispatch & Revenue Trend</h3>
-              <p className="text-xs text-[#8E9299] mt-0.5">Daily tonnage dispatched & realized sales value</p>
+              <h3 className="font-serif italic font-normal text-2xl text-[#111827]">Last 7 Days: In vs Out</h3>
+              <p className="text-xs text-[#8E9299] mt-0.5">Kilograms dispatched to customers and received from suppliers, with realised sales value</p>
             </div>
             <div className="flex items-center gap-3 text-xs font-medium">
               <span className="flex items-center gap-2 text-[#6B7280]">
                 <span className="w-2.5 h-2.5 rounded-full bg-teal-600" />
-                Dispatched Tons
+                Out (kg)
+              </span>
+              <span className="flex items-center gap-2 text-[#6B7280]">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                In (kg)
               </span>
             </div>
           </div>
@@ -265,6 +356,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   <linearGradient id="tealGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#0d9488" stopOpacity={0.25} />
                     <stop offset="95%" stopColor="#0d9488" stopOpacity={0.0} />
+                  </linearGradient>
+                  <linearGradient id="amberGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
                 <XAxis
@@ -280,7 +375,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   tickLine={false}
                   axisLine={false}
                   width={45}
-                  tickFormatter={(v) => `${formatNumber(v)}T`}
+                  tickFormatter={(v) => `${formatNumber(v)}kg`}
                 />
                 <Tooltip
                   content={({ active, payload, label }) => {
@@ -289,10 +384,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         <div className="bg-[#111827] text-white p-3 rounded-2xl shadow-xl text-xs space-y-1 border border-[#374151]">
                           <div className="font-bold text-gray-300">{label}</div>
                           <div className="text-teal-300 font-mono font-bold">
-                            Tonnage: {payload[0]?.value} Tons
+                            Out: {formatKg((payload[0]?.payload?.kg as number) || 0)}
+                          </div>
+                          <div className="text-amber-300 font-mono font-bold">
+                            In: {formatKg((payload[0]?.payload?.inKg as number) || 0)}
                           </div>
                           <div className="text-gray-400 font-mono">
-                            Revenue: {formatCurrency((payload[0]?.payload?.sales as number) || 0)}
+                            Sales: {formatCurrency((payload[0]?.payload?.sales as number) || 0)}
                           </div>
                         </div>
                       );
@@ -302,7 +400,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 />
                 <Area
                   type="monotone"
-                  dataKey="tons"
+                  dataKey="inKg"
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#amberGrad)"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="kg"
                   stroke="#0d9488"
                   strokeWidth={2.5}
                   fillOpacity={1}
@@ -387,7 +493,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             {activeBookings.map((b) => {
               const cust = customers.find((c) => c.id === b.customerId);
               const prod = products.find((p) => p.id === b.productId);
-              const progress = (b.dispatchedTons / b.totalTons) * 100;
+              const progress = (b.dispatchedKg / b.totalKg) * 100;
 
               return (
                 <div
@@ -396,11 +502,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 >
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-xs font-mono text-[#111827]">
-                        {b.bookingNumber}
-                      </span>
+                      <button onClick={() => openBooking(b.id)} title="Open booking details" className="font-bold text-xs font-mono text-[#111827] hover:text-teal-800 hover:underline underline-offset-2 text-left">{b.bookingNumber}</button>
                       <span className="text-xs font-bold font-mono text-teal-800">
-                        Rs. {b.pricePerTon}/Ton
+                        Rs. {b.pricePerKg}/kg
                       </span>
                     </div>
 
@@ -419,12 +523,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       <span>{prod?.name}</span>
                     </div>
 
-                    {/* Progress Bar & Remaining Tons */}
+                    {/* Progress Bar & Remaining kg */}
                     <div className="space-y-1.5 pt-1">
                       <div className="flex justify-between text-xs font-medium">
                         <span className="text-[#8E9299]">Remaining:</span>
                         <span className="font-mono font-bold text-amber-800">
-                          {b.remainingTons} Tons
+                          {b.remainingKg} kg
                         </span>
                       </div>
                       <div className="w-full h-2 bg-[#E5E5E1] rounded-full overflow-hidden">
@@ -434,8 +538,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         />
                       </div>
                       <div className="flex justify-between text-[10px] text-[#8E9299]">
-                        <span>Dispatched: {b.dispatchedTons} T</span>
-                        <span>Total: {b.totalTons} T</span>
+                        <span>Dispatched: {b.dispatchedKg} kg</span>
+                        <span>Total: {b.totalKg} kg</span>
                       </div>
                     </div>
                   </div>

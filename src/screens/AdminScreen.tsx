@@ -21,6 +21,8 @@ import {
   Truck,
   BookOpen,
   MessageSquare,
+  PackagePlus,
+  History,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -59,6 +61,8 @@ export const AdminScreen: React.FC = () => {
     products,
     bookings,
     dispatches,
+    purchases,
+    priceHistory,
     ledger,
     whatsappMessages,
     changeAdminPin,
@@ -120,6 +124,8 @@ export const AdminScreen: React.FC = () => {
     { table: 'products', label: 'Products', count: products.length, icon: <Package className="w-4 h-4" /> },
     { table: 'bookings', label: 'Bookings', count: bookings.length, icon: <ShoppingBag className="w-4 h-4" /> },
     { table: 'dispatches', label: 'Dispatches', count: dispatches.length, icon: <Truck className="w-4 h-4" /> },
+    { table: 'purchases', label: 'Stock Receipts', count: purchases.length, icon: <PackagePlus className="w-4 h-4" /> },
+    { table: 'price_history', label: 'Price History', count: priceHistory.length, icon: <History className="w-4 h-4" /> },
     { table: 'ledger', label: 'Ledger Entries', count: ledger.length, icon: <BookOpen className="w-4 h-4" /> },
     { table: 'whatsapp_messages', label: 'WhatsApp Logs', count: whatsappMessages.length, icon: <MessageSquare className="w-4 h-4" /> },
   ];
