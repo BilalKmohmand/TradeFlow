@@ -109,9 +109,10 @@ export const OpsScreen: React.FC<OpsScreenProps> = ({ initialTab = 'alerts' }) =
 
   // ---- Expenses ----
   const [expMonth, setExpMonth] = useState(currentMonthKey());
-  const [expForm, setExpForm] = useState<{ date: string; category: ExpenseCategory; amount: string; description: string; paidVia: string; truckId: string }>({
-    date: todayISO(), category: 'transport', amount: '', description: '', paidVia: 'Cash', truckId: '',
+  const [expForm, setExpForm] = useState<{ date: string; category: ExpenseCategory; amount: string; description: string; paidVia: string; truckId: string; dispatchId: string }>({
+    date: todayISO(), category: 'transport', amount: '', description: '', paidVia: 'Cash', truckId: '', dispatchId: '',
   });
+  const recentDispatches = useMemo(() => [...dispatches].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 40), [dispatches]);
   const [pendingExpense, setPendingExpense] = useState<Expense | null>(null);
   const monthExpenses = useMemo(() => expenses.filter((e) => monthKey(e.date) === expMonth).sort((a, b) => (a.date < b.date ? 1 : -1)), [expenses, expMonth]);
   const monthTotal = monthExpenses.reduce((a, e) => a + e.amount, 0);
@@ -125,7 +126,7 @@ export const OpsScreen: React.FC<OpsScreenProps> = ({ initialTab = 'alerts' }) =
     e.preventDefault();
     const amount = parseFloat(expForm.amount);
     if (!amount || amount <= 0 || !expForm.description.trim()) return;
-    addExpense({ date: expForm.date, category: expForm.category, amount, description: expForm.description.trim(), paidVia: expForm.paidVia, truckId: expForm.truckId || null });
+    addExpense({ date: expForm.date, category: expForm.category, amount, description: expForm.description.trim(), paidVia: expForm.paidVia, truckId: expForm.truckId || null, dispatchId: expForm.dispatchId || null });
     setExpForm((f) => ({ ...f, amount: '', description: '' }));
     setExpMonth(monthKey(expForm.date));
   };
@@ -149,14 +150,14 @@ export const OpsScreen: React.FC<OpsScreenProps> = ({ initialTab = 'alerts' }) =
   };
 
   // ---- Alerts ----
-  const alerts = useMemo(() => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger }, todayISO()), [products, customers, suppliers, bookings, trucks, ledger]);
+  const alerts = useMemo(() => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger, dispatches }, todayISO()), [products, customers, suppliers, bookings, trucks, ledger, dispatches]);
   const followAlert = (a: (typeof alerts)[number]) => {
     if (!a.link) return;
     switch (a.link.type) {
       case 'customer': setSelectedCustomerId(a.link.id); break;
       case 'supplier': setSelectedSupplierId(a.link.id); break;
       case 'product': setSelectedProductId(a.link.id); break;
-      case 'booking': openBooking(a.link.id); break;
+      case 'booking': openBooking(a.link.id, a.link.dispatchId || null); break;
       case 'truck': setTab('fleet'); break;
     }
   };
@@ -322,7 +323,7 @@ export const OpsScreen: React.FC<OpsScreenProps> = ({ initialTab = 'alerts' }) =
           {can('manage_expenses') && (
             <form onSubmit={submitExpense} className={`${card} p-5 space-y-3`}>
               <h3 className="text-sm font-bold text-[#111827] dark:text-white flex items-center gap-1.5"><Receipt className="w-4 h-4 text-teal-700" /> Record an expense</h3>
-              <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
                 <div><label className={labelCls}>Date</label><input type="date" value={expForm.date} max={todayISO()} onChange={(e) => setExpForm({ ...expForm, date: e.target.value })} className={inputCls} required /></div>
                 <div>
                   <label className={labelCls}>Category</label>
@@ -337,6 +338,13 @@ export const OpsScreen: React.FC<OpsScreenProps> = ({ initialTab = 'alerts' }) =
                   <select value={expForm.truckId} onChange={(e) => setExpForm({ ...expForm, truckId: e.target.value })} className={inputCls}>
                     <option value="">—</option>
                     {trucks.map((t) => <option key={t.id} value={t.id}>{t.number}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Trip (dispatch)</label>
+                  <select value={expForm.dispatchId} onChange={(e) => { const id = e.target.value; const d = dispatches.find((x) => x.id === id); setExpForm({ ...expForm, dispatchId: id, truckId: d?.truckId || expForm.truckId }); }} className={inputCls}>
+                    <option value="">—</option>
+                    {recentDispatches.map((d) => <option key={d.id} value={d.id}>{d.dispatchNumber} • {d.truckNumber}</option>)}
                   </select>
                 </div>
                 <div>

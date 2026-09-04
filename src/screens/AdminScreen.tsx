@@ -74,6 +74,8 @@ export const AdminScreen: React.FC = () => {
     trucks,
     users,
     cashEntries,
+    settings,
+    updateSettings,
     addUser,
     updateUser,
     deleteUser,
@@ -104,6 +106,32 @@ export const AdminScreen: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [pending, setPending] = useState<PendingAction>(null);
+  const [company, setCompany] = useState({
+    companyName: settings.companyName || '',
+    companyTagline: settings.companyTagline || '',
+    companyAddress: settings.companyAddress || '',
+    companyPhone: settings.companyPhone || '',
+    companyTaxId: settings.companyTaxId || '',
+    taxRatePct: String(settings.taxRatePct ?? 0),
+    taxLabel: settings.taxLabel || 'Sales Tax',
+    monthlyTargetRs: String(settings.monthlyTargetRs ?? 0),
+  });
+  const [companySaved, setCompanySaved] = useState(false);
+  const saveCompany = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateSettings({
+      companyName: company.companyName.trim() || 'Sarmaya',
+      companyTagline: company.companyTagline.trim(),
+      companyAddress: company.companyAddress.trim(),
+      companyPhone: company.companyPhone.trim(),
+      companyTaxId: company.companyTaxId.trim(),
+      taxRatePct: Math.max(0, Math.min(100, parseFloat(company.taxRatePct) || 0)),
+      taxLabel: company.taxLabel.trim() || 'Sales Tax',
+      monthlyTargetRs: Math.max(0, parseFloat(company.monthlyTargetRs) || 0),
+    });
+    setCompanySaved(true);
+    setTimeout(() => setCompanySaved(false), 1500);
+  };
 
   // Users & roles
   const [userForm, setUserForm] = useState<{ id: string | null; name: string; role: UserRole; pin: string }>({ id: null, name: '', role: 'operator', pin: '' });
@@ -491,6 +519,22 @@ export const AdminScreen: React.FC = () => {
         </div>
       </div>
       )}
+
+      {/* Company & invoicing */}
+      <div className={cardCls}>
+        {sectionTitle(<Receipt className="w-5 h-5" />, 'Company & Invoicing', 'Printed on invoices, challans, vouchers and statements. Sales tax applies to new dispatches.')}
+        <form onSubmit={saveCompany} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="lg:col-span-2"><label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Company name</label><input value={company.companyName} onChange={(e) => setCompany({ ...company, companyName: e.target.value })} className={inputCls} /></div>
+          <div className="lg:col-span-2"><label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Tagline</label><input value={company.companyTagline} onChange={(e) => setCompany({ ...company, companyTagline: e.target.value })} className={inputCls} /></div>
+          <div className="lg:col-span-2"><label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Address</label><input value={company.companyAddress} onChange={(e) => setCompany({ ...company, companyAddress: e.target.value })} className={inputCls} /></div>
+          <div><label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Phone</label><input value={company.companyPhone} onChange={(e) => setCompany({ ...company, companyPhone: e.target.value })} className={inputCls} /></div>
+          <div><label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">NTN / STRN</label><input value={company.companyTaxId} onChange={(e) => setCompany({ ...company, companyTaxId: e.target.value })} className={inputCls} /></div>
+          <div><label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Sales tax %</label><input type="number" min="0" max="100" step="0.01" value={company.taxRatePct} onChange={(e) => setCompany({ ...company, taxRatePct: e.target.value })} className={inputCls} /></div>
+          <div><label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Tax label</label><input value={company.taxLabel} onChange={(e) => setCompany({ ...company, taxLabel: e.target.value })} className={inputCls} /></div>
+          <div><label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Monthly sales target (Rs.)</label><input type="number" min="0" step="1000" value={company.monthlyTargetRs} onChange={(e) => setCompany({ ...company, monthlyTargetRs: e.target.value })} className={inputCls} /></div>
+          <div className="flex items-end"><button type="submit" className="px-5 py-2.5 rounded-2xl bg-[#111827] dark:bg-white text-white dark:text-[#111827] text-xs font-bold shadow-xs flex items-center gap-1.5">{companySaved ? <><CheckCircle2 className="w-3.5 h-3.5 text-teal-400 dark:text-teal-700" /> Saved</> : 'Save settings'}</button></div>
+        </form>
+      </div>
 
       {/* Exports */}
       <div className={cardCls}>

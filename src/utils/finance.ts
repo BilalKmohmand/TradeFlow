@@ -88,7 +88,7 @@ export const computeMonthlyPnL = (
         avgCostPerKg: cost,
       };
     row.soldKg += d.kg;
-    row.revenue += d.amount;
+    row.revenue += d.amount + (d.freightCharge || 0);
     row.cogs += cost != null ? cost * d.kg : 0;
     byProduct.set(d.productId, row);
   });

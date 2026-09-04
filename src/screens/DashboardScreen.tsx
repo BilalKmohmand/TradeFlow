@@ -72,6 +72,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     ledger,
     can,
     currentUser,
+    settings,
   } = useTrading();
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -104,7 +105,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   // Month-to-date P&L and live alerts
   const pnl = useMemo(() => computeMonthlyPnL(currentMonthKey(), dispatches, purchases, expenses, products), [dispatches, purchases, expenses, products]);
-  const alerts = useMemo(() => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger }, todayStr), [products, customers, suppliers, bookings, trucks, ledger, todayStr]);
+  const alerts = useMemo(() => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger, dispatches }, todayStr), [products, customers, suppliers, bookings, trucks, ledger, dispatches, todayStr]);
   const topAlerts = alerts.slice(0, 3);
   const topCustomers = useMemo(() => {
     const m = new Map<string, number>();
@@ -317,6 +318,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               <div className="col-span-3 bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4 text-xs text-[#6B7280] flex items-center gap-2"><Wallet className="w-4 h-4" /> Margin and profit figures are visible to managers and admins.</div>
             )}
           </div>
+          {(settings.monthlyTargetRs || 0) > 0 && (
+            <div className="bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-[#111827]">Monthly sales target</span>
+                <span className="font-mono text-[#6B7280]">{formatCurrency(pnl.revenue)} / {formatCurrency(settings.monthlyTargetRs || 0)} • {Math.min(999, Math.round((pnl.revenue / (settings.monthlyTargetRs || 1)) * 100))}%</span>
+              </div>
+              <div className="w-full h-2 bg-[#E5E5E1] rounded-full overflow-hidden mt-2"><div className={`h-full ${pnl.revenue >= (settings.monthlyTargetRs || 0) ? 'bg-teal-600' : 'bg-amber-500'}`} style={{ width: `${Math.min(100, (pnl.revenue / (settings.monthlyTargetRs || 1)) * 100)}%` }} /></div>
+            </div>
+          )}
           {topCustomers.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#6B7280]">
               <span className="font-bold uppercase tracking-widest text-[10px] text-[#8E9299]">Top customers</span>

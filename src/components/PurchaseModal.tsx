@@ -33,6 +33,15 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
   const [truckNumber, setTruckNumber] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [paid, setPaid] = useState<boolean>(false);
+  const [grossKg, setGrossKg] = useState<string>('');
+  const [tareKg, setTareKg] = useState<string>('');
+  const applyWeights = (g: string, t: string) => {
+    setGrossKg(g);
+    setTareKg(t);
+    const gv = parseFloat(g);
+    const tv = parseFloat(t);
+    if (!isNaN(gv) && !isNaN(tv) && gv > tv) setKg(String(Math.round((gv - tv) * 100) / 100));
+  };
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,6 +59,8 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
     setTruckNumber('');
     setNotes('');
     setPaid(false);
+    setGrossKg('');
+    setTareKg('');
     setIsSuccess(false);
     setError(null);
   }, [isOpen, preselectedSupplierId, preselectedProductId, products, suppliers]);
@@ -94,6 +105,8 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
         truckNumber: truckNumber.trim() || undefined,
         notes: notes.trim() || undefined,
         paymentMadeImmediately: paid,
+        grossKg: grossKg ? parseFloat(grossKg) : null,
+        tareKg: tareKg ? parseFloat(tareKg) : null,
       });
       setIsSuccess(true);
       setTimeout(() => {
@@ -180,6 +193,11 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
                   <label className={labelCls}>Receipt Date *</label>
                   <input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} required />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className={labelCls}>Gross weight (kg)</label><input type="number" min="0" step="1" value={grossKg} onChange={(e) => applyWeights(e.target.value, tareKg)} placeholder="Weighbridge" className={inputCls} /></div>
+                <div><label className={labelCls}>Tare weight (kg)</label><input type="number" min="0" step="1" value={tareKg} onChange={(e) => applyWeights(grossKg, e.target.value)} placeholder="Empty truck" className={inputCls} /></div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

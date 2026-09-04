@@ -31,10 +31,10 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenCommandBar,
 }) => {
-  const { activeScreen, setActiveScreen, lockAdmin, can, currentUser, products, customers, suppliers, bookings, trucks, ledger } = useTrading();
+  const { activeScreen, setActiveScreen, lockAdmin, can, currentUser, products, customers, suppliers, bookings, trucks, ledger, dispatches } = useTrading();
   const alertCount = useMemo(
-    () => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger }, new Date().toISOString().split('T')[0]).length,
-    [products, customers, suppliers, bookings, trucks, ledger]
+    () => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger, dispatches }, new Date().toISOString().split('T')[0]).length,
+    [products, customers, suppliers, bookings, trucks, ledger, dispatches]
   );
   const { themeMode, resolvedTheme, setThemeMode, isNightTime, timeLabel } = useTheme();
 

@@ -487,7 +487,10 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                               <td className="py-3 px-4 text-right font-bold text-[#111827]">
                                 {formatCurrency(item.balanceAfter)}
                               </td>
-                              <td className="py-3 px-2 text-right">
+                              <td className="py-3 px-2 text-right whitespace-nowrap">
+                                {item.type === 'payment_received' && (
+                                  <button type="button" onClick={() => setPrintRequest({ type: 'voucher', ledgerId: item.id })} title="Print receipt voucher" className="p-1.5 rounded-lg text-[#8E9299] hover:text-teal-700 hover:bg-teal-50 transition-colors"><Printer className="w-3.5 h-3.5" /></button>
+                                )}
                                 {can('delete_records') && (
                                 <button
                                   type="button"

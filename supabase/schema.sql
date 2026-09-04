@@ -73,7 +73,17 @@ CREATE TABLE IF NOT EXISTS dispatches (
   "whatsappSent" BOOLEAN DEFAULT FALSE,
   "whatsappMessage" TEXT,
   "paymentReceivedImmediately" BOOLEAN DEFAULT FALSE,
-  "truckId" TEXT
+  "truckId" TEXT,
+  "grossKg" NUMERIC,
+  "tareKg" NUMERIC,
+  "freightCharge" NUMERIC DEFAULT 0,
+  "taxRatePct" NUMERIC DEFAULT 0,
+  "taxAmount" NUMERIC DEFAULT 0,
+  "totalBilled" NUMERIC,
+  status TEXT DEFAULT 'in_transit',
+  "deliveredAt" TEXT,
+  "receivedBy" TEXT,
+  "podNote" TEXT
 );
 
 -- Incoming stock from suppliers (goods receipts)
@@ -89,7 +99,9 @@ CREATE TABLE IF NOT EXISTS purchases (
   "truckNumber" TEXT,
   notes TEXT,
   "paymentMadeImmediately" BOOLEAN DEFAULT FALSE,
-  "createdAt" TEXT
+  "createdAt" TEXT,
+  "grossKg" NUMERIC,
+  "tareKg" NUMERIC
 );
 
 -- Selling price observations per product over time
@@ -112,6 +124,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   description TEXT,
   "paidVia" TEXT,
   "truckId" TEXT,
+  "dispatchId" TEXT,
   "referenceId" TEXT,
   "createdAt" TEXT,
   "createdBy" TEXT
@@ -155,7 +168,15 @@ CREATE TABLE IF NOT EXISTS cash_entries (
 CREATE TABLE IF NOT EXISTS settings (
   id TEXT PRIMARY KEY,
   "cashOpeningBalance" NUMERIC DEFAULT 0,
-  "cashOpeningDate" TEXT
+  "cashOpeningDate" TEXT,
+  "taxRatePct" NUMERIC DEFAULT 0,
+  "taxLabel" TEXT,
+  "companyName" TEXT,
+  "companyTagline" TEXT,
+  "companyAddress" TEXT,
+  "companyPhone" TEXT,
+  "companyTaxId" TEXT,
+  "monthlyTargetRs" NUMERIC DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS ledger (

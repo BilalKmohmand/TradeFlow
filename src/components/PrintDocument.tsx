@@ -4,8 +4,10 @@ import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
 import { todayISO } from '../utils/stockFlow';
 import { useEscape } from '../hooks/useEscape';
+import { dispatchBilledTotal } from '../types';
 
 export type PrintRequest =
+  | { type: 'voucher'; ledgerId: string }
   | { type: 'invoice'; dispatchId: string }
   | { type: 'challan'; dispatchId: string }
   | { type: 'statement'; customerId: string; from: string; to: string }
@@ -16,18 +18,20 @@ interface PrintDocumentProps {
   onClose: () => void;
 }
 
-const COMPANY = {
-  name: 'Sarmaya',
-  tagline: 'Pakistani Bulk Commodity Trading & Logistics',
-  address: 'Karachi, Pakistan',
-};
 
 /**
  * Printable business documents. The preview is on screen; "Print / Save PDF" uses the browser's
  * print dialog, with CSS in index.css that prints only #print-root.
  */
 export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }) => {
-  const { dispatches, bookings, customers, suppliers, products, ledger, trucks, currentUser } = useTrading();
+  const { dispatches, bookings, customers, suppliers, products, ledger, trucks, currentUser, settings } = useTrading();
+  const COMPANY = {
+    name: settings.companyName || 'Sarmaya',
+    tagline: settings.companyTagline || '',
+    address: settings.companyAddress || '',
+    phone: settings.companyPhone || '',
+    taxId: settings.companyTaxId || '',
+  };
   useEscape(Boolean(request), onClose);
 
   const content = useMemo(() => {
@@ -61,6 +65,8 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 <div>Booking <span className="font-mono font-bold">{booking?.bookingNumber}</span></div>
                 <div>Dispatch <span className="font-mono font-bold">{d.dispatchNumber}</span></div>
                 <div>Vehicle <span className="font-mono font-bold">{d.truckNumber}</span></div>
+                {d.grossKg != null && d.tareKg != null && <div>Weighbridge <span className="font-mono">gross {formatKg(d.grossKg)} − tare {formatKg(d.tareKg)}</span></div>}
+                {d.deliveredAt && <div>Delivered <span className="font-mono">{formatDate(d.deliveredAt)}</span>{d.receivedBy ? ` to ${d.receivedBy}` : ''}</div>}
                 {(truck?.driverName || d.driverPhone) && <div>Driver {truck?.driverName || ''} <span className="font-mono">{d.driverPhone || truck?.driverPhone || ''}</span></div>}
               </div>
             </div>
@@ -86,9 +92,15 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               </tbody>
               {isInvoice && (
                 <tfoot>
+                  {(d.freightCharge || 0) > 0 && (
+                    <tr><td colSpan={3} className="pt-3 text-right text-[11px] text-gray-600">Freight</td><td className="pt-3 text-right font-mono">{formatCurrency(d.freightCharge || 0)}</td></tr>
+                  )}
+                  {(d.taxAmount || 0) > 0 && (
+                    <tr><td colSpan={3} className="pt-1 text-right text-[11px] text-gray-600">{settings.taxLabel || 'Sales Tax'} ({d.taxRatePct || 0}%)</td><td className="pt-1 text-right font-mono">{formatCurrency(d.taxAmount || 0)}</td></tr>
+                  )}
                   <tr>
                     <td colSpan={3} className="pt-4 text-right font-bold uppercase tracking-widest text-[10px] text-gray-600">Total payable</td>
-                    <td className="pt-4 text-right font-mono font-extrabold text-base">{formatCurrency(d.amount)}</td>
+                    <td className="pt-4 text-right font-mono font-extrabold text-base">{formatCurrency(dispatchBilledTotal(d))}</td>
                   </tr>
                   {d.paymentReceivedImmediately && (
                     <tr><td colSpan={4} className="pt-1 text-right text-[11px] text-teal-700 font-bold">PAID ON DISPATCH</td></tr>
@@ -105,6 +117,40 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 <div className="border-t border-gray-900 pt-2">Received by (customer signature & stamp)</div>
               </div>
             )}
+          </>
+        ),
+      };
+    }
+
+    if (request.type === 'voucher') {
+      const l = ledger.find((x) => x.id === request.ledgerId);
+      if (!l || !(l.type === 'payment_received' || l.type === 'payment_made')) return null;
+      const isReceipt = l.type === 'payment_received';
+      const party = isReceipt ? customers.find((c) => c.id === l.entityId) : suppliers.find((s) => s.id === l.entityId);
+      return {
+        title: isReceipt ? 'RECEIPT VOUCHER' : 'PAYMENT VOUCHER',
+        number: l.referenceId,
+        date: l.date,
+        body: (
+          <>
+            <div className="grid grid-cols-2 gap-6 text-xs">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">{isReceipt ? 'Received from' : 'Paid to'}</div>
+                <div className="font-bold text-sm">{party?.company}</div>
+                <div>{party?.name}</div>
+                <div className="font-mono">{party?.phone}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Amount</div>
+                <div className="font-mono font-extrabold text-2xl">{formatCurrency(l.credit)}</div>
+                <div className="text-[11px] text-gray-500">Balance after: {formatCurrency(l.balanceAfter)}</div>
+              </div>
+            </div>
+            <div className="mt-6 text-xs border-t border-b border-gray-200 py-3">{l.description}</div>
+            <div className="grid grid-cols-2 gap-10 mt-16 text-xs">
+              <div className="border-t border-gray-900 pt-2">{isReceipt ? 'Received by' : 'Paid by'} ({COMPANY.name})</div>
+              <div className="border-t border-gray-900 pt-2">{isReceipt ? 'Payer signature' : 'Payee signature'}</div>
+            </div>
           </>
         ),
       };
@@ -189,7 +235,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       };
     }
     return null;
-  }, [request, dispatches, bookings, customers, suppliers, products, ledger, trucks]);
+  }, [request, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings]);
 
   if (!request) return null;
 
@@ -214,7 +260,8 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                   <div>
                     <div className="font-serif italic font-bold text-2xl leading-none">{COMPANY.name}</div>
                     <div className="text-[11px] text-gray-500 mt-1">{COMPANY.tagline}</div>
-                    <div className="text-[11px] text-gray-500">{COMPANY.address}</div>
+                    <div className="text-[11px] text-gray-500">{COMPANY.address}{COMPANY.phone ? ` • ${COMPANY.phone}` : ''}</div>
+                    {COMPANY.taxId && <div className="text-[11px] text-gray-500">Tax ID: {COMPANY.taxId}</div>}
                   </div>
                 </div>
                 <div className="text-right">

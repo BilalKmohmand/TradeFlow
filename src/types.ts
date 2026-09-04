@@ -74,7 +74,27 @@ export interface Dispatch {
   whatsappMessage?: string;
   paymentReceivedImmediately?: boolean;
   truckId?: string | null;
+  /** Weighbridge: gross and tare weights; kg is the net. */
+  grossKg?: number | null;
+  tareKg?: number | null;
+  /** Freight billed to the customer on top of goods (Rs.). */
+  freightCharge?: number;
+  /** Sales tax applied at dispatch time. */
+  taxRatePct?: number;
+  taxAmount?: number;
+  /** Goods + freight + tax: the invoice total that hits the customer ledger. */
+  totalBilled?: number;
+  status?: DispatchStatus;
+  deliveredAt?: string | null;
+  receivedBy?: string;
+  podNote?: string;
 }
+
+export type DispatchStatus = 'in_transit' | 'delivered';
+
+/** Invoice total for a dispatch (older rows have no totalBilled). */
+export const dispatchBilledTotal = (d: { amount: number; freightCharge?: number; taxAmount?: number; totalBilled?: number }) =>
+  d.totalBilled ?? Number((d.amount + (d.freightCharge || 0) + (d.taxAmount || 0)).toFixed(2));
 
 export type TransactionType =
   | 'booking_invoice'
@@ -124,6 +144,8 @@ export interface Purchase {
   notes?: string;
   paymentMadeImmediately?: boolean;
   createdAt: string;
+  grossKg?: number | null;
+  tareKg?: number | null;
 }
 
 export type PriceSource = 'product_created' | 'price_update' | 'manual' | 'booking' | 'purchase';
@@ -191,6 +213,8 @@ export interface Expense {
   description: string;
   paidVia?: string;
   truckId?: string | null;
+  /** Trip cost tied to a specific dispatch (per-trip profitability). */
+  dispatchId?: string | null;
   referenceId?: string;
   createdAt: string;
   createdBy?: string;
@@ -259,9 +283,34 @@ export interface AppSettings {
   id: 'default';
   cashOpeningBalance: number;
   cashOpeningDate: string;
+  /** Sales tax % applied to new dispatches (0 = none). */
+  taxRatePct?: number;
+  taxLabel?: string;
+  /** Company profile printed on documents. */
+  companyName?: string;
+  companyTagline?: string;
+  companyAddress?: string;
+  companyPhone?: string;
+  companyTaxId?: string;
+  /** Monthly sales target in Rs. shown on the dashboard (0 = off). */
+  monthlyTargetRs?: number;
 }
 
-export type AlertKind = 'low_stock' | 'overdue_receivable' | 'overdue_payable' | 'late_delivery' | 'credit_exceeded' | 'truck_maintenance';
+export const DEFAULT_SETTINGS: AppSettings = {
+  id: 'default',
+  cashOpeningBalance: 0,
+  cashOpeningDate: new Date().toISOString().split('T')[0],
+  taxRatePct: 0,
+  taxLabel: 'Sales Tax',
+  companyName: 'Sarmaya',
+  companyTagline: 'Pakistani Bulk Commodity Trading & Logistics',
+  companyAddress: 'Karachi, Pakistan',
+  companyPhone: '',
+  companyTaxId: '',
+  monthlyTargetRs: 0,
+};
+
+export type AlertKind = 'low_stock' | 'overdue_receivable' | 'overdue_payable' | 'late_delivery' | 'credit_exceeded' | 'truck_maintenance' | 'undelivered';
 
 export interface AppAlert {
   id: string;
@@ -270,5 +319,5 @@ export interface AppAlert {
   title: string;
   detail: string;
   /** Click-through target */
-  link?: { type: 'customer' | 'supplier' | 'product' | 'booking' | 'truck'; id: string };
+  link?: { type: 'customer' | 'supplier' | 'product' | 'booking' | 'truck'; id: string; dispatchId?: string };
 }

@@ -118,6 +118,7 @@ describe('alerts', () => {
     expect(kinds).toContain('overdue_receivable');
     expect(kinds).toContain('late_delivery');
     expect(kinds).toContain('truck_maintenance');
+    expect(kinds).not.toContain('undelivered');
     expect(alerts[0].severity).toBe('danger');
   });
 });
@@ -206,5 +207,16 @@ describe('cash book', () => {
     expect(d3.closing).toBe(12500);
     expect(book.days[0].date).toBe('2026-09-04');
     expect(cashBalanceOn(mv, settings, '2026-09-03')).toBe(12500);
+  });
+});
+
+describe('undelivered alert', () => {
+  it('flags dispatches still in transit after two days', () => {
+    const alerts = computeAlerts(
+      { products: [], customers: [], suppliers: [], bookings: [], trucks: [], ledger: [], dispatches: [{ id: 'd', dispatchNumber: 'DSP-1', bookingId: 'b', customerId: 'c', productId: 'p', kg: 100, amount: 1, truckNumber: 'X', date: '2026-09-01', whatsappSent: false, status: 'in_transit' }] },
+      '2026-09-04'
+    );
+    expect(alerts.map((a) => a.kind)).toEqual(['undelivered']);
+    expect(alerts[0].link?.dispatchId).toBe('d');
   });
 });

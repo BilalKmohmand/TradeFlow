@@ -20,6 +20,9 @@ import {
   AppUser,
   CashEntry,
   AppSettings,
+  DEFAULT_SETTINGS,
+  dispatchBilledTotal,
+  DispatchStatus,
   UserRole,
   Permission,
   ROLE_PERMISSIONS,
@@ -100,6 +103,8 @@ interface TradingContextType {
     truckNumber?: string;
     notes?: string;
     paymentMadeImmediately?: boolean;
+    grossKg?: number | null;
+    tareKg?: number | null;
   }) => Purchase;
   deletePurchase: (id: string) => DeleteSummary;
 
@@ -163,7 +168,12 @@ interface TradingContextType {
     notes?: string;
     paymentReceivedImmediately?: boolean;
     sendWhatsApp?: boolean;
+    grossKg?: number | null;
+    tareKg?: number | null;
+    freightCharge?: number;
   }) => { dispatch: Dispatch; message?: WhatsAppMessage };
+  markDelivered: (dispatchId: string, data?: { receivedBy?: string; podNote?: string; deliveredAt?: string }) => void;
+  reopenDispatch: (dispatchId: string) => void;
   
   recordCustomerPayment: (customerId: string, amount: number, notes?: string) => void;
   recordSupplierPayment: (supplierId: string, amount: number, notes?: string) => void;
@@ -225,6 +235,7 @@ export const todayISO = () => new Date().toISOString().split('T')[0];
 export type EditRequest = { type: 'customer' | 'supplier' | 'product' | 'booking'; id: string };
 /** Mirrors PrintRequest in components/PrintDocument.tsx without importing a component into the context. */
 export type PrintRequestLike =
+  | { type: 'voucher'; ledgerId: string }
   | { type: 'invoice'; dispatchId: string }
   | { type: 'challan'; dispatchId: string }
   | { type: 'statement'; customerId: string; from: string; to: string }
@@ -321,9 +332,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [trucks, setTrucks] = useState<Truck[]>(() => loadLocal(STORAGE_KEYS.TRUCKS, []));
   const [users, setUsers] = useState<AppUser[]>(() => loadLocal(STORAGE_KEYS.USERS, []));
   const [cashEntries, setCashEntries] = useState<CashEntry[]>(() => loadLocal(STORAGE_KEYS.CASH, []));
-  const [settings, setSettings] = useState<AppSettings>(() =>
-    safeParse<AppSettings>(localStorage.getItem(STORAGE_KEYS.SETTINGS), { id: 'default', cashOpeningBalance: 0, cashOpeningDate: todayISO() })
-  );
+  const [settings, setSettings] = useState<AppSettings>(() => ({
+    ...DEFAULT_SETTINGS,
+    ...safeParse<Partial<AppSettings>>(localStorage.getItem(STORAGE_KEYS.SETTINGS), {}),
+    id: 'default',
+  }));
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>(() => loadLocal(STORAGE_KEYS.LEDGER, initialLedgerEntries, normalizeLedger));
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>(() =>
@@ -379,7 +392,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setTrucks(data.trucks);
         setUsers(data.users);
         setCashEntries(data.cashEntries);
-        if (data.settings) setSettings({ ...data.settings, id: 'default' });
+        if (data.settings) setSettings((prev) => ({ ...DEFAULT_SETTINGS, ...prev, ...data.settings, id: 'default' }));
         setLedger(data.ledger);
         setWhatsappMessages(data.whatsappMessages);
         setIsCloudSyncReady(true);
@@ -586,6 +599,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     truckNumber,
     notes,
     paymentMadeImmediately = false,
+    grossKg = null,
+    tareKg = null,
   }: {
     supplierId: string;
     productId: string;
@@ -595,6 +610,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     truckNumber?: string;
     notes?: string;
     paymentMadeImmediately?: boolean;
+    grossKg?: number | null;
+    tareKg?: number | null;
   }): Purchase => {
     const supplier = suppliers.find((s) => s.id === supplierId);
     const product = products.find((p) => p.id === productId);
@@ -616,6 +633,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       notes,
       paymentMadeImmediately,
       createdAt: todayISO(),
+      grossKg,
+      tareKg,
     };
 
     // 1. Stock in
@@ -733,11 +752,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       prev.map((p) => (stockDelta.has(p.id) ? { ...p, stockKg: round2(p.stockKg + (stockDelta.get(p.id) || 0)) } : p))
     );
 
-    // Unpaid dispatch amounts come off the customer's outstanding balance
+    // Unpaid dispatch invoice totals come off the customer's outstanding balance
     const dueDelta = new Map<string, number>();
     targets
       .filter((d) => !d.paymentReceivedImmediately)
-      .forEach((d) => dueDelta.set(d.customerId, (dueDelta.get(d.customerId) || 0) + d.amount));
+      .forEach((d) => dueDelta.set(d.customerId, (dueDelta.get(d.customerId) || 0) + dispatchBilledTotal(d)));
     setCustomers((prev) =>
       prev.map((c) =>
         dueDelta.has(c.id) ? { ...c, totalDue: Math.max(0, round2(c.totalDue - (dueDelta.get(c.id) || 0))) } : c
@@ -794,6 +813,25 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       'danger'
     );
     return summary;
+  };
+
+  const markDelivered = (dispatchId: string, data: { receivedBy?: string; podNote?: string; deliveredAt?: string } = {}) => {
+    const d = dispatches.find((x) => x.id === dispatchId);
+    if (!d) return;
+    const deliveredAt = data.deliveredAt || todayISO();
+    setDispatches((prev) => prev.map((x) => (x.id === dispatchId ? { ...x, status: 'delivered' as DispatchStatus, deliveredAt, receivedBy: data.receivedBy?.trim() || undefined, podNote: data.podNote?.trim() || undefined } : x)));
+    if (d.truckId) {
+      const stillOut = dispatches.some((x) => x.id !== dispatchId && x.truckId === d.truckId && (x.status ?? 'in_transit') === 'in_transit');
+      if (!stillOut) setTrucks((prev) => prev.map((t) => (t.id === d.truckId && t.status === 'on_trip' ? { ...t, status: 'available' } : t)));
+    }
+    logAuditEvent('Dispatch Delivered', `${d.dispatchNumber} delivered on ${deliveredAt}${data.receivedBy ? `, received by ${data.receivedBy}` : ''}.`, 'info');
+  };
+
+  const reopenDispatch = (dispatchId: string) => {
+    const d = dispatches.find((x) => x.id === dispatchId);
+    if (!d) return;
+    setDispatches((prev) => prev.map((x) => (x.id === dispatchId ? { ...x, status: 'in_transit' as DispatchStatus, deliveredAt: null, receivedBy: undefined, podNote: undefined } : x)));
+    logAuditEvent('Dispatch Reopened', `${d.dispatchNumber} marked back in transit.`, 'warning');
   };
 
   /** Removes bookings and everything hanging off them. Returns the summary of removed rows. */
@@ -986,7 +1024,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       trucks: () => setTrucks([]),
       users: () => setUsers([]),
       cash_entries: () => setCashEntries([]),
-      settings: () => setSettings({ id: 'default', cashOpeningBalance: 0, cashOpeningDate: todayISO() }),
+      settings: () => setSettings({ ...DEFAULT_SETTINGS, cashOpeningDate: todayISO() }),
       ledger: () => setLedger([]),
       whatsapp_messages: () => setWhatsappMessages([]),
     };
@@ -1067,6 +1105,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     notes,
     paymentReceivedImmediately = false,
     sendWhatsApp = true,
+    grossKg = null,
+    tareKg = null,
+    freightCharge = 0,
   }: {
     bookingId: string;
     kg: number;
@@ -1076,6 +1117,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     notes?: string;
     paymentReceivedImmediately?: boolean;
     sendWhatsApp?: boolean;
+    grossKg?: number | null;
+    tareKg?: number | null;
+    freightCharge?: number;
   }) => {
     const booking = bookings.find((b) => b.id === bookingId);
     if (!booking) throw new Error('Booking not found');
@@ -1083,7 +1127,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const customer = customers.find((c) => c.id === booking.customerId);
     const product = products.find((p) => p.id === booking.productId);
     const today = new Date().toISOString().split('T')[0];
-    const dispatchAmount = kg * booking.pricePerKg;
+    const dispatchAmount = round2(kg * booking.pricePerKg);
+    const taxRatePct = settings.taxRatePct || 0;
+    const freight = round2(Math.max(0, freightCharge || 0));
+    const taxAmount = round2(((dispatchAmount + freight) * taxRatePct) / 100);
+    const totalBilled = round2(dispatchAmount + freight + taxAmount);
 
     // Recalculate kg
     const newDispatchedKg = Number((booking.dispatchedKg + kg).toFixed(2));
@@ -1094,7 +1142,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     let generatedMessage = '';
     if (customer && product) {
-      generatedMessage = `🚚 *Sarmaya Dispatch Alert*\n\nHello ${customer.name},\nTruck *${truckNumber.toUpperCase()}* carrying *${kg.toLocaleString()} kg* of *${product.name}* is on its way to your destination.\n\n📊 *Booking Status (${booking.bookingNumber})*:\n• Dispatched Now: ${kg.toLocaleString()} kg\n• Remaining Balance: ${newRemainingKg.toLocaleString()} kg\n• Invoice for this dispatch: *${formatCurrency(dispatchAmount)}*\n\n💳 Kindly confirm once payment has been initiated for this shipment.\nThank you for trading with us!`;
+      generatedMessage = `🚚 *Sarmaya Dispatch Alert*\n\nHello ${customer.name},\nTruck *${truckNumber.toUpperCase()}* carrying *${kg.toLocaleString()} kg* of *${product.name}* is on its way to your destination.\n\n📊 *Booking Status (${booking.bookingNumber})*:\n• Dispatched Now: ${kg.toLocaleString()} kg\n• Remaining Balance: ${newRemainingKg.toLocaleString()} kg\n• Goods: ${formatCurrency(dispatchAmount)}${freight > 0 ? `\n• Freight: ${formatCurrency(freight)}` : ''}${taxAmount > 0 ? `\n• ${settings.taxLabel || 'Sales Tax'} (${taxRatePct}%): ${formatCurrency(taxAmount)}` : ''}\n• Invoice total: *${formatCurrency(totalBilled)}*\n\n💳 Kindly confirm once payment has been initiated for this shipment.\nThank you for trading with us!`;
     }
 
     const newDispatch: Dispatch = {
@@ -1113,7 +1161,18 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       whatsappSent: sendWhatsApp,
       whatsappMessage: generatedMessage,
       paymentReceivedImmediately,
+      grossKg,
+      tareKg,
+      freightCharge: freight,
+      taxRatePct,
+      taxAmount,
+      totalBilled,
+      status: 'in_transit',
+      deliveredAt: null,
     };
+
+    // 0. Vehicle goes on trip
+    if (truckId) setTrucks((prev) => prev.map((t) => (t.id === truckId && t.status === 'available' ? { ...t, status: 'on_trip' } : t)));
 
     // 1. Update Booking
     setBookings((prev) =>
@@ -1145,8 +1204,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       )
     );
 
-    // 3. Update Customer Total Due & Ledger
-    const netDueChange = paymentReceivedImmediately ? 0 : dispatchAmount;
+    // 3. Update Customer Total Due & Ledger (invoice total incl. freight and tax)
+    const netDueChange = paymentReceivedImmediately ? 0 : totalBilled;
     setCustomers((prev) =>
       prev.map((c) =>
         c.id === booking.customerId
@@ -1164,10 +1223,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       type: 'dispatch_billed',
       referenceId: dispatchNum,
       date: today,
-      description: `Dispatch ${dispatchNum}: ${kg} kg ${product?.name || 'goods'}`,
-      debit: dispatchAmount,
+      description: `Dispatch ${dispatchNum}: ${kg} kg ${product?.name || 'goods'}${freight > 0 ? ` + freight ${formatCurrency(freight)}` : ''}${taxAmount > 0 ? ` + ${settings.taxLabel || 'tax'} ${formatCurrency(taxAmount)}` : ''}`,
+      debit: totalBilled,
       credit: 0,
-      balanceAfter: Number((currentCustomerDue + dispatchAmount).toFixed(2)),
+      balanceAfter: Number((currentCustomerDue + totalBilled).toFixed(2)),
       kg,
     };
 
@@ -1183,7 +1242,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         date: today,
         description: `Immediate payment received for ${dispatchNum}`,
         debit: 0,
-        credit: dispatchAmount,
+        credit: totalBilled,
         balanceAfter: Number((currentCustomerDue).toFixed(2)),
       };
       newLedgerEntries.push(paymentLedger);
@@ -1702,6 +1761,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         can,
         unlockAsUser,
         cancelBooking,
+        markDelivered,
+        reopenDispatch,
         cashEntries,
         addCashEntry,
         deleteCashEntry,

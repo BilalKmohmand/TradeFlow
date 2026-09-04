@@ -27,7 +27,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   onClose,
   preselectedBookingId,
 }) => {
-  const { bookings, customers, products, trucks, logDispatch } = useTrading();
+  const { bookings, customers, products, trucks, logDispatch, settings } = useTrading();
 
   const activeBookings = bookings.filter((b) => b.status === 'active' && b.remainingKg > 0);
 
@@ -36,6 +36,9 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   const [truckNumber, setTruckNumber] = useState<string>('');
   const [driverPhone, setDriverPhone] = useState<string>('');
   const [truckId, setTruckId] = useState<string>('');
+  const [grossKg, setGrossKg] = useState<string>('');
+  const [tareKg, setTareKg] = useState<string>('');
+  const [freight, setFreight] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [paymentReceivedImmediately, setPaymentReceivedImmediately] = useState<boolean>(false);
   const [sendWhatsApp, setSendWhatsApp] = useState<boolean>(true);
@@ -58,6 +61,17 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     ? Math.max(0, Number((currentBooking.remainingKg - dispatchKg).toFixed(2)))
     : 0;
   const dispatchAmount = currentBooking ? dispatchKg * currentBooking.pricePerKg : 0;
+  const freightAmount = Math.max(0, parseFloat(freight) || 0);
+  const taxRate = settings.taxRatePct || 0;
+  const taxAmount = ((dispatchAmount + freightAmount) * taxRate) / 100;
+  const totalBilled = dispatchAmount + freightAmount + taxAmount;
+  const applyWeights = (g: string, t: string) => {
+    setGrossKg(g);
+    setTareKg(t);
+    const gv = parseFloat(g);
+    const tv = parseFloat(t);
+    if (!isNaN(gv) && !isNaN(tv) && gv > tv) setKgInput(String(Math.round((gv - tv) * 100) / 100));
+  };
   const progressPercentBefore = currentBooking
     ? (currentBooking.dispatchedKg / currentBooking.totalKg) * 100
     : 0;
@@ -79,6 +93,9 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       kg: dispatchKg,
       truckNumber: truckNumber.trim() || 'TR-GENERIC',
       truckId: truckId || null,
+      grossKg: grossKg ? parseFloat(grossKg) : null,
+      tareKg: tareKg ? parseFloat(tareKg) : null,
+      freightCharge: freightAmount,
       driverPhone: driverPhone.trim(),
       notes: notes.trim(),
       paymentReceivedImmediately,
@@ -278,6 +295,30 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                   <div className="w-full bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl px-4 py-2.5 text-xs font-mono font-bold text-teal-800">
                     {formatCurrency(dispatchAmount)}
                   </div>
+                </div>
+              </div>
+
+              {/* Weighbridge + freight + invoice preview */}
+              <div className="p-4 bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#8E9299] mb-1.5 uppercase tracking-widest">Gross (kg)</label>
+                    <input type="number" min="0" step="1" value={grossKg} onChange={(e) => applyWeights(e.target.value, tareKg)} placeholder="Weighbridge" className="w-full bg-white border border-[#E5E5E1] rounded-2xl px-3 py-2 text-xs font-mono font-bold text-[#111827] focus:outline-hidden focus:border-teal-600" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#8E9299] mb-1.5 uppercase tracking-widest">Tare (kg)</label>
+                    <input type="number" min="0" step="1" value={tareKg} onChange={(e) => applyWeights(grossKg, e.target.value)} placeholder="Empty truck" className="w-full bg-white border border-[#E5E5E1] rounded-2xl px-3 py-2 text-xs font-mono font-bold text-[#111827] focus:outline-hidden focus:border-teal-600" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#8E9299] mb-1.5 uppercase tracking-widest">Freight (Rs.)</label>
+                    <input type="number" min="0" step="1" value={freight} onChange={(e) => setFreight(e.target.value)} placeholder="Billed to customer" className="w-full bg-white border border-[#E5E5E1] rounded-2xl px-3 py-2 text-xs font-mono font-bold text-[#111827] focus:outline-hidden focus:border-teal-600" />
+                  </div>
+                </div>
+                <div className="text-[11px] font-mono text-[#374151] space-y-0.5">
+                  <div className="flex justify-between"><span>Goods ({dispatchKg.toLocaleString()} kg)</span><span>{formatCurrency(dispatchAmount)}</span></div>
+                  {freightAmount > 0 && <div className="flex justify-between"><span>Freight</span><span>{formatCurrency(freightAmount)}</span></div>}
+                  {taxRate > 0 && <div className="flex justify-between"><span>{settings.taxLabel || 'Sales Tax'} ({taxRate}%)</span><span>{formatCurrency(taxAmount)}</span></div>}
+                  <div className="flex justify-between font-bold text-[#111827] border-t border-[#E5E5E1] pt-1 mt-1"><span>Invoice total</span><span>{formatCurrency(totalBilled)}</span></div>
                 </div>
               </div>
 

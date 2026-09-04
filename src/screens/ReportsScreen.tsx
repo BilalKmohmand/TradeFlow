@@ -559,6 +559,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
                     <th className="py-3.5 px-6">Truck / Driver</th>
                     <th className="py-3.5 px-6 text-right">Quantity</th>
                     <th className="py-3.5 px-6 text-right">Amount</th>
+                    <th className="py-3.5 px-6 text-center">Delivery</th>
                     <th className="py-3.5 px-6 text-center">WhatsApp Alert</th>
                     <th className="py-3.5 px-4 text-right"><span className="sr-only">Actions</span></th>
                   </tr>
@@ -566,7 +567,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
                 <tbody className="divide-y divide-[#F0F0EE] dark:divide-[#1E2E40] font-mono">
                   {dailyDispatches.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-[#8E9299] dark:text-[#64748B] font-sans">
+                      <td colSpan={9} className="py-12 text-center text-[#8E9299] dark:text-[#64748B] font-sans">
                         No dispatches logged for {selectedDate}.
                       </td>
                     </tr>
@@ -612,6 +613,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
                           </td>
                           <td className="py-3.5 px-6 text-right font-bold text-teal-800 dark:text-teal-400">
                             {formatCurrency(d.amount)}
+                          </td>
+                          <td className="py-3.5 px-6 text-center font-sans">
+                            {(d.status ?? 'in_transit') === 'delivered' ? (
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-teal-900 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/40 px-2.5 py-0.5 rounded-full border border-teal-200/80">Delivered</span>
+                            ) : (
+                              <button onClick={() => openBooking(d.bookingId, d.id)} className="text-[10px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-full border border-amber-200/80 hover:bg-amber-100">In transit</button>
+                            )}
                           </td>
                           <td className="py-3.5 px-6 text-center font-sans">
                             {d.whatsappSent ? (

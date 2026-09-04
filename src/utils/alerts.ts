@@ -1,4 +1,4 @@
-import { AppAlert, Booking, Customer, LedgerEntry, Product, Supplier, Truck } from '../types';
+import { AppAlert, Booking, Customer, Dispatch, LedgerEntry, Product, Supplier, Truck } from '../types';
 import { receivablesAging, payablesAging } from './finance';
 import { formatCurrency, formatKg, formatDate } from './formatters';
 
@@ -11,6 +11,7 @@ export const computeAlerts = (
     bookings: Booking[];
     trucks: Truck[];
     ledger: LedgerEntry[];
+    dispatches?: Dispatch[];
   },
   asOf: string
 ): AppAlert[] => {
@@ -80,6 +81,22 @@ export const computeAlerts = (
         title: `${b.bookingNumber} is past its delivery date`,
         detail: `${formatKg(b.remainingKg)} still to dispatch for ${cust?.name || 'customer'}; target was ${formatDate(b.targetDeliveryDate)}.`,
         link: { type: 'booking', id: b.id },
+      });
+    }
+  });
+
+  (data.dispatches || []).forEach((d) => {
+    if ((d.status ?? 'in_transit') !== 'in_transit') return;
+    const age = Math.floor((new Date(asOf + 'T00:00:00Z').getTime() - new Date(d.date + 'T00:00:00Z').getTime()) / 86400000);
+    if (age >= 2) {
+      const cust = data.customers.find((c) => c.id === d.customerId);
+      alerts.push({
+        id: `undelivered-${d.id}`,
+        kind: 'undelivered',
+        severity: age >= 5 ? 'danger' : 'warning',
+        title: `${d.dispatchNumber} not confirmed delivered`,
+        detail: `${d.truckNumber} left ${age} day(s) ago with ${formatKg(d.kg)} for ${cust?.name || 'customer'}. Mark it delivered or follow up with the driver.`,
+        link: { type: 'booking', id: d.bookingId, dispatchId: d.id },
       });
     }
   });

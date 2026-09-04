@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { TrendingUp, TrendingDown, AlertTriangle, Download, Receipt, Scale, Landmark, Wallet, ChevronDown, ChevronRight, Plus, Trash2, ArrowDownLeft, ArrowUpRight, Settings2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, Download, Receipt, Scale, Landmark, Wallet, ChevronDown, ChevronRight, Plus, Trash2, ArrowDownLeft, ArrowUpRight, Settings2, Printer } from 'lucide-react';
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { useTrading } from '../context/TradingContext';
 import { useTheme } from '../context/ThemeContext';
@@ -347,7 +347,7 @@ const SOURCE_LABEL: Record<CashMovement['source'], string> = {
 };
 
 export const CashBookPanel: React.FC<{ onDownload?: (f: string) => void }> = ({ onDownload }) => {
-  const { ledger, expenses, cashEntries, customers, suppliers, settings, updateSettings, addCashEntry, deleteCashEntry, deleteExpense, deleteLedgerEntry, setSelectedCustomerId, setSelectedSupplierId, can } = useTrading();
+  const { ledger, expenses, cashEntries, customers, suppliers, settings, updateSettings, addCashEntry, deleteCashEntry, deleteExpense, deleteLedgerEntry, setSelectedCustomerId, setSelectedSupplierId, setPrintRequest, can } = useTrading();
   const [range, setRange] = useState<'7' | '30' | 'month' | 'custom'>('7');
   const [customFrom, setCustomFrom] = useState(shiftDate(todayISO(), -6));
   const [customTo, setCustomTo] = useState(todayISO());
@@ -507,6 +507,7 @@ export const CashBookPanel: React.FC<{ onDownload?: (f: string) => void }> = ({ 
                             <span className="block text-[10px] text-[#8E9299] font-mono">{[m.reference, m.method, m.recordedBy ? `by ${m.recordedBy}` : ''].filter(Boolean).join(' • ')}</span>
                           </span>
                           <span className="text-right font-mono shrink-0"><span className={`font-bold ${m.direction === 'in' ? 'text-teal-800 dark:text-teal-400' : 'text-amber-800 dark:text-amber-400'}`}>{m.direction === 'in' ? '+' : '−'}{formatCurrency(m.amount)}</span><span className="block text-[10px] text-[#8E9299]">bal {formatCurrency(run)}</span></span>
+                          {(m.source === 'customer_payment' || m.source === 'supplier_payment') && (<button onClick={() => setPrintRequest({ type: 'voucher', ledgerId: m.sourceId })} title="Print voucher" className="p-1.5 rounded-lg text-[#8E9299] hover:text-teal-700 hover:bg-teal-50 shrink-0 self-end sm:self-center"><Printer className="w-3.5 h-3.5" /></button>)}
                           {can('delete_records') && (<button onClick={() => setPending(m)} title="Delete entry (admin)" className="p-1.5 rounded-lg text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 shrink-0 self-end sm:self-center"><Trash2 className="w-3.5 h-3.5" /></button>)}
                         </div>
                       );

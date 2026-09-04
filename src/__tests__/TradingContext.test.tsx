@@ -279,3 +279,61 @@ describe('trading flow', () => {
     expect(result.current.adminPin).toBe('7860');
   });
 });
+
+describe('tax, freight and delivery', () => {
+  it('applies sales tax and freight to the invoice, ledger and customer due; delete reverses the billed total', () => {
+    const { result } = setup();
+    let customerId = '';
+    let productId = '';
+    act(() => {
+      customerId = result.current.addCustomer({ name: 'Ali', company: 'A', phone: '1', email: '', address: '', creditLimit: 0 }).id;
+      productId = result.current.addProduct({ name: 'Cement', category: 'x', unitPricePerKg: 40, stockKg: 10000, minThresholdKg: 0 }).id;
+    });
+    act(() => {
+      result.current.updateSettings({ taxRatePct: 18, taxLabel: 'GST' });
+    });
+    let bookingId = '';
+    act(() => {
+      bookingId = result.current.createBooking({ customerId, productId, totalKg: 1000, pricePerKg: 40 }).id;
+    });
+    let dispatchId = '';
+    act(() => {
+      dispatchId = result.current.logDispatch({ bookingId, kg: 100, truckNumber: 'x', freightCharge: 500, grossKg: 25100, tareKg: 25000, sendWhatsApp: false }).dispatch.id;
+    });
+    const d = result.current.dispatches[0];
+    expect(d.amount).toBe(4000);
+    expect(d.freightCharge).toBe(500);
+    expect(d.taxAmount).toBe(810); // 18% of 4500
+    expect(d.totalBilled).toBe(5310);
+    expect(d.status).toBe('in_transit');
+    expect(result.current.customers[0].totalDue).toBe(5310);
+    expect(result.current.ledger[0].debit).toBe(5310);
+    act(() => {
+      result.current.markDelivered(dispatchId, { receivedBy: 'Guard', podNote: 'signed' });
+    });
+    expect(result.current.dispatches[0].status).toBe('delivered');
+    expect(result.current.dispatches[0].receivedBy).toBe('Guard');
+    act(() => {
+      result.current.deleteDispatch(dispatchId);
+    });
+    expect(result.current.customers[0].totalDue).toBe(0);
+    expect(result.current.products[0].stockKg).toBe(10000);
+  });
+
+  it('dispatching with a fleet vehicle puts it on trip and delivery frees it', () => {
+    const { result } = setup();
+    let customerId = '', productId = '', truckId = '';
+    act(() => {
+      customerId = result.current.addCustomer({ name: 'Ali', company: 'A', phone: '1', email: '', address: '', creditLimit: 0 }).id;
+      productId = result.current.addProduct({ name: 'Cement', category: 'x', unitPricePerKg: 40, stockKg: 10000, minThresholdKg: 0 }).id;
+      truckId = result.current.addTruck({ number: 'les-1', driverName: 'R', driverPhone: '', capacityKg: 20000, status: 'available' }).id;
+    });
+    let bookingId = '';
+    act(() => { bookingId = result.current.createBooking({ customerId, productId, totalKg: 1000, pricePerKg: 40 }).id; });
+    let dispatchId = '';
+    act(() => { dispatchId = result.current.logDispatch({ bookingId, kg: 100, truckNumber: 'LES-1', truckId, sendWhatsApp: false }).dispatch.id; });
+    expect(result.current.trucks[0].status).toBe('on_trip');
+    act(() => { result.current.markDelivered(dispatchId); });
+    expect(result.current.trucks[0].status).toBe('available');
+  });
+});
