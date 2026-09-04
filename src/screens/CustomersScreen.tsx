@@ -64,8 +64,8 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="bg-[#FAF9F6] px-5 py-2.5 rounded-2xl border border-[#E5E5E1] text-right">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="bg-[#FAF9F6] px-5 py-2.5 rounded-2xl border border-[#E5E5E1] text-right flex-1 sm:flex-none min-w-[150px]">
             <span className="text-[10px] uppercase font-bold tracking-widest text-[#8E9299] block">Total Due</span>
             <span className="text-xl font-bold font-mono text-teal-800">
               <AnimatedNumber value={totalReceivables} format="currency" />
@@ -74,7 +74,7 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
 
           <button
             onClick={onOpenAddCustomer}
-            className="px-5 py-2.5 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-2xl shadow-xs flex items-center gap-2 active:scale-95 transition-all border border-[#111827]"
+            className="px-5 py-2.5 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-2xl shadow-xs flex items-center justify-center gap-2 active:scale-95 transition-all border border-[#111827] flex-1 sm:flex-none whitespace-nowrap"
           >
             <Plus className="w-4 h-4 text-teal-400" />
             <span>Add Customer</span>

@@ -198,8 +198,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           </div>
 
           {/* Navigation Tabs */}
-          <div className="px-7 border-b border-[#E5E5E1] flex items-center justify-between bg-white">
-            <div className="flex gap-4 text-xs font-bold">
+          <div className="px-5 sm:px-7 border-b border-[#E5E5E1] flex items-center justify-between gap-3 bg-white overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex gap-4 text-xs font-bold shrink-0">
               <button
                 onClick={() => setActiveTab('overview')}
                 className={`py-3.5 border-b-2 transition-all ${

@@ -74,8 +74,8 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="bg-[#FAF9F6] px-5 py-2.5 rounded-2xl border border-[#E5E5E1] text-right">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="bg-[#FAF9F6] px-5 py-2.5 rounded-2xl border border-[#E5E5E1] text-right flex-1 sm:flex-none min-w-[150px]">
             <span className="text-[10px] uppercase font-bold tracking-widest text-[#8E9299] block">
               Pending Remaining
             </span>
@@ -86,7 +86,7 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
 
           <button
             onClick={onOpenNewBooking}
-            className="px-5 py-2.5 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-2xl shadow-xs flex items-center gap-2 active:scale-95 transition-all border border-[#111827]"
+            className="px-5 py-2.5 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-2xl shadow-xs flex items-center justify-center gap-2 active:scale-95 transition-all border border-[#111827] flex-1 sm:flex-none whitespace-nowrap"
           >
             <Plus className="w-4 h-4 text-teal-400" />
             <span>Create Booking</span>
@@ -150,23 +150,23 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
               >
                 <div className="space-y-3.5">
                   {/* Top Bar: Booking ID & Status */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <button
                         onClick={() => openBooking(b.id)}
                         title="Open booking details"
-                        className="font-extrabold text-sm font-mono text-[#111827] hover:text-teal-800 hover:underline underline-offset-2"
+                        className="font-extrabold text-sm font-mono text-[#111827] hover:text-teal-800 hover:underline underline-offset-2 whitespace-nowrap"
                       >
                         {b.bookingNumber}
                       </button>
                       <span
-                        className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                        className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border whitespace-nowrap ${
                           isFullyDispatched
                             ? 'bg-teal-50 text-teal-900 border-teal-200/80'
                             : 'bg-amber-50 text-amber-900 border-amber-200/80'
                         }`}
                       >
-                        {isFullyDispatched ? 'Fulfilled (100%)' : 'In Progress'}
+                        {isFullyDispatched ? 'Fulfilled' : b.status === 'cancelled' ? 'Cancelled' : 'In Progress'}
                       </span>
                     </div>
 

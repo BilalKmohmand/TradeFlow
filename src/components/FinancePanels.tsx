@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { TrendingUp, TrendingDown, AlertTriangle, Download, Receipt, Scale } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, Download, Receipt, Scale, Landmark } from 'lucide-react';
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { useTrading } from '../context/TradingContext';
 import { useTheme } from '../context/ThemeContext';
 import { formatCurrency, formatKg, formatDate, formatNumber } from '../utils/formatters';
-import { computeMonthlyPnL, pnlTrend, currentMonthKey, monthLabel, shiftMonth, receivablesAging, payablesAging, sumAging, AgingRow } from '../utils/finance';
+import { computeMonthlyPnL, pnlTrend, currentMonthKey, monthLabel, shiftMonth, receivablesAging, payablesAging, sumAging, AgingRow, computeBalanceSheet } from '../utils/finance';
 import { todayISO } from '../utils/stockFlow';
 import { EXPENSE_CATEGORIES, ExpenseCategory } from '../types';
 
@@ -49,7 +49,7 @@ export const PnLPanel: React.FC<{ onDownload?: (f: string) => void; onOpenExpens
   const stat = (label: string, value: string, sub?: string, tone: 'default' | 'good' | 'bad' = 'default') => (
     <div className={`${card} p-5 min-w-0`}>
       <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">{label}</div>
-      <div className={`text-xl sm:text-2xl font-bold font-mono mt-1.5 truncate ${tone === 'good' ? 'text-teal-800 dark:text-teal-400' : tone === 'bad' ? 'text-rose-700 dark:text-rose-400' : 'text-[#111827] dark:text-white'}`}>{value}</div>
+      <div className={`text-base sm:text-2xl font-bold font-mono mt-1.5 break-words ${tone === 'good' ? 'text-teal-800 dark:text-teal-400' : tone === 'bad' ? 'text-rose-700 dark:text-rose-400' : 'text-[#111827] dark:text-white'}`}>{value}</div>
       {sub && <div className="text-[11px] text-[#6B7280] dark:text-[#94A3B8] mt-1 font-mono truncate">{sub}</div>}
     </div>
   );
@@ -173,7 +173,7 @@ export const AgingPanel: React.FC<{ onDownload?: (f: string) => void }> = ({ onD
   const bucket = (label: string, value: number, tone: string) => (
     <div className={`${card} p-4 min-w-0`}>
       <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">{label}</div>
-      <div className={`text-lg font-bold font-mono mt-1 truncate ${tone}`}>{formatCurrency(value)}</div>
+      <div className={`text-sm sm:text-lg font-bold font-mono mt-1 break-words ${tone}`}>{formatCurrency(value)}</div>
       <div className="text-[10px] text-[#8E9299] font-mono">{totals.total > 0 ? `${((value / totals.total) * 100).toFixed(0)}%` : '0%'}</div>
     </div>
   );
@@ -198,7 +198,7 @@ export const AgingPanel: React.FC<{ onDownload?: (f: string) => void }> = ({ onD
         {bucket('Over 90 days', totals.d90plus, 'text-rose-700')}
         <div className={`${card} p-4 bg-[#111827] dark:bg-white text-white dark:text-[#111827] min-w-0`}>
           <div className="text-[10px] font-bold uppercase tracking-widest opacity-70 flex items-center gap-1"><Scale className="w-3 h-3" /> Total open</div>
-          <div className="text-lg font-bold font-mono mt-1 truncate">{formatCurrency(totals.total)}</div>
+          <div className="text-sm sm:text-lg font-bold font-mono mt-1 break-words">{formatCurrency(totals.total)}</div>
           <div className="text-[10px] opacity-70 font-mono">{rows.length} account(s)</div>
         </div>
       </div>
@@ -242,6 +242,95 @@ export const AgingPanel: React.FC<{ onDownload?: (f: string) => void }> = ({ onD
         </div>
       </div>
       <p className="text-[11px] text-[#8E9299]">Open amounts are computed from the ledger by applying payments to the oldest invoices first. Manual balance adjustments and deleted ledger rows are flagged where the recorded balance differs.</p>
+    </div>
+  );
+};
+
+// ===========================================================================
+// Balance sheet
+// ===========================================================================
+export const BalanceSheetPanel: React.FC<{ onDownload?: (f: string) => void }> = ({ onDownload }) => {
+  const { products, purchases, customers, suppliers, ledger, expenses, setSelectedProductId } = useTrading();
+  const [asOf, setAsOf] = useState(todayISO());
+  const bs = useMemo(() => computeBalanceSheet({ products, purchases, customers, suppliers, ledger, expenses }, asOf), [products, purchases, customers, suppliers, ledger, expenses, asOf]);
+
+  const exportCsv = () => {
+    let csv = `Balance sheet as at ${bs.asOf}\n\nASSETS\nInventory at cost,${bs.inventory.atCost}\nReceivables,${bs.receivables}\nCash & bank (net movements),${bs.cashNet.net}\nTotal assets,${bs.totalAssets}\n\nLIABILITIES\nPayables,${bs.payables}\nAccrued expenses,${bs.accruedExpenses}\nTotal liabilities,${bs.totalLiabilities}\n\nEQUITY,${bs.equity}\n\nInventory detail\nProduct,kg,Cost Rs./kg,Value\n`;
+    bs.inventory.lines.forEach((l) => (csv += `"${l.name}",${l.kg},${l.costPerKg ?? ''},${l.value}\n`));
+    downloadCsv(`sarmaya-balance-sheet-${asOf}.csv`, csv, onDownload);
+  };
+
+  const row = (label: string, value: number, opts: { bold?: boolean; sub?: string; tone?: string } = {}) => (
+    <div className={`flex items-start justify-between gap-3 py-2.5 ${opts.bold ? 'border-t-2 border-[#111827] dark:border-white mt-1 pt-3' : 'border-b border-[#F0F0EE] dark:border-[#1E2E40]'}`}>
+      <span className="min-w-0">
+        <span className={`text-xs ${opts.bold ? 'font-extrabold uppercase tracking-widest text-[#111827] dark:text-white' : 'font-semibold text-[#374151] dark:text-[#CBD5E1]'}`}>{label}</span>
+        {opts.sub && <span className="block text-[10px] text-[#8E9299] mt-0.5">{opts.sub}</span>}
+      </span>
+      <span className={`font-mono text-right shrink-0 ${opts.bold ? 'text-sm sm:text-base font-extrabold' : 'text-xs sm:text-sm font-bold'} ${opts.tone || 'text-[#111827] dark:text-white'}`}>{formatCurrency(value)}</span>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="font-semibold text-[#111827] dark:text-white">As at</span>
+          <input type="date" value={asOf} max={todayISO()} onChange={(e) => setAsOf(e.target.value)} className="bg-white dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-xl px-3 py-1.5 font-mono text-[#111827] dark:text-white" />
+        </div>
+        <button onClick={exportCsv} className="px-4 py-2 bg-[#111827] dark:bg-white text-white dark:text-[#111827] text-xs font-bold rounded-2xl flex items-center gap-1.5 w-fit"><Download className="w-3.5 h-3.5 text-teal-400 dark:text-teal-700" /> Export balance sheet</button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className={`${card} p-4 min-w-0`}><div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Total assets</div><div className="text-base sm:text-xl font-bold font-mono text-[#111827] dark:text-white mt-1 break-words">{formatCurrency(bs.totalAssets)}</div></div>
+        <div className={`${card} p-4 min-w-0`}><div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Total liabilities</div><div className="text-base sm:text-xl font-bold font-mono text-rose-700 mt-1 break-words">{formatCurrency(bs.totalLiabilities)}</div></div>
+        <div className="rounded-[28px] border border-[#111827] dark:border-white shadow-xs p-4 min-w-0 bg-[#111827] dark:bg-white text-white dark:text-[#111827]"><div className="text-[10px] font-bold uppercase tracking-widest opacity-70 flex items-center gap-1"><Landmark className="w-3 h-3" /> Owner's equity</div><div className={`text-base sm:text-xl font-bold font-mono mt-1 break-words ${bs.equity >= 0 ? 'text-teal-300 dark:text-teal-700' : 'text-rose-400'}`}>{formatCurrency(bs.equity)}</div></div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={`${card} p-5 sm:p-6`}>
+          <h3 className="text-sm font-bold text-[#111827] dark:text-white mb-2">Assets</h3>
+          {row('Inventory at cost', bs.inventory.atCost, { sub: `${formatKg(bs.inventory.kg)} on hand • ${formatCurrency(bs.inventory.atSellingPrice)} at selling price${bs.inventory.uncostedKg > 0 ? ` • ${formatKg(bs.inventory.uncostedKg)} without purchase cost` : ''}` })}
+          {row('Receivables from customers', bs.receivables, { sub: `${customers.filter((c) => c.totalDue > 0).length} customer(s) owing` })}
+          {row('Cash & bank (net of recorded movements)', bs.cashNet.net, { sub: `Received ${formatCurrency(bs.cashNet.received)} − paid suppliers ${formatCurrency(bs.cashNet.paidToSuppliers)} − expenses ${formatCurrency(bs.cashNet.expensesPaid)}`, tone: bs.cashNet.net >= 0 ? 'text-[#111827] dark:text-white' : 'text-rose-700' })}
+          {row('Total assets', bs.totalAssets, { bold: true })}
+        </div>
+        <div className="space-y-6">
+          <div className={`${card} p-5 sm:p-6`}>
+            <h3 className="text-sm font-bold text-[#111827] dark:text-white mb-2">Liabilities</h3>
+            {row('Payables to suppliers', bs.payables, { sub: `${suppliers.filter((s) => s.totalOwed > 0).length} supplier(s) owed` })}
+            {row('Accrued expenses (unpaid)', bs.accruedExpenses, { sub: 'Expenses recorded as "Credit (unpaid)"' })}
+            {row('Total liabilities', bs.totalLiabilities, { bold: true })}
+          </div>
+          <div className={`${card} p-5 sm:p-6`}>
+            <h3 className="text-sm font-bold text-[#111827] dark:text-white mb-2">Equity</h3>
+            {row("Owner's equity (assets − liabilities)", bs.equity, { bold: true, tone: bs.equity >= 0 ? 'text-teal-800 dark:text-teal-400' : 'text-rose-700' })}
+          </div>
+        </div>
+      </div>
+
+      <div className={`${card} overflow-hidden`}>
+        <div className="p-5 border-b border-[#E5E5E1] dark:border-[#203248]"><h3 className="text-sm font-bold text-[#111827] dark:text-white">Inventory valuation</h3><p className="text-[11px] text-[#8E9299]">Stock on hand at weighted-average purchase cost</p></div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-[#FAF9F6] dark:bg-[#162436] text-[#8E9299] uppercase tracking-widest font-bold text-[10px]"><tr><th className="py-3 px-4">Product</th><th className="py-3 px-4 text-right">On hand</th><th className="py-3 px-4 text-right">Cost /kg</th><th className="py-3 px-4 text-right">Value</th></tr></thead>
+            <tbody className="divide-y divide-[#FAF9F6] dark:divide-[#1E2E40] font-mono">
+              {bs.inventory.lines.length === 0 ? (
+                <tr><td colSpan={4} className="py-8 text-center text-[#8E9299] font-sans">No products.</td></tr>
+              ) : (
+                bs.inventory.lines.map((l) => (
+                  <tr key={l.productId} className="hover:bg-[#FAF9F6] dark:hover:bg-[#162436]">
+                    <td className="py-2.5 px-4 font-sans"><button onClick={() => setSelectedProductId(l.productId)} className="font-bold text-[#111827] dark:text-white hover:text-teal-800 hover:underline">{l.name}</button></td>
+                    <td className="py-2.5 px-4 text-right text-[#374151] dark:text-[#CBD5E1]">{formatKg(l.kg)}</td>
+                    <td className="py-2.5 px-4 text-right text-[#6B7280]">{l.costPerKg != null ? `Rs. ${l.costPerKg}` : <span className="text-amber-600">n/a</span>}</td>
+                    <td className="py-2.5 px-4 text-right font-bold text-[#111827] dark:text-white">{formatCurrency(l.value)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p className="text-[11px] text-[#8E9299]">Simplified management balance sheet built from the app's records. Cash has no opening balance and reflects only payments and expenses recorded here; fixed assets, loans and tax are not tracked.</p>
     </div>
   );
 };

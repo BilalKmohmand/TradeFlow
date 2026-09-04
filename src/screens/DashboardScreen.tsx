@@ -292,24 +292,24 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4 min-w-0">
               <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Revenue</div>
-              <div className="text-lg font-bold font-mono text-[#111827] mt-1 truncate"><AnimatedNumber value={pnl.revenue} format="currency" /></div>
+              <div className="text-sm sm:text-lg font-bold font-mono text-[#111827] mt-1 break-words"><AnimatedNumber value={pnl.revenue} format="currency" /></div>
               <div className="text-[10px] text-[#8E9299] font-mono mt-0.5">{formatKg(pnl.soldKg)} sold</div>
             </div>
             {can('view_finance') ? (
               <>
                 <div className="bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4 min-w-0">
                   <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Gross profit</div>
-                  <div className={`text-lg font-bold font-mono mt-1 truncate ${pnl.grossProfit >= 0 ? 'text-teal-800' : 'text-rose-700'}`}><AnimatedNumber value={pnl.grossProfit} format="currency" /></div>
+                  <div className={`text-sm sm:text-lg font-bold font-mono mt-1 break-words ${pnl.grossProfit >= 0 ? 'text-teal-800' : 'text-rose-700'}`}><AnimatedNumber value={pnl.grossProfit} format="currency" /></div>
                   <div className="text-[10px] text-[#8E9299] font-mono mt-0.5">{pnl.grossMarginPct != null ? `${pnl.grossMarginPct}% margin` : 'no sales yet'}</div>
                 </div>
                 <div className="bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4 min-w-0">
                   <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Expenses</div>
-                  <div className="text-lg font-bold font-mono text-amber-800 mt-1 truncate"><AnimatedNumber value={pnl.expenses} format="currency" /></div>
+                  <div className="text-sm sm:text-lg font-bold font-mono text-amber-800 mt-1 break-words"><AnimatedNumber value={pnl.expenses} format="currency" /></div>
                   <button onClick={() => openOps('expenses')} className="text-[10px] text-teal-700 font-semibold hover:underline mt-0.5">Record expense</button>
                 </div>
                 <div className={`rounded-2xl p-4 min-w-0 border ${pnl.netProfit >= 0 ? 'bg-[#111827] border-[#111827] text-white' : 'bg-rose-50 border-rose-200'}`}>
                   <div className={`text-[10px] font-bold uppercase tracking-widest ${pnl.netProfit >= 0 ? 'text-[#9CA3AF]' : 'text-rose-700'}`}>Net profit</div>
-                  <div className={`text-lg font-bold font-mono mt-1 truncate ${pnl.netProfit >= 0 ? 'text-teal-300' : 'text-rose-700'}`}><AnimatedNumber value={pnl.netProfit} format="currency" /></div>
+                  <div className={`text-sm sm:text-lg font-bold font-mono mt-1 break-words ${pnl.netProfit >= 0 ? 'text-teal-300' : 'text-rose-700'}`}><AnimatedNumber value={pnl.netProfit} format="currency" /></div>
                   <div className={`text-[10px] font-mono mt-0.5 ${pnl.netProfit >= 0 ? 'text-[#9CA3AF]' : 'text-rose-700'}`}>{pnl.netMarginPct != null ? `${pnl.netMarginPct}% net` : '—'}</div>
                 </div>
               </>

@@ -306,3 +306,49 @@ export const creditExposure = (customer: Customer, bookings: { customerId: strin
     .reduce((a, b) => a + b.remainingKg * b.pricePerKg, 0);
   return { outstanding: customer.totalDue, committed: round2(committed), exposure: round2(customer.totalDue + committed), limit: customer.creditLimit };
 };
+
+// ---------------------------------------------------------------------------
+// Balance sheet (simplified, derived from operational records as of a date).
+// Cash is the net of money movements recorded in the app since records began:
+// customer payments in, supplier payments out, expenses paid. There is no opening cash figure.
+// ---------------------------------------------------------------------------
+export interface BalanceSheet {
+  asOf: string;
+  inventory: { kg: number; atCost: number; atSellingPrice: number; uncostedKg: number; lines: { productId: string; name: string; kg: number; costPerKg: number | null; value: number }[] };
+  receivables: number;
+  cashNet: { received: number; paidToSuppliers: number; expensesPaid: number; net: number };
+  totalAssets: number;
+  payables: number;
+  accruedExpenses: number;
+  totalLiabilities: number;
+  equity: number;
+}
+
+export const computeBalanceSheet = (
+  data: { products: Product[]; purchases: Purchase[]; customers: Customer[]; suppliers: Supplier[]; ledger: LedgerEntry[]; expenses: Expense[] },
+  asOf: string
+): BalanceSheet => {
+  const lines = data.products.map((p) => {
+    const cost = costPerKgOn(data.purchases, p.id, asOf);
+    return { productId: p.id, name: p.name, kg: p.stockKg, costPerKg: cost != null ? round2(cost) : null, value: round2(p.stockKg * (cost ?? 0)) };
+  });
+  const inventory = {
+    kg: lines.reduce((a, l) => a + l.kg, 0),
+    atCost: round2(lines.reduce((a, l) => a + l.value, 0)),
+    atSellingPrice: round2(data.products.reduce((a, p) => a + p.stockKg * p.unitPricePerKg, 0)),
+    uncostedKg: lines.filter((l) => l.costPerKg == null).reduce((a, l) => a + l.kg, 0),
+    lines: lines.sort((a, b) => b.value - a.value),
+  };
+  const receivables = round2(data.customers.reduce((a, c) => a + c.totalDue, 0));
+  const upTo = data.ledger.filter((l) => l.date <= asOf);
+  const received = round2(upTo.filter((l) => l.entityType === 'customer' && l.type === 'payment_received').reduce((a, l) => a + l.credit, 0));
+  const paidToSuppliers = round2(upTo.filter((l) => l.entityType === 'supplier' && l.type === 'payment_made').reduce((a, l) => a + l.credit, 0));
+  const expUpTo = data.expenses.filter((e) => e.date <= asOf);
+  const expensesPaid = round2(expUpTo.filter((e) => e.paidVia !== 'Credit (unpaid)').reduce((a, e) => a + e.amount, 0));
+  const accruedExpenses = round2(expUpTo.filter((e) => e.paidVia === 'Credit (unpaid)').reduce((a, e) => a + e.amount, 0));
+  const cashNet = { received, paidToSuppliers, expensesPaid, net: round2(received - paidToSuppliers - expensesPaid) };
+  const payables = round2(data.suppliers.reduce((a, s) => a + s.totalOwed, 0));
+  const totalAssets = round2(inventory.atCost + receivables + cashNet.net);
+  const totalLiabilities = round2(payables + accruedExpenses);
+  return { asOf, inventory, receivables, cashNet, totalAssets, payables, accruedExpenses, totalLiabilities, equity: round2(totalAssets - totalLiabilities) };
+};

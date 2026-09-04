@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { costPerKgOn, computeMonthlyPnL, ageLedger, receivablesAging, creditExposure, shiftMonth, pnlTrend, productSalesHistory } from '../utils/finance';
+import { costPerKgOn, computeMonthlyPnL, ageLedger, receivablesAging, creditExposure, shiftMonth, pnlTrend, productSalesHistory, computeBalanceSheet } from '../utils/finance';
 import { computeAlerts } from '../utils/alerts';
 import { LedgerEntry } from '../types';
 
@@ -139,5 +139,32 @@ describe('product sales history', () => {
     expect(sep.lastYearKg).toBe(250);
     expect(sep.kgChangePct).toBe(100);
     expect(rows[0].kgChangePct).toBeNull();
+  });
+});
+
+describe('balance sheet', () => {
+  it('values stock at cost, nets cash movements and balances equity', () => {
+    const bs = computeBalanceSheet(
+      {
+        products: products as any,
+        purchases,
+        customers: [{ id: 'c1', name: 'A', company: 'A', phone: '1', totalDue: 30000, creditLimit: 0 } as any],
+        suppliers: [{ id: 's1', name: 'S', company: 'S', phone: '2', totalOwed: 15000 } as any],
+        ledger: [
+          { id: 'x', entityType: 'customer', entityId: 'c1', type: 'payment_received', referenceId: 'r', date: '2026-09-01', description: '', debit: 0, credit: 10000, balanceAfter: 0 },
+          { id: 'y', entityType: 'supplier', entityId: 's1', type: 'payment_made', referenceId: 'r', date: '2026-09-02', description: '', debit: 0, credit: 4000, balanceAfter: 0 },
+          { id: 'z', entityType: 'customer', entityId: 'c1', type: 'payment_received', referenceId: 'r', date: '2026-12-01', description: '', debit: 0, credit: 99999, balanceAfter: 0 },
+        ],
+        expenses: [...expenses, { id: 'e3', date: '2026-09-06', category: 'rent' as const, amount: 5000, description: 'unpaid rent', paidVia: 'Credit (unpaid)', createdAt: '2026-09-06' }],
+      },
+      '2026-09-30'
+    );
+    expect(bs.inventory.atCost).toBe(1500 * 25); // cement at weighted avg 25; steel uncosted -> 0
+    expect(bs.inventory.uncostedKg).toBe(50);
+    expect(bs.receivables).toBe(30000);
+    expect(bs.cashNet.net).toBe(10000 - 4000 - 3000 - 9000); // December payment excluded
+    expect(bs.payables).toBe(15000);
+    expect(bs.accruedExpenses).toBe(5000);
+    expect(bs.equity).toBe(bs.totalAssets - bs.totalLiabilities);
   });
 });

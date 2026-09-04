@@ -78,8 +78,8 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="bg-[#FAF9F6] px-5 py-2.5 rounded-2xl border border-[#E5E5E1] text-right">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="bg-[#FAF9F6] px-5 py-2.5 rounded-2xl border border-[#E5E5E1] text-right flex-1 sm:flex-none min-w-[150px]">
             <span className="text-[10px] uppercase font-bold tracking-widest text-[#8E9299] block">
               Total Stock on Hand
             </span>
@@ -90,14 +90,14 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
 
           <button
             onClick={() => onReceiveStock()}
-            className="px-4 py-2.5 bg-[#FAF9F6] hover:bg-[#F4F3EF] text-[#111827] font-semibold text-xs rounded-2xl border border-[#E5E5E1] flex items-center gap-1.5 transition-colors"
+            className="px-4 py-2.5 bg-[#FAF9F6] hover:bg-[#F4F3EF] text-[#111827] font-semibold text-xs rounded-2xl border border-[#E5E5E1] flex items-center justify-center gap-1.5 transition-colors flex-1 sm:flex-none whitespace-nowrap"
           >
             <PackagePlus className="w-4 h-4 text-teal-700" />
             <span>Receive Stock</span>
           </button>
           <button
             onClick={onOpenAddProduct}
-            className="px-5 py-2.5 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-2xl shadow-xs flex items-center gap-2 active:scale-95 transition-all border border-[#111827]"
+            className="px-5 py-2.5 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-2xl shadow-xs flex items-center justify-center gap-2 active:scale-95 transition-all border border-[#111827] flex-1 sm:flex-none whitespace-nowrap"
           >
             <Plus className="w-4 h-4 text-teal-400" />
             <span>Add Commodity</span>
@@ -257,8 +257,8 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                 )}
               </div>
 
-              <div className="pt-2 border-t border-[#F0F0EE] flex items-center justify-between gap-2">
-                <span className="text-[11px] font-mono text-[#8E9299] truncate">
+              <div className="pt-2 border-t border-[#F0F0EE] flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-mono text-[#8E9299] w-full sm:w-auto">
                   Total Value: {formatCurrency(prod.stockKg * prod.unitPricePerKg)}
                 </span>
 

@@ -170,7 +170,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ productI
   const tabBtn = (id: typeof tab, label: string) => (
     <button
       onClick={() => setTab(id)}
-      className={`py-3.5 border-b-2 transition-all ${tab === id ? 'border-teal-700 text-[#111827]' : 'border-transparent text-[#8E9299] hover:text-[#111827]'}`}
+      className={`py-3.5 border-b-2 transition-all shrink-0 ${tab === id ? 'border-teal-700 text-[#111827]' : 'border-transparent text-[#8E9299] hover:text-[#111827]'}`}
     >
       {label}
     </button>
@@ -230,7 +230,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ productI
             </div>
 
             {/* Tabs */}
-            <div className="px-6 sm:px-7 border-b border-[#E5E5E1] flex gap-4 text-xs font-bold bg-white overflow-x-auto">
+            <div className="px-6 sm:px-7 border-b border-[#E5E5E1] flex gap-4 text-xs font-bold bg-white overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {tabBtn('price', `Price History (${entries.length})`)}
               {tabBtn('sales', 'Sales by Month')}
               {tabBtn('movements', `Stock In / Out (${movements.length})`)}

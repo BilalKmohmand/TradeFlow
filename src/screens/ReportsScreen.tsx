@@ -35,7 +35,7 @@ import { useTrading } from '../context/TradingContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Dispatch, ReportsTab } from '../types';
 import { StockFlowPanel } from '../components/StockFlowPanel';
-import { PnLPanel, AgingPanel } from '../components/FinancePanels';
+import { PnLPanel, AgingPanel, BalanceSheetPanel } from '../components/FinancePanels';
 import { useTheme } from '../context/ThemeContext';
 import { formatCurrency, formatKg, formatDate, formatNumber } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
@@ -318,10 +318,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
 
         {/* Tab Selector & Prominent Download Report Button */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-[#FAF9F6] dark:bg-[#162436] p-1.5 rounded-full border border-[#E5E5E1] dark:border-[#203248] flex items-center gap-1 text-xs font-bold">
+          <div className="bg-[#FAF9F6] dark:bg-[#162436] p-1.5 rounded-3xl sm:rounded-full border border-[#E5E5E1] dark:border-[#203248] flex flex-wrap items-center gap-1 text-xs font-bold max-w-full">
             <button
               onClick={() => setReportTab('daily')}
-              className={`px-4 py-1.5 rounded-full transition-all ${
+              className={`px-4 py-1.5 rounded-full whitespace-nowrap transition-all ${
                 reportTab === 'daily'
                   ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
                   : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'
@@ -331,7 +331,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
             </button>
             <button
               onClick={() => setReportTab('monthly')}
-              className={`px-4 py-1.5 rounded-full transition-all ${
+              className={`px-4 py-1.5 rounded-full whitespace-nowrap transition-all ${
                 reportTab === 'monthly'
                   ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
                   : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'
@@ -341,7 +341,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
             </button>
             <button
               onClick={() => setReportTab('flow')}
-              className={`px-4 py-1.5 rounded-full transition-all ${
+              className={`px-4 py-1.5 rounded-full whitespace-nowrap transition-all ${
                 reportTab === 'flow'
                   ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
                   : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'
@@ -353,7 +353,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
               <>
                 <button
                   onClick={() => setReportTab('pnl')}
-                  className={`px-4 py-1.5 rounded-full transition-all ${
+                  className={`px-4 py-1.5 rounded-full whitespace-nowrap transition-all ${
                     reportTab === 'pnl'
                       ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
                       : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'
@@ -363,7 +363,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
                 </button>
                 <button
                   onClick={() => setReportTab('aging')}
-                  className={`px-4 py-1.5 rounded-full transition-all ${
+                  className={`px-4 py-1.5 rounded-full whitespace-nowrap transition-all ${
                     reportTab === 'aging'
                       ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
                       : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'
@@ -371,12 +371,22 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
                 >
                   Aging
                 </button>
+                <button
+                  onClick={() => setReportTab('balance')}
+                  className={`px-4 py-1.5 rounded-full whitespace-nowrap transition-all ${
+                    reportTab === 'balance'
+                      ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
+                      : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'
+                  }`}
+                >
+                  Balance Sheet
+                </button>
               </>
             )}
           </div>
 
           {/* Prominent Download Report Button */}
-          {reportTab !== 'flow' && reportTab !== 'pnl' && reportTab !== 'aging' && (
+          {(reportTab === 'daily' || reportTab === 'monthly') && (
           <button
             onClick={handleDownloadReport}
             title="Download CSV for local bookkeeping"
@@ -427,6 +437,15 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
       {reportTab === 'pnl' && (
         <PnLPanel
           onOpenExpenses={() => openOps('expenses')}
+          onDownload={(fileName) => {
+            setDownloadSuccessToast(fileName);
+            setTimeout(() => setDownloadSuccessToast(null), 4000);
+          }}
+        />
+      )}
+
+      {reportTab === 'balance' && (
+        <BalanceSheetPanel
           onDownload={(fileName) => {
             setDownloadSuccessToast(fileName);
             setTimeout(() => setDownloadSuccessToast(null), 4000);

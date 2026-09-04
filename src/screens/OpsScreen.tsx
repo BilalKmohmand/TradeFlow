@@ -164,7 +164,7 @@ export const OpsScreen: React.FC<OpsScreenProps> = ({ initialTab = 'alerts' }) =
   const tabBtn = (id: OpsTab, label: string, icon: React.ReactNode, count?: number) => (
     <button
       onClick={() => setTab(id)}
-      className={`px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 ${tab === id ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs' : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'}`}
+      className={`px-4 py-1.5 rounded-full whitespace-nowrap transition-all flex items-center gap-1.5 ${tab === id ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs' : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'}`}
     >
       {icon}
       {label}
@@ -185,7 +185,7 @@ export const OpsScreen: React.FC<OpsScreenProps> = ({ initialTab = 'alerts' }) =
           <h2 className="text-3xl sm:text-4xl font-serif italic font-normal tracking-tight text-[#111827] dark:text-white mt-1.5">Operations</h2>
           <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">Fleet & drivers, operating expenses, and everything that needs attention today.</p>
         </div>
-        <div className="bg-[#FAF9F6] dark:bg-[#162436] p-1.5 rounded-full border border-[#E5E5E1] dark:border-[#203248] flex items-center gap-1 text-xs font-bold w-fit">
+        <div className="bg-[#FAF9F6] dark:bg-[#162436] p-1.5 rounded-3xl sm:rounded-full border border-[#E5E5E1] dark:border-[#203248] flex flex-wrap items-center gap-1 text-xs font-bold w-fit max-w-full">
           {tabBtn('alerts', 'Alerts', <Bell className="w-3.5 h-3.5" />, alerts.length)}
           {tabBtn('fleet', 'Fleet', <TruckIcon className="w-3.5 h-3.5" />)}
           {tabBtn('expenses', 'Expenses', <Receipt className="w-3.5 h-3.5" />)}

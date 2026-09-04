@@ -76,7 +76,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({ bookingI
                   </span>
                   <span className="text-xs text-[#9CA3AF] flex items-center gap-1"><Calendar className="w-3 h-3" /> {formatDate(booking.createdAt)}</span>
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-serif italic text-white font-mono">{booking.bookingNumber}</h2>
+                <h2 className="text-xl sm:text-3xl font-serif italic text-white font-mono whitespace-nowrap">{booking.bookingNumber}</h2>
                 <div className="flex items-center gap-4 text-xs flex-wrap">
                   {customer && (
                     <button onClick={() => go(() => setSelectedCustomerId(customer.id))} className="text-[#D1D5DB] hover:text-white flex items-center gap-1 hover:underline">
