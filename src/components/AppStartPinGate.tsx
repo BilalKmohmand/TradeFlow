@@ -168,22 +168,22 @@ export const AppStartPinGate: React.FC = () => {
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-teal-500/5 dark:bg-teal-500/10 blur-3xl pointer-events-none rounded-full" />
 
       {/* Top Header Bar */}
-      <div className="w-full max-w-5xl mx-auto flex items-center justify-between z-10">
+      <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 xl:px-8 flex items-center justify-between z-10">
         {/* Brand identity */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-[#111827] dark:bg-[#162436] flex items-center justify-center text-white shadow-xs border border-transparent dark:border-[#203248]">
+          <div className="w-11 h-11 rounded-2xl bg-[#111827] dark:bg-[#162436] flex items-center justify-center text-white shadow-xs border border-transparent dark:border-[#203248]">
             <Truck className="w-5 h-5 text-teal-400" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-serif italic font-bold text-lg tracking-tight text-[#111827] dark:text-white">
+              <span className="font-serif italic font-bold text-xl tracking-tight text-[#111827] dark:text-white">
                 Sarmaya
               </span>
-              <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 bg-white dark:bg-[#162436] text-teal-800 dark:text-teal-300 rounded-full border border-[#E5E5E1] dark:border-[#203248]">
+              <span className="text-[11px] uppercase font-bold tracking-widest px-2.5 py-0.5 bg-white dark:bg-[#162436] text-teal-800 dark:text-teal-300 rounded-full border border-[#E5E5E1] dark:border-[#203248]">
                 سرمایہ
               </span>
             </div>
-            <div className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">
+            <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
               Pakistani Bulk Commodity Trading
             </div>
           </div>
@@ -191,8 +191,8 @@ export const AppStartPinGate: React.FC = () => {
 
         {/* Right side controls: PKT Time & Theme Toggle */}
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white dark:bg-[#101A26] border border-[#E5E5E1] dark:border-[#203248] text-xs font-mono text-[#6B7280] dark:text-[#94A3B8] shadow-2xs">
-            <Clock className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+          <div className="hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white dark:bg-[#101A26] border border-[#E5E5E1] dark:border-[#203248] text-xs font-mono text-[#6B7280] dark:text-[#94A3B8] shadow-2xs">
+            <Clock className="w-4 h-4 text-teal-600 dark:text-teal-400" />
             <span>PKT {currentTime}</span>
           </div>
 
@@ -212,7 +212,7 @@ export const AppStartPinGate: React.FC = () => {
       </div>
 
       {/* Main Center PIN Card */}
-      <div className="w-full flex-1 flex items-center justify-center my-6 z-10">
+      <div className="w-full flex-1 flex items-center justify-center my-6 z-10 px-2">
         <motion.div
           key={`pin-terminal-${shakeTrigger}`}
           animate={{
@@ -221,42 +221,42 @@ export const AppStartPinGate: React.FC = () => {
             opacity: isSuccess ? 0.7 : 1,
           }}
           transition={{ duration: 0.35, ease: 'easeInOut' }}
-          className="w-full max-w-sm sm:max-w-md bg-white dark:bg-[#101A26] rounded-3xl border border-[#E5E5E1] dark:border-[#203248] p-6 sm:p-8 shadow-xl text-center flex flex-col items-center"
+          className="w-full max-w-md sm:max-w-lg md:max-w-[480px] bg-white dark:bg-[#101A26] rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] p-7 sm:p-9 shadow-2xl text-center flex flex-col items-center"
         >
           {/* Animated Lock Icon */}
           <div
-            className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 transition-all shadow-xs border ${
+            className={`w-18 h-18 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl flex items-center justify-center mb-4 transition-all shadow-xs border ${
               isSuccess
                 ? 'bg-teal-500 text-white border-teal-400 scale-105'
                 : 'bg-teal-50 dark:bg-teal-950/50 border-teal-200 dark:border-teal-800/60 text-teal-700 dark:text-teal-400'
             }`}
           >
-            {isSuccess ? <Unlock className="w-8 h-8" /> : <Lock className="w-8 h-8" />}
+            {isSuccess ? <Unlock className="w-8 h-8 sm:w-9 sm:h-9" /> : <Lock className="w-8 h-8 sm:w-9 sm:h-9" />}
           </div>
 
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF9F6] dark:bg-[#162436] text-[11px] font-bold text-teal-800 dark:text-teal-300 border border-[#E5E5E1] dark:border-[#203248] mb-2 uppercase tracking-wider">
-            <ShieldCheck className="w-3.5 h-3.5" />
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#FAF9F6] dark:bg-[#162436] text-xs font-bold text-teal-800 dark:text-teal-300 border border-[#E5E5E1] dark:border-[#203248] mb-2 uppercase tracking-wider">
+            <ShieldCheck className="w-4 h-4" />
             <span>Protected Trading Terminal</span>
           </div>
 
-          <h2 className="font-serif italic text-2xl sm:text-3xl font-bold text-[#111827] dark:text-white mb-2">
+          <h2 className="font-serif italic text-2xl sm:text-3xl md:text-4xl font-bold text-[#111827] dark:text-white mb-2">
             Enter PIN to Open
           </h2>
-          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] max-w-xs mb-5 leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] max-w-sm mb-6 leading-relaxed">
             Please enter your security PIN to access dispatches, customer ledgers, and trade bookings.
           </p>
 
           {/* PIN Digits Display */}
-          <div className="flex items-center justify-center gap-2.5 sm:gap-3 mb-3">
+          <div className="flex items-center justify-center gap-3 sm:gap-3.5 mb-3">
             {[0, 1, 2, 3].map((slotIdx) => {
               const isFilled = enteredPin.length > slotIdx;
               const char = enteredPin[slotIdx];
               return (
                 <div
                   key={slotIdx}
-                  className={`w-12 h-14 rounded-2xl flex items-center justify-center text-xl font-mono font-bold transition-all border ${
+                  className={`w-14 h-16 sm:w-16 sm:h-20 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl font-mono font-bold transition-all border ${
                     isFilled
-                      ? 'border-teal-600 bg-teal-50/60 dark:bg-teal-950/40 text-teal-800 dark:text-teal-200 shadow-xs scale-105'
+                      ? 'border-teal-600 bg-teal-50/70 dark:bg-teal-950/50 text-teal-800 dark:text-teal-200 shadow-xs scale-105'
                       : 'border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] text-[#8E9299]'
                   }`}
                 >
@@ -265,7 +265,7 @@ export const AppStartPinGate: React.FC = () => {
               );
             })}
             {enteredPin.length > 4 && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 sm:gap-3.5">
                 {[4, 5].map((slotIdx) => {
                   if (enteredPin.length <= slotIdx && slotIdx === 5) return null;
                   const isFilled = enteredPin.length > slotIdx;
@@ -273,7 +273,7 @@ export const AppStartPinGate: React.FC = () => {
                   return (
                     <div
                       key={slotIdx}
-                      className="w-12 h-14 rounded-2xl flex items-center justify-center text-xl font-mono font-bold border border-teal-600 bg-teal-50/60 dark:bg-teal-950/40 text-teal-800 dark:text-teal-200"
+                      className="w-14 h-16 sm:w-16 sm:h-20 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl font-mono font-bold border border-teal-600 bg-teal-50/70 dark:bg-teal-950/50 text-teal-800 dark:text-teal-200"
                     >
                       {isFilled ? (showDigits ? char : '•') : ''}
                     </div>
@@ -284,22 +284,22 @@ export const AppStartPinGate: React.FC = () => {
           </div>
 
           {/* Mask toggle or Error notification */}
-          <div className="min-h-6 flex items-center justify-center mb-4">
+          <div className="min-h-7 flex items-center justify-center mb-4">
             {errorMessage ? (
-              <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 font-semibold animate-in fade-in">
-                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+              <div className="flex items-center gap-1.5 text-xs sm:text-sm text-rose-600 dark:text-rose-400 font-semibold animate-in fade-in">
+                <ShieldAlert className="w-4 h-4 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
             ) : isSuccess ? (
-              <div className="flex items-center gap-1.5 text-xs text-teal-700 dark:text-teal-400 font-bold animate-in fade-in">
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <div className="flex items-center gap-1.5 text-xs sm:text-sm text-teal-700 dark:text-teal-400 font-bold animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>PIN Verified • Opening Terminal...</span>
               </div>
             ) : (
               <button
                 type="button"
                 onClick={() => setShowDigits(!showDigits)}
-                className="text-[11px] text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white flex items-center gap-1.5 py-1 px-2.5 rounded-lg hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"
+                className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white flex items-center gap-1.5 py-1 px-3 rounded-lg hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"
               >
                 {showDigits ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 <span>{showDigits ? 'Mask Digits' : 'Show Digits'}</span>
@@ -308,13 +308,13 @@ export const AppStartPinGate: React.FC = () => {
           </div>
 
           {/* Tactile Keypad */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-2.5 w-full max-w-[280px] mb-4">
+          <div className="grid grid-cols-3 gap-2.5 sm:gap-3 w-full max-w-[320px] sm:max-w-[360px] mb-4">
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
               <button
                 key={num}
                 type="button"
                 onClick={() => handleDigit(num)}
-                className="h-12 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] active:scale-95 text-[#111827] dark:text-white font-mono font-semibold text-lg border border-[#E5E5E1] dark:border-[#203248] transition-all flex items-center justify-center shadow-2xs"
+                className="h-13 sm:h-15 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] active:scale-95 text-[#111827] dark:text-white font-mono font-semibold text-xl sm:text-2xl border border-[#E5E5E1] dark:border-[#203248] transition-all flex items-center justify-center shadow-2xs"
               >
                 {num}
               </button>
@@ -323,14 +323,14 @@ export const AppStartPinGate: React.FC = () => {
               type="button"
               onClick={handleClear}
               title="Clear All (Esc)"
-              className="h-12 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-rose-50 dark:hover:bg-rose-950/30 active:scale-95 text-[#6B7280] hover:text-rose-600 dark:text-[#94A3B8] font-semibold text-xs border border-[#E5E5E1] dark:border-[#203248] transition-all flex items-center justify-center"
+              className="h-13 sm:h-15 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-rose-50 dark:hover:bg-rose-950/30 active:scale-95 text-[#6B7280] hover:text-rose-600 dark:text-[#94A3B8] font-semibold text-xs sm:text-sm border border-[#E5E5E1] dark:border-[#203248] transition-all flex items-center justify-center"
             >
               Clear
             </button>
             <button
               type="button"
               onClick={() => handleDigit('0')}
-              className="h-12 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] active:scale-95 text-[#111827] dark:text-white font-mono font-semibold text-lg border border-[#E5E5E1] dark:border-[#203248] transition-all flex items-center justify-center shadow-2xs"
+              className="h-13 sm:h-15 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] active:scale-95 text-[#111827] dark:text-white font-mono font-semibold text-xl sm:text-2xl border border-[#E5E5E1] dark:border-[#203248] transition-all flex items-center justify-center shadow-2xs"
             >
               0
             </button>
@@ -338,7 +338,7 @@ export const AppStartPinGate: React.FC = () => {
               type="button"
               onClick={handleBackspace}
               title="Backspace"
-              className="h-12 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] active:scale-95 text-[#6B7280] dark:text-[#94A3B8] font-semibold text-xs border border-[#E5E5E1] dark:border-[#203248] transition-all flex items-center justify-center"
+              className="h-13 sm:h-15 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] active:scale-95 text-[#6B7280] dark:text-[#94A3B8] font-semibold text-xs sm:text-sm border border-[#E5E5E1] dark:border-[#203248] transition-all flex items-center justify-center"
             >
               ⌫
             </button>
@@ -348,18 +348,18 @@ export const AppStartPinGate: React.FC = () => {
           <button
             type="button"
             onClick={handleUnlockAttempt}
-            className="w-full max-w-[280px] bg-[#111827] dark:bg-white hover:bg-black dark:hover:bg-slate-100 text-white dark:text-[#111827] font-semibold text-sm py-3 px-4 rounded-2xl flex items-center justify-center gap-2 shadow-xs active:scale-98 transition-all mb-4"
+            className="w-full max-w-[320px] sm:max-w-[360px] h-13 sm:h-14 bg-[#111827] dark:bg-white hover:bg-black dark:hover:bg-slate-100 text-white dark:text-[#111827] font-bold text-sm sm:text-base py-3 sm:py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2.5 shadow-sm active:scale-98 transition-all mb-4"
           >
             <Unlock className="w-4 h-4 text-teal-400 dark:text-teal-700" />
             <span>Unlock Terminal</span>
           </button>
 
           {/* PIN Action Bar */}
-          <div className="pt-3 border-t border-[#E5E5E1] dark:border-[#203248] w-full flex items-center justify-center">
+          <div className="pt-3.5 border-t border-[#E5E5E1] dark:border-[#203248] w-full flex items-center justify-center">
             <button
               type="button"
               onClick={() => setShowChangePinModal(true)}
-              className="text-xs text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white hover:underline flex items-center gap-1.5 py-1 px-3 rounded-xl hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"
+              className="text-xs sm:text-sm text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white hover:underline flex items-center gap-1.5 py-1 px-3 rounded-xl hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors font-medium"
             >
               <KeyRound className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
               <span>Change PIN</span>
@@ -369,7 +369,7 @@ export const AppStartPinGate: React.FC = () => {
       </div>
 
       {/* Footer Info */}
-      <div className="w-full max-w-5xl mx-auto text-center text-xs text-[#8E9299] dark:text-[#64748B] z-10 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 xl:px-8 text-center text-xs sm:text-sm text-[#8E9299] dark:text-[#64748B] z-10 flex flex-col sm:flex-row items-center justify-between gap-2 pt-2">
         <div>
           Pakistan Bulk Commodities • Cement, Coal, Steel & Chemical Haulage
         </div>
