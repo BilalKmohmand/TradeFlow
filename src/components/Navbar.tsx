@@ -59,7 +59,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#101A26]/90 backdrop-blur-md border-b border-[#E5E5E1] dark:border-[#203248] text-[#111827] dark:text-[#F1F5F9] shadow-xs transition-colors">
-      <div className="max-w-7xl min-w-0 mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
+      <div className="max-w-7xl min-w-0 w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
         <div className="flex items-center justify-between min-h-16 min-w-0 py-3 gap-3 sm:gap-4">
           {/* Logo & Brand */}
           <div className="flex items-center gap-3 shrink-0">
@@ -75,14 +75,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                   Bulk Trading
                 </span>
               </div>
-              <p className="text-[11px] text-[#8E9299] dark:text-[#94A3B8] font-medium hidden sm:block">
+              <p className="text-[11px] text-[#8E9299] dark:text-[#94A3B8] font-medium hidden 2xl:block">
                 Simple • Smart • Automated
               </p>
             </div>
           </div>
 
           {/* Core Navigation Items */}
-          <nav className="hidden lg:flex items-center gap-1 bg-[#FAF9F6] dark:bg-[#162436] p-1.5 rounded-full border border-[#E5E5E1] dark:border-[#203248]">
+          <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 bg-[#FAF9F6] dark:bg-[#162436] p-1 rounded-full border border-[#E5E5E1] dark:border-[#203248]">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeScreen === item.id;
@@ -90,51 +90,52 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   key={item.id}
                   onClick={() => setActiveScreen(item.id)}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  title={item.label}
+                  className={`flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
                     isActive
                       ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
                       : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40]'
                   }`}
                 >
                   <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-teal-400 dark:text-teal-700' : 'text-[#8E9299] dark:text-[#64748B]'}`} />
-                  <span>{item.label}</span>
+                  <span className="hidden xl:inline">{item.label}</span>
                 </button>
               );
             })}
           </nav>
 
-          {/* Global Command Bar Search Trigger (CMD+K) */}
+          {/* Global Command Bar Search Trigger (CMD+K) - High Contrast & Dedicated Width */}
           <button
             onClick={onOpenCommandBar}
-            title="Global Quick Search (CMD+K)"
-            className="flex items-center gap-2.5 px-3 py-2 bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl text-xs text-[#6B7280] dark:text-[#94A3B8] transition-all max-w-[140px] sm:max-w-[220px] flex-1 min-w-0 justify-between group"
+            title="Global Quick Search (Press ⌘K or Ctrl+K to open)"
+            className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] border border-[#CBD5E1] dark:border-[#2A3F5A] hover:border-teal-600/50 dark:hover:border-teal-400/50 rounded-2xl text-xs text-[#374151] dark:text-[#E2E8F0] shadow-2xs transition-all w-36 sm:w-44 lg:w-36 xl:w-52 shrink min-w-0 justify-between group cursor-pointer"
           >
             <div className="flex items-center gap-2 truncate min-w-0">
               <Search className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0 group-hover:scale-110 transition-transform" />
-              <span className="hidden sm:inline text-xs truncate font-medium text-[#8E9299] dark:text-[#94A3B8]">
+              <span className="text-xs font-medium text-[#4B5563] dark:text-[#CBD5E1] group-hover:text-[#111827] dark:group-hover:text-white truncate">
                 Search...
               </span>
             </div>
-            <div className="hidden sm:flex items-center gap-0.5 text-[10px] font-mono font-semibold bg-white dark:bg-[#101A26] px-1.5 py-0.5 rounded-lg border border-[#E5E5E1] dark:border-[#203248] text-[#8E9299] dark:text-[#94A3B8] shrink-0">
+            <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono font-semibold bg-[#F1F5F9] dark:bg-[#0D1520] px-1.5 py-0.5 rounded-md border border-[#CBD5E1] dark:border-[#203248] text-[#475569] dark:text-[#94A3B8] shadow-2xs shrink-0">
               <span>⌘K</span>
-            </div>
+            </kbd>
           </button>
 
           {/* Right Action Hub */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Automated System-Aware Theme Toggle */}
             <div className="relative" ref={themeMenuRef}>
               <button
                 onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
                 title={`Theme: ${timeLabel}. Click to switch theme.`}
-                className="p-2.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-[#F1F5F9] border border-[#E5E5E1] dark:border-[#203248] transition-colors flex items-center gap-1.5"
+                className="px-2.5 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-[#F1F5F9] border border-[#E5E5E1] dark:border-[#203248] transition-colors flex items-center gap-1.5"
               >
                 {themeMode === 'auto' ? (
-                  <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400 animate-pulse" />
+                  <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 animate-pulse" />
                 ) : themeMode === 'dark' ? (
-                  <Moon className="w-4 h-4 text-teal-400" />
+                  <Moon className="w-3.5 h-3.5 text-teal-400" />
                 ) : (
-                  <Sun className="w-4 h-4 text-amber-500" />
+                  <Sun className="w-3.5 h-3.5 text-amber-500" />
                 )}
                 <span className="hidden xl:inline text-[11px] font-semibold text-[#6B7280] dark:text-[#94A3B8]">
                   {themeMode === 'auto' ? 'Auto' : themeMode === 'dark' ? 'Ocean' : 'Light'}
@@ -231,7 +232,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={() => lockAdmin()}
               title="Lock Trading Terminal (Requires PIN to enter)"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#E5E5E1] dark:border-[#203248] hover:border-rose-200 dark:hover:border-rose-900/60 text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600 dark:hover:text-rose-400 transition-all shadow-2xs active:scale-95"
+              className="flex items-center gap-1.5 px-2.5 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#E5E5E1] dark:border-[#203248] hover:border-rose-200 dark:hover:border-rose-900/60 text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600 dark:hover:text-rose-400 transition-all shadow-2xs active:scale-95"
             >
               <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
               <span className="hidden sm:inline">Lock</span>
@@ -240,7 +241,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Quick Dispatch Button */}
             <button
               onClick={onOpenDispatch}
-              className="bg-[#111827] dark:bg-white hover:bg-black dark:hover:bg-slate-100 text-white dark:text-[#111827] text-xs font-bold py-2.5 px-3.5 sm:px-4 rounded-2xl flex items-center gap-2 shadow-xs active:scale-95 transition-all border border-[#111827] dark:border-white"
+              className="bg-[#111827] dark:bg-white hover:bg-black dark:hover:bg-slate-100 text-white dark:text-[#111827] text-xs font-bold py-2 px-3 sm:px-3.5 rounded-2xl flex items-center gap-1.5 sm:gap-2 shadow-xs active:scale-95 transition-all border border-[#111827] dark:border-white"
             >
               <Truck className="w-3.5 h-3.5 text-teal-400 dark:text-teal-700" />
               <span className="hidden sm:inline">Log Dispatch</span>
@@ -250,7 +251,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenWhatsAppDrawer}
               title="Open WhatsApp Automation Hub"
-              className="relative p-2.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-[#F1F5F9] border border-[#E5E5E1] dark:border-[#203248] transition-colors"
+              className="relative p-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-[#F1F5F9] border border-[#E5E5E1] dark:border-[#203248] transition-colors"
             >
               <MessageSquare className="w-4 h-4 text-teal-700 dark:text-teal-400" />
               {whatsappMessages.length > 0 && (

@@ -130,24 +130,27 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.05 }}
-          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-teal-600/40 transition-colors relative overflow-hidden min-w-0"
+          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-teal-600/40 transition-colors relative overflow-hidden min-w-0 flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between">
+          <div>
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
               Today's Dispatches
             </span>
-            <div className="w-9 h-9 rounded-2xl bg-[#FAF9F6] border border-[#E5E5E1] text-teal-700 flex items-center justify-center">
-              <Truck className="w-4 h-4" />
+            <div className="mt-3">
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
+                <AnimatedNumber value={todayDispatchedTons} format="tons" />
+              </div>
+              <div className="text-xs text-teal-800 font-medium font-mono mt-1.5 flex items-center gap-1">
+                <span>Value:</span>
+                <AnimatedNumber value={todayDispatchedValue} format="currency" />
+                <span className="text-[#8E9299] font-sans font-normal">({todayDispatches.length} trucks)</span>
+              </div>
             </div>
           </div>
-          <div className="mt-4">
-            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
-              <AnimatedNumber value={todayDispatchedTons} format="tons" />
-            </div>
-            <div className="text-xs text-teal-800 font-medium font-mono mt-1.5 flex items-center gap-1">
-              <span>Value:</span>
-              <AnimatedNumber value={todayDispatchedValue} format="currency" />
-              <span className="text-[#8E9299] font-sans font-normal">({todayDispatches.length} trucks)</span>
+          <div className="mt-4 pt-3 border-t border-[#E5E5E1]/60 flex items-center justify-between">
+            <span className="text-[11px] text-[#8E9299]">Daily Tonnage</span>
+            <div className="w-8 h-8 rounded-xl bg-[#FAF9F6] border border-[#E5E5E1] text-teal-700 flex items-center justify-center">
+              <Truck className="w-4 h-4" />
             </div>
           </div>
         </motion.div>
@@ -157,23 +160,26 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.1 }}
-          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-amber-600/40 transition-colors relative overflow-hidden min-w-0"
+          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-amber-600/40 transition-colors relative overflow-hidden min-w-0 flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between">
+          <div>
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
               Pending Bookings
             </span>
-            <div className="w-9 h-9 rounded-2xl bg-[#FAF9F6] border border-[#E5E5E1] text-amber-700 flex items-center justify-center">
-              <ShoppingBag className="w-4 h-4" />
+            <div className="mt-3">
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
+                <AnimatedNumber value={totalPendingTons} format="tons" />
+              </div>
+              <div className="text-xs text-amber-800 font-medium font-mono mt-1.5">
+                <span>Contract value: </span>
+                <AnimatedNumber value={totalPendingValue} format="currency" />
+              </div>
             </div>
           </div>
-          <div className="mt-4">
-            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
-              <AnimatedNumber value={totalPendingTons} format="tons" />
-            </div>
-            <div className="text-xs text-amber-800 font-medium font-mono mt-1.5">
-              <span>Contract value: </span>
-              <AnimatedNumber value={totalPendingValue} format="currency" />
+          <div className="mt-4 pt-3 border-t border-[#E5E5E1]/60 flex items-center justify-between">
+            <span className="text-[11px] text-[#8E9299]">Awaiting Haulage</span>
+            <div className="w-8 h-8 rounded-xl bg-[#FAF9F6] border border-[#E5E5E1] text-amber-700 flex items-center justify-center">
+              <ShoppingBag className="w-4 h-4" />
             </div>
           </div>
         </motion.div>
@@ -183,22 +189,25 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.15 }}
-          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-teal-600/40 transition-colors relative overflow-hidden min-w-0"
+          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-teal-600/40 transition-colors relative overflow-hidden min-w-0 flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between">
+          <div>
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
               Total Receivables
             </span>
-            <div className="w-9 h-9 rounded-2xl bg-[#FAF9F6] border border-[#E5E5E1] text-teal-700 flex items-center justify-center">
-              <ArrowDownLeft className="w-4 h-4" />
+            <div className="mt-3">
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-teal-800 tracking-tight">
+                <AnimatedNumber value={totalReceivables} format="currency" />
+              </div>
+              <div className="text-xs text-[#8E9299] font-medium mt-1.5">
+                Across {customers.filter((c) => c.totalDue > 0).length} active customer accounts
+              </div>
             </div>
           </div>
-          <div className="mt-4">
-            <div className="text-2xl sm:text-3xl font-bold font-mono text-teal-800 tracking-tight">
-              <AnimatedNumber value={totalReceivables} format="currency" />
-            </div>
-            <div className="text-xs text-[#8E9299] font-medium mt-1.5">
-              Across {customers.filter((c) => c.totalDue > 0).length} active customer accounts
+          <div className="mt-4 pt-3 border-t border-[#E5E5E1]/60 flex items-center justify-between">
+            <span className="text-[11px] text-[#8E9299]">Outstanding Inflow</span>
+            <div className="w-8 h-8 rounded-xl bg-[#FAF9F6] border border-[#E5E5E1] text-teal-700 flex items-center justify-center">
+              <ArrowDownLeft className="w-4 h-4" />
             </div>
           </div>
         </motion.div>
@@ -208,22 +217,25 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.2 }}
-          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-[#111827]/40 transition-colors relative overflow-hidden min-w-0"
+          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-[#111827]/40 transition-colors relative overflow-hidden min-w-0 flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between">
+          <div>
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
               Total Payables (Owed)
             </span>
-            <div className="w-9 h-9 rounded-2xl bg-[#FAF9F6] border border-[#E5E5E1] text-[#111827] flex items-center justify-center">
-              <ArrowUpRight className="w-4 h-4" />
+            <div className="mt-3">
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
+                <AnimatedNumber value={totalPayables} format="currency" />
+              </div>
+              <div className="text-xs text-[#8E9299] font-medium mt-1.5">
+                Across {suppliers.length} primary source suppliers
+              </div>
             </div>
           </div>
-          <div className="mt-4">
-            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
-              <AnimatedNumber value={totalPayables} format="currency" />
-            </div>
-            <div className="text-xs text-[#8E9299] font-medium mt-1.5">
-              Across {suppliers.length} primary source suppliers
+          <div className="mt-4 pt-3 border-t border-[#E5E5E1]/60 flex items-center justify-between">
+            <span className="text-[11px] text-[#8E9299]">Mill & Plant Due</span>
+            <div className="w-8 h-8 rounded-xl bg-[#FAF9F6] border border-[#E5E5E1] text-[#111827] flex items-center justify-center">
+              <ArrowUpRight className="w-4 h-4" />
             </div>
           </div>
         </motion.div>
