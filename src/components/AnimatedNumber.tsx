@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { motion, useSpring, useTransform } from 'motion/react';
 
 interface AnimatedNumberProps {
@@ -35,7 +35,7 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
       } else if (format === 'tons') {
         setDisplayValue(
           `${new Intl.NumberFormat('en-PK', {
-            minimumFractionDigits: 1,
+            minimumFractionDigits: 0,
             maximumFractionDigits: 1,
           }).format(num)} T`
         );
@@ -54,5 +54,24 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
     return () => unsubscribe();
   }, [spring, format]);
 
-  return <motion.span className={className}>{displayValue || (format === 'currency' ? `Rs.${new Intl.NumberFormat('en-PK').format(Math.round(value))}` : value)}</motion.span>;
+  const fallbackValue = useMemo(() => {
+    if (format === 'currency') {
+      return `Rs. ${new Intl.NumberFormat('en-PK').format(Math.round(value))}`;
+    }
+    if (format === 'tons') {
+      return `${new Intl.NumberFormat('en-PK', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1,
+      }).format(value)} T`;
+    }
+    if (format === 'decimal') {
+      return new Intl.NumberFormat('en-PK', {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 2,
+      }).format(value);
+    }
+    return new Intl.NumberFormat('en-PK').format(Math.round(value));
+  }, [format, value]);
+
+  return <motion.span className={className}>{displayValue || fallbackValue}</motion.span>;
 };

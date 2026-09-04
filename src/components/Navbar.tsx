@@ -60,7 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#101A26]/90 backdrop-blur-md border-b border-[#E5E5E1] dark:border-[#203248] text-[#111827] dark:text-[#F1F5F9] shadow-xs transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-18 gap-3 sm:gap-4">
+        <div className="flex items-center justify-between min-h-16 py-3 gap-3 sm:gap-4">
           {/* Logo & Brand */}
           <div className="flex items-center gap-3 shrink-0">
             <div className="w-10 h-10 rounded-2xl bg-[#111827] dark:bg-[#162436] flex items-center justify-center text-white shadow-xs border border-transparent dark:border-[#203248]">
@@ -68,10 +68,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-serif italic font-bold text-xl tracking-tight text-[#111827] dark:text-white">
+                <h1 className="font-serif italic font-bold text-lg sm:text-xl tracking-tight text-[#111827] dark:text-white">
                   Sarmaya
                 </h1>
-                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 bg-[#FAF9F6] dark:bg-[#162436] text-teal-800 dark:text-teal-300 rounded-full border border-[#E5E5E1] dark:border-[#203248]">
+                <span className="hidden sm:inline-flex text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 bg-[#FAF9F6] dark:bg-[#162436] text-teal-800 dark:text-teal-300 rounded-full border border-[#E5E5E1] dark:border-[#203248]">
                   Bulk Trading
                 </span>
               </div>
@@ -107,12 +107,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={onOpenCommandBar}
             title="Global Quick Search (CMD+K)"
-            className="flex items-center gap-2.5 px-3 py-2 bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl text-xs text-[#6B7280] dark:text-[#94A3B8] transition-all max-w-[200px] sm:max-w-[240px] w-full justify-between group"
+            className="flex items-center gap-2.5 px-3 py-2 bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl text-xs text-[#6B7280] dark:text-[#94A3B8] transition-all max-w-[140px] sm:max-w-[220px] w-full justify-between group"
           >
-            <div className="flex items-center gap-2 truncate">
+            <div className="flex items-center gap-2 truncate min-w-0">
               <Search className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0 group-hover:scale-110 transition-transform" />
-              <span className="text-xs truncate font-medium text-[#8E9299] dark:text-[#94A3B8]">
-                Search or jump to...
+              <span className="hidden sm:inline text-xs truncate font-medium text-[#8E9299] dark:text-[#94A3B8]">
+                Search...
               </span>
             </div>
             <div className="hidden sm:flex items-center gap-0.5 text-[10px] font-mono font-semibold bg-white dark:bg-[#101A26] px-1.5 py-0.5 rounded-lg border border-[#E5E5E1] dark:border-[#203248] text-[#8E9299] dark:text-[#94A3B8] shrink-0">

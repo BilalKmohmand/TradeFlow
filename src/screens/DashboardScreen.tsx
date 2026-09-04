@@ -26,7 +26,7 @@ import {
   Bar,
 } from 'recharts';
 import { useTrading } from '../context/TradingContext';
-import { formatCurrency, formatTons, formatDate } from '../utils/formatters';
+import { formatCurrency, formatTons, formatDate, formatNumber } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
 
 interface DashboardScreenProps {
@@ -89,7 +89,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   return (
     <div className="space-y-6 pb-12">
       {/* Top Banner / Welcome with Quick Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs">
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-teal-600" />
@@ -141,7 +141,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
           </div>
           <div className="mt-4">
-            <div className="text-3xl font-bold font-mono text-[#111827] tracking-tight">
+            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
               <AnimatedNumber value={todayDispatchedTons} format="tons" />
             </div>
             <div className="text-xs text-teal-800 font-medium font-mono mt-1.5 flex items-center gap-1">
@@ -168,7 +168,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
           </div>
           <div className="mt-4">
-            <div className="text-3xl font-bold font-mono text-[#111827] tracking-tight">
+            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
               <AnimatedNumber value={totalPendingTons} format="tons" />
             </div>
             <div className="text-xs text-amber-800 font-medium font-mono mt-1.5">
@@ -194,7 +194,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
           </div>
           <div className="mt-4">
-            <div className="text-3xl font-bold font-mono text-teal-800 tracking-tight">
+            <div className="text-2xl sm:text-3xl font-bold font-mono text-teal-800 tracking-tight">
               <AnimatedNumber value={totalReceivables} format="currency" />
             </div>
             <div className="text-xs text-[#8E9299] font-medium mt-1.5">
@@ -219,7 +219,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
           </div>
           <div className="mt-4">
-            <div className="text-3xl font-bold font-mono text-[#111827] tracking-tight">
+            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
               <AnimatedNumber value={totalPayables} format="currency" />
             </div>
             <div className="text-xs text-[#8E9299] font-medium mt-1.5">
@@ -232,7 +232,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       {/* Main Grid: Quick Sales Chart + Active Bookings Quick Dispatch */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Minimal Clean Sales & Dispatch Chart */}
-        <div className="lg:col-span-2 bg-white p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-5">
+        <div className="lg:col-span-2 bg-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-5">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-serif italic font-normal text-2xl text-[#111827]">Weekly Dispatch & Revenue Trend</h3>
@@ -246,9 +246,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
           </div>
 
-          <div className="h-64 w-full pt-2">
+          <div className="h-56 sm:h-64 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="tealGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#0d9488" stopOpacity={0.25} />
@@ -267,7 +267,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   fontSize={11}
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={(v) => `${v}T`}
+                  width={45}
+                  tickFormatter={(v) => `${formatNumber(v)}T`}
                 />
                 <Tooltip
                   content={({ active, payload, label }) => {
@@ -301,7 +302,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
 
         {/* Right 1 Col: Smart WhatsApp Background Automation Activity */}
-        <div className="bg-[#111827] text-white p-7 rounded-[32px] border border-[#1F2937] shadow-sm flex flex-col justify-between space-y-4">
+        <div className="bg-[#111827] text-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#1F2937] shadow-sm flex flex-col justify-between space-y-4">
           <div className="space-y-3.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -350,7 +351,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       </div>
 
       {/* Active Bookings Quick Dispatch Grid */}
-      <div className="bg-white p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-5">
+      <div className="bg-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-5">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-serif italic font-normal text-2xl text-[#111827]">Active Bookings Awaiting Dispatch</h3>
