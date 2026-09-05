@@ -292,6 +292,8 @@ export interface AppSettings {
   id: 'default';
   cashOpeningBalance: number;
   cashOpeningDate: string;
+  /** Shared master PIN stored in cloud settings for multi-device unlock consistency. */
+  masterPin?: string;
   /** Sales tax % applied to new dispatches (0 = none). */
   taxRatePct?: number;
   taxLabel?: string;

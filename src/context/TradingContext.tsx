@@ -337,10 +337,16 @@ const loadLocal = <T,>(key: string, fallback: T[], normalise?: (row: any) => T):
   return normalise ? rows.map(normalise) : (rows as T[]);
 };
 
+const readCachedSettings = (): Partial<AppSettings> =>
+  safeParse<Partial<AppSettings>>(localStorage.getItem(STORAGE_KEYS.SETTINGS), {});
+
 export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [adminPin, setAdminPin] = useState<string>(() =>
-    localStorage.getItem(STORAGE_KEYS.ADMIN_PIN) || DEFAULT_ADMIN_PIN
-  );
+  const [adminPin, setAdminPin] = useState<string>(() => {
+    const localPin = localStorage.getItem(STORAGE_KEYS.ADMIN_PIN)?.trim();
+    if (localPin) return localPin;
+    const settingsPin = readCachedSettings().masterPin?.trim();
+    return settingsPin || DEFAULT_ADMIN_PIN;
+  });
   const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(false);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() =>
     safeParse(localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS), initialAuditLogs)
@@ -363,7 +369,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [tasks, setTasks] = useState<Task[]>(() => loadLocal(STORAGE_KEYS.TASKS, []));
   const [settings, setSettings] = useState<AppSettings>(() => ({
     ...DEFAULT_SETTINGS,
-    ...safeParse<Partial<AppSettings>>(localStorage.getItem(STORAGE_KEYS.SETTINGS), {}),
+    ...readCachedSettings(),
     id: 'default',
   }));
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
@@ -436,7 +442,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setReturns(data.returns);
         setAdjustments(data.adjustments);
         setTasks(data.tasks);
-        if (data.settings) setSettings((prev) => ({ ...DEFAULT_SETTINGS, ...prev, ...data.settings, id: 'default' }));
+        if (data.settings) {
+          const mergedSettings = { ...DEFAULT_SETTINGS, ...data.settings, id: 'default' as const };
+          setSettings((prev) => ({ ...DEFAULT_SETTINGS, ...prev, ...data.settings, id: 'default' }));
+          if (mergedSettings.masterPin?.trim()) {
+            setAdminPin(mergedSettings.masterPin.trim());
+          }
+        }
         setLedger(data.ledger);
         setWhatsappMessages(data.whatsappMessages);
         setIsCloudSyncReady(true);
@@ -497,6 +509,22 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   }, [settings]);
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.ADMIN_PIN, adminPin);
+  }, [adminPin]);
+  useEffect(() => {
+    if (!isCloudSyncReady) return;
+    const settingsPin = settings.masterPin?.trim();
+    const currentPin = adminPin.trim();
+    // Prefer the shared cloud PIN when available; otherwise seed cloud once from a custom local PIN.
+    if (settingsPin && settingsPin !== currentPin) {
+      setAdminPin(settingsPin);
+      return;
+    }
+    if (!settingsPin && currentPin && currentPin !== DEFAULT_ADMIN_PIN) {
+      setSettings((prev) => ({ ...prev, id: 'default', masterPin: currentPin }));
+    }
+  }, [isCloudSyncReady, settings.masterPin, adminPin]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.QUOTES, JSON.stringify(quotations)); }, [quotations]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.POS, JSON.stringify(purchaseOrders)); }, [purchaseOrders]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.RETURNS, JSON.stringify(returns)); }, [returns]);
@@ -1876,14 +1904,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { success: false, message: 'New PIN must be exactly 4 to 6 numeric digits.' };
     }
     setAdminPin(clean);
-    localStorage.setItem(STORAGE_KEYS.ADMIN_PIN, clean);
+    setSettings((prev) => ({ ...prev, id: 'default', masterPin: clean }));
     logAuditEvent('Master PIN Updated', 'Administrator established a new master PIN.', 'warning');
     return { success: true, message: 'Master PIN successfully updated.' };
   };
 
   const resetAdminPinToDefault = () => {
     setAdminPin(DEFAULT_ADMIN_PIN);
-    localStorage.setItem(STORAGE_KEYS.ADMIN_PIN, DEFAULT_ADMIN_PIN);
+    setSettings((prev) => ({ ...prev, id: 'default', masterPin: DEFAULT_ADMIN_PIN }));
     logAuditEvent('Master PIN Reset', 'Master PIN restored to factory default (7860).', 'warning');
   };
 
@@ -1955,7 +1983,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (Array.isArray(data.returns)) setReturns(data.returns);
       if (Array.isArray(data.adjustments)) setAdjustments(data.adjustments);
       if (Array.isArray(data.tasks)) setTasks(data.tasks);
-      if (data.settings && typeof data.settings === 'object') setSettings({ ...data.settings, id: 'default' });
+      if (data.settings && typeof data.settings === 'object') {
+        setSettings({ ...data.settings, id: 'default' });
+        const importedPin = (data.settings as Partial<AppSettings>).masterPin;
+        if (typeof importedPin === 'string' && /^\d{4,6}$/.test(importedPin.trim())) {
+          setAdminPin(importedPin.trim());
+        }
+      } else if (typeof data.adminPin === 'string' && /^\d{4,6}$/.test(data.adminPin.trim())) {
+        const importedPin = data.adminPin.trim();
+        setAdminPin(importedPin);
+        setSettings((prev) => ({ ...prev, id: 'default', masterPin: importedPin }));
+      }
       if (Array.isArray(data.ledger)) setLedger(data.ledger.map(normalizeLedger));
       if (Array.isArray(data.whatsappMessages)) setWhatsappMessages(data.whatsappMessages);
       if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);

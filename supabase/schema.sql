@@ -180,7 +180,8 @@ CREATE TABLE IF NOT EXISTS settings (
   "companyAddress" TEXT,
   "companyPhone" TEXT,
   "companyTaxId" TEXT,
-  "monthlyTargetRs" NUMERIC DEFAULT 0
+  "monthlyTargetRs" NUMERIC DEFAULT 0,
+  "masterPin" TEXT
 );
 
 -- Customer quotations (convert to bookings)
