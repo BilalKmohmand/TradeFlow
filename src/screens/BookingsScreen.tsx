@@ -65,26 +65,26 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
   return (
     <div className="space-y-6 pb-12">
       {/* Header & Metric Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#101A26] p-7 rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-teal-600" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
               Bulk Contracts & Orders
             </span>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-serif italic font-normal tracking-tight text-[#111827] mt-1.5">Bookings</h2>
-          <p className="text-xs text-[#6B7280] mt-1">
+          <h2 className="text-3xl sm:text-4xl font-serif italic font-normal tracking-tight text-[#111827] dark:text-white mt-1.5">Bookings</h2>
+          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
             Real-time live remaining balance tracking as bulk truck dispatches are logged.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-[#FAF9F6] px-5 py-2.5 rounded-2xl border border-[#E5E5E1] text-right flex-1 sm:flex-none min-w-[150px]">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-[#8E9299] block">
+          <div className="bg-[#FAF9F6] dark:bg-[#162436] px-5 py-2.5 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-right flex-1 sm:flex-none min-w-[150px]">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-[#8E9299] dark:text-[#94A3B8] block">
               Pending Remaining
             </span>
-            <span className="text-xl font-bold font-mono text-amber-800">
+            <span className="text-xl font-bold font-mono text-amber-800 dark:text-amber-300">
               <AnimatedNumber value={totalRemainingKg} format="kg" />
             </span>
           </div>
@@ -100,9 +100,9 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
       </div>
 
       {/* Orders / Quotations / Returns */}
-      <div className="bg-[#FAF9F6] p-1.5 rounded-full border border-[#E5E5E1] shadow-xs text-xs font-semibold flex flex-wrap items-center gap-1 w-fit max-w-full">
+      <div className="bg-[#FAF9F6] dark:bg-[#162436] p-1.5 rounded-full border border-[#E5E5E1] dark:border-[#203248] shadow-xs text-xs font-semibold flex flex-wrap items-center gap-1 w-fit max-w-full">
         {([['orders', `Orders (${bookings.length})`], ['quotations', `Quotations (${quotations.filter((q) => q.status !== 'converted' && q.status !== 'rejected').length})`], ['returns', `Returns (${returns.length})`]] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setView(id)} className={`px-4 py-1.5 rounded-full whitespace-nowrap transition-colors ${view === id ? 'bg-[#111827] text-white shadow-xs font-bold' : 'text-[#6B7280] hover:text-[#111827] hover:bg-[#F4F3EF]'}`}>{label}</button>
+          <button key={id} onClick={() => setView(id)} className={`px-4 py-1.5 rounded-full whitespace-nowrap transition-colors ${view === id ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs font-bold' : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40]'}`}>{label}</button>
         ))}
       </div>
 
@@ -113,7 +113,7 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
       {/* Filter and Search Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         {/* Status Filters */}
-        <div className="flex items-center gap-1 bg-[#FAF9F6] p-1.5 rounded-full border border-[#E5E5E1] shadow-xs text-xs font-semibold">
+        <div className="flex items-center gap-1 bg-[#FAF9F6] dark:bg-[#162436] p-1.5 rounded-full border border-[#E5E5E1] dark:border-[#203248] shadow-xs text-xs font-semibold">
           {(['all', 'active', 'completed'] as const).map((status) => (
             <button
               key={status}
@@ -121,7 +121,7 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
               className={`px-4 py-1.5 rounded-full capitalize transition-colors ${
                 statusFilter === status
                   ? 'bg-[#111827] text-white shadow-xs font-bold'
-                  : 'text-[#6B7280] hover:text-[#111827] hover:bg-[#F4F3EF]'
+                  : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40]'
               }`}
             >
               {status} Orders
@@ -131,13 +131,13 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
 
         {/* Search */}
         <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-[#8E9299] absolute left-3.5 top-3" />
+          <Search className="w-4 h-4 text-[#8E9299] dark:text-[#94A3B8] absolute left-3.5 top-3" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search booking #, customer, or product..."
-            className="w-full bg-white border border-[#E5E5E1] rounded-2xl pl-10 pr-4 py-2.5 text-xs font-medium text-[#111827] placeholder-[#8E9299] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600 shadow-xs"
+            className="w-full bg-white dark:bg-[#101A26] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl pl-10 pr-4 py-2.5 text-xs font-medium text-[#111827] dark:text-white placeholder-[#8E9299] dark:placeholder-[#94A3B8] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600 shadow-xs"
           />
         </div>
       </div>
@@ -145,10 +145,10 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
       {/* Bookings List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
         {filteredBookings.length === 0 ? (
-          <div className="col-span-full py-16 text-center text-[#8E9299] bg-white rounded-[32px] border border-[#E5E5E1]">
-            <ShoppingBag className="w-10 h-10 mx-auto mb-2 text-[#8E9299]" />
-            <p className="text-sm font-semibold text-[#111827]">No bookings match criteria</p>
-            <p className="text-xs text-[#8E9299] mt-1">Try resetting the filter or search.</p>
+          <div className="col-span-full py-16 text-center text-[#8E9299] dark:text-[#94A3B8] bg-white dark:bg-[#101A26] rounded-[32px] border border-[#E5E5E1] dark:border-[#203248]">
+            <ShoppingBag className="w-10 h-10 mx-auto mb-2 text-[#8E9299] dark:text-[#94A3B8]" />
+            <p className="text-sm font-semibold text-[#111827] dark:text-white">No bookings match criteria</p>
+            <p className="text-xs text-[#8E9299] dark:text-[#94A3B8] mt-1">Try resetting the filter or search.</p>
           </div>
         ) : (
           filteredBookings.map((b) => {
@@ -162,7 +162,7 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                 key={b.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="min-w-0 bg-white rounded-[28px] p-6 border border-[#E5E5E1] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between space-y-4"
+                className="min-w-0 bg-white dark:bg-[#101A26] rounded-[28px] p-6 border border-[#E5E5E1] dark:border-[#203248] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between space-y-4"
               >
                 <div className="space-y-3.5">
                   {/* Top Bar: Booking ID & Status */}
@@ -171,7 +171,7 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                       <button
                         onClick={() => openBooking(b.id)}
                         title="Open booking details"
-                        className="font-extrabold text-sm font-mono text-[#111827] hover:text-teal-800 hover:underline underline-offset-2 whitespace-nowrap"
+                        className="font-extrabold text-sm font-mono text-[#111827] dark:text-white hover:text-teal-800 dark:hover:text-teal-300 hover:underline underline-offset-2 whitespace-nowrap"
                       >
                         {b.bookingNumber}
                       </button>
@@ -187,14 +187,14 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-[#8E9299] font-medium font-mono">
+                      <span className="text-xs text-[#8E9299] dark:text-[#94A3B8] font-medium font-mono">
                         {formatDate(b.createdAt)}
                       </span>
                       {can('delete_records') && (<button
                         type="button"
                         onClick={() => setPendingDelete(b)}
                         title="Delete booking (admin)"
-                        className="p-1.5 rounded-xl text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
+                        className="p-1.5 rounded-xl text-[#8E9299] dark:text-[#94A3B8] hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-transparent hover:border-rose-200 dark:hover:border-rose-900/40 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>)}
@@ -204,62 +204,62 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                   {/* Customer and Commodity Details */}
                   <div className="grid grid-cols-2 gap-3 pt-1">
                     <div className="space-y-0.5">
-                      <span className="text-[10px] text-[#8E9299] flex items-center gap-1 font-bold uppercase tracking-wider">
-                        <User className="w-3 h-3 text-[#8E9299]" /> Customer
+                      <span className="text-[10px] text-[#8E9299] dark:text-[#94A3B8] flex items-center gap-1 font-bold uppercase tracking-wider">
+                        <User className="w-3 h-3 text-[#8E9299] dark:text-[#94A3B8]" /> Customer
                       </span>
                       <div
                         onClick={() => cust && onOpenCustomer(cust.id)}
-                        className="font-bold text-xs text-[#111827] hover:text-teal-800 cursor-pointer transition-colors"
+                        className="font-bold text-xs text-[#111827] dark:text-white hover:text-teal-800 dark:hover:text-teal-300 cursor-pointer transition-colors"
                       >
                         {cust?.name}
                       </div>
-                      <div className="text-[11px] text-[#8E9299] truncate">{cust?.company}</div>
+                      <div className="text-[11px] text-[#8E9299] dark:text-[#94A3B8] truncate">{cust?.company}</div>
                     </div>
 
                     <div className="space-y-0.5">
-                      <span className="text-[10px] text-[#8E9299] flex items-center gap-1 font-bold uppercase tracking-wider">
-                        <Package className="w-3 h-3 text-[#8E9299]" /> Commodity
+                      <span className="text-[10px] text-[#8E9299] dark:text-[#94A3B8] flex items-center gap-1 font-bold uppercase tracking-wider">
+                        <Package className="w-3 h-3 text-[#8E9299] dark:text-[#94A3B8]" /> Commodity
                       </span>
-                      <div className="font-bold text-xs text-[#111827]">{prod?.name}</div>
-                      <div className="text-[11px] text-teal-800 font-mono font-semibold">
+                      <div className="font-bold text-xs text-[#111827] dark:text-white">{prod?.name}</div>
+                      <div className="text-[11px] text-teal-800 dark:text-teal-300 font-mono font-semibold">
                         Rs. {b.pricePerKg}/kg
                       </div>
                     </div>
                   </div>
 
                   {/* Smart Real-time Progress Bar & kg Counter */}
-                  <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#E5E5E1] space-y-3">
+                  <div className="bg-[#FAF9F6] dark:bg-[#162436] p-4 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] space-y-3">
                     <div className="grid grid-cols-3 gap-2 text-center">
                       <div>
-                        <div className="text-[10px] text-[#8E9299] uppercase tracking-wider font-semibold">
+                        <div className="text-[10px] text-[#8E9299] dark:text-[#94A3B8] uppercase tracking-wider font-semibold">
                           Total Order
                         </div>
-                        <div className="text-xs font-bold text-[#111827] font-mono mt-0.5">
+                        <div className="text-xs font-bold text-[#111827] dark:text-white font-mono mt-0.5">
                           {b.totalKg} kg
                         </div>
                       </div>
-                      <div className="border-x border-[#E5E5E1]">
-                        <div className="text-[10px] text-teal-800 uppercase tracking-wider font-semibold">
+                      <div className="border-x border-[#E5E5E1] dark:border-[#203248]">
+                        <div className="text-[10px] text-teal-800 dark:text-teal-300 uppercase tracking-wider font-semibold">
                           Dispatched
                         </div>
-                        <div className="text-xs font-bold text-teal-800 font-mono mt-0.5">
+                        <div className="text-xs font-bold text-teal-800 dark:text-teal-300 font-mono mt-0.5">
                           {b.dispatchedKg} kg
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-amber-800 uppercase tracking-wider font-semibold">
+                        <div className="text-[10px] text-amber-800 dark:text-amber-300 uppercase tracking-wider font-semibold">
                           Remaining
                         </div>
-                        <div className="text-xs font-bold text-amber-800 font-mono mt-0.5">
+                        <div className="text-xs font-bold text-amber-800 dark:text-amber-300 font-mono mt-0.5">
                           {b.remainingKg} kg
                         </div>
                       </div>
                     </div>
 
                     <div className="space-y-1">
-                      <div className="flex justify-between text-[11px] text-[#8E9299] font-medium">
+                      <div className="flex justify-between text-[11px] text-[#8E9299] dark:text-[#94A3B8] font-medium">
                         <span>Dispatch Progress</span>
-                        <span className="font-mono text-[#111827]">{progress.toFixed(0)}%</span>
+                        <span className="font-mono text-[#111827] dark:text-white">{progress.toFixed(0)}%</span>
                       </div>
                       <div className="w-full h-2 bg-[#E5E5E1] rounded-full overflow-hidden">
                         <div
@@ -271,17 +271,17 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                   </div>
 
                   {b.notes && (
-                    <p className="text-xs text-[#6B7280] italic bg-[#FAF9F6] p-3 rounded-2xl border border-[#E5E5E1]">
+                    <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] italic bg-[#FAF9F6] dark:bg-[#162436] p-3 rounded-2xl border border-[#E5E5E1] dark:border-[#203248]">
                       "{b.notes}"
                     </p>
                   )}
                 </div>
 
                 {/* Footer Action */}
-                <div className="pt-3 border-t border-[#F0F0EE] flex items-center justify-between">
+                <div className="pt-3 border-t border-[#F0F0EE] dark:border-[#1E2E40] flex items-center justify-between">
                   <div className="text-xs">
-                    <span className="text-[#8E9299] block text-[10px] uppercase tracking-wider font-bold">Total Contract</span>
-                    <span className="font-bold font-mono text-[#111827]">
+                    <span className="text-[#8E9299] dark:text-[#94A3B8] block text-[10px] uppercase tracking-wider font-bold">Total Contract</span>
+                    <span className="font-bold font-mono text-[#111827] dark:text-white">
                       {formatCurrency(b.totalAmount)}
                     </span>
                   </div>
@@ -295,8 +295,8 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
                       <span>Log Dispatch ({b.remainingKg} kg left)</span>
                     </button>
                   ) : (
-                    <span className="text-xs font-semibold text-teal-900 bg-teal-50 border border-teal-200/80 px-3 py-1 rounded-full flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-700" />
+                    <span className="text-xs font-semibold text-teal-900 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/30 border border-teal-200/80 dark:border-teal-900/40 px-3 py-1 rounded-full flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-700 dark:text-teal-300" />
                       <span>Completed</span>
                     </span>
                   )}

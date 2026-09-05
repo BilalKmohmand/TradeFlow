@@ -57,33 +57,33 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
   return (
     <div className="space-y-6 pb-12">
       {/* Header & Metric Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#101A26] p-7 rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-teal-600" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
               Bulk Commodity Inventory
             </span>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-serif italic font-normal tracking-tight text-[#111827] mt-1.5">Products</h2>
-          <p className="text-xs text-[#6B7280] mt-1">
+          <h2 className="text-3xl sm:text-4xl font-serif italic font-normal tracking-tight text-[#111827] dark:text-white mt-1.5">Products</h2>
+          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
             Commodity catalog with live warehouse stock tracking and Rs./kg market pricing.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-[#FAF9F6] px-5 py-2.5 rounded-2xl border border-[#E5E5E1] text-right flex-1 sm:flex-none min-w-[150px]">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-[#8E9299] block">
+          <div className="bg-[#FAF9F6] dark:bg-[#162436] px-5 py-2.5 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-right flex-1 sm:flex-none min-w-[150px]">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-[#8E9299] dark:text-[#94A3B8] block">
               Total Stock on Hand
             </span>
-            <span className="text-xl font-bold font-mono text-teal-800">
+            <span className="text-xl font-bold font-mono text-teal-800 dark:text-teal-300">
               <AnimatedNumber value={totalWarehouseKg} format="kg" />
             </span>
           </div>
 
           <button
             onClick={() => onReceiveStock()}
-            className="px-4 py-2.5 bg-[#FAF9F6] hover:bg-[#F4F3EF] text-[#111827] font-semibold text-xs rounded-2xl border border-[#E5E5E1] flex items-center justify-center gap-1.5 transition-colors flex-1 sm:flex-none whitespace-nowrap"
+            className="px-4 py-2.5 bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-white font-semibold text-xs rounded-2xl border border-[#E5E5E1] dark:border-[#203248] flex items-center justify-center gap-1.5 transition-colors flex-1 sm:flex-none whitespace-nowrap"
           >
             <PackagePlus className="w-4 h-4 text-teal-700" />
             <span>Receive Stock</span>
@@ -109,7 +109,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
               className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
                 selectedCategory === cat
                   ? 'bg-[#111827] text-white shadow-xs font-bold'
-                  : 'bg-white text-[#6B7280] hover:text-[#111827] hover:bg-[#FAF9F6] border border-[#E5E5E1]'
+                  : 'bg-white dark:bg-[#101A26] text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white hover:bg-[#FAF9F6] dark:hover:bg-[#1E2E40] border border-[#E5E5E1] dark:border-[#203248]'
               }`}
             >
               {cat}
@@ -119,13 +119,13 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
 
         {/* Search Input */}
         <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 text-[#8E9299] absolute left-3.5 top-3" />
+          <Search className="w-4 h-4 text-[#8E9299] dark:text-[#94A3B8] absolute left-3.5 top-3" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search commodities..."
-            className="w-full bg-white border border-[#E5E5E1] rounded-2xl pl-10 pr-4 py-2.5 text-xs font-medium text-[#111827] placeholder-[#8E9299] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600 shadow-xs"
+            className="w-full bg-white dark:bg-[#101A26] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl pl-10 pr-4 py-2.5 text-xs font-medium text-[#111827] dark:text-white placeholder-[#8E9299] dark:placeholder-[#94A3B8] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600 shadow-xs"
           />
         </div>
       </div>
@@ -145,18 +145,18 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
               key={prod.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="min-w-0 bg-white rounded-[28px] p-6 border border-[#E5E5E1] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between space-y-4"
+              className="min-w-0 bg-white dark:bg-[#101A26] rounded-[28px] p-6 border border-[#E5E5E1] dark:border-[#203248] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between space-y-4"
             >
               <div className="space-y-3.5">
                 <div className="flex items-start justify-between">
                   <div>
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#FAF9F6] text-[#6B7280] border border-[#E5E5E1] uppercase tracking-wider">
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#FAF9F6] dark:bg-[#162436] text-[#6B7280] dark:text-[#94A3B8] border border-[#E5E5E1] dark:border-[#203248] uppercase tracking-wider">
                       {prod.category}
                     </span>
                     <h3
                       onClick={() => setSelectedProductId(prod.id)}
                       title="Open price history & stock movements"
-                      className="font-bold text-base text-[#111827] mt-2 cursor-pointer hover:text-teal-800 transition-colors"
+                      className="font-bold text-base text-[#111827] dark:text-white mt-2 cursor-pointer hover:text-teal-800 dark:hover:text-teal-300 transition-colors"
                     >
                       {prod.name}
                     </h3>
@@ -184,25 +184,25 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                 </div>
 
                 {prod.description && (
-                  <p className="text-xs text-[#6B7280] line-clamp-2 leading-relaxed">
+                  <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] line-clamp-2 leading-relaxed">
                     {prod.description}
                   </p>
                 )}
 
                 {/* Price & Stock Stats Box */}
-                <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#E5E5E1] space-y-2.5">
+                <div className="bg-[#FAF9F6] dark:bg-[#162436] p-4 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] space-y-2.5">
                   <div className="flex justify-between items-baseline">
-                    <span className="text-xs text-[#8E9299]">Market Trading Rate:</span>
-                    <span className="text-base font-bold font-mono text-teal-800">
+                    <span className="text-xs text-[#8E9299] dark:text-[#94A3B8]">Market Trading Rate:</span>
+                    <span className="text-base font-bold font-mono text-teal-800 dark:text-teal-300">
                       Rs. {prod.unitPricePerKg}/kg
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-center pt-1.5 border-t border-[#E5E5E1] text-xs">
-                    <span className="text-[#8E9299]">Warehouse Stock:</span>
+                  <div className="flex justify-between items-center pt-1.5 border-t border-[#E5E5E1] dark:border-[#203248] text-xs">
+                    <span className="text-[#8E9299] dark:text-[#94A3B8]">Warehouse Stock:</span>
                     {(
                       <div className="flex items-center gap-2">
-                        <span className="font-bold font-mono text-[#111827]">
+                        <span className="font-bold font-mono text-[#111827] dark:text-white">
                           {prod.stockKg.toLocaleString()} kg
                         </span>
                         <button
@@ -215,24 +215,24 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                     )}
                   </div>
 
-                  <div className="flex justify-between text-[11px] text-[#8E9299] pt-1">
+                  <div className="flex justify-between text-[11px] text-[#8E9299] dark:text-[#94A3B8] pt-1">
                     <span>Committed in Active Orders:</span>
-                    <span className="font-mono font-medium text-[#111827]">
+                    <span className="font-mono font-medium text-[#111827] dark:text-white">
                       {activeBookedKg} kg
                     </span>
                   </div>
                 </div>
 
                 {supplier && (
-                  <div className="text-[11px] text-[#8E9299] flex items-center gap-1">
-                    <Building className="w-3.5 h-3.5 text-[#8E9299]" />
+                  <div className="text-[11px] text-[#8E9299] dark:text-[#94A3B8] flex items-center gap-1">
+                    <Building className="w-3.5 h-3.5 text-[#8E9299] dark:text-[#94A3B8]" />
                     <span>Primary Supplier: {supplier.company}</span>
                   </div>
                 )}
               </div>
 
-              <div className="pt-2 border-t border-[#F0F0EE] flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-mono text-[#8E9299] w-full sm:w-auto">
+              <div className="pt-2 border-t border-[#F0F0EE] dark:border-[#1E2E40] flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-mono text-[#8E9299] dark:text-[#94A3B8] w-full sm:w-auto">
                   Total Value: {formatCurrency(prod.stockKg * prod.unitPricePerKg)}
                 </span>
 
@@ -241,7 +241,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                     type="button"
                     onClick={() => setSelectedProductId(prod.id)}
                     title="Price history & stock movements"
-                    className="px-2.5 py-1.5 rounded-xl text-[#6B7280] hover:text-teal-800 hover:bg-teal-50 border border-[#E5E5E1] text-xs font-semibold flex items-center gap-1 transition-colors"
+                    className="px-2.5 py-1.5 rounded-xl text-[#6B7280] dark:text-[#94A3B8] hover:text-teal-800 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/30 border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold flex items-center gap-1 transition-colors"
                   >
                     <History className="w-3.5 h-3.5" />
                     <span className="hidden xl:inline">History</span>
@@ -250,7 +250,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                         type="button"
                         onClick={() => setEditRequest({ type: 'product', id: prod.id })}
                         title="Edit product"
-                        className="p-1.5 rounded-xl text-[#8E9299] hover:text-teal-800 hover:bg-teal-50 border border-transparent hover:border-teal-200 transition-colors"
+                        className="p-1.5 rounded-xl text-[#8E9299] dark:text-[#94A3B8] hover:text-teal-800 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/30 border border-transparent hover:border-teal-200 dark:hover:border-teal-900/40 transition-colors"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
@@ -258,7 +258,7 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
                         type="button"
                         onClick={() => setPendingDelete(prod)}
                         title="Delete product (admin)"
-                        className="p-1.5 rounded-xl text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
+                        className="p-1.5 rounded-xl text-[#8E9299] dark:text-[#94A3B8] hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-transparent hover:border-rose-200 dark:hover:border-rose-900/40 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>)}

@@ -50,24 +50,24 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
   return (
     <div className="space-y-6 pb-12">
       {/* Header & Metric Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#101A26] p-7 rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-teal-600" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
               Accounts Receivable
             </span>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-serif italic font-normal tracking-tight text-[#111827] mt-1.5">Customers</h2>
-          <p className="text-xs text-[#6B7280] mt-1">
+          <h2 className="text-3xl sm:text-4xl font-serif italic font-normal tracking-tight text-[#111827] dark:text-white mt-1.5">Customers</h2>
+          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
             Tap any customer to inspect full ledger, track shipments, or send smart WhatsApp reminders.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-[#FAF9F6] px-5 py-2.5 rounded-2xl border border-[#E5E5E1] text-right flex-1 sm:flex-none min-w-[150px]">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-[#8E9299] block">Total Due</span>
-            <span className="text-xl font-bold font-mono text-teal-800">
+          <div className="bg-[#FAF9F6] dark:bg-[#162436] px-5 py-2.5 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-right flex-1 sm:flex-none min-w-[150px]">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-[#8E9299] dark:text-[#94A3B8] block">Total Due</span>
+            <span className="text-xl font-bold font-mono text-teal-800 dark:text-teal-300">
               <AnimatedNumber value={totalReceivables} format="currency" />
             </span>
           </div>
@@ -84,23 +84,23 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
 
       {/* Search Bar */}
       <div className="relative">
-        <Search className="w-4 h-4 text-[#8E9299] absolute left-4 top-3.5" />
+        <Search className="w-4 h-4 text-[#8E9299] dark:text-[#94A3B8] absolute left-4 top-3.5" />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search customers by name, company, or phone number..."
-          className="w-full bg-white border border-[#E5E5E1] rounded-2xl pl-11 pr-4 py-3 text-xs font-medium text-[#111827] placeholder-[#8E9299] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600 shadow-xs"
+          className="w-full bg-white dark:bg-[#101A26] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl pl-11 pr-4 py-3 text-xs font-medium text-[#111827] dark:text-white placeholder-[#8E9299] dark:placeholder-[#94A3B8] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600 shadow-xs"
         />
       </div>
 
       {/* Customer Cards List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0">
         {filteredCustomers.length === 0 ? (
-          <div className="col-span-full py-16 text-center text-[#8E9299] bg-white rounded-[32px] border border-[#E5E5E1]">
-            <Users className="w-10 h-10 mx-auto mb-2 text-[#8E9299]" />
-            <p className="text-sm font-semibold text-[#111827]">No customers found</p>
-            <p className="text-xs text-[#8E9299] mt-1">Try adjusting your search criteria.</p>
+          <div className="col-span-full py-16 text-center text-[#8E9299] dark:text-[#94A3B8] bg-white dark:bg-[#101A26] rounded-[32px] border border-[#E5E5E1] dark:border-[#203248]">
+            <Users className="w-10 h-10 mx-auto mb-2 text-[#8E9299] dark:text-[#94A3B8]" />
+            <p className="text-sm font-semibold text-[#111827] dark:text-white">No customers found</p>
+            <p className="text-xs text-[#8E9299] dark:text-[#94A3B8] mt-1">Try adjusting your search criteria.</p>
           </div>
         ) : (
           filteredCustomers.map((cust) => {
@@ -112,19 +112,19 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
                 key={cust.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="min-w-0 bg-white rounded-[28px] p-6 border border-[#E5E5E1] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between space-y-4 group"
+                className="min-w-0 bg-white dark:bg-[#101A26] rounded-[28px] p-6 border border-[#E5E5E1] dark:border-[#203248] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between space-y-4 group"
               >
                 <div className="space-y-3.5">
                   <div className="flex items-start justify-between">
                     <div>
                       <h3
                         onClick={() => onSelectCustomer(cust.id)}
-                        className="font-bold text-base text-[#111827] group-hover:text-teal-800 cursor-pointer transition-colors"
+                        className="font-bold text-base text-[#111827] dark:text-white group-hover:text-teal-800 dark:group-hover:text-teal-300 cursor-pointer transition-colors"
                       >
                         {cust.name}
                       </h3>
-                      <p className="text-xs font-medium text-[#8E9299] flex items-center gap-1 mt-0.5">
-                        <Building className="w-3.5 h-3.5 text-[#8E9299]" />
+                      <p className="text-xs font-medium text-[#8E9299] dark:text-[#94A3B8] flex items-center gap-1 mt-0.5">
+                        <Building className="w-3.5 h-3.5 text-[#8E9299] dark:text-[#94A3B8]" />
                         {cust.company}
                       </p>
                     </div>
@@ -143,7 +143,7 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
                         type="button"
                         onClick={() => setEditRequest({ type: 'customer', id: cust.id })}
                         title="Edit customer"
-                        className="p-1.5 rounded-xl text-[#8E9299] hover:text-teal-800 hover:bg-teal-50 border border-transparent hover:border-teal-200 transition-colors"
+                        className="p-1.5 rounded-xl text-[#8E9299] dark:text-[#94A3B8] hover:text-teal-800 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/30 border border-transparent hover:border-teal-200 dark:hover:border-teal-900/40 transition-colors"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
@@ -151,27 +151,27 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
                         type="button"
                         onClick={() => setPendingDelete(cust)}
                         title="Delete customer (admin)"
-                        className="p-1.5 rounded-xl text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
+                        className="p-1.5 rounded-xl text-[#8E9299] dark:text-[#94A3B8] hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-transparent hover:border-rose-200 dark:hover:border-rose-900/40 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>)}
                     </div>
                   </div>
 
-                  <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#E5E5E1] space-y-2">
+                  <div className="bg-[#FAF9F6] dark:bg-[#162436] p-4 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] space-y-2">
                     <div className="flex justify-between items-baseline">
-                      <span className="text-xs text-[#8E9299]">Total Outstanding Due:</span>
-                      <span className="text-lg font-bold font-mono text-[#111827]">
+                      <span className="text-xs text-[#8E9299] dark:text-[#94A3B8]">Total Outstanding Due:</span>
+                      <span className="text-lg font-bold font-mono text-[#111827] dark:text-white">
                         <AnimatedNumber value={cust.totalDue} format="currency" />
                       </span>
                     </div>
-                    <div className="flex justify-between text-[11px] text-[#8E9299] pt-1.5 border-t border-[#E5E5E1]">
+                    <div className="flex justify-between text-[11px] text-[#8E9299] dark:text-[#94A3B8] pt-1.5 border-t border-[#E5E5E1] dark:border-[#203248]">
                       <span>Active Orders: {activeCount}</span>
                       <span>Limit: {formatCurrency(cust.creditLimit)}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs text-[#4B5563]">
+                  <div className="flex items-center justify-between text-xs text-[#4B5563] dark:text-[#CBD5E1]">
                     <span className="flex items-center gap-1.5 font-mono">
                       <Phone className="w-3.5 h-3.5 text-teal-700" />
                       {cust.phone}
@@ -189,12 +189,12 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#F0F0EE]">
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#F0F0EE] dark:border-[#1E2E40]">
                   <button
                     onClick={() => onOpenPayment(cust.id)}
-                    className="w-full bg-[#FAF9F6] hover:bg-[#F4F3EF] text-[#111827] border border-[#E5E5E1] font-semibold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1 transition-colors"
+                    className="w-full bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-white border border-[#E5E5E1] dark:border-[#203248] font-semibold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1 transition-colors"
                   >
-                    <CreditCard className="w-3.5 h-3.5 text-[#8E9299]" />
+                    <CreditCard className="w-3.5 h-3.5 text-[#8E9299] dark:text-[#94A3B8]" />
                     <span>Pay</span>
                   </button>
 

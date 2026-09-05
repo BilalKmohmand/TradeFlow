@@ -129,18 +129,18 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   return (
     <div className="space-y-6 pb-12">
       {/* Top Banner / Welcome with Quick Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0 bg-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0 bg-white dark:bg-[#101A26] p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs">
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-teal-600" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
               Bulk Trading Operations
             </span>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-serif italic font-normal tracking-tight text-[#111827] mt-1.5">
+          <h2 className="text-3xl sm:text-4xl font-serif italic font-normal tracking-tight text-[#111827] dark:text-white mt-1.5">
             Trading Overview
           </h2>
-          <p className="text-xs text-[#6B7280] mt-1">
+          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-1">
             Automated balance calculations and instant WhatsApp confirmations active.
           </p>
         </div>
@@ -148,9 +148,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         <div className="flex items-center gap-2.5">
           <button
             onClick={onOpenBooking}
-            className="px-4 py-2.5 bg-[#FAF9F6] hover:bg-[#F4F3EF] text-[#111827] font-semibold text-xs rounded-2xl border border-[#E5E5E1] flex items-center gap-1.5 transition-colors"
+            className="px-4 py-2.5 bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-white font-semibold text-xs rounded-2xl border border-[#E5E5E1] dark:border-[#203248] flex items-center gap-1.5 transition-colors"
           >
-            <Plus className="w-3.5 h-3.5 text-[#8E9299]" />
+            <Plus className="w-3.5 h-3.5 text-[#8E9299] dark:text-[#94A3B8]" />
             <span>New Booking</span>
           </button>
           <button
@@ -170,26 +170,26 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.05 }}
-          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-teal-600/40 transition-colors relative overflow-hidden min-w-0 flex flex-col justify-between"
+          className="bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs hover:border-teal-600/40 transition-colors relative overflow-hidden min-w-0 flex flex-col justify-between"
         >
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
               Today's Dispatches
             </span>
             <div className="mt-3">
-              <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] dark:text-white tracking-tight">
                 <AnimatedNumber value={todayDispatchedKg} format="kg" />
               </div>
-              <div className="text-xs text-teal-800 font-medium font-mono mt-1.5 flex items-center gap-1">
+              <div className="text-xs text-teal-800 dark:text-teal-300 font-medium font-mono mt-1.5 flex items-center gap-1">
                 <span>Value:</span>
                 <AnimatedNumber value={todayDispatchedValue} format="currency" />
-                <span className="text-[#8E9299] font-sans font-normal">({todayDispatches.length} trucks)</span>
+                <span className="text-[#8E9299] dark:text-[#94A3B8] font-sans font-normal">({todayDispatches.length} trucks)</span>
               </div>
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-[#E5E5E1]/60 flex items-center justify-between">
-            <span className="text-[11px] text-[#8E9299]">Daily Volume</span>
-            <div className="w-8 h-8 rounded-xl bg-[#FAF9F6] border border-[#E5E5E1] text-teal-700 flex items-center justify-center">
+            <span className="text-[11px] text-[#8E9299] dark:text-[#94A3B8]">Daily Volume</span>
+            <div className="w-8 h-8 rounded-xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-teal-700 flex items-center justify-center">
               <Truck className="w-4 h-4" />
             </div>
           </div>
@@ -200,25 +200,25 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.1 }}
-          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-amber-600/40 transition-colors relative overflow-hidden min-w-0 flex flex-col justify-between"
+          className="bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs hover:border-amber-600/40 transition-colors relative overflow-hidden min-w-0 flex flex-col justify-between"
         >
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
               Pending Bookings
             </span>
             <div className="mt-3">
-              <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] dark:text-white tracking-tight">
                 <AnimatedNumber value={totalPendingKg} format="kg" />
               </div>
-              <div className="text-xs text-amber-800 font-medium font-mono mt-1.5">
+              <div className="text-xs text-amber-800 dark:text-amber-300 font-medium font-mono mt-1.5">
                 <span>Contract value: </span>
                 <AnimatedNumber value={totalPendingValue} format="currency" />
               </div>
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-[#E5E5E1]/60 flex items-center justify-between">
-            <span className="text-[11px] text-[#8E9299]">Awaiting Haulage</span>
-            <div className="w-8 h-8 rounded-xl bg-[#FAF9F6] border border-[#E5E5E1] text-amber-700 flex items-center justify-center">
+            <span className="text-[11px] text-[#8E9299] dark:text-[#94A3B8]">Awaiting Haulage</span>
+            <div className="w-8 h-8 rounded-xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-amber-700 flex items-center justify-center">
               <ShoppingBag className="w-4 h-4" />
             </div>
           </div>
@@ -229,24 +229,24 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.15 }}
-          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-teal-600/40 transition-colors relative overflow-hidden min-w-0 flex flex-col justify-between"
+          className="bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs hover:border-teal-600/40 transition-colors relative overflow-hidden min-w-0 flex flex-col justify-between"
         >
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
               Total Receivables
             </span>
             <div className="mt-3">
-              <div className="text-2xl sm:text-3xl font-bold font-mono text-teal-800 tracking-tight">
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-teal-800 dark:text-teal-300 tracking-tight">
                 <AnimatedNumber value={totalReceivables} format="currency" />
               </div>
-              <div className="text-xs text-[#8E9299] font-medium mt-1.5">
+              <div className="text-xs text-[#8E9299] dark:text-[#94A3B8] font-medium mt-1.5">
                 Across {customers.filter((c) => c.totalDue > 0).length} active customer accounts
               </div>
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-[#E5E5E1]/60 flex items-center justify-between">
-            <span className="text-[11px] text-[#8E9299]">Outstanding Inflow</span>
-            <div className="w-8 h-8 rounded-xl bg-[#FAF9F6] border border-[#E5E5E1] text-teal-700 flex items-center justify-center">
+            <span className="text-[11px] text-[#8E9299] dark:text-[#94A3B8]">Outstanding Inflow</span>
+            <div className="w-8 h-8 rounded-xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-teal-700 flex items-center justify-center">
               <ArrowDownLeft className="w-4 h-4" />
             </div>
           </div>
@@ -257,24 +257,24 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.2 }}
-          className="bg-white p-6 rounded-[28px] border border-[#E5E5E1] shadow-xs hover:border-[#111827]/40 transition-colors relative overflow-hidden min-w-0 flex flex-col justify-between"
+          className="bg-white dark:bg-[#101A26] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs hover:border-[#111827]/40 transition-colors relative overflow-hidden min-w-0 flex flex-col justify-between"
         >
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299]">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E9299] dark:text-[#94A3B8]">
               Total Payables (Owed)
             </span>
             <div className="mt-3">
-              <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] tracking-tight">
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-[#111827] dark:text-white tracking-tight">
                 <AnimatedNumber value={totalPayables} format="currency" />
               </div>
-              <div className="text-xs text-[#8E9299] font-medium mt-1.5">
+              <div className="text-xs text-[#8E9299] dark:text-[#94A3B8] font-medium mt-1.5">
                 Across {suppliers.length} primary source suppliers
               </div>
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-[#E5E5E1]/60 flex items-center justify-between">
-            <span className="text-[11px] text-[#8E9299]">Mill & Plant Due</span>
-            <div className="w-8 h-8 rounded-xl bg-[#FAF9F6] border border-[#E5E5E1] text-[#111827] flex items-center justify-center">
+            <span className="text-[11px] text-[#8E9299] dark:text-[#94A3B8]">Mill & Plant Due</span>
+            <div className="w-8 h-8 rounded-xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-[#111827] dark:text-white flex items-center justify-center">
               <ArrowUpRight className="w-4 h-4" />
             </div>
           </div>
@@ -283,81 +283,81 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
       {/* Month-to-date finance KPIs + alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
-        <div className="lg:col-span-2 bg-white p-5 sm:p-6 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-4 min-w-0">
+        <div className="lg:col-span-2 bg-white dark:bg-[#101A26] p-5 sm:p-6 rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs space-y-4 min-w-0">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="font-serif italic font-normal text-2xl text-[#111827]">This Month at a Glance</h3>
-              <p className="text-xs text-[#8E9299] mt-0.5">{pnl.label} • revenue, cost of goods, expenses and net profit to date</p>
+              <h3 className="font-serif italic font-normal text-2xl text-[#111827] dark:text-white">This Month at a Glance</h3>
+              <p className="text-xs text-[#8E9299] dark:text-[#94A3B8] mt-0.5">{pnl.label} • revenue, cost of goods, expenses and net profit to date</p>
             </div>
             {can('view_finance') && (
-              <button onClick={() => openReports('pnl')} className="px-3.5 py-2 bg-[#FAF9F6] hover:bg-[#F4F3EF] text-[#111827] text-xs font-semibold rounded-2xl border border-[#E5E5E1] flex items-center gap-1.5 shrink-0">
+              <button onClick={() => openReports('pnl')} className="px-3.5 py-2 bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-white text-xs font-semibold rounded-2xl border border-[#E5E5E1] dark:border-[#203248] flex items-center gap-1.5 shrink-0">
                 Full P&L <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4 min-w-0">
-              <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Revenue</div>
-              <div className="text-sm sm:text-lg font-bold font-mono text-[#111827] mt-1 break-words"><AnimatedNumber value={pnl.revenue} format="currency" /></div>
-              <div className="text-[10px] text-[#8E9299] font-mono mt-0.5">{formatKg(pnl.soldKg)} sold</div>
+            <div className="bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl p-4 min-w-0">
+              <div className="text-[10px] font-bold text-[#8E9299] dark:text-[#94A3B8] uppercase tracking-widest">Revenue</div>
+              <div className="text-sm sm:text-lg font-bold font-mono text-[#111827] dark:text-white mt-1 break-words"><AnimatedNumber value={pnl.revenue} format="currency" /></div>
+              <div className="text-[10px] text-[#8E9299] dark:text-[#94A3B8] font-mono mt-0.5">{formatKg(pnl.soldKg)} sold</div>
             </div>
             {can('view_finance') ? (
               <>
-                <div className="bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4 min-w-0">
-                  <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Gross profit</div>
-                  <div className={`text-sm sm:text-lg font-bold font-mono mt-1 break-words ${pnl.grossProfit >= 0 ? 'text-teal-800' : 'text-rose-700'}`}><AnimatedNumber value={pnl.grossProfit} format="currency" /></div>
-                  <div className="text-[10px] text-[#8E9299] font-mono mt-0.5">{pnl.grossMarginPct != null ? `${pnl.grossMarginPct}% margin` : 'no sales yet'}</div>
+                <div className="bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl p-4 min-w-0">
+                  <div className="text-[10px] font-bold text-[#8E9299] dark:text-[#94A3B8] uppercase tracking-widest">Gross profit</div>
+                  <div className={`text-sm sm:text-lg font-bold font-mono mt-1 break-words ${pnl.grossProfit >= 0 ? 'text-teal-800 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}><AnimatedNumber value={pnl.grossProfit} format="currency" /></div>
+                  <div className="text-[10px] text-[#8E9299] dark:text-[#94A3B8] font-mono mt-0.5">{pnl.grossMarginPct != null ? `${pnl.grossMarginPct}% margin` : 'no sales yet'}</div>
                 </div>
-                <div className="bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4 min-w-0">
-                  <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">Expenses</div>
-                  <div className="text-sm sm:text-lg font-bold font-mono text-amber-800 mt-1 break-words"><AnimatedNumber value={pnl.expenses} format="currency" /></div>
-                  <button onClick={() => openOps('expenses')} className="text-[10px] text-teal-700 font-semibold hover:underline mt-0.5">Record expense</button>
+                <div className="bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl p-4 min-w-0">
+                  <div className="text-[10px] font-bold text-[#8E9299] dark:text-[#94A3B8] uppercase tracking-widest">Expenses</div>
+                  <div className="text-sm sm:text-lg font-bold font-mono text-amber-800 dark:text-amber-300 mt-1 break-words"><AnimatedNumber value={pnl.expenses} format="currency" /></div>
+                  <button onClick={() => openOps('expenses')} className="text-[10px] text-teal-700 dark:text-teal-300 font-semibold hover:underline mt-0.5">Record expense</button>
                 </div>
                 <div className={`rounded-2xl p-4 min-w-0 border ${pnl.netProfit >= 0 ? 'bg-[#111827] border-[#111827] text-white' : 'bg-rose-50 border-rose-200'}`}>
-                  <div className={`text-[10px] font-bold uppercase tracking-widest ${pnl.netProfit >= 0 ? 'text-[#9CA3AF]' : 'text-rose-700'}`}>Net profit</div>
-                  <div className={`text-sm sm:text-lg font-bold font-mono mt-1 break-words ${pnl.netProfit >= 0 ? 'text-teal-300' : 'text-rose-700'}`}><AnimatedNumber value={pnl.netProfit} format="currency" /></div>
-                  <div className={`text-[10px] font-mono mt-0.5 ${pnl.netProfit >= 0 ? 'text-[#9CA3AF]' : 'text-rose-700'}`}>{pnl.netMarginPct != null ? `${pnl.netMarginPct}% net` : '—'}</div>
+                  <div className={`text-[10px] font-bold uppercase tracking-widest ${pnl.netProfit >= 0 ? 'text-[#9CA3AF]' : 'text-rose-700 dark:text-rose-300'}`}>Net profit</div>
+                  <div className={`text-sm sm:text-lg font-bold font-mono mt-1 break-words ${pnl.netProfit >= 0 ? 'text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}><AnimatedNumber value={pnl.netProfit} format="currency" /></div>
+                  <div className={`text-[10px] font-mono mt-0.5 ${pnl.netProfit >= 0 ? 'text-[#9CA3AF]' : 'text-rose-700 dark:text-rose-300'}`}>{pnl.netMarginPct != null ? `${pnl.netMarginPct}% net` : '—'}</div>
                 </div>
               </>
             ) : (
-              <div className="col-span-3 bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4 text-xs text-[#6B7280] flex items-center gap-2"><Wallet className="w-4 h-4" /> Margin and profit figures are visible to managers and admins.</div>
+              <div className="col-span-3 bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl p-4 text-xs text-[#6B7280] dark:text-[#94A3B8] flex items-center gap-2"><Wallet className="w-4 h-4" /> Margin and profit figures are visible to managers and admins.</div>
             )}
           </div>
           {(settings.monthlyTargetRs || 0) > 0 && (
-            <div className="bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4">
+            <div className="bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl p-4">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-[#111827]">Monthly sales target</span>
-                <span className="font-mono text-[#6B7280]">{formatCurrency(pnl.revenue)} / {formatCurrency(settings.monthlyTargetRs || 0)} • {Math.min(999, Math.round((pnl.revenue / (settings.monthlyTargetRs || 1)) * 100))}%</span>
+                <span className="font-bold text-[#111827] dark:text-white">Monthly sales target</span>
+                <span className="font-mono text-[#6B7280] dark:text-[#94A3B8]">{formatCurrency(pnl.revenue)} / {formatCurrency(settings.monthlyTargetRs || 0)} • {Math.min(999, Math.round((pnl.revenue / (settings.monthlyTargetRs || 1)) * 100))}%</span>
               </div>
               <div className="w-full h-2 bg-[#E5E5E1] rounded-full overflow-hidden mt-2"><div className={`h-full ${pnl.revenue >= (settings.monthlyTargetRs || 0) ? 'bg-teal-600' : 'bg-amber-500'}`} style={{ width: `${Math.min(100, (pnl.revenue / (settings.monthlyTargetRs || 1)) * 100)}%` }} /></div>
             </div>
           )}
           {topCustomers.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#6B7280]">
-              <span className="font-bold uppercase tracking-widest text-[10px] text-[#8E9299]">Top customers</span>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#6B7280] dark:text-[#94A3B8]">
+              <span className="font-bold uppercase tracking-widest text-[10px] text-[#8E9299] dark:text-[#94A3B8]">Top customers</span>
               {topCustomers.map((t, i) => t.customer && (
-                <button key={t.customer.id} onClick={() => onOpenCustomer(t.customer!.id)} className="px-2.5 py-1 rounded-full bg-[#FAF9F6] border border-[#E5E5E1] hover:border-teal-600/50 font-semibold text-[#111827]">
-                  {i + 1}. {t.customer.name} <span className="font-mono text-[#8E9299]">{formatCurrency(t.value)}</span>
+                <button key={t.customer.id} onClick={() => onOpenCustomer(t.customer!.id)} className="px-2.5 py-1 rounded-full bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] hover:border-teal-600/50 font-semibold text-[#111827] dark:text-white">
+                  {i + 1}. {t.customer.name} <span className="font-mono text-[#8E9299] dark:text-[#94A3B8]">{formatCurrency(t.value)}</span>
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        <div className={`p-5 sm:p-6 rounded-[32px] border shadow-xs space-y-3 min-w-0 ${alerts.some((a) => a.severity === 'danger') ? 'bg-rose-50/60 border-rose-200' : 'bg-white border-[#E5E5E1]'}`}>
+        <div className={`p-5 sm:p-6 rounded-[32px] border shadow-xs space-y-3 min-w-0 ${alerts.some((a) => a.severity === 'danger') ? 'bg-rose-50/60 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40' : 'bg-white dark:bg-[#101A26] border-[#E5E5E1] dark:border-[#203248]'}`}>
           <div className="flex items-center justify-between">
-            <h3 className="font-serif italic font-normal text-2xl text-[#111827] flex items-center gap-2"><Bell className="w-5 h-5 text-rose-600" /> Needs Attention</h3>
-            <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${alerts.length > 0 ? 'bg-rose-100 text-rose-800 border-rose-200' : 'bg-teal-50 text-teal-800 border-teal-200'}`}>{alerts.length}</span>
+            <h3 className="font-serif italic font-normal text-2xl text-[#111827] dark:text-white flex items-center gap-2"><Bell className="w-5 h-5 text-rose-600" /> Needs Attention</h3>
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${alerts.length > 0 ? 'bg-rose-100 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-900/40' : 'bg-teal-50 dark:bg-teal-950/30 text-teal-800 dark:text-teal-300 border-teal-200 dark:border-teal-900/40'}`}>{alerts.length}</span>
           </div>
           {topAlerts.length === 0 ? (
-            <div className="text-xs text-[#6B7280] py-6 text-center flex flex-col items-center gap-1"><CheckCircle2 className="w-6 h-6 text-teal-600" /> All clear. Nothing overdue, late or short.</div>
+            <div className="text-xs text-[#6B7280] dark:text-[#94A3B8] py-6 text-center flex flex-col items-center gap-1"><CheckCircle2 className="w-6 h-6 text-teal-600" /> All clear. Nothing overdue, late or short.</div>
           ) : (
             <div className="space-y-2">
               {topAlerts.map((a) => (
-                <button key={a.id} onClick={() => openOps('alerts')} className="w-full text-left bg-white border border-[#E5E5E1] rounded-2xl p-3 hover:border-rose-300 transition-colors">
+                <button key={a.id} onClick={() => openOps('alerts')} className="w-full text-left bg-white dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl p-3 hover:border-rose-300 dark:hover:border-rose-800/60 transition-colors">
                   <div className="flex items-start gap-2">
                     <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${a.severity === 'danger' ? 'bg-rose-500' : a.severity === 'warning' ? 'bg-amber-500' : 'bg-teal-500'}`} />
-                    <span className="min-w-0"><span className="text-xs font-bold text-[#111827] block truncate">{a.title}</span><span className="text-[11px] text-[#6B7280] block line-clamp-2">{a.detail}</span></span>
+                    <span className="min-w-0"><span className="text-xs font-bold text-[#111827] dark:text-white block truncate">{a.title}</span><span className="text-[11px] text-[#6B7280] dark:text-[#94A3B8] block line-clamp-2">{a.detail}</span></span>
                   </div>
                 </button>
               ))}
@@ -370,14 +370,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       </div>
 
       {/* Daily Incoming / Outgoing Tracker */}
-      <div className="bg-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-5">
+      <div className="bg-white dark:bg-[#101A26] p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="font-serif italic font-normal text-2xl text-[#111827]">Today's Stock Movement</h3>
-            <p className="text-xs text-[#8E9299] mt-0.5">Incoming from suppliers vs outgoing to customers, updated as receipts and dispatches are logged</p>
+            <h3 className="font-serif italic font-normal text-2xl text-[#111827] dark:text-white">Today's Stock Movement</h3>
+            <p className="text-xs text-[#8E9299] dark:text-[#94A3B8] mt-0.5">Incoming from suppliers vs outgoing to customers, updated as receipts and dispatches are logged</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onReceiveStock} className="px-4 py-2 bg-[#FAF9F6] hover:bg-[#F4F3EF] text-[#111827] font-semibold text-xs rounded-2xl border border-[#E5E5E1] flex items-center gap-1.5 transition-colors">
+            <button onClick={onReceiveStock} className="px-4 py-2 bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-white font-semibold text-xs rounded-2xl border border-[#E5E5E1] dark:border-[#203248] flex items-center gap-1.5 transition-colors">
               <PackagePlus className="w-3.5 h-3.5 text-teal-700" /> Receive Stock
             </button>
             <button onClick={() => openReports('flow')} className="px-4 py-2 bg-[#111827] hover:bg-black text-white font-bold text-xs rounded-2xl flex items-center gap-1.5 shadow-xs">
@@ -387,54 +387,54 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-teal-50/60 border border-teal-200/70 rounded-2xl p-4">
-            <div className="text-[10px] font-bold text-teal-900 uppercase tracking-widest flex items-center gap-1.5"><ArrowDownLeft className="w-3.5 h-3.5" /> Incoming today</div>
-            <div className="text-xl font-bold font-mono text-teal-900 mt-1"><AnimatedNumber value={todayFlow.inKg} format="kg" /></div>
-            <div className="text-[11px] text-teal-800/80 font-mono mt-0.5">{formatCurrency(todayFlow.inAmount)} • {todayFlow.movements.filter((m) => m.direction === 'in').length} receipt(s)</div>
+          <div className="bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200/70 dark:border-teal-900/40 rounded-2xl p-4">
+            <div className="text-[10px] font-bold text-teal-900 dark:text-teal-300 uppercase tracking-widest flex items-center gap-1.5"><ArrowDownLeft className="w-3.5 h-3.5" /> Incoming today</div>
+            <div className="text-xl font-bold font-mono text-teal-900 dark:text-teal-300 mt-1"><AnimatedNumber value={todayFlow.inKg} format="kg" /></div>
+            <div className="text-[11px] text-teal-800 dark:text-teal-300/90 font-mono mt-0.5">{formatCurrency(todayFlow.inAmount)} • {todayFlow.movements.filter((m) => m.direction === 'in').length} receipt(s)</div>
           </div>
-          <div className="bg-amber-50/60 border border-amber-200/70 rounded-2xl p-4">
-            <div className="text-[10px] font-bold text-amber-900 uppercase tracking-widest flex items-center gap-1.5"><ArrowUpRight className="w-3.5 h-3.5" /> Outgoing today</div>
-            <div className="text-xl font-bold font-mono text-amber-900 mt-1"><AnimatedNumber value={todayFlow.outKg} format="kg" /></div>
-            <div className="text-[11px] text-amber-800/80 font-mono mt-0.5">{formatCurrency(todayFlow.outAmount)} • {todayFlow.movements.filter((m) => m.direction === 'out').length} dispatch(es)</div>
+          <div className="bg-amber-50/60 dark:bg-amber-950/25 border border-amber-200/70 dark:border-amber-900/40 rounded-2xl p-4">
+            <div className="text-[10px] font-bold text-amber-900 dark:text-amber-300 uppercase tracking-widest flex items-center gap-1.5"><ArrowUpRight className="w-3.5 h-3.5" /> Outgoing today</div>
+            <div className="text-xl font-bold font-mono text-amber-900 dark:text-amber-300 mt-1"><AnimatedNumber value={todayFlow.outKg} format="kg" /></div>
+            <div className="text-[11px] text-amber-800 dark:text-amber-300/90 font-mono mt-0.5">{formatCurrency(todayFlow.outAmount)} • {todayFlow.movements.filter((m) => m.direction === 'out').length} dispatch(es)</div>
           </div>
-          <div className="bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-4">
-            <div className="text-[10px] font-bold text-[#6B7280] uppercase tracking-widest flex items-center gap-1.5"><Scale className="w-3.5 h-3.5" /> Net today</div>
-            <div className={`text-xl font-bold font-mono mt-1 ${todayFlow.netKg >= 0 ? 'text-[#111827]' : 'text-rose-700'}`}>{todayFlow.netKg >= 0 ? '+' : '−'}{formatKg(Math.abs(todayFlow.netKg))}</div>
-            <div className="text-[11px] text-[#6B7280] font-mono mt-0.5">Stock on hand: {formatKg(products.reduce((a, p) => a + p.stockKg, 0))}</div>
+          <div className="bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl p-4">
+            <div className="text-[10px] font-bold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-widest flex items-center gap-1.5"><Scale className="w-3.5 h-3.5" /> Net today</div>
+            <div className={`text-xl font-bold font-mono mt-1 ${todayFlow.netKg >= 0 ? 'text-[#111827] dark:text-white' : 'text-rose-700 dark:text-rose-300'}`}>{todayFlow.netKg >= 0 ? '+' : '−'}{formatKg(Math.abs(todayFlow.netKg))}</div>
+            <div className="text-[11px] text-[#6B7280] dark:text-[#94A3B8] font-mono mt-0.5">Stock on hand: {formatKg(products.reduce((a, p) => a + p.stockKg, 0))}</div>
           </div>
         </div>
 
         <div>
-          <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest mb-2">Latest movements</div>
+          <div className="text-[10px] font-bold text-[#8E9299] dark:text-[#94A3B8] uppercase tracking-widest mb-2">Latest movements</div>
           {recentMovements.length === 0 ? (
-            <div className="text-xs text-[#8E9299] bg-[#FAF9F6] border border-[#E5E5E1] rounded-2xl p-5 text-center">
+            <div className="text-xs text-[#8E9299] dark:text-[#94A3B8] bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl p-5 text-center">
               No stock movements yet. Log a dispatch or receive stock to start the daily log.
             </div>
           ) : (
-            <div className="divide-y divide-[#F0F0EE] border border-[#E5E5E1] rounded-2xl overflow-hidden">
+            <div className="divide-y divide-[#F0F0EE] dark:divide-[#1E2E40] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl overflow-hidden">
               {recentMovements.map((m) => (
-                <div key={m.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs hover:bg-[#FAF9F6] transition-colors">
-                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 w-fit ${m.direction === 'in' ? 'bg-teal-50 text-teal-900 border-teal-200' : 'bg-amber-50 text-amber-900 border-amber-200'}`}>
+                <div key={m.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors">
+                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 w-fit ${m.direction === 'in' ? 'bg-teal-50 text-teal-900 dark:text-teal-300 border-teal-200' : 'bg-amber-50 text-amber-900 dark:text-amber-300 border-amber-200'}`}>
                     {m.direction === 'in' ? <ArrowDownLeft className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
                     {m.direction === 'in' ? 'IN' : 'OUT'}
                   </span>
-                  <span className="font-mono text-[#8E9299] shrink-0 w-24">{formatDate(m.date)}</span>
+                  <span className="font-mono text-[#8E9299] dark:text-[#94A3B8] shrink-0 w-24">{formatDate(m.date)}</span>
                   <span className="flex-1 min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
                     {m.direction === 'out' && m.bookingId ? (
-                      <button onClick={() => openBooking(m.bookingId!, m.dispatchId)} className="font-mono font-bold text-[#111827] hover:text-teal-800 hover:underline flex items-center gap-1"><ShoppingBag className="w-3 h-3 text-[#8E9299]" />{m.reference}</button>
+                      <button onClick={() => openBooking(m.bookingId!, m.dispatchId)} className="font-mono font-bold text-[#111827] dark:text-white hover:text-teal-800 dark:hover:text-teal-300 hover:underline flex items-center gap-1"><ShoppingBag className="w-3 h-3 text-[#8E9299] dark:text-[#94A3B8]" />{m.reference}</button>
                     ) : (
-                      <span className="font-mono font-bold text-[#111827]">{m.reference}</span>
+                      <span className="font-mono font-bold text-[#111827] dark:text-white">{m.reference}</span>
                     )}
                     {m.direction === 'in' && m.supplierId ? (
-                      <button onClick={() => setSelectedSupplierId(m.supplierId!)} className="text-[#374151] hover:text-teal-800 hover:underline flex items-center gap-1"><Building className="w-3 h-3 text-[#8E9299]" />{m.supplierName}</button>
+                      <button onClick={() => setSelectedSupplierId(m.supplierId!)} className="text-[#374151] dark:text-[#CBD5E1] hover:text-teal-800 dark:hover:text-teal-300 hover:underline flex items-center gap-1"><Building className="w-3 h-3 text-[#8E9299] dark:text-[#94A3B8]" />{m.supplierName}</button>
                     ) : m.customerId ? (
-                      <button onClick={() => onOpenCustomer(m.customerId!)} className="text-[#374151] hover:text-teal-800 hover:underline flex items-center gap-1"><User className="w-3 h-3 text-[#8E9299]" />{m.customerName}</button>
+                      <button onClick={() => onOpenCustomer(m.customerId!)} className="text-[#374151] dark:text-[#CBD5E1] hover:text-teal-800 dark:hover:text-teal-300 hover:underline flex items-center gap-1"><User className="w-3 h-3 text-[#8E9299] dark:text-[#94A3B8]" />{m.customerName}</button>
                     ) : null}
-                    <button onClick={() => setSelectedProductId(m.productId)} className="text-[#6B7280] hover:text-teal-800 hover:underline flex items-center gap-1"><Package className="w-3 h-3" />{m.productName}</button>
+                    <button onClick={() => setSelectedProductId(m.productId)} className="text-[#6B7280] dark:text-[#94A3B8] hover:text-teal-800 dark:hover:text-teal-300 hover:underline flex items-center gap-1"><Package className="w-3 h-3" />{m.productName}</button>
                   </span>
                   <span className="text-right font-mono shrink-0">
-                    <span className={`font-bold ${m.direction === 'in' ? 'text-teal-800' : 'text-amber-800'}`}>{m.direction === 'in' ? '+' : '−'}{formatKg(m.kg)}</span>
-                    <span className="block text-[10px] text-[#8E9299]">{formatCurrency(m.amount)}</span>
+                    <span className={`font-bold ${m.direction === 'in' ? 'text-teal-800 dark:text-teal-300' : 'text-amber-800 dark:text-amber-300'}`}>{m.direction === 'in' ? '+' : '−'}{formatKg(m.kg)}</span>
+                    <span className="block text-[10px] text-[#8E9299] dark:text-[#94A3B8]">{formatCurrency(m.amount)}</span>
                   </span>
                 </div>
               ))}
@@ -446,18 +446,18 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       {/* Main Grid: Quick Sales Chart + Active Bookings Quick Dispatch */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
         {/* Left 2 Cols: Minimal Clean Sales & Dispatch Chart */}
-        <div className="lg:col-span-2 min-w-0 bg-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-5">
+        <div className="lg:col-span-2 min-w-0 bg-white dark:bg-[#101A26] p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs space-y-5">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-serif italic font-normal text-2xl text-[#111827]">Last 7 Days: In vs Out</h3>
-              <p className="text-xs text-[#8E9299] mt-0.5">Kilograms dispatched to customers and received from suppliers, with realised sales value</p>
+              <h3 className="font-serif italic font-normal text-2xl text-[#111827] dark:text-white">Last 7 Days: In vs Out</h3>
+              <p className="text-xs text-[#8E9299] dark:text-[#94A3B8] mt-0.5">Kilograms dispatched to customers and received from suppliers, with realised sales value</p>
             </div>
             <div className="flex items-center gap-3 text-xs font-medium">
-              <span className="flex items-center gap-2 text-[#6B7280]">
+              <span className="flex items-center gap-2 text-[#6B7280] dark:text-[#94A3B8]">
                 <span className="w-2.5 h-2.5 rounded-full bg-teal-600" />
                 Out (kg)
               </span>
-              <span className="flex items-center gap-2 text-[#6B7280]">
+              <span className="flex items-center gap-2 text-[#6B7280] dark:text-[#94A3B8]">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
                 In (kg)
               </span>
@@ -584,24 +584,24 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       </div>
 
       {/* Active Bookings Quick Dispatch Grid */}
-      <div className="bg-white p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-5">
+      <div className="bg-white dark:bg-[#101A26] p-5 sm:p-6 lg:p-7 rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-serif italic font-normal text-2xl text-[#111827]">Active Bookings Awaiting Dispatch</h3>
-            <p className="text-xs text-[#8E9299] mt-0.5">
+            <h3 className="font-serif italic font-normal text-2xl text-[#111827] dark:text-white">Active Bookings Awaiting Dispatch</h3>
+            <p className="text-xs text-[#8E9299] dark:text-[#94A3B8] mt-0.5">
               Select any booking to immediately log a truck dispatch
             </p>
           </div>
-          <span className="text-xs font-semibold text-teal-800 bg-[#FAF9F6] border border-[#E5E5E1] px-3 py-1.5 rounded-full">
+          <span className="text-xs font-semibold text-teal-800 dark:text-teal-300 bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] px-3 py-1.5 rounded-full">
             {activeBookings.length} Active Orders
           </span>
         </div>
 
         {activeBookings.length === 0 ? (
-          <div className="text-center py-12 text-[#8E9299]">
+          <div className="text-center py-12 text-[#8E9299] dark:text-[#94A3B8]">
             <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-teal-600" />
-            <p className="text-sm font-semibold text-[#111827]">All orders fully fulfilled!</p>
-            <p className="text-xs text-[#8E9299] mt-1">Create a new booking to start shipping.</p>
+            <p className="text-sm font-semibold text-[#111827] dark:text-white">All orders fully fulfilled!</p>
+            <p className="text-xs text-[#8E9299] dark:text-[#94A3B8] mt-1">Create a new booking to start shipping.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0">
@@ -613,12 +613,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               return (
                 <div
                   key={b.id}
-                  className="min-w-0 bg-[#FAF9F6] hover:bg-white p-6 rounded-[28px] border border-[#E5E5E1] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all space-y-4 flex flex-col justify-between group"
+                  className="min-w-0 bg-[#FAF9F6] dark:bg-[#162436] hover:bg-white dark:hover:bg-[#1E2E40] p-6 rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] hover:border-teal-600/50 shadow-xs hover:shadow-sm transition-all space-y-4 flex flex-col justify-between group"
                 >
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <button onClick={() => openBooking(b.id)} title="Open booking details" className="font-bold text-xs font-mono text-[#111827] hover:text-teal-800 hover:underline underline-offset-2 text-left">{b.bookingNumber}</button>
-                      <span className="text-xs font-bold font-mono text-teal-800">
+                      <button onClick={() => openBooking(b.id)} title="Open booking details" className="font-bold text-xs font-mono text-[#111827] dark:text-white hover:text-teal-800 dark:hover:text-teal-300 hover:underline underline-offset-2 text-left">{b.bookingNumber}</button>
+                      <span className="text-xs font-bold font-mono text-teal-800 dark:text-teal-300">
                         Rs. {b.pricePerKg}/kg
                       </span>
                     </div>
@@ -626,14 +626,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     <div>
                       <div
                         onClick={() => cust && onOpenCustomer(cust.id)}
-                        className="font-bold text-sm text-[#111827] group-hover:text-teal-800 cursor-pointer transition-colors"
+                        className="font-bold text-sm text-[#111827] dark:text-white group-hover:text-teal-800 dark:group-hover:text-teal-300 cursor-pointer transition-colors"
                       >
                         {cust?.name}
                       </div>
-                      <div className="text-xs text-[#8E9299]">{cust?.company}</div>
+                      <div className="text-xs text-[#8E9299] dark:text-[#94A3B8]">{cust?.company}</div>
                     </div>
 
-                    <div className="text-xs font-medium text-[#4B5563] flex items-center gap-1.5">
+                    <div className="text-xs font-medium text-[#4B5563] dark:text-[#CBD5E1] flex items-center gap-1.5">
                       <Package className="w-3.5 h-3.5 text-teal-700" />
                       <span>{prod?.name}</span>
                     </div>
@@ -641,8 +641,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     {/* Progress Bar & Remaining kg */}
                     <div className="space-y-1.5 pt-1">
                       <div className="flex justify-between text-xs font-medium">
-                        <span className="text-[#8E9299]">Remaining:</span>
-                        <span className="font-mono font-bold text-amber-800">
+                        <span className="text-[#8E9299] dark:text-[#94A3B8]">Remaining:</span>
+                        <span className="font-mono font-bold text-amber-800 dark:text-amber-300">
                           {b.remainingKg} kg
                         </span>
                       </div>
@@ -652,7 +652,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                           style={{ width: `${progress}%` }}
                         />
                       </div>
-                      <div className="flex justify-between text-[10px] text-[#8E9299]">
+                      <div className="flex justify-between text-[10px] text-[#8E9299] dark:text-[#94A3B8]">
                         <span>Dispatched: {b.dispatchedKg} kg</span>
                         <span>Total: {b.totalKg} kg</span>
                       </div>
