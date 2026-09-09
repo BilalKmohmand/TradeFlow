@@ -21,6 +21,16 @@ test('desktop screens with data', async ({ page }) => {
   await page.keyboard.press('Escape');
   await shot(page, '01-dashboard');
 
+  // Header notifications bell lists the live alerts and opens the alerts centre
+  await page.getByRole('button', { name: 'Notifications' }).click();
+  await expect(page.getByText('Needs attention', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Steel Bars is below reorder level/).first()).toBeVisible();
+  await shot(page, '01b-notifications');
+  await page.getByRole('button', { name: /Steel Bars is below reorder level/ }).first().click();
+  await expect(page.getByRole('heading', { name: 'Operations' })).toBeVisible();
+  await expect(page.getByText('Critical')).toBeVisible();
+  await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+
   await page.getByRole('button', { name: 'Bookings', exact: true }).click();
   await shot(page, '02-bookings');
   await page.getByRole('button', { name: /Quotations/ }).click();
