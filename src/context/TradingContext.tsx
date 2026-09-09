@@ -4,6 +4,7 @@ import {
   Supplier,
   Product,
   Booking,
+  BookingItem,
   BookingStatus,
   Dispatch,
   LedgerEntry,
@@ -341,6 +342,17 @@ const emptySummary = (): DeleteSummary => ({
 });
 
 export const todayISO = () => new Date().toISOString().split('T')[0];
+
+// ---------------------------------------------------------------------------
+// Optional backend (server.ts). The production build is static, so API calls are only made when a
+// backend is actually available: in the Vite dev server (which mounts the Express routes) or when
+// VITE_API_URL points at a deployed API. Otherwise every call is a no-op and state stays local-first.
+// ---------------------------------------------------------------------------
+const API_BASE = (((import.meta as any).env?.VITE_API_URL as string) || '').replace(/\/$/, '');
+export const API_ENABLED = Boolean(API_BASE) || Boolean((import.meta as any).env?.DEV);
+const apiFetch = (path: string, init?: RequestInit): Promise<Response> =>
+  API_ENABLED ? fetch(`${API_BASE}${path}`, init) : Promise.reject(new Error('Backend API not configured'));
+
 
 export type EditRequest = { type: 'customer' | 'supplier' | 'product' | 'booking'; id: string };
 /** Mirrors PrintRequest in components/PrintDocument.tsx without importing a component into the context. */
@@ -2158,7 +2170,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     logAuditEvent('User Login', `${user.name} signed in successfully via PIN (${user.role}).`, 'info', 'auth');
 
     // Notify backend if online
-    fetch('/api/auth/pin-login', {
+    apiFetch('/api/auth/pin-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, pin: cleanPin }),
@@ -2207,7 +2219,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     // Attempt backend API first
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier: trimmedId, password: pass, otpCode }),
@@ -2366,7 +2378,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const verify2FACode = async (tempToken: string, otpCode: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      const res = await fetch('/api/auth/verify-2fa', {
+      const res = await apiFetch('/api/auth/verify-2fa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tempToken, otpCode }),
@@ -2422,7 +2434,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!clean) return { success: false, message: 'Please enter your username or registered email.' };
 
     try {
-      const res = await fetch('/api/auth/forgot-password', {
+      const res = await apiFetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: clean }),
@@ -2475,7 +2487,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!newPass || newPass.length < 6) return { success: false, message: 'New password must be at least 6 characters.' };
 
     try {
-      const res = await fetch('/api/auth/reset-password', {
+      const res = await apiFetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, newPassword: newPass }),
@@ -2543,7 +2555,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     logAuditEvent('Role Created', `Created custom role "${cleanName}" with ${newRole.permissions.length} permissions.`, 'warning', 'roles');
 
     // Notify backend if available
-    fetch('/api/roles', {
+    apiFetch('/api/roles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newRole),
@@ -2571,7 +2583,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setRoles((prev) => prev.map((r) => (r.id === id ? updatedRole : r)));
     logAuditEvent('Role Updated', `Updated role "${existing.name}" settings and permissions.`, 'warning', 'roles');
 
-    fetch(`/api/roles/${id}`, {
+    apiFetch(`/api/roles/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updatedRole),
@@ -2598,7 +2610,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setRoles((prev) => prev.filter((r) => r.id !== id));
     logAuditEvent('Role Deleted', `Removed custom role "${existing.name}".`, 'danger', 'roles');
 
-    fetch(`/api/roles/${id}`, { method: 'DELETE' }).catch(() => {});
+    apiFetch(`/api/roles/${id}`, { method: 'DELETE' }).catch(() => {});
 
     return { success: true, message: `Role "${existing.name}" deleted.` };
   };
@@ -2618,7 +2630,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
     logAuditEvent('Permissions Matrix Updated', 'Super-admin updated the global RBAC permissions matrix.', 'warning', 'roles');
 
-    fetch('/api/roles/matrix', {
+    apiFetch('/api/roles/matrix', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(matrix),
@@ -2631,7 +2643,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setVisibilitySettings(settingsMap);
     logAuditEvent('Visibility Rules Updated', 'Role-based screen and sensitive field visibility settings updated.', 'warning', 'visibility');
 
-    fetch('/api/roles/visibility', {
+    apiFetch('/api/roles/visibility', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settingsMap),
@@ -2642,7 +2654,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setSecurityPolicy((prev) => ({ ...prev, ...policy }));
     logAuditEvent('Security Policy Changed', 'Updated system password and lockout security parameters.', 'warning', 'system');
 
-    fetch('/api/security/policy', {
+    apiFetch('/api/security/policy', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...securityPolicy, ...policy }),
@@ -2704,7 +2716,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setUsers((prev) => [newUser, ...prev]);
     logAuditEvent('User Created', `Administrator created user "${cleanName}" with role [${assignedRoles.join(', ')}] and secure PIN.`, 'warning', 'users');
 
-    fetch('/api/users/invite', {
+    apiFetch('/api/users/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newUser),
@@ -2750,7 +2762,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     logAuditEvent('User Updated', `${existing.name}: profile/settings modified by administrator.`, 'info', 'users');
 
-    fetch(`/api/users/${id}`, {
+    apiFetch(`/api/users/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updatePayload),
@@ -2770,7 +2782,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     removeRemote('users', [id]);
     logAuditEvent('User Deleted', `${existing.name} (${existing.role}) removed from system.`, 'danger', 'users');
 
-    fetch(`/api/users/${id}`, { method: 'DELETE' }).catch(() => {});
+    apiFetch(`/api/users/${id}`, { method: 'DELETE' }).catch(() => {});
   };
 
   const unlockUserAccount = (id: string) => {
@@ -2783,7 +2795,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
     logAuditEvent('Account Unlocked', `Administrator lifted lockout on user account ID ${id}.`, 'info', 'auth');
 
-    fetch(`/api/users/${id}/unlock`, { method: 'POST' }).catch(() => {});
+    apiFetch(`/api/users/${id}/unlock`, { method: 'POST' }).catch(() => {});
   };
 
   const forceLogoutUser = (id: string) => {

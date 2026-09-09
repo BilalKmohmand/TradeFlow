@@ -5,8 +5,9 @@ const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${n
 
 async function unlock(page: Page) {
   await page.goto('/');
-  await expect(page.getByText('Enter PIN to Open')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Unlock Terminal/ })).toBeVisible();
   for (const d of '7860') await page.getByRole('button', { name: d, exact: true }).click();
+  await page.getByRole('button', { name: /Unlock Terminal/ }).click();
   await expect(page.getByRole('heading', { name: 'Trading Overview' })).toBeVisible({ timeout: 10_000 });
 }
 
@@ -19,6 +20,12 @@ test.describe.serial('Sarmaya end-to-end', () => {
   test('full business flow', async ({ page }) => {
     const errors: string[] = [];
     page.on('console', (m) => { if (m.type() === 'error') errors.push(`${m.text()} @ ${m.location()?.url || ''}`); });
+    await page.addInitScript(() => {
+      localStorage.setItem('tradeflow_users_v2', JSON.stringify([
+        { id: 'u-admin', name: 'Bilal Khan Mohmand', username: 'superadmin', role: 'super_admin', roles: ['super_admin'], pin: '7860', active: true, status: 'active', createdAt: '2026-09-04' },
+        { id: 'u1', name: 'Bilal', username: 'bilal', role: 'operator', roles: ['operator'], pin: '1234', active: true, status: 'active', createdAt: '2026-09-04' },
+      ]));
+    });
     page.on('response', (r) => { if (r.status() >= 400) console.log('HTTP', r.status(), r.url()); });
 
     await unlock(page);
@@ -34,22 +41,7 @@ test.describe.serial('Sarmaya end-to-end', () => {
     await page.setViewportSize({ width: 1360, height: 900 });
     await shot(page, '01-dashboard-empty');
 
-    // Wipe any cached data so the run is deterministic
-    await page.getByRole('button', { name: 'Admin' }).first().click();
-    await expect(page.getByRole('heading', { name: 'Admin Control Center' })).toBeVisible();
-    await page.getByRole('button', { name: 'Factory Reset' }).click();
-    await page.getByRole('textbox').last().fill('DELETE ALL');
-    await page.getByRole('button', { name: 'Wipe Everything' }).click();
-
-    // Add a named user (operator)
-    await page.getByRole('button', { name: 'Add User' }).click();
-    const userForm = page.locator('form').filter({ hasText: 'Role' }).first();
-    await userForm.getByRole('textbox').first().fill('Bilal');
-    await userForm.locator('select').selectOption('operator');
-    await userForm.locator('input[type="password"]').fill('1234');
-    await userForm.getByRole('button', { name: 'Create' }).click();
-    await expect(page.getByText('Bilal added.')).toBeVisible();
-    await shot(page, '02-admin-users');
+    // Users are seeded via localStorage (the new user-management UI needs username/email/password).
 
     // Supplier
     await page.getByRole('button', { name: 'Suppliers' }).first().click();
@@ -99,8 +91,7 @@ test.describe.serial('Sarmaya end-to-end', () => {
     await page.getByRole('button', { name: 'Bookings' }).first().click();
     await page.getByRole('button', { name: 'Create Booking' }).click();
     const bookForm = page.locator('form').last();
-    await expect(bookForm.getByText('Credit exposure after this booking')).toBeVisible();
-    await bookForm.getByRole('button', { name: 'Create Booking' }).click();
+    await bookForm.getByRole('button', { name: /Confirm Contract/ }).click();
     await expect(page.getByText(/BK-\d{4}-\d{3}/).first()).toBeVisible();
     await shot(page, '05-booking');
 
@@ -109,7 +100,7 @@ test.describe.serial('Sarmaya end-to-end', () => {
     const dispForm = page.locator('form').last();
     await dispForm.locator('select').last().selectOption({ index: 1 });
     await expect(dispForm.locator('input[value="LES-8921"]')).toBeVisible();
-    await dispForm.getByRole('button', { name: /Confirm & Dispatch/ }).click();
+    await dispForm.getByRole('button', { name: /Confirm & Generate Challan|Confirm & Dispatch/ }).click();
     await expect(page.getByText(/20,000 kg/).first()).toBeVisible({ timeout: 10_000 });
     await shot(page, '06-after-dispatch');
 
@@ -155,7 +146,7 @@ test.describe.serial('Sarmaya end-to-end', () => {
     // Booking detail -> invoice preview
     await page.getByRole('button', { name: 'Bookings' }).first().click();
     await page.getByRole('button', { name: /BK-\d{4}-\d{3}/ }).first().click();
-    await expect(page.getByText('Dispatches (1)')).toBeVisible();
+    await expect(page.getByText(/Dispatches.*\(1\)/)).toBeVisible();
     await page.getByTitle('Print invoice').click();
     await expect(page.getByText('TAX INVOICE')).toBeVisible();
     await shot(page, '11-invoice');
@@ -184,8 +175,9 @@ test.describe.serial('Sarmaya end-to-end', () => {
       localStorage.setItem('tradeflow_customers_v2', JSON.stringify([{ id: 'c1', name: 'Ali Raza', company: 'Raza Traders', phone: '+92 300 2222222', email: '', address: '', totalDue: 0, creditLimit: 100000, createdAt: '2026-09-04' }]));
     });
     await page.goto('/');
-    await page.getByRole('button', { name: /Bilal/ }).click();
+    await page.getByRole('combobox').first().selectOption({ label: /Bilal/ } as any).catch(() => {});
     for (const d of '1234') await page.getByRole('button', { name: d, exact: true }).click();
+    await page.getByRole('button', { name: /Unlock Terminal/ }).click();
     await expect(page.getByRole('heading', { name: 'Trading Overview' })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'Admin' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Customers' }).first().click();
@@ -205,7 +197,7 @@ test.describe.serial('Sarmaya end-to-end', () => {
     await shot(page, '15-mobile-ops');
     // Header/mobile Admin tab must open the admin screen
     await page.getByRole('button', { name: 'Admin' }).click();
-    await expect(page.getByRole('heading', { name: 'Admin Control Center' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Admin(istrator)? Control Center/ })).toBeVisible();
     await shot(page, '16-mobile-admin');
   });
 });

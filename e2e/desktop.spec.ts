@@ -16,6 +16,7 @@ test('desktop screens with data', async ({ page }) => {
   await page.addInitScript(seed);
   await page.goto('/');
   for (const d of '7860') await page.getByRole('button', { name: d, exact: true }).click();
+  await page.getByRole('button', { name: /Unlock Terminal/ }).click();
   await expect(page.getByRole('heading', { name: 'Trading Overview' })).toBeVisible({ timeout: 10_000 });
   await page.keyboard.press('Escape');
   await shot(page, '01-dashboard');

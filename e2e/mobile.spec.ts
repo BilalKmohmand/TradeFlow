@@ -45,6 +45,7 @@ test('every screen and modal on a phone', async ({ page }) => {
   await page.goto('/');
   await shot(page, '00-lock');
   for (const d of '7860') await page.getByRole('button', { name: d, exact: true }).click();
+  await page.getByRole('button', { name: /Unlock Terminal/ }).click();
   await expect(page.getByRole('heading', { name: 'Trading Overview' })).toBeVisible({ timeout: 10_000 });
   await page.keyboard.press('Escape');
   await noOverflow(page, 'dashboard');
@@ -95,7 +96,7 @@ test('every screen and modal on a phone', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Bookings', exact: true }).click();
   await page.getByRole('button', { name: 'BK-2026-514' }).click();
-  await expect(page.getByText('Dispatches (1)')).toBeVisible();
+  await expect(page.getByText(/Dispatches.*\(1\)/)).toBeVisible();
   await shot(page, '06-booking-detail');
   await page.getByTitle('Print invoice').click();
   await expect(page.getByText('TAX INVOICE')).toBeVisible();
@@ -104,12 +105,12 @@ test('every screen and modal on a phone', async ({ page }) => {
   await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: /Log Dispatch/ }).first().click();
-  await expect(page.getByText('Dispatch Quantity (kg)')).toBeVisible();
+  await expect(page.getByText(/Gross − Tare = Net/)).toBeVisible();
   await shot(page, '08-dispatch-modal');
   await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: 'Create Booking' }).click();
-  await expect(page.getByText('Credit exposure after this booking')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Confirm Contract/ })).toBeVisible();
   await shot(page, '09-booking-modal');
   await page.getByRole('button', { name: 'Cancel' }).click();
 
@@ -127,6 +128,6 @@ test('every screen and modal on a phone', async ({ page }) => {
   await page.getByRole('button', { name: 'Cancel' }).click();
 
   await page.getByRole('button', { name: 'Admin', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Admin Control Center' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Admin(istrator)? Control Center/ })).toBeVisible();
   await noOverflow(page, 'admin');
 });

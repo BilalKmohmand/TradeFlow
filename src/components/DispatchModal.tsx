@@ -401,7 +401,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                       setTruckId(e.target.value);
                       const t = trucks.find((x) => x.id === e.target.value);
                       if (t) {
-                        setTruckNumber(t.plateNumber);
+                        setTruckNumber(t.number);
                         if (t.driverPhone) setDriverPhone(t.driverPhone);
                       }
                     }}
@@ -410,7 +410,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                     <option value="">Custom truck</option>
                     {trucks.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.plateNumber} ({t.driverName} • {t.status})
+                        {t.number} ({t.driverName} • {t.status})
                       </option>
                     ))}
                   </select>

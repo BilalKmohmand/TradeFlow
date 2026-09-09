@@ -87,8 +87,17 @@ Run the SQL files in `supabase/` in this order on an existing project:
 3. `migrate_v4_cashbook.sql` (once) — cash entries and settings.
 4. `migrate_v5_dispatch_tax_delivery.sql` (once) — weighbridge, freight, tax, delivery status, trip expenses, company profile.
 5. `migrate_v6_trade_documents.sql` (once) — quotations, purchase orders, returns, stock adjustments, tasks, broker commission.
+6. `migrate_v7_master_pin_sync.sql` (once) — master PIN and user account columns synced through cloud settings.
 
 New projects can run `schema.sql` instead, which already contains everything.
+
+## Signing in
+
+The lock screen lists active users by role. Pick your name, enter your PIN and press **Unlock Terminal**. On a fresh install with no users the app seeds demo accounts (a super admin with PIN `7860` plus a manager, an operator and a viewer); replace them under **Admin → Users** before going live. Repeated wrong PINs lock the account for a cooling-off period.
+
+## Optional backend
+
+`server.ts` now carries an Express API for credential login, 2FA, password reset and role management. The production build on Vercel is static and does not run it; the app is local-first and every API call is skipped unless a backend is available (the Vite dev server mounts the routes, or set `VITE_API_URL` to a deployed API). PIN sign-in, roles and permissions work fully without the backend.
 
 ## Admin Access
 

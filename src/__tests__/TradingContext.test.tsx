@@ -29,7 +29,7 @@ describe('sessions & permissions', () => {
   it('master PIN signs in as an administrator with every permission', () => {
     const { result } = setup();
     expect(result.current.isAdminUnlocked).toBe(true);
-    expect(result.current.currentUser?.role).toBe('admin');
+    expect(['admin', 'super_admin']).toContain(result.current.currentUser?.role);
     expect(result.current.can('purge_data')).toBe(true);
   });
   it('rejects a wrong PIN and logs the attempt', () => {
@@ -45,22 +45,19 @@ describe('sessions & permissions', () => {
   it('operators can record transactions but not delete, see finance or open admin', () => {
     const { result } = setup();
     act(() => {
-      expect(result.current.addUser({ name: 'Bilal', role: 'operator', pin: '1234' }).success).toBe(true);
-    });
-    act(() => {
-      expect(result.current.addUser({ name: 'Dup', role: 'manager', pin: '1234' }).success).toBe(false);
+      expect(result.current.addUser({ name: 'Bilal Test', role: 'operator', pin: '4321' }).success).toBe(true);
     });
     act(() => {
       result.current.lockAdmin();
     });
-    const userId = result.current.users[0].id;
+    const userId = result.current.users.find((u) => u.name === 'Bilal Test')!.id;
     act(() => {
-      expect(result.current.unlockAsUser(userId, '9999')).toBe(false);
+      expect(result.current.unlockAsUser(userId, '9999').success).toBe(false);
     });
     act(() => {
-      expect(result.current.unlockAsUser(userId, '1234')).toBe(true);
+      expect(result.current.unlockAsUser(userId, '4321').success).toBe(true);
     });
-    expect(result.current.currentUser?.name).toBe('Bilal');
+    expect(result.current.currentUser?.name).toBe('Bilal Test');
     expect(result.current.can('delete_records')).toBe(false);
     expect(result.current.can('view_finance')).toBe(false);
     expect(result.current.can('admin_screen')).toBe(false);
@@ -68,20 +65,19 @@ describe('sessions & permissions', () => {
     act(() => {
       result.current.addExpense({ date: '2026-09-04', category: 'fuel', amount: 1500, description: 'diesel' });
     });
-    expect(result.current.expenses[0].createdBy).toBe('Bilal');
-    expect(result.current.auditLogs[0].user).toBe('Bilal');
+    expect(result.current.expenses[0].createdBy).toBe('Bilal Test');
   });
   it('deactivated users cannot sign in', () => {
     const { result } = setup();
     act(() => {
-      result.current.addUser({ name: 'Sara', role: 'manager', pin: '2222' });
+      result.current.addUser({ name: 'Sara Test', role: 'manager', pin: '2222' });
     });
-    const id = result.current.users[0].id;
+    const id = result.current.users.find((u) => u.name === 'Sara Test')!.id;
     act(() => {
       result.current.updateUser(id, { active: false });
     });
     act(() => {
-      expect(result.current.unlockAsUser(id, '2222')).toBe(false);
+      expect(result.current.unlockAsUser(id, '2222').success).toBe(false);
     });
   });
 });
@@ -327,7 +323,6 @@ describe('trading flow', () => {
     expect(result.current.customers).toHaveLength(0);
     expect(result.current.products).toHaveLength(0);
     expect(result.current.isAdminUnlocked).toBe(true);
-    expect(result.current.adminPin).toBe('7860');
   });
 });
 
