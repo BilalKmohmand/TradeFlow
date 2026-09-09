@@ -344,14 +344,13 @@ const emptySummary = (): DeleteSummary => ({
 export const todayISO = () => new Date().toISOString().split('T')[0];
 
 // ---------------------------------------------------------------------------
-// Optional backend (server.ts). The production build is static, so API calls are only made when a
-// backend is actually available: in the Vite dev server (which mounts the Express routes) or when
-// VITE_API_URL points at a deployed API. Otherwise every call is a no-op and state stays local-first.
+// Optional backend (server.ts). The production build is static and local-first, so the Express
+// routes are only called from the Vite dev server, which mounts them. In production every call is
+// skipped and the app works entirely from its own state and Supabase sync.
 // ---------------------------------------------------------------------------
-const API_BASE = (((import.meta as any).env?.VITE_API_URL as string) || '').replace(/\/$/, '');
-export const API_ENABLED = Boolean(API_BASE) || Boolean((import.meta as any).env?.DEV);
+export const API_ENABLED = Boolean((import.meta as any).env?.DEV);
 const apiFetch = (path: string, init?: RequestInit): Promise<Response> =>
-  API_ENABLED ? fetch(`${API_BASE}${path}`, init) : Promise.reject(new Error('Backend API not configured'));
+  API_ENABLED ? fetch(path, init) : Promise.reject(new Error('Backend API not available in production'));
 
 
 export type EditRequest = { type: 'customer' | 'supplier' | 'product' | 'booking'; id: string };

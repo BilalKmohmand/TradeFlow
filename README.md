@@ -97,7 +97,7 @@ The lock screen lists active users by role. Pick your name, enter your PIN and p
 
 ## Optional backend
 
-`server.ts` now carries an Express API for credential login, 2FA, password reset and role management. The production build on Vercel is static and does not run it; the app is local-first and every API call is skipped unless a backend is available (the Vite dev server mounts the routes, or set `VITE_API_URL` to a deployed API). PIN sign-in, roles and permissions work fully without the backend.
+`server.ts` carries an Express API for credential login, 2FA, password reset and role management. It only runs under `npm run dev`. The production build on Vercel is static and local-first, so those calls are skipped there; PIN sign-in, roles and permissions work fully without it. Nothing needs configuring.
 
 ## Admin Access
 
