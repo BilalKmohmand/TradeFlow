@@ -62,6 +62,11 @@ test('desktop screens with data', async ({ page }) => {
   await shot(page, '12-balance');
   await page.getByRole('button', { name: 'Profit & Loss' }).click();
   await shot(page, '13-pnl');
+  await page.getByRole('button', { name: 'Sales Analytics' }).click();
+  await shot(page, '13b-analytics');
+  await page.getByRole('button', { name: 'Admin', exact: true }).click();
+  await page.getByRole('button', { name: /Data Import/ }).click();
+  await shot(page, '16b-import');
 
   await page.getByRole('button', { name: 'Bookings', exact: true }).click();
   await page.getByRole('button', { name: /^Orders/ }).click();

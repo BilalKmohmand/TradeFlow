@@ -49,6 +49,15 @@ A localised bulk-trading operations dashboard built for Pakistani commodity trad
 - **Dashboard**: month-to-date revenue, gross profit, expenses and net profit, top customers, and a "Needs Attention" panel with the top alerts.
 - **Exports**: Admin → Data Exports for customers, suppliers, products and the full ledger as CSV.
 
+## Navigation & workspace
+
+- **Sidebar** (desktop): grouped into Overview, Sales, Purchasing, Inventory, Finance, Operations and Administration, with quick links into the sub-views (orders, quotations, returns, purchase orders, receive stock, stock flow, each finance report, alerts, fleet, expenses, follow-ups). Collapsible; remembers its state. On phones the bottom tab grid is used instead.
+- **Header**: global search (⌘K), theme, a notifications bell with the current alerts, the signed-in user and role, and Lock.
+- **Dashboard**: business pulse tiles (receivables, payables, stock value, active orders, open quotes, open POs, fleet), month-to-date P&L, needs-attention panel, today's stock movement, a 7-day in/out chart, recent activity from the audit trail and active bookings awaiting dispatch.
+- **Sales Analytics** (Reports → Sales Analytics): revenue, volume, average price, customers ranked by revenue with share bars, revenue by product, and a 12-month revenue vs gross-profit chart, for 30 days / quarter / 12 months / all time, with CSV export.
+- **Lists**: Customers, Suppliers, Products and Bookings can be sorted (name, balance, stock, value, date, customer…) and exported to CSV.
+- **Data Import** (Admin → Data Import): upload CSV files of customers, suppliers or products (templates provided), preview, then import; duplicates by phone or product name are skipped and opening balances can be set.
+
 ## Trade documents & workflow
 
 - **Quotations** (Bookings → Quotations): quote a price, mark it sent / accepted / rejected, print it, and convert it to a booking in one click. Quotes expiring within two days appear in alerts.

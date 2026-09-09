@@ -20,6 +20,7 @@ import { QuotationsPanel, ReturnsPanel } from '../components/TradeDocsPanels';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
+import { downloadCsvFile, sortBy } from '../utils/listTools';
 import { BookingStatus, Booking } from '../types';
 
 interface BookingsScreenProps {
@@ -39,6 +40,8 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
     if (requestedBookingsView) setView(requestedBookingsView);
   }, [requestedBookingsView]);
   const [pendingDelete, setPendingDelete] = useState<Booking | null>(null);
+  const [sortKey, setSortKey] = useState<'created' | 'remaining' | 'amount' | 'customer'>('created');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const pendingDispatches = pendingDelete ? dispatches.filter((d) => d.bookingId === pendingDelete.id) : [];
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | BookingStatus>('all');
@@ -62,6 +65,8 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
     return matchesSearch && matchesStatus;
   });
 
+  const sortedBookings = sortBy<Booking>(filteredBookings, (b) => (sortKey === 'created' ? b.createdAt : sortKey === 'remaining' ? b.remainingKg : sortKey === 'amount' ? b.totalAmount : (customers.find((c) => c.id === b.customerId)?.name || '').toLowerCase()), sortDir);
+  const exportList = () => downloadCsvFile('sarmaya-bookings.csv', ['Booking #', 'Date', 'Customer', 'Product', 'Total kg', 'Dispatched kg', 'Remaining kg', 'Rate Rs./kg', 'Contract Rs.', 'Paid Rs.', 'Status'], sortedBookings.map((b) => [b.bookingNumber, b.createdAt, customers.find((c) => c.id === b.customerId)?.name || '', products.find((p) => p.id === b.productId)?.name || '', b.totalKg, b.dispatchedKg, b.remainingKg, b.pricePerKg, b.totalAmount, b.paidAmount, b.status]));
   const totalContractKg = bookings.reduce((acc, b) => acc + b.totalKg, 0);
   const totalDispatchedKg = bookings.reduce((acc, b) => acc + b.dispatchedKg, 0);
   const totalRemainingKg = bookings.reduce((acc, b) => acc + b.remainingKg, 0);
@@ -146,16 +151,29 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
         </div>
       </div>
 
+
+      {/* Sort & export */}
+      <div className="flex flex-wrap items-center justify-between gap-2 -mt-2">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-[#8E9299] font-semibold">Sort</span>
+          <select value={sortKey} onChange={(e) => setSortKey(e.target.value as any)} className="bg-white border border-[#E5E5E1] rounded-xl px-3 py-1.5 text-xs font-semibold text-[#111827]">
+            <option value="created">Newest</option><option value="remaining">Remaining kg</option><option value="amount">Contract value</option><option value="customer">Customer</option>
+          </select>
+          <button onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))} className="px-3 py-1.5 rounded-xl bg-white border border-[#E5E5E1] text-xs font-semibold text-[#374151]">{sortDir === 'asc' ? '↑ Asc' : '↓ Desc'}</button>
+        </div>
+        <button onClick={exportList} className="px-3.5 py-1.5 rounded-xl bg-white border border-[#E5E5E1] text-xs font-semibold text-[#374151] hover:bg-[#FAF9F6]">Export CSV</button>
+      </div>
+
       {/* Bookings List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
-        {filteredBookings.length === 0 ? (
+        {sortedBookings.length === 0 ? (
           <div className="col-span-full py-16 text-center text-[#8E9299] dark:text-[#94A3B8] bg-white dark:bg-[#101A26] rounded-[32px] border border-[#E5E5E1] dark:border-[#203248]">
             <ShoppingBag className="w-10 h-10 mx-auto mb-2 text-[#8E9299] dark:text-[#94A3B8]" />
             <p className="text-sm font-semibold text-[#111827] dark:text-white">No bookings match criteria</p>
             <p className="text-xs text-[#8E9299] dark:text-[#94A3B8] mt-1">Try resetting the filter or search.</p>
           </div>
         ) : (
-          filteredBookings.map((b) => {
+          sortedBookings.map((b) => {
             const cust = customers.find((c) => c.id === b.customerId);
             const prod = products.find((p) => p.id === b.productId);
             const progress = (b.dispatchedKg / b.totalKg) * 100;

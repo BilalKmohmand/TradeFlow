@@ -20,6 +20,7 @@ import { StockAdjustDialog } from '../components/TradeDocsPanels';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
+import { downloadCsvFile, sortBy } from '../utils/listTools';
 
 interface ProductsScreenProps {
   onOpenAddProduct: () => void;
@@ -39,6 +40,8 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [adjustId, setAdjustId] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<'name' | 'stock' | 'price' | 'value'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   const categories = ['All', ...Array.from(new Set(products.map((p) => p.category)))];
 
@@ -50,6 +53,8 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
     return matchesSearch && matchesCat;
   });
 
+  const sortedProducts = sortBy<Product>(filteredProducts, (p) => (sortKey === 'name' ? p.name.toLowerCase() : sortKey === 'stock' ? p.stockKg : sortKey === 'price' ? p.unitPricePerKg : p.stockKg * p.unitPricePerKg), sortDir);
+  const exportList = () => downloadCsvFile('sarmaya-products.csv', ['Product', 'Category', 'Price Rs./kg', 'Stock kg', 'Reorder level kg', 'Stock value', 'Supplier'], sortedProducts.map((p) => [p.name, p.category, p.unitPricePerKg, p.stockKg, p.minThresholdKg, p.stockKg * p.unitPricePerKg, suppliers.find((s) => s.id === p.supplierId)?.company || '']));
   const totalWarehouseKg = products.reduce((acc, p) => acc + p.stockKg, 0);
   const totalStockValue = products.reduce((acc, p) => acc + p.stockKg * p.unitPricePerKg, 0);
 
@@ -130,9 +135,22 @@ export const ProductsScreen: React.FC<ProductsScreenProps> = ({
         </div>
       </div>
 
+
+      {/* Sort & export */}
+      <div className="flex flex-wrap items-center justify-between gap-2 -mt-2">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-[#8E9299] font-semibold">Sort</span>
+          <select value={sortKey} onChange={(e) => setSortKey(e.target.value as any)} className="bg-white border border-[#E5E5E1] rounded-xl px-3 py-1.5 text-xs font-semibold text-[#111827]">
+            <option value="name">Name</option><option value="stock">Stock</option><option value="price">Price</option><option value="value">Stock value</option>
+          </select>
+          <button onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))} className="px-3 py-1.5 rounded-xl bg-white border border-[#E5E5E1] text-xs font-semibold text-[#374151]">{sortDir === 'asc' ? '↑ Asc' : '↓ Desc'}</button>
+        </div>
+        <button onClick={exportList} className="px-3.5 py-1.5 rounded-xl bg-white border border-[#E5E5E1] text-xs font-semibold text-[#374151] hover:bg-[#FAF9F6]">Export CSV</button>
+      </div>
+
       {/* Products Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0">
-        {filteredProducts.map((prod) => {
+        {sortedProducts.map((prod) => {
           const supplier = suppliers.find((s) => s.id === prod.supplierId);
           const activeBookedKg = bookings
             .filter((b) => b.productId === prod.id && b.status === 'active')

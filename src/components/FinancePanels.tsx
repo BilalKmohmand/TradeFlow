@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { TrendingUp, TrendingDown, AlertTriangle, Download, Receipt, Scale, Landmark, Wallet, ChevronDown, ChevronRight, Plus, Trash2, ArrowDownLeft, ArrowUpRight, Settings2, Printer } from 'lucide-react';
-import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell } from 'recharts';
 import { useTrading } from '../context/TradingContext';
 import { useTheme } from '../context/ThemeContext';
 import { formatCurrency, formatKg, formatDate, formatNumber } from '../utils/formatters';
@@ -539,6 +539,148 @@ export const CashBookPanel: React.FC<{ onDownload?: (f: string) => void }> = ({ 
         onConfirm={() => { if (pending) removeMovement(pending); setPending(null); }}
         onCancel={() => setPending(null)}
       />
+    </div>
+  );
+};
+
+// ===========================================================================
+// Sales analytics
+// ===========================================================================
+const PALETTE = ['#0d9488', '#f59e0b', '#6366f1', '#ef4444', '#0ea5e9', '#84cc16', '#a855f7', '#f97316'];
+
+export const SalesAnalyticsPanel: React.FC<{ onDownload?: (f: string) => void }> = ({ onDownload }) => {
+  const { dispatches, customers, products, purchases, bookings, setSelectedCustomerId, setSelectedProductId } = useTrading();
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+  const [range, setRange] = useState<'month' | 'quarter' | 'year' | 'all'>('month');
+  const today = todayISO();
+  const from = useMemo(() => {
+    if (range === 'all') return '0000-01-01';
+    const d = new Date(today + 'T00:00:00Z');
+    if (range === 'month') d.setUTCMonth(d.getUTCMonth() - 1);
+    if (range === 'quarter') d.setUTCMonth(d.getUTCMonth() - 3);
+    if (range === 'year') d.setUTCFullYear(d.getUTCFullYear() - 1);
+    return d.toISOString().split('T')[0];
+  }, [range, today]);
+  const inRange = useMemo(() => dispatches.filter((d) => d.date >= from && d.date <= today), [dispatches, from, today]);
+  const byCustomer = useMemo(() => {
+    const m = new Map<string, { kg: number; revenue: number; trips: number }>();
+    inRange.forEach((d) => { const r = m.get(d.customerId) || { kg: 0, revenue: 0, trips: 0 }; r.kg += d.kg; r.revenue += d.amount + (d.freightCharge || 0); r.trips += 1; m.set(d.customerId, r); });
+    return Array.from(m.entries()).map(([id, r]) => ({ id, name: customers.find((c) => c.id === id)?.name || 'Unknown', ...r })).sort((a, b) => b.revenue - a.revenue);
+  }, [inRange, customers]);
+  const byProduct = useMemo(() => {
+    const m = new Map<string, { kg: number; revenue: number }>();
+    inRange.forEach((d) => { const r = m.get(d.productId) || { kg: 0, revenue: 0 }; r.kg += d.kg; r.revenue += d.amount; m.set(d.productId, r); });
+    return Array.from(m.entries()).map(([id, r]) => ({ id, name: products.find((p) => p.id === id)?.name || 'Unknown', ...r })).sort((a, b) => b.revenue - a.revenue);
+  }, [inRange, products]);
+  const totals = useMemo(() => ({ revenue: inRange.reduce((a, d) => a + d.amount + (d.freightCharge || 0), 0), kg: inRange.reduce((a, d) => a + d.kg, 0), trips: inRange.length, customers: byCustomer.length }), [inRange, byCustomer]);
+  const avgPrice = totals.kg > 0 ? totals.revenue / totals.kg : 0;
+  const monthly = useMemo(() => pnlTrend(currentMonthKey(), 12, dispatches, purchases, [], products, bookings).map((m) => ({ label: m.label.split(' ')[0], Revenue: m.revenue, 'Gross profit': m.grossProfit, kg: m.soldKg })), [dispatches, purchases, products, bookings]);
+  const thisYear = monthly.reduce((a, m) => a + m.Revenue, 0);
+
+  const exportCsv = () => {
+    let csv = `Sales analytics ${from === '0000-01-01' ? 'all time' : from} to ${today}\n\nCustomer,Trips,kg,Revenue,Share %\n`;
+    byCustomer.forEach((c) => (csv += `"${c.name}",${c.trips},${c.kg},${c.revenue.toFixed(2)},${totals.revenue > 0 ? ((c.revenue / totals.revenue) * 100).toFixed(1) : 0}\n`));
+    csv += `\nProduct,kg,Revenue,Avg Rs./kg\n`;
+    byProduct.forEach((p) => (csv += `"${p.name}",${p.kg},${p.revenue.toFixed(2)},${p.kg > 0 ? (p.revenue / p.kg).toFixed(2) : ''}\n`));
+    downloadCsv(`sarmaya-sales-analytics-${today}.csv`, csv, onDownload);
+  };
+
+  const rangeBtn = (k: typeof range, label: string) => (
+    <button onClick={() => setRange(k)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${range === k ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs' : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'}`}>{label}</button>
+  );
+  const kpi = (label: string, value: string, sub?: string) => (
+    <div className={`${card} p-4 min-w-0`}><div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest">{label}</div><div className="text-base sm:text-xl font-bold font-mono text-[#111827] dark:text-white mt-1 break-words">{value}</div>{sub && <div className="text-[10px] text-[#8E9299] font-mono mt-0.5">{sub}</div>}</div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-[#FAF9F6] dark:bg-[#162436] p-1 rounded-full border border-[#E5E5E1] dark:border-[#203248] flex flex-wrap items-center gap-0.5 w-fit">
+          {rangeBtn('month', 'Last 30 days')}{rangeBtn('quarter', 'Last quarter')}{rangeBtn('year', 'Last 12 months')}{rangeBtn('all', 'All time')}
+        </div>
+        <button onClick={exportCsv} className="px-4 py-2 bg-[#111827] dark:bg-white text-white dark:text-[#111827] text-xs font-bold rounded-2xl flex items-center gap-1.5 w-fit"><Download className="w-3.5 h-3.5 text-teal-400 dark:text-teal-700" /> Export analytics</button>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {kpi('Revenue', formatCurrency(totals.revenue), `${totals.trips} dispatch(es)`)}
+        {kpi('Volume sold', formatKg(totals.kg))}
+        {kpi('Average price', `Rs. ${avgPrice.toFixed(2)}/kg`)}
+        {kpi('Active customers', String(totals.customers), 'bought in this period')}
+        {kpi('Top customer', byCustomer[0]?.name || '—', byCustomer[0] ? `${((byCustomer[0].revenue / Math.max(1, totals.revenue)) * 100).toFixed(0)}% of revenue` : undefined)}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className={`${card} p-5 sm:p-6 lg:col-span-2`}>
+          <h3 className="text-sm font-bold text-[#111827] dark:text-white">Revenue & gross profit, last 12 months</h3>
+          <p className="text-[11px] text-[#8E9299] mb-3">{formatCurrency(thisYear)} revenue over the period</p>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#1E2E40' : '#eee'} vertical={false} />
+                <XAxis dataKey="label" stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} width={60} tickFormatter={(v) => `${formatNumber(v / 1000)}k`} />
+                <Tooltip cursor={{ fill: isDark ? '#162436' : '#FAF9F6' }} formatter={(v: number, n: string) => (n === 'kg' ? formatKg(v) : formatCurrency(v))} contentStyle={{ borderRadius: 16, fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="Revenue" fill="#0d9488" radius={[6, 6, 0, 0]} />
+                <Line type="monotone" dataKey="Gross profit" stroke="#111827" strokeWidth={2.5} dot={{ r: 3 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className={`${card} p-5 sm:p-6`}>
+          <h3 className="text-sm font-bold text-[#111827] dark:text-white">Revenue by product</h3>
+          <p className="text-[11px] text-[#8E9299] mb-2">Share of goods value in the period</p>
+          {byProduct.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-xs text-[#8E9299]">No sales in this period.</div>
+          ) : (
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={byProduct.slice(0, 8)} dataKey="revenue" nameKey="name" isAnimationActive={false} innerRadius={45} outerRadius={75} paddingAngle={2}>
+                    {byProduct.slice(0, 8).map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ borderRadius: 16, fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          <div className="space-y-1 mt-2">
+            {byProduct.slice(0, 5).map((p, i) => (
+              <button key={p.id} onClick={() => setSelectedProductId(p.id)} className="w-full flex items-center justify-between text-xs hover:text-teal-800">
+                <span className="flex items-center gap-2 truncate"><span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} />{p.name}</span>
+                <span className="font-mono text-[#374151] dark:text-[#CBD5E1] shrink-0">{formatCurrency(p.revenue)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className={`${card} overflow-hidden`}>
+        <div className="p-5 border-b border-[#E5E5E1] dark:border-[#203248]"><h3 className="text-sm font-bold text-[#111827] dark:text-white">Customers ranked by revenue</h3><p className="text-[11px] text-[#8E9299]">Click a customer to open their account</p></div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-[#FAF9F6] dark:bg-[#162436] text-[#8E9299] uppercase tracking-widest font-bold text-[10px]"><tr><th className="py-3 px-4">#</th><th className="py-3 px-4">Customer</th><th className="py-3 px-4 text-right">Dispatches</th><th className="py-3 px-4 text-right">Volume</th><th className="py-3 px-4 text-right">Revenue</th><th className="py-3 px-4">Share</th></tr></thead>
+            <tbody className="divide-y divide-[#FAF9F6] dark:divide-[#1E2E40] font-mono">
+              {byCustomer.length === 0 ? (
+                <tr><td colSpan={6} className="py-10 text-center text-[#8E9299] font-sans">No sales in this period.</td></tr>
+              ) : byCustomer.map((c, i) => {
+                const share = totals.revenue > 0 ? (c.revenue / totals.revenue) * 100 : 0;
+                return (
+                  <tr key={c.id} className="hover:bg-[#FAF9F6] dark:hover:bg-[#162436]">
+                    <td className="py-2.5 px-4 text-[#8E9299]">{i + 1}</td>
+                    <td className="py-2.5 px-4 font-sans"><button onClick={() => setSelectedCustomerId(c.id)} className="font-bold text-[#111827] dark:text-white hover:text-teal-800 hover:underline">{c.name}</button></td>
+                    <td className="py-2.5 px-4 text-right text-[#374151] dark:text-[#CBD5E1]">{c.trips}</td>
+                    <td className="py-2.5 px-4 text-right text-[#374151] dark:text-[#CBD5E1]">{formatKg(c.kg)}</td>
+                    <td className="py-2.5 px-4 text-right font-bold text-[#111827] dark:text-white">{formatCurrency(c.revenue)}</td>
+                    <td className="py-2.5 px-4 w-40"><div className="flex items-center gap-2"><div className="flex-1 h-1.5 bg-[#E5E5E1] dark:bg-[#203248] rounded-full overflow-hidden"><div className="h-full bg-teal-600" style={{ width: `${share}%` }} /></div><span className="text-[10px] text-[#6B7280]">{share.toFixed(0)}%</span></div></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };

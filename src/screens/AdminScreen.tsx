@@ -11,6 +11,7 @@ import {
   Sparkles,
   KeyRound,
   AlertTriangle,
+  Upload,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { UserManagementTab } from '../components/admin/UserManagementTab';
@@ -18,9 +19,10 @@ import { RolesAndMatrixTab } from '../components/admin/RolesAndMatrixTab';
 import { VisibilitySettingsTab } from '../components/admin/VisibilitySettingsTab';
 import { SecurityPolicyTab } from '../components/admin/SecurityPolicyTab';
 import { SystemDataTab } from '../components/admin/SystemDataTab';
+import { DataImportTab } from '../components/admin/DataImportTab';
 import { AuditLogTab } from '../components/admin/AuditLogTab';
 
-type AdminTab = 'users' | 'roles' | 'visibility' | 'policy' | 'audit' | 'system';
+type AdminTab = 'users' | 'roles' | 'visibility' | 'policy' | 'audit' | 'system' | 'import';
 
 export const AdminScreen: React.FC = () => {
   const { currentUser, can, users, roles, auditLogs } = useTrading();
@@ -77,6 +79,11 @@ export const AdminScreen: React.FC = () => {
       id: 'system',
       label: 'System & Backups',
       icon: <Database className="w-4 h-4" />,
+    },
+    {
+      id: 'import',
+      label: 'Data Import',
+      icon: <Upload className="w-4 h-4" />,
     },
   ];
 
@@ -148,6 +155,7 @@ export const AdminScreen: React.FC = () => {
         {activeTab === 'policy' && <SecurityPolicyTab />}
         {activeTab === 'audit' && <AuditLogTab />}
         {activeTab === 'system' && <SystemDataTab />}
+        {activeTab === 'import' && <DataImportTab />}
       </div>
     </div>
   );

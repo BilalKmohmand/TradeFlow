@@ -78,6 +78,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     tasks,
     quotations,
     purchaseOrders,
+    auditLogs,
+    setActiveScreen,
+    openBookingsView,
+    openSuppliersView,
   } = useTrading();
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -281,6 +285,25 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </motion.div>
       </div>
 
+      {/* Business pulse: key balances at a glance */}
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 min-w-0">
+        {[
+          { label: 'Receivables', value: formatCurrency(customers.reduce((a, c) => a + c.totalDue, 0)), sub: `${customers.filter((c) => c.totalDue > 0).length} owing`, go: () => openReports('aging'), tone: 'text-amber-800' },
+          { label: 'Payables', value: formatCurrency(suppliers.reduce((a, s) => a + s.totalOwed, 0)), sub: `${suppliers.filter((s) => s.totalOwed > 0).length} suppliers`, go: () => openReports('aging'), tone: 'text-rose-700' },
+          { label: 'Stock value', value: formatCurrency(products.reduce((a, p) => a + p.stockKg * p.unitPricePerKg, 0)), sub: formatKg(products.reduce((a, p) => a + p.stockKg, 0)), go: () => openReports('balance'), tone: 'text-[#111827]' },
+          { label: 'Active orders', value: String(bookings.filter((b) => b.status === 'active').length), sub: `${formatKg(bookings.filter((b) => b.status === 'active').reduce((a, b) => a + b.remainingKg, 0))} to ship`, go: () => openBookingsView('orders'), tone: 'text-teal-800' },
+          { label: 'Open quotes', value: String(quotations.filter((q) => q.status === 'draft' || q.status === 'sent' || q.status === 'accepted').length), sub: formatCurrency(quotations.filter((q) => q.status === 'draft' || q.status === 'sent' || q.status === 'accepted').reduce((a, q) => a + q.amount, 0)), go: () => openBookingsView('quotations'), tone: 'text-[#111827]' },
+          { label: 'Open POs', value: String(purchaseOrders.filter((p) => p.status === 'open' || p.status === 'partial').length), sub: `${formatKg(purchaseOrders.filter((p) => p.status === 'open' || p.status === 'partial').reduce((a, p) => a + (p.kg - p.receivedKg), 0))} inbound`, go: () => openSuppliersView('orders'), tone: 'text-[#111827]' },
+          { label: 'Fleet', value: `${trucks.filter((t) => t.status === 'available').length}/${trucks.length}`, sub: `${dispatches.filter((d) => (d.status ?? 'in_transit') === 'in_transit').length} in transit`, go: () => openOps('fleet'), tone: 'text-[#111827]' },
+        ].map((k) => (
+          <button key={k.label} onClick={k.go} className="text-left bg-white p-4 rounded-2xl border border-[#E5E5E1] shadow-xs hover:border-teal-600/50 transition-colors min-w-0">
+            <div className="text-[10px] font-bold text-[#8E9299] uppercase tracking-widest truncate">{k.label}</div>
+            <div className={`text-sm sm:text-base font-bold font-mono mt-1 break-words ${k.tone}`}>{k.value}</div>
+            <div className="text-[10px] text-[#8E9299] font-mono mt-0.5 truncate">{k.sub}</div>
+          </button>
+        ))}
+      </div>
+
       {/* Month-to-date finance KPIs + alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
         <div className="lg:col-span-2 bg-white dark:bg-[#101A26] p-5 sm:p-6 rounded-[32px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs space-y-4 min-w-0">
@@ -366,6 +389,33 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <button onClick={() => openOps('alerts')} className="w-full py-2.5 bg-[#111827] hover:bg-black text-white text-xs font-bold rounded-2xl flex items-center justify-center gap-1.5">
             Open alerts centre <ArrowRight className="w-3.5 h-3.5 text-teal-400" />
           </button>
+        </div>
+      </div>
+
+      {/* Activity feed */}
+      <div className="bg-white p-5 sm:p-6 rounded-[32px] border border-[#E5E5E1] shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-serif italic font-normal text-2xl text-[#111827]">Recent Activity</h3>
+            <p className="text-xs text-[#8E9299] mt-0.5">Who did what, from the audit trail</p>
+          </div>
+          {(can('admin_screen') || can('system:admin_screen')) && (
+            <button onClick={() => setActiveScreen('admin')} className="text-xs font-semibold text-teal-700 hover:underline">Full audit log →</button>
+          )}
+        </div>
+        <div className="divide-y divide-[#F0F0EE] border border-[#E5E5E1] rounded-2xl overflow-hidden">
+          {auditLogs.slice(0, 8).map((log) => (
+            <div key={log.id} className="px-4 py-2.5 flex items-start gap-3 text-xs">
+              <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${log.severity === 'danger' ? 'bg-rose-500' : log.severity === 'warning' ? 'bg-amber-500' : 'bg-teal-500'}`} />
+              <span className="flex-1 min-w-0">
+                <span className="font-bold text-[#111827]">{log.action}</span>
+                {log.user && <span className="ml-2 text-[10px] font-semibold text-teal-700">{log.user}</span>}
+                <span className="block text-[11px] text-[#6B7280] truncate">{log.details}</span>
+              </span>
+              <span className="font-mono text-[10px] text-[#8E9299] shrink-0">{log.timestamp}</span>
+            </div>
+          ))}
+          {auditLogs.length === 0 && <div className="px-4 py-6 text-center text-xs text-[#8E9299]">No activity yet.</div>}
         </div>
       </div>
 
@@ -489,7 +539,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   fontSize={11}
                   tickLine={false}
                   axisLine={false}
-                  width={45}
+                  width={62}
                   tickFormatter={(v) => `${formatNumber(v)}kg`}
                 />
                 <Tooltip
@@ -517,6 +567,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   type="monotone"
                   dataKey="inKg"
                   stroke="#f59e0b"
+                  isAnimationActive={false}
                   strokeWidth={2}
                   fillOpacity={1}
                   fill="url(#amberGrad)"
@@ -525,6 +576,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   type="monotone"
                   dataKey="kg"
                   stroke="#0d9488"
+                  isAnimationActive={false}
                   strokeWidth={2.5}
                   fillOpacity={1}
                   fill="url(#tealGrad)"

@@ -96,7 +96,7 @@ test('every screen and modal on a phone', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Bookings', exact: true }).click();
   await page.getByRole('button', { name: 'BK-2026-514' }).click();
-  await expect(page.getByText(/Dispatches.*\(1\)/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Dispatches.*\(1\)/ })).toBeVisible();
   await shot(page, '06-booking-detail');
   await page.getByTitle('Print invoice').click();
   await expect(page.getByText('TAX INVOICE')).toBeVisible();

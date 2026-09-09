@@ -146,7 +146,7 @@ test.describe.serial('Sarmaya end-to-end', () => {
     // Booking detail -> invoice preview
     await page.getByRole('button', { name: 'Bookings' }).first().click();
     await page.getByRole('button', { name: /BK-\d{4}-\d{3}/ }).first().click();
-    await expect(page.getByText(/Dispatches.*\(1\)/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Dispatches.*\(1\)/ })).toBeVisible();
     await page.getByTitle('Print invoice').click();
     await expect(page.getByText('TAX INVOICE')).toBeVisible();
     await shot(page, '11-invoice');

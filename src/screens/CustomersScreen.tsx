@@ -19,6 +19,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
+import { downloadCsvFile, sortBy } from '../utils/listTools';
 
 interface CustomersScreenProps {
   onSelectCustomer: (customerId: string) => void;
@@ -34,6 +35,8 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
   const { customers, bookings, dispatches, deleteCustomer, can, setEditRequest } = useTrading();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [pendingDelete, setPendingDelete] = useState<Customer | null>(null);
+  const [sortKey, setSortKey] = useState<'name' | 'due' | 'created'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   const pendingBookings = pendingDelete ? bookings.filter((b) => b.customerId === pendingDelete.id) : [];
   const pendingDispatches = pendingDelete ? dispatches.filter((d) => d.customerId === pendingDelete.id) : [];
@@ -46,6 +49,8 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
   );
 
   const totalReceivables = customers.reduce((acc, c) => acc + c.totalDue, 0);
+  const sortedCustomers = sortBy<Customer>(filteredCustomers, (c) => (sortKey === 'name' ? c.name.toLowerCase() : sortKey === 'due' ? c.totalDue : c.createdAt), sortDir);
+  const exportList = () => downloadCsvFile('sarmaya-customers.csv', ['Name', 'Company', 'Phone', 'Email', 'Address', 'Outstanding', 'Credit limit', 'Since'], sortedCustomers.map((c) => [c.name, c.company, c.phone, c.email, c.address, c.totalDue, c.creditLimit, c.createdAt]));
 
   return (
     <div className="space-y-6 pb-12">
@@ -94,16 +99,29 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
         />
       </div>
 
+
+      {/* Sort & export */}
+      <div className="flex flex-wrap items-center justify-between gap-2 -mt-2">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-[#8E9299] font-semibold">Sort</span>
+          <select value={sortKey} onChange={(e) => setSortKey(e.target.value as any)} className="bg-white border border-[#E5E5E1] rounded-xl px-3 py-1.5 text-xs font-semibold text-[#111827]">
+            <option value="name">Name</option><option value="due">Outstanding due</option><option value="created">Newest</option>
+          </select>
+          <button onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))} className="px-3 py-1.5 rounded-xl bg-white border border-[#E5E5E1] text-xs font-semibold text-[#374151]">{sortDir === 'asc' ? '↑ Asc' : '↓ Desc'}</button>
+        </div>
+        <button onClick={exportList} className="px-3.5 py-1.5 rounded-xl bg-white border border-[#E5E5E1] text-xs font-semibold text-[#374151] hover:bg-[#FAF9F6]">Export CSV</button>
+      </div>
+
       {/* Customer Cards List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0">
-        {filteredCustomers.length === 0 ? (
+        {sortedCustomers.length === 0 ? (
           <div className="col-span-full py-16 text-center text-[#8E9299] dark:text-[#94A3B8] bg-white dark:bg-[#101A26] rounded-[32px] border border-[#E5E5E1] dark:border-[#203248]">
             <Users className="w-10 h-10 mx-auto mb-2 text-[#8E9299] dark:text-[#94A3B8]" />
             <p className="text-sm font-semibold text-[#111827] dark:text-white">No customers found</p>
             <p className="text-xs text-[#8E9299] dark:text-[#94A3B8] mt-1">Try adjusting your search criteria.</p>
           </div>
         ) : (
-          filteredCustomers.map((cust) => {
+          sortedCustomers.map((cust) => {
             const custBookings = bookings.filter((b) => b.customerId === cust.id);
             const activeCount = custBookings.filter((b) => b.status === 'active').length;
 

@@ -18,6 +18,7 @@ import { PurchaseOrdersPanel } from '../components/TradeDocsPanels';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
+import { downloadCsvFile, sortBy } from '../utils/listTools';
 
 interface SuppliersScreenProps {
   onSelectSupplier: (supplierId: string) => void;
@@ -39,6 +40,8 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
   }, [requestedSuppliersView]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null);
+  const [sortKey, setSortKey] = useState<'name' | 'owed' | 'created'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const pendingProducts = pendingDelete ? products.filter((p) => p.supplierId === pendingDelete.id) : [];
 
   const filteredSuppliers = suppliers.filter(
@@ -50,6 +53,8 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
   );
 
   const totalPayables = suppliers.reduce((acc, s) => acc + s.totalOwed, 0);
+  const sortedSuppliers = sortBy<Supplier>(filteredSuppliers, (s) => (sortKey === 'name' ? s.company.toLowerCase() : sortKey === 'owed' ? s.totalOwed : s.createdAt), sortDir);
+  const exportList = () => downloadCsvFile('sarmaya-suppliers.csv', ['Company', 'Contact', 'Phone', 'Email', 'Category', 'Address', 'Payable', 'Since'], sortedSuppliers.map((s) => [s.company, s.name, s.phone, s.email, s.materialCategory, s.address, s.totalOwed, s.createdAt]));
 
   return (
     <div className="space-y-6 pb-12">
@@ -107,16 +112,29 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
         />
       </div>
 
+
+      {/* Sort & export */}
+      <div className="flex flex-wrap items-center justify-between gap-2 -mt-2">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-[#8E9299] font-semibold">Sort</span>
+          <select value={sortKey} onChange={(e) => setSortKey(e.target.value as any)} className="bg-white border border-[#E5E5E1] rounded-xl px-3 py-1.5 text-xs font-semibold text-[#111827]">
+            <option value="name">Company</option><option value="owed">Payable</option><option value="created">Newest</option>
+          </select>
+          <button onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))} className="px-3 py-1.5 rounded-xl bg-white border border-[#E5E5E1] text-xs font-semibold text-[#374151]">{sortDir === 'asc' ? '↑ Asc' : '↓ Desc'}</button>
+        </div>
+        <button onClick={exportList} className="px-3.5 py-1.5 rounded-xl bg-white border border-[#E5E5E1] text-xs font-semibold text-[#374151] hover:bg-[#FAF9F6]">Export CSV</button>
+      </div>
+
       {/* Suppliers Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-w-0">
-        {filteredSuppliers.length === 0 ? (
+        {sortedSuppliers.length === 0 ? (
           <div className="col-span-full py-16 text-center text-[#8E9299] dark:text-[#94A3B8] bg-white dark:bg-[#101A26] rounded-[32px] border border-[#E5E5E1] dark:border-[#203248]">
             <Layers className="w-10 h-10 mx-auto mb-2 text-[#8E9299] dark:text-[#94A3B8]" />
             <p className="text-sm font-semibold text-[#111827] dark:text-white">No suppliers found</p>
             <p className="text-xs text-[#8E9299] dark:text-[#94A3B8] mt-1">Try adjusting your search criteria.</p>
           </div>
         ) : (
-          filteredSuppliers.map((sup) => {
+          sortedSuppliers.map((sup) => {
             const suppliedProducts = products.filter((p) => p.supplierId === sup.id);
 
             return (

@@ -195,7 +195,7 @@ export interface PriceHistoryEntry {
   referenceId?: string;
 }
 
-export type ReportsTab = 'daily' | 'monthly' | 'flow' | 'pnl' | 'aging' | 'balance' | 'cashbook';
+export type ReportsTab = 'daily' | 'monthly' | 'flow' | 'pnl' | 'aging' | 'balance' | 'cashbook' | 'analytics';
 export type OpsTab = 'fleet' | 'expenses' | 'alerts' | 'tasks';
 
 export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'billing' | 'reports' | 'ops' | 'admin';

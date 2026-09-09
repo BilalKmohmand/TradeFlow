@@ -34,6 +34,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const {
     activeScreen,
     setActiveScreen,
+    openOps,
     lockAdmin,
     can,
     isScreenVisible,
@@ -56,6 +57,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   const { themeMode, resolvedTheme, setThemeMode, isNightTime, timeLabel } = useTheme();
 
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const [isBellOpen, setIsBellOpen] = useState(false);
+  const bellRef = useRef<HTMLDivElement>(null);
+  const alerts = useMemo(
+    () => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders }, new Date().toISOString().split('T')[0]).slice(0, 6),
+    [products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders]
+  );
   const themeMenuRef = useRef<HTMLDivElement>(null);
 
   // Close theme menu when clicking outside
@@ -63,6 +70,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
         setIsThemeMenuOpen(false);
+      }
+      if (bellRef.current && !bellRef.current.contains(event.target as Node)) {
+        setIsBellOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -106,33 +116,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Core Navigation Items */}
-          <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 bg-[#FAF9F6] dark:bg-[#162436] p-1 rounded-full border border-[#E5E5E1] dark:border-[#203248] min-w-0 shrink overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeScreen === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveScreen(item.id)}
-                  title={item.label}
-                  aria-label={item.label}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={`flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-                    isActive
-                      ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
-                      : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40]'
-                  }`}
-                >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-teal-400 dark:text-teal-700' : 'text-[#8E9299] dark:text-[#64748B]'}`} />
-                  <span className="hidden xl:inline">{item.label}</span>
-                  {item.id === 'ops' && alertCount > 0 && (
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/20' : 'bg-rose-100 text-rose-700'}`}>{alertCount}</span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
 
           {/* Global Command Bar Search Trigger (CMD+K) - High Contrast & Dedicated Width */}
           <button
@@ -254,6 +237,48 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </div>
                     {themeMode === 'dark' && <Check className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />}
                   </button>
+                </div>
+              )}
+            </div>
+
+            {/* Notifications */}
+            <div className="relative" ref={bellRef}>
+              <button
+                onClick={() => setIsBellOpen((v) => !v)}
+                title="Notifications"
+                aria-label="Notifications"
+                className="relative px-2.5 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-[#F1F5F9] border border-[#E5E5E1] dark:border-[#203248] transition-colors"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                {alertCount > 0 && <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">{alertCount > 99 ? '99+' : alertCount}</span>}
+              </button>
+              {isBellOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-[#101A26] rounded-2xl shadow-xl border border-[#E5E5E1] dark:border-[#203248] py-2 z-50 text-xs animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8E9299] dark:text-[#64748B] border-b border-[#E5E5E1] dark:border-[#203248] mb-1 flex items-center justify-between">
+                    <span>Needs attention</span>
+                    <span className="font-mono">{alertCount}</span>
+                  </div>
+                  {alerts.length === 0 ? (
+                    <div className="px-3.5 py-5 text-center text-[#8E9299]">All clear. Nothing overdue, late or short.</div>
+                  ) : (
+                    alerts.map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() => {
+                          setIsBellOpen(false);
+                          openOps('alerts');
+                        }}
+                        className="w-full text-left px-3.5 py-2 flex items-start gap-2 hover:bg-[#FAF9F6] dark:hover:bg-[#162436]"
+                      >
+                        <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${a.severity === 'danger' ? 'bg-rose-500' : a.severity === 'warning' ? 'bg-amber-500' : 'bg-teal-500'}`} />
+                        <span className="min-w-0">
+                          <span className="block font-semibold text-[#111827] dark:text-white truncate">{a.title}</span>
+                          <span className="block text-[10px] text-[#8E9299] line-clamp-2">{a.detail}</span>
+                        </span>
+                      </button>
+                    ))
+                  )}
+                  <button onClick={() => { setIsBellOpen(false); openOps('alerts'); }} className="w-full mt-1 px-3.5 py-2 text-[11px] font-bold text-teal-700 dark:text-teal-400 hover:underline text-left border-t border-[#E5E5E1] dark:border-[#203248]">Open alerts centre →</button>
                 </div>
               )}
             </div>

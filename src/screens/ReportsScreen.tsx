@@ -35,7 +35,7 @@ import { useTrading } from '../context/TradingContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Dispatch, ReportsTab } from '../types';
 import { StockFlowPanel } from '../components/StockFlowPanel';
-import { PnLPanel, AgingPanel, BalanceSheetPanel, CashBookPanel } from '../components/FinancePanels';
+import { PnLPanel, AgingPanel, BalanceSheetPanel, CashBookPanel, SalesAnalyticsPanel } from '../components/FinancePanels';
 import { useTheme } from '../context/ThemeContext';
 import { formatCurrency, formatKg, formatDate, formatNumber } from '../utils/formatters';
 import { AnimatedNumber } from '../components/AnimatedNumber';
@@ -352,6 +352,16 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
             {can('view_finance') && (
               <>
                 <button
+                  onClick={() => setReportTab('analytics')}
+                  className={`px-4 py-1.5 rounded-full whitespace-nowrap transition-all ${
+                    reportTab === 'analytics'
+                      ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-xs'
+                      : 'text-[#6B7280] dark:text-[#94A3B8] hover:text-[#111827] dark:hover:text-white'
+                  }`}
+                >
+                  Sales Analytics
+                </button>
+                <button
                   onClick={() => setReportTab('pnl')}
                   className={`px-4 py-1.5 rounded-full whitespace-nowrap transition-all ${
                     reportTab === 'pnl'
@@ -447,6 +457,15 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
       {reportTab === 'pnl' && (
         <PnLPanel
           onOpenExpenses={() => openOps('expenses')}
+          onDownload={(fileName) => {
+            setDownloadSuccessToast(fileName);
+            setTimeout(() => setDownloadSuccessToast(null), 4000);
+          }}
+        />
+      )}
+
+      {reportTab === 'analytics' && (
+        <SalesAnalyticsPanel
           onDownload={(fileName) => {
             setDownloadSuccessToast(fileName);
             setTimeout(() => setDownloadSuccessToast(null), 4000);
