@@ -52,7 +52,10 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     setEditRequest,
     setPrintRequest,
     can,
+    isFieldVisible,
   } = useTrading();
+
+  const showCreditLimit = isFieldVisible('credit_limits');
 
   const [activeTab, setActiveTab] = useState<'overview' | 'ledger' | 'bookings'>('overview');
   const [reminderSent, setReminderSent] = useState<boolean>(false);
@@ -160,7 +163,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 <AnimatedNumber value={customer.totalDue} format="currency" />
               </div>
               <div className="text-[11px] text-[#8E9299] mt-1 font-mono">
-                Credit Limit: {formatCurrency(customer.creditLimit)}
+                Credit Limit: {showCreditLimit ? formatCurrency(customer.creditLimit) : '••••••'}
               </div>
             </div>
 
@@ -320,7 +323,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                                 </span>
                               </div>
                               <div className="text-xs text-[#6B7280]">
-                                {prod?.name} • {b.totalKg} kg (@ Rs. {b.pricePerKg}/kg)
+                                {b.items && b.items.length > 1
+                                  ? `${b.items.length} items • ${formatKg(b.totalKg)}`
+                                  : `${prod?.name} • ${formatKg(b.totalKg)} (@ Rs. ${b.pricePerKg}/kg)`}
                               </div>
                               <div className="w-36 h-1.5 bg-[#E5E5E1] rounded-full overflow-hidden mt-1">
                                 <div

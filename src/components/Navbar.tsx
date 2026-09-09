@@ -31,7 +31,24 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenCommandBar,
 }) => {
-  const { activeScreen, setActiveScreen, lockAdmin, can, currentUser, products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders } = useTrading();
+  const {
+    activeScreen,
+    setActiveScreen,
+    lockAdmin,
+    can,
+    isScreenVisible,
+    currentUser,
+    products,
+    customers,
+    suppliers,
+    bookings,
+    trucks,
+    ledger,
+    dispatches,
+    tasks,
+    quotations,
+    purchaseOrders,
+  } = useTrading();
   const alertCount = useMemo(
     () => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders }, new Date().toISOString().split('T')[0]).length,
     [products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders]
@@ -52,7 +69,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const navItems: { id: ActiveScreen; label: string; icon: React.FC<{ className?: string }> }[] = [
+  const allNavItems: { id: ActiveScreen; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'customers', label: 'Customers', icon: Users },
     { id: 'suppliers', label: 'Suppliers', icon: Layers },
@@ -60,8 +77,10 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'bookings', label: 'Bookings', icon: ShoppingBag },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'ops', label: 'Ops', icon: Bell },
-    ...(can('admin_screen') ? [{ id: 'admin' as ActiveScreen, label: 'Admin', icon: ShieldCheck }] : []),
+    ...(can('admin_screen') || can('system:admin_screen') ? [{ id: 'admin' as ActiveScreen, label: 'Admin', icon: ShieldCheck }] : []),
   ];
+
+  const navItems = allNavItems.filter((item) => isScreenVisible(item.id));
 
   return (
     <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#101A26]/90 backdrop-blur-md border-b border-[#E5E5E1] dark:border-[#203248] text-[#111827] dark:text-[#F1F5F9] shadow-xs transition-colors">
@@ -242,12 +261,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Signed-in user */}
             {currentUser && (
               <div
-                title={`Signed in as ${currentUser.name} (${currentUser.role})`}
-                className="hidden 2xl:flex items-center gap-1.5 px-2.5 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] max-w-44"
+                title={`Signed in as ${currentUser.name} (${currentUser.roles?.join(', ') || currentUser.role})`}
+                className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] max-w-64"
               >
-                <UserCircle2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-                <span className="truncate">{currentUser.name}</span>
-                <span className="text-[9px] uppercase tracking-wider text-[#8E9299] shrink-0">{currentUser.role}</span>
+                <div className="w-6 h-6 rounded-full bg-teal-600 dark:bg-teal-500 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                  {currentUser.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-[#111827] dark:text-white truncate">{currentUser.name}</div>
+                  <div className="text-[9px] uppercase tracking-wider text-teal-700 dark:text-teal-300 font-bold truncate">
+                    {currentUser.role.replace('_', ' ')}
+                  </div>
+                </div>
               </div>
             )}
 

@@ -24,7 +24,7 @@ import { BookingStatus, Booking } from '../types';
 
 interface BookingsScreenProps {
   onOpenNewBooking: () => void;
-  onOpenDispatchForBooking: (bookingId: string) => void;
+  onOpenDispatchForBooking: (bookingId: string, bookingItemId?: string) => void;
   onOpenCustomer: (customerId: string) => void;
 }
 
@@ -51,7 +51,11 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
       b.bookingNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       cust?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       cust?.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      prod?.name.toLowerCase().includes(searchQuery.toLowerCase());
+      prod?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (b.items && b.items.some((it) => {
+        const itProd = products.find((p) => p.id === it.productId);
+        return itProd?.name.toLowerCase().includes(searchQuery.toLowerCase());
+      }));
 
     const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
 
@@ -218,11 +222,15 @@ export const BookingsScreen: React.FC<BookingsScreenProps> = ({
 
                     <div className="space-y-0.5">
                       <span className="text-[10px] text-[#8E9299] dark:text-[#94A3B8] flex items-center gap-1 font-bold uppercase tracking-wider">
-                        <Package className="w-3 h-3 text-[#8E9299] dark:text-[#94A3B8]" /> Commodity
+                        <Package className="w-3 h-3 text-[#8E9299] dark:text-[#94A3B8]" /> {b.items && b.items.length > 1 ? `${b.items.length} Commodities` : 'Commodity'}
                       </span>
-                      <div className="font-bold text-xs text-[#111827] dark:text-white">{prod?.name}</div>
+                      <div className="font-bold text-xs text-[#111827] dark:text-white truncate" title={b.items && b.items.length > 1 ? b.items.map((it) => products.find((p) => p.id === it.productId)?.name || 'Item').join(', ') : prod?.name}>
+                        {b.items && b.items.length > 1
+                          ? b.items.map((it) => products.find((p) => p.id === it.productId)?.name || 'Item').join(', ')
+                          : prod?.name}
+                      </div>
                       <div className="text-[11px] text-teal-800 dark:text-teal-300 font-mono font-semibold">
-                        Rs. {b.pricePerKg}/kg
+                        {b.items && b.items.length > 1 ? 'Multi-rate contract' : `Rs. ${b.pricePerKg}/kg`}
                       </div>
                     </div>
                   </div>

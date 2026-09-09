@@ -235,6 +235,56 @@ describe('trading flow', () => {
     expect(result.current.dispatches).toHaveLength(1);
   });
 
+  it('supports multi-item bookings and item-level dispatch fulfillment', () => {
+    const { result } = setup();
+    const { customerId, supplierId, productId } = seed(result);
+    let secondProductId = '';
+    act(() => {
+      secondProductId = result.current.addProduct({
+        name: 'Clinker',
+        category: 'Construction',
+        unitPricePerKg: 55,
+        stockKg: 6000,
+        minThresholdKg: 1000,
+        supplierId,
+      }).id;
+    });
+
+    let bookingId = '';
+    act(() => {
+      bookingId = result.current.createBooking({
+        customerId,
+        items: [
+          { productId, totalKg: 5000, pricePerKg: 40 },
+          { productId: secondProductId, totalKg: 3000, pricePerKg: 55 },
+        ],
+      }).id;
+    });
+
+    const booking = result.current.bookings.find((b) => b.id === bookingId)!;
+    expect(booking.items?.length).toBe(2);
+    expect(booking.totalKg).toBe(8000);
+    expect(booking.totalAmount).toBe(365000);
+
+    const secondItemId = booking.items?.find((it) => it.productId === secondProductId)?.id;
+    expect(secondItemId).toBeTruthy();
+
+    act(() => {
+      result.current.logDispatch({ bookingId, bookingItemId: secondItemId, kg: 1000, truckNumber: 'x', sendWhatsApp: false });
+    });
+
+    const updated = result.current.bookings.find((b) => b.id === bookingId)!;
+    const firstItem = updated.items?.find((it) => it.productId === productId)!;
+    const secondItem = updated.items?.find((it) => it.productId === secondProductId)!;
+
+    expect(firstItem.dispatchedKg).toBe(0);
+    expect(firstItem.remainingKg).toBe(5000);
+    expect(secondItem.dispatchedKg).toBe(1000);
+    expect(secondItem.remainingKg).toBe(2000);
+    expect(updated.dispatchedKg).toBe(1000);
+    expect(updated.remainingKg).toBe(7000);
+  });
+
   it('price changes are recorded in history and product deletion removes it', () => {
     const { result } = setup();
     const { productId } = seed(result);

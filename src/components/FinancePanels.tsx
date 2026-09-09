@@ -28,10 +28,13 @@ const downloadCsv = (name: string, csv: string, onDone?: (f: string) => void) =>
 // Profit & Loss
 // ===========================================================================
 export const PnLPanel: React.FC<{ onDownload?: (f: string) => void; onOpenExpenses: () => void }> = ({ onDownload, onOpenExpenses }) => {
-  const { dispatches, purchases, expenses, products, bookings, setSelectedProductId } = useTrading();
+  const { dispatches, purchases, expenses, products, bookings, setSelectedProductId, isFieldVisible } = useTrading();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
   const [month, setMonth] = useState(currentMonthKey());
+
+  const showMargins = isFieldVisible('profit_margins');
+  const showCosts = isFieldVisible('purchase_costs');
 
   const pnl = useMemo(() => computeMonthlyPnL(month, dispatches, purchases, expenses, products, bookings), [month, dispatches, purchases, expenses, products, bookings]);
   const trend = useMemo(() => pnlTrend(month, 6, dispatches, purchases, expenses, products, bookings), [month, dispatches, purchases, expenses, products, bookings]);
@@ -71,10 +74,17 @@ export const PnLPanel: React.FC<{ onDownload?: (f: string) => void; onOpenExpens
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {stat('Revenue', formatCurrency(pnl.revenue), `${pnl.dispatchCount} dispatch(es) • ${formatKg(pnl.soldKg)}`)}
-        {stat('Cost of goods', formatCurrency(pnl.cogs), pnl.uncostedKg > 0 ? `${formatKg(pnl.uncostedKg)} without cost data` : 'weighted avg purchase cost')}
-        {stat('Gross profit', formatCurrency(pnl.grossProfit), pnl.grossMarginPct != null ? `${pnl.grossMarginPct}% margin` : undefined, pnl.grossProfit >= 0 ? 'good' : 'bad')}
+        {stat('Cost of goods', showCosts ? formatCurrency(pnl.cogs) : '••••••', pnl.uncostedKg > 0 ? `${formatKg(pnl.uncostedKg)} without cost data` : 'weighted avg purchase cost')}
+        {stat('Gross profit', showMargins ? formatCurrency(pnl.grossProfit) : '••••••', showMargins && pnl.grossMarginPct != null ? `${pnl.grossMarginPct}% margin` : (showMargins ? undefined : 'Restricted'), pnl.grossProfit >= 0 ? 'good' : 'bad')}
         {stat('Expenses', formatCurrency(pnl.expenses), `${Object.keys(pnl.expensesByCategory).length} categor(ies)`)}
-        {stat('Net profit', formatCurrency(pnl.netProfit), delta != null ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}% vs ${prev.label}` : pnl.netMarginPct != null ? `${pnl.netMarginPct}% net margin` : undefined, pnl.netProfit >= 0 ? 'good' : 'bad')}
+        {stat(
+          'Net profit',
+          showMargins ? formatCurrency(pnl.netProfit) : '••••••',
+          showMargins
+            ? (delta != null ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}% vs ${prev.label}` : pnl.netMarginPct != null ? `${pnl.netMarginPct}% net margin` : undefined)
+            : 'Restricted',
+          pnl.netProfit >= 0 ? 'good' : 'bad'
+        )}
       </div>
 
       {pnl.uncostedKg > 0 && (

@@ -13,6 +13,7 @@ export type PrintRequest =
   | { type: 'note'; returnId: string }
   | { type: 'invoice'; dispatchId: string }
   | { type: 'challan'; dispatchId: string }
+  | { type: 'booking'; bookingId: string }
   | { type: 'statement'; customerId: string; from: string; to: string }
   | { type: 'supplier_statement'; supplierId: string; from: string; to: string };
 
@@ -45,10 +46,11 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       if (!d) return null;
       const booking = bookings.find((b) => b.id === d.bookingId);
       const customer = customers.find((c) => c.id === d.customerId);
-      const product = products.find((p) => p.id === d.productId);
+      const bookingItem = booking?.items?.find((it) => it.id === d.bookingItemId);
+      const product = products.find((p) => p.id === (d.productId || bookingItem?.productId || booking?.productId));
       const truck = trucks.find((t) => t.id === d.truckId);
       const isInvoice = request.type === 'invoice';
-      const unit = d.kg > 0 ? d.amount / d.kg : booking?.pricePerKg || 0;
+      const unit = d.kg > 0 ? d.amount / d.kg : (bookingItem?.pricePerKg || booking?.pricePerKg || 0);
       return {
         title: isInvoice ? 'TAX INVOICE' : 'DELIVERY CHALLAN',
         number: isInvoice ? `INV-${d.dispatchNumber}` : d.dispatchNumber,
@@ -85,8 +87,12 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               <tbody>
                 <tr className="border-b border-gray-200">
                   <td className="py-3">
-                    <div className="font-bold">{product?.name}</div>
-                    <div className="text-gray-500">{product?.category}{d.notes ? ` • ${d.notes}` : ''}</div>
+                    <div className="font-bold">{product?.name || bookingItem?.productName || 'Commodity'}</div>
+                    <div className="text-gray-500">
+                      {product?.category || 'Bulk Commodity'}
+                      {booking?.items && booking.items.length > 1 && bookingItem ? ` • Line Item: ${product?.name}` : ''}
+                      {d.notes ? ` • ${d.notes}` : ''}
+                    </div>
                   </td>
                   <td className="py-3 text-right font-mono">{formatKg(d.kg)}</td>
                   {isInvoice && <td className="py-3 text-right font-mono">{unit.toFixed(2)}</td>}
@@ -109,17 +115,119 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                     <tr><td colSpan={4} className="pt-1 text-right text-[11px] text-teal-700 font-bold">PAID ON DISPATCH</td></tr>
                   )}
                   {booking && (
-                    <tr><td colSpan={4} className="pt-3 text-right text-[11px] text-gray-500">Booking balance after this dispatch: {formatKg(booking.remainingKg)} remaining of {formatKg(booking.totalKg)}</td></tr>
+                    <tr>
+                      <td colSpan={4} className="pt-3 text-right text-[11px] text-gray-500">
+                        Contract balance: {bookingItem ? `${product?.name}: ${formatKg(bookingItem.remainingKg)} left | ` : ''}Overall contract {formatKg(booking.remainingKg)} remaining of {formatKg(booking.totalKg)}
+                      </td>
+                    </tr>
                   )}
                 </tfoot>
               )}
             </table>
             {!isInvoice && (
               <div className="grid grid-cols-2 gap-10 mt-16 text-xs">
-                <div className="border-t border-gray-900 pt-2">Dispatched by (Sarmaya)</div>
+                <div className="border-t border-gray-900 pt-2">Dispatched by ({COMPANY.name})</div>
                 <div className="border-t border-gray-900 pt-2">Received by (customer signature & stamp)</div>
               </div>
             )}
+          </>
+        ),
+      };
+    }
+
+    if (request.type === 'booking') {
+      const b = bookings.find((x) => x.id === request.bookingId);
+      if (!b) return null;
+      const customer = customers.find((c) => c.id === b.customerId);
+      const items = (b.items && b.items.length > 0)
+        ? b.items
+        : [
+            {
+              id: 'item-legacy',
+              productId: b.productId,
+              productName: products.find((p) => p.id === b.productId)?.name,
+              totalKg: b.totalKg,
+              dispatchedKg: b.dispatchedKg,
+              remainingKg: b.remainingKg,
+              pricePerKg: b.pricePerKg,
+              totalAmount: b.totalAmount,
+            },
+          ];
+
+      return {
+        title: 'SALES CONTRACT & BOOKING CONFIRMATION',
+        number: b.bookingNumber,
+        date: b.createdAt,
+        body: (
+          <>
+            <div className="grid grid-cols-2 gap-6 text-xs">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Buyer / Customer</div>
+                <div className="font-bold text-sm">{customer?.company}</div>
+                <div>{customer?.name}</div>
+                <div>{customer?.address}</div>
+                <div className="font-mono">{customer?.phone}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Contract Particulars</div>
+                <div>Contract # <span className="font-mono font-bold">{b.bookingNumber}</span></div>
+                <div>Status <span className="font-mono uppercase font-bold text-teal-800">{b.status}</span></div>
+                {b.targetDeliveryDate && <div>Target Delivery <span className="font-mono">{formatDate(b.targetDeliveryDate)}</span></div>}
+                {b.brokerName && <div>Broker <span className="font-mono">{b.brokerName}</span></div>}
+              </div>
+            </div>
+
+            <table className="w-full text-xs mt-6 border-collapse">
+              <thead>
+                <tr className="border-b-2 border-gray-900 text-[10px] uppercase tracking-widest text-gray-600">
+                  <th className="text-left py-2">#</th>
+                  <th className="text-left py-2">Commodity / Item</th>
+                  <th className="text-right py-2">Contract Qty</th>
+                  <th className="text-right py-2">Rate (Rs./kg)</th>
+                  <th className="text-right py-2">Line Total</th>
+                  <th className="text-right py-2">Remaining</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {items.map((it, idx) => {
+                  const p = products.find((prod) => prod.id === it.productId);
+                  return (
+                    <tr key={it.id || idx}>
+                      <td className="py-3 text-gray-400 font-bold">{idx + 1}</td>
+                      <td className="py-3">
+                        <div className="font-bold">{p?.name || it.productName || 'Commodity'}</div>
+                        <div className="text-gray-500">{p?.category || 'Bulk Commodity'}{it.rateOverrideReason ? ` • Note: ${it.rateOverrideReason}` : ''}</div>
+                      </td>
+                      <td className="py-3 text-right font-mono">{formatKg(it.totalKg)}</td>
+                      <td className="py-3 text-right font-mono">Rs. {it.pricePerKg}/kg</td>
+                      <td className="py-3 text-right font-mono font-bold">{formatCurrency(it.totalAmount || it.totalKg * it.pricePerKg)}</td>
+                      <td className="py-3 text-right font-mono text-amber-800">{formatKg(it.remainingKg)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-gray-900">
+                  <td colSpan={2} className="pt-4 font-bold text-gray-900 text-right uppercase tracking-widest text-[10px]">Total Contract Volume & Value</td>
+                  <td className="pt-4 text-right font-mono font-bold text-sm">{formatKg(b.totalKg)}</td>
+                  <td className="pt-4" />
+                  <td className="pt-4 text-right font-mono font-extrabold text-base">{formatCurrency(b.totalAmount)}</td>
+                  <td className="pt-4 text-right font-mono font-bold text-amber-800">{formatKg(b.remainingKg)}</td>
+                </tr>
+                {b.notes && (
+                  <tr>
+                    <td colSpan={6} className="pt-4 text-xs text-gray-600 italic bg-gray-50 p-3 rounded-lg border border-gray-200">
+                      Special Terms: {b.notes}
+                    </td>
+                  </tr>
+                )}
+              </tfoot>
+            </table>
+
+            <div className="grid grid-cols-2 gap-10 mt-16 text-xs">
+              <div className="border-t border-gray-900 pt-2">Authorized Signatory ({COMPANY.name})</div>
+              <div className="border-t border-gray-900 pt-2">Buyer Acceptance & Stamp</div>
+            </div>
           </>
         ),
       };

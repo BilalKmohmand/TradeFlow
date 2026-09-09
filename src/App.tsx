@@ -54,6 +54,7 @@ function MainApp() {
   const [isCommandBarOpen, setIsCommandBarOpen] = useState<boolean>(false);
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState<boolean>(false);
   const [preselectedBookingId, setPreselectedBookingId] = useState<string | null>(null);
+  const [preselectedBookingItemId, setPreselectedBookingItemId] = useState<string | null>(null);
 
   const [isBookingModalOpen, setIsBookingModalOpen] = useState<boolean>(false);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState<boolean>(false);
@@ -90,8 +91,9 @@ function MainApp() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const handleOpenDispatch = (bookingId?: string) => {
+  const handleOpenDispatch = (bookingId?: string, bookingItemId?: string) => {
     setPreselectedBookingId(bookingId || null);
+    setPreselectedBookingItemId(bookingItemId || null);
     setIsDispatchModalOpen(true);
   };
 
@@ -220,8 +222,10 @@ function MainApp() {
         onClose={() => {
           setIsDispatchModalOpen(false);
           setPreselectedBookingId(null);
+          setPreselectedBookingItemId(null);
         }}
         preselectedBookingId={preselectedBookingId}
+        preselectedBookingItemId={preselectedBookingItemId}
       />
 
       {/* New Booking Modal */}

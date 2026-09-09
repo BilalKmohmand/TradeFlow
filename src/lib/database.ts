@@ -102,13 +102,41 @@ export const normalizeProduct = (r: any): Product => ({
   unitPricePerKg: r.unitPricePerKg ?? num(r.unitPricePerTon) / KG_PER_TON,
 });
 
-export const normalizeBooking = (r: any): Booking => ({
-  ...r,
-  totalKg: r.totalKg ?? num(r.totalTons) * KG_PER_TON,
-  dispatchedKg: r.dispatchedKg ?? num(r.dispatchedTons) * KG_PER_TON,
-  remainingKg: r.remainingKg ?? num(r.remainingTons) * KG_PER_TON,
-  pricePerKg: r.pricePerKg ?? num(r.pricePerTon) / KG_PER_TON,
-});
+export const normalizeBooking = (r: any): Booking => {
+  const totalKg = r.totalKg ?? num(r.totalTons) * KG_PER_TON;
+  const dispatchedKg = r.dispatchedKg ?? num(r.dispatchedTons) * KG_PER_TON;
+  const remainingKg = r.remainingKg ?? num(r.remainingTons) * KG_PER_TON;
+  const pricePerKg = r.pricePerKg ?? num(r.pricePerTon) / KG_PER_TON;
+
+  let items = Array.isArray(r.items) && r.items.length > 0 ? r.items : undefined;
+  if (!items && r.productId) {
+    items = [
+      {
+        id: `${r.id || 'bki'}-item-1`,
+        productId: r.productId,
+        totalKg,
+        pricePerKg,
+        dispatchedKg,
+        remainingKg,
+        totalAmount: r.totalAmount ?? totalKg * pricePerKg,
+        costPricePerKg: r.costPricePerKg,
+        marginPerKg: r.marginPerKg,
+        totalMargin: r.totalMargin,
+        isCustomRate: r.isCustomRate,
+        rateOverrideReason: r.rateOverrideReason,
+      },
+    ];
+  }
+
+  return {
+    ...r,
+    totalKg,
+    dispatchedKg,
+    remainingKg,
+    pricePerKg,
+    items: items || [],
+  };
+};
 
 export const normalizeDispatch = (r: any): Dispatch => ({
   ...r,

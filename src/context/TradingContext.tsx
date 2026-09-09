@@ -35,7 +35,33 @@ import {
   Permission,
   ROLE_PERMISSIONS,
   SessionUser,
+  RoleDefinition,
+  RoleVisibilitySettings,
+  SecurityPolicySettings,
+  SensitiveFieldKey,
+  AuditCategory,
+  CustomerAgreedRate,
+  Invoice,
+  InvoiceItem,
+  InvoicePaymentRecord,
+  InvoicePaymentStatus,
+  InvoiceStatus,
 } from '../types';
+import {
+  DEFAULT_ROLES,
+  DEFAULT_VISIBILITY_SETTINGS,
+  DEFAULT_SECURITY_POLICY,
+  INITIAL_DEMO_USERS,
+  hasPermission,
+  isScreenVisibleForRoles,
+  isFieldVisibleForRoles,
+  hashPassword,
+  verifyPassword,
+  hashPin,
+  verifyPin,
+  verifyTOTP,
+  generateResetToken,
+} from '../lib/auth';
 import { formatCurrency } from '../utils/formatters';
 import {
   loadAllData,
@@ -150,33 +176,78 @@ interface TradingContextType {
   addTruck: (data: Omit<Truck, 'id' | 'createdAt'>) => Truck;
   updateTruck: (id: string, data: Partial<Truck>) => void;
   deleteTruck: (id: string) => void;
-  addUser: (data: { name: string; role: UserRole; pin: string }) => { success: boolean; message: string };
+  addUser: (data: { name: string; role: UserRole; pin: string; roles?: UserRole[]; email?: string; username?: string }) => { success: boolean; message: string };
   updateUser: (id: string, data: Partial<Omit<AppUser, 'id' | 'createdAt'>>) => { success: boolean; message: string };
   deleteUser: (id: string) => void;
   currentUser: SessionUser | null;
   can: (permission: Permission) => boolean;
-  unlockAsUser: (userId: string, pin: string) => boolean;
+  unlockAsUser: (userId: string, pin: string) => { success: boolean; error?: string; remainingMinutes?: number; attemptsLeft?: number; isLocked?: boolean };
   cancelBooking: (id: string, reason?: string) => void;
   cashEntries: CashEntry[];
   addCashEntry: (data: Omit<CashEntry, 'id' | 'createdAt' | 'createdBy'>) => CashEntry;
   deleteCashEntry: (id: string) => void;
   settings: AppSettings;
   updateSettings: (data: Partial<Omit<AppSettings, 'id'>>) => void;
+
+  // Invoicing & Commercial Billing
+  invoices: Invoice[];
+  addInvoice: (data: Omit<Invoice, 'id' | 'createdAt' | 'invoiceNumber'>) => Invoice;
+  updateInvoice: (id: string, data: Partial<Invoice>) => { success: boolean; message: string };
+  deleteInvoice: (id: string) => { success: boolean; message: string };
+  recordInvoicePayment: (
+    invoiceId: string,
+    payment: {
+      amount: number;
+      date: string;
+      method: 'bank_transfer' | 'cash' | 'cheque' | 'online';
+      referenceNumber?: string;
+      notes?: string;
+    }
+  ) => { success: boolean; message: string };
+  generateInvoiceFromBookings: (
+    bookingIds: string[],
+    customOptions?: {
+      discount?: number;
+      freightCharges?: number;
+      handlingCharges?: number;
+      taxRatePct?: number;
+      notes?: string;
+      terms?: string;
+      dueDate?: string;
+    }
+  ) => Invoice;
+
+  // Customer Agreed Rates
+  customerAgreedRates: CustomerAgreedRate[];
+  setCustomerAgreedRate: (customerId: string, productId: string, agreedRatePerKg: number, notes?: string) => CustomerAgreedRate;
+  deleteCustomerAgreedRate: (id: string) => void;
+  getCustomerAgreedRate: (customerId: string, productId: string) => number | null;
   
   createBooking: (bookingData: {
     customerId: string;
-    productId: string;
-    totalKg: number;
-    pricePerKg: number;
+    items?: Array<{
+      productId: string;
+      totalKg: number;
+      pricePerKg: number;
+      costPricePerKg?: number;
+      rateOverrideReason?: string;
+      notes?: string;
+    }>;
+    productId?: string;
+    totalKg?: number;
+    pricePerKg?: number;
     targetDeliveryDate?: string;
     notes?: string;
     brokerName?: string;
     brokerCommissionPerKg?: number;
     quotationId?: string | null;
+    rateOverrideReason?: string;
   }) => Booking;
   
   logDispatch: (dispatchData: {
     bookingId: string;
+    bookingItemId?: string;
+    productId?: string;
     kg: number;
     truckNumber: string;
     truckId?: string | null;
@@ -207,7 +278,7 @@ interface TradingContextType {
   recentWhatsAppAlert: WhatsAppMessage | null;
   clearRecentAlert: () => void;
 
-  // Admin PIN & Security
+  // Admin PIN, Authentication & Security
   isAdminUnlocked: boolean;
   unlockAdmin: (pin: string) => boolean;
   lockAdmin: () => void;
@@ -215,11 +286,34 @@ interface TradingContextType {
   changeAdminPin: (oldPin: string, newPin: string) => { success: boolean; message: string };
   resetAdminPinToDefault: () => void;
   auditLogs: AuditLogEntry[];
-  logAuditEvent: (action: string, details: string, severity?: 'info' | 'warning' | 'danger') => void;
+  logAuditEvent: (action: string, details: string, severity?: 'info' | 'warning' | 'danger', category?: AuditCategory, ip?: string) => void;
   clearAuditLogs: () => void;
   exportSystemBackup: () => string;
   importSystemBackup: (jsonContent: string) => { success: boolean; message: string };
   factoryResetAllData: () => void;
+
+  // RBAC Roles & Hierarchy Management
+  roles: RoleDefinition[];
+  createRole: (role: Omit<RoleDefinition, 'isSystem'>) => { success: boolean; message: string };
+  updateRole: (id: string, role: Partial<RoleDefinition>) => { success: boolean; message: string };
+  deleteRole: (id: string) => { success: boolean; message: string };
+  updatePermissionsMatrix: (matrix: Record<string, Permission[]>) => { success: boolean; message: string };
+
+  // Granular Permissions & Visibility Controls
+  visibilitySettings: Record<string, RoleVisibilitySettings>;
+  updateVisibilitySettings: (settings: Record<string, RoleVisibilitySettings>) => void;
+  isScreenVisible: (screen: ActiveScreen) => boolean;
+  isFieldVisible: (field: SensitiveFieldKey) => boolean;
+
+  // Security Policies & Credentials Authentication
+  securityPolicy: SecurityPolicySettings;
+  updateSecurityPolicy: (policy: Partial<SecurityPolicySettings>) => void;
+  loginWithCredentials: (identifier: string, password: string, otpCode?: string) => Promise<{ success: boolean; require2FA?: boolean; tempToken?: string; error?: string; remainingMinutes?: number; attemptsLeft?: number }>;
+  verify2FACode: (tempToken: string, otpCode: string) => Promise<{ success: boolean; error?: string }>;
+  requestPasswordReset: (emailOrUsername: string) => Promise<{ success: boolean; message: string; previewToken?: string; previewUrl?: string }>;
+  resetPasswordWithToken: (token: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
+  unlockUserAccount: (id: string) => void;
+  forceLogoutUser: (id: string) => void;
 }
 
 export interface DeleteSummary {
@@ -257,6 +351,7 @@ export type PrintRequestLike =
   | { type: 'note'; returnId: string }
   | { type: 'invoice'; dispatchId: string }
   | { type: 'challan'; dispatchId: string }
+  | { type: 'booking'; bookingId: string }
   | { type: 'statement'; customerId: string; from: string; to: string }
   | { type: 'supplier_statement'; supplierId: string; from: string; to: string };
 
@@ -299,6 +394,134 @@ const initialAuditLogs: AuditLogEntry[] = [
   },
 ];
 
+const initialInvoices: Invoice[] = [
+  {
+    id: 'inv-101',
+    invoiceNumber: 'INV-2026-001',
+    customerId: 'cust-1',
+    customerName: 'Haji Tariq Mehmood',
+    customerCompany: 'Indus Sugar & Textile Mills Ltd.',
+    customerPhone: '+92 300 8472910',
+    customerAddress: 'Plot 42, Industrial Area, Kot Lakhpat, Lahore',
+    customerNtn: 'NTN-3829102-4',
+    issueDate: '2026-09-01',
+    dueDate: '2026-09-15',
+    status: 'issued',
+    paymentStatus: 'partial',
+    items: [
+      {
+        id: 'item-1',
+        bookingId: 'book-1',
+        productId: 'prod-1',
+        productName: 'Raw Cotton Bales (Pak Grade-1)',
+        description: 'First delivery lot under contract BK-2026-101',
+        kg: 10000,
+        ratePerKg: 385,
+        costPricePerKg: 310,
+        amount: 3850000,
+      },
+    ],
+    subtotal: 3850000,
+    freightCharges: 45000,
+    handlingCharges: 15000,
+    taxRatePct: 0,
+    taxAmount: 0,
+    discount: 20000,
+    totalAmount: 3890000,
+    paidAmount: 2000000,
+    balanceDue: 1890000,
+    payments: [
+      {
+        id: 'pmt-1',
+        date: '2026-09-02',
+        amount: 2000000,
+        method: 'bank_transfer',
+        referenceNumber: 'HBL-FT-99214',
+        notes: 'Initial advance payment received',
+        recordedBy: 'Rashid Minhas',
+      },
+    ],
+    notes: 'Goods inspected and dispatched via National Highway N-5.',
+    terms: 'Payment due within 14 days of invoice date. 1.5% monthly surcharge applies thereafter.',
+    linkedBookingIds: ['book-1'],
+    createdAt: '2026-09-01T11:00:00.000Z',
+    createdBy: 'Rashid Minhas',
+  },
+  {
+    id: 'inv-102',
+    invoiceNumber: 'INV-2026-002',
+    customerId: 'cust-2',
+    customerName: 'Malik Zeeshan',
+    customerCompany: 'Chenab Feed & Grain Mills',
+    customerPhone: '+92 321 9841203',
+    customerAddress: 'Jhang Road, Industrial Estate, Multan',
+    customerNtn: 'NTN-7419203-1',
+    issueDate: '2026-09-03',
+    dueDate: '2026-09-17',
+    status: 'paid',
+    paymentStatus: 'paid',
+    items: [
+      {
+        id: 'item-2',
+        bookingId: 'book-2',
+        productId: 'prod-2',
+        productName: 'Feed Grade Molasses (Bulk Tankers)',
+        description: 'Tanker load dispatches under booking BK-2026-102',
+        kg: 25000,
+        ratePerKg: 78,
+        costPricePerKg: 62,
+        amount: 1950000,
+      },
+    ],
+    subtotal: 1950000,
+    freightCharges: 30000,
+    handlingCharges: 5000,
+    taxRatePct: 0,
+    taxAmount: 0,
+    discount: 0,
+    totalAmount: 1985000,
+    paidAmount: 1985000,
+    balanceDue: 0,
+    payments: [
+      {
+        id: 'pmt-2',
+        date: '2026-09-04',
+        amount: 1985000,
+        method: 'bank_transfer',
+        referenceNumber: 'MCB-OL-88412',
+        notes: 'Full clearance received',
+        recordedBy: 'Bilal Khan Mohmand',
+      },
+    ],
+    notes: 'Thank you for your business.',
+    terms: 'Standard commercial credit terms.',
+    linkedBookingIds: ['book-2'],
+    createdAt: '2026-09-03T14:30:00.000Z',
+    createdBy: 'Bilal Khan Mohmand',
+  },
+];
+
+const initialCustomerAgreedRates: CustomerAgreedRate[] = [
+  {
+    id: 'agr-1',
+    customerId: 'cust-1',
+    productId: 'prod-1',
+    agreedRatePerKg: 385,
+    effectiveDate: '2026-08-15',
+    notes: 'Long-term bulk supply contract agreed rate',
+    createdAt: '2026-08-15T10:00:00.000Z',
+  },
+  {
+    id: 'agr-2',
+    customerId: 'cust-2',
+    productId: 'prod-2',
+    agreedRatePerKg: 78,
+    effectiveDate: '2026-08-20',
+    notes: 'Seasonal volume commitment rate',
+    createdAt: '2026-08-20T12:00:00.000Z',
+  },
+];
+
 const STORAGE_KEYS = {
   CUSTOMERS: 'tradeflow_customers_v2',
   SUPPLIERS: 'tradeflow_suppliers_v2',
@@ -321,6 +544,13 @@ const STORAGE_KEYS = {
   MESSAGES: 'tradeflow_whatsapp_v2',
   ADMIN_PIN: 'sarmaya_admin_pin_v1',
   AUDIT_LOGS: 'sarmaya_audit_logs_v1',
+  ROLES: 'tradeflow_roles_v2',
+  VISIBILITY: 'tradeflow_visibility_v2',
+  SECURITY_POLICY: 'tradeflow_security_policy_v1',
+  AUTH_TOKEN: 'sarmaya_jwt_token_v1',
+  SESSION_USER: 'sarmaya_current_user_v1',
+  INVOICES: 'tradeflow_invoices_v1',
+  AGREED_RATES: 'tradeflow_agreed_rates_v1',
 };
 
 /**
@@ -360,7 +590,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>(() => loadLocal(STORAGE_KEYS.PRICE_HISTORY, []));
   const [expenses, setExpenses] = useState<Expense[]>(() => loadLocal(STORAGE_KEYS.EXPENSES, []));
   const [trucks, setTrucks] = useState<Truck[]>(() => loadLocal(STORAGE_KEYS.TRUCKS, []));
-  const [users, setUsers] = useState<AppUser[]>(() => loadLocal(STORAGE_KEYS.USERS, []));
+  const [users, setUsers] = useState<AppUser[]>(() => {
+    const loaded = loadLocal<AppUser>(STORAGE_KEYS.USERS, []);
+    return loaded.length > 0 ? loaded : INITIAL_DEMO_USERS;
+  });
+  const [roles, setRoles] = useState<RoleDefinition[]>(() =>
+    safeParse(localStorage.getItem(STORAGE_KEYS.ROLES), DEFAULT_ROLES)
+  );
+  const [visibilitySettings, setVisibilitySettings] = useState<Record<string, RoleVisibilitySettings>>(() =>
+    safeParse(localStorage.getItem(STORAGE_KEYS.VISIBILITY), DEFAULT_VISIBILITY_SETTINGS)
+  );
+  const [securityPolicy, setSecurityPolicy] = useState<SecurityPolicySettings>(() =>
+    safeParse(localStorage.getItem(STORAGE_KEYS.SECURITY_POLICY), DEFAULT_SECURITY_POLICY)
+  );
   const [cashEntries, setCashEntries] = useState<CashEntry[]>(() => loadLocal(STORAGE_KEYS.CASH, []));
   const [quotations, setQuotations] = useState<Quotation[]>(() => loadLocal(STORAGE_KEYS.QUOTES, []));
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => loadLocal(STORAGE_KEYS.POS, []));
@@ -372,10 +614,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     ...readCachedSettings(),
     id: 'default',
   }));
-  const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<SessionUser | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.SESSION_USER);
+    return safeParse<SessionUser | null>(saved, null);
+  });
   const [ledger, setLedger] = useState<LedgerEntry[]>(() => loadLocal(STORAGE_KEYS.LEDGER, initialLedgerEntries, normalizeLedger));
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>(() =>
     loadLocal(STORAGE_KEYS.MESSAGES, initialWhatsAppMessages)
+  );
+  const [invoices, setInvoices] = useState<Invoice[]>(() =>
+    loadLocal(STORAGE_KEYS.INVOICES, initialInvoices)
+  );
+  const [customerAgreedRates, setCustomerAgreedRates] = useState<CustomerAgreedRate[]>(() =>
+    loadLocal(STORAGE_KEYS.AGREED_RATES, initialCustomerAgreedRates)
   );
 
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>('dashboard');
@@ -538,6 +789,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(whatsappMessages));
   }, [whatsappMessages]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(invoices));
+  }, [invoices]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.AGREED_RATES, JSON.stringify(customerAgreedRates));
+  }, [customerAgreedRates]);
 
   const syncToSupabase = async (table: string, rows: unknown[]) => {
     if (!isCloudSyncReady || rows.length === 0) return;
@@ -805,10 +1064,29 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       prev.map((b) => {
         if (b.id !== id) return b;
         const next = { ...b, ...data };
-        if (data.totalKg != null || data.pricePerKg != null) {
+        if (data.items && Array.isArray(data.items)) {
+          next.items = data.items;
+          next.totalKg = round2(data.items.reduce((acc, it) => acc + it.totalKg, 0));
+          next.dispatchedKg = round2(data.items.reduce((acc, it) => acc + (it.dispatchedKg || 0), 0));
+          next.remainingKg = Math.max(0, round2(next.totalKg - next.dispatchedKg));
+          next.totalAmount = round2(data.items.reduce((acc, it) => acc + (it.totalAmount || it.totalKg * it.pricePerKg), 0));
+          next.pricePerKg = next.totalKg > 0 ? round2(next.totalAmount / next.totalKg) : (data.items[0]?.pricePerKg || next.pricePerKg);
+          next.productId = data.items[0]?.productId || next.productId;
+          if (next.status !== 'cancelled') next.status = next.remainingKg === 0 ? 'completed' : 'active';
+          next.paymentStatus = next.paidAmount <= 0 ? 'unpaid' : next.paidAmount >= next.totalAmount ? 'paid' : 'partial';
+        } else if (data.totalKg != null || data.pricePerKg != null) {
           next.totalKg = Math.max(round2(next.totalKg), next.dispatchedKg);
           next.remainingKg = Math.max(0, round2(next.totalKg - next.dispatchedKg));
           next.totalAmount = round2(next.totalKg * next.pricePerKg);
+          if (next.items && next.items.length === 1) {
+            next.items = [{
+              ...next.items[0],
+              totalKg: next.totalKg,
+              remainingKg: next.remainingKg,
+              pricePerKg: next.pricePerKg,
+              totalAmount: next.totalAmount,
+            }];
+          }
           if (next.status !== 'cancelled') next.status = next.remainingKg === 0 ? 'completed' : 'active';
           next.paymentStatus = next.paidAmount <= 0 ? 'unpaid' : next.paidAmount >= next.totalAmount ? 'paid' : 'partial';
         }
@@ -871,8 +1149,22 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
           const remainingKg = Math.max(0, round2(b.totalKg - dispatchedKg));
           const paidAmount = Math.max(0, round2(b.paidAmount - paid));
           const paymentStatus = paidAmount <= 0 ? 'unpaid' : paidAmount >= b.totalAmount ? 'paid' : 'partial';
+
+          const updatedItems = b.items?.map((it) => {
+            const itemDispatches = ds.filter((d) => d.bookingItemId ? d.bookingItemId === it.id : d.productId === it.productId);
+            const itemKg = itemDispatches.reduce((a, d) => a + d.kg, 0);
+            const itemDispatched = Math.max(0, round2(it.dispatchedKg - itemKg));
+            const itemRemaining = Math.max(0, round2(it.totalKg - itemDispatched));
+            return {
+              ...it,
+              dispatchedKg: itemDispatched,
+              remainingKg: itemRemaining,
+            };
+          });
+
           return {
             ...b,
+            items: updatedItems || b.items,
             dispatchedKg,
             remainingKg,
             paidAmount,
@@ -1155,6 +1447,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const createBooking = ({
     customerId,
+    items,
     productId,
     totalKg,
     pricePerKg,
@@ -1163,29 +1456,114 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     brokerName,
     brokerCommissionPerKg,
     quotationId = null,
+    rateOverrideReason,
   }: {
     customerId: string;
-    productId: string;
-    totalKg: number;
-    pricePerKg: number;
+    items?: Array<{
+      productId: string;
+      totalKg: number;
+      pricePerKg: number;
+      costPricePerKg?: number;
+      rateOverrideReason?: string;
+      notes?: string;
+    }>;
+    productId?: string;
+    totalKg?: number;
+    pricePerKg?: number;
     targetDeliveryDate?: string;
     notes?: string;
     brokerName?: string;
     brokerCommissionPerKg?: number;
     quotationId?: string | null;
+    rateOverrideReason?: string;
   }): Booking => {
     const bookingNum = `BK-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
-    const totalAmount = totalKg * pricePerKg;
+
+    let builtItems: BookingItem[] = [];
+
+    if (items && items.length > 0) {
+      builtItems = items.map((it, idx) => {
+        const prod = products.find((p) => p.id === it.productId);
+        const defaultRate = prod?.pricePerKg || it.pricePerKg;
+        const costRate = it.costPricePerKg ?? prod?.costPricePerKg;
+        const itMarginPerKg = costRate != null ? round2(it.pricePerKg - costRate) : undefined;
+        const itTotalMargin = itMarginPerKg != null ? round2(itMarginPerKg * it.totalKg) : undefined;
+        const itCustom = Math.abs(defaultRate - it.pricePerKg) > 0.001;
+        return {
+          id: uid('bki'),
+          productId: it.productId,
+          productName: prod?.name,
+          totalKg: round2(it.totalKg),
+          dispatchedKg: 0,
+          remainingKg: round2(it.totalKg),
+          pricePerKg: round2(it.pricePerKg),
+          totalAmount: round2(it.totalKg * it.pricePerKg),
+          defaultProductPricePerKg: defaultRate,
+          costPricePerKg: costRate,
+          marginPerKg: itMarginPerKg,
+          totalMargin: itTotalMargin,
+          isCustomRate: itCustom,
+          rateOverrideReason: itCustom ? (it.rateOverrideReason || 'Item selling rate configured') : undefined,
+          notes: it.notes,
+        };
+      });
+    } else {
+      const fallbackProductId = productId || '';
+      const fallbackKg = round2(totalKg || 0);
+      const fallbackPrice = round2(pricePerKg || 0);
+      const product = products.find((p) => p.id === fallbackProductId);
+      const defaultProductPricePerKg = product?.pricePerKg || fallbackPrice;
+      const costPricePerKg = product?.costPricePerKg;
+      const marginPerKg = costPricePerKg != null ? round2(fallbackPrice - costPricePerKg) : undefined;
+      const totalMargin = marginPerKg != null ? round2(marginPerKg * fallbackKg) : undefined;
+      const isCustomRate = Math.abs(defaultProductPricePerKg - fallbackPrice) > 0.001;
+
+      builtItems = [
+        {
+          id: uid('bki'),
+          productId: fallbackProductId,
+          productName: product?.name,
+          totalKg: fallbackKg,
+          dispatchedKg: 0,
+          remainingKg: fallbackKg,
+          pricePerKg: fallbackPrice,
+          totalAmount: round2(fallbackKg * fallbackPrice),
+          defaultProductPricePerKg,
+          costPricePerKg,
+          marginPerKg,
+          totalMargin,
+          isCustomRate,
+          rateOverrideReason: isCustomRate ? (rateOverrideReason || 'Selling rate manually configured on booking') : undefined,
+        },
+      ];
+    }
+
+    const computedTotalKg = round2(builtItems.reduce((acc, it) => acc + it.totalKg, 0));
+    const computedTotalAmount = round2(builtItems.reduce((acc, it) => acc + it.totalAmount, 0));
+    const primaryProductId = builtItems[0]?.productId || '';
+    const primaryProduct = products.find((p) => p.id === primaryProductId);
+    const avgPricePerKg = computedTotalKg > 0 ? round2(computedTotalAmount / computedTotalKg) : (builtItems[0]?.pricePerKg || 0);
+    const overallTotalMargin = builtItems.reduce((acc, it) => acc + (it.totalMargin || 0), 0);
+    const overallMarginPerKg = computedTotalKg > 0 ? round2(overallTotalMargin / computedTotalKg) : undefined;
+    const hasAnyCustomRate = builtItems.some((it) => it.isCustomRate);
+
     const newBooking: Booking = {
       id: uid('book'),
       bookingNumber: bookingNum,
       customerId,
-      productId,
-      totalKg,
+      items: builtItems,
+      productId: primaryProductId,
+      totalKg: computedTotalKg,
       dispatchedKg: 0,
-      remainingKg: totalKg,
-      pricePerKg,
-      totalAmount,
+      remainingKg: computedTotalKg,
+      pricePerKg: avgPricePerKg,
+      defaultProductPricePerKg: builtItems[0]?.defaultProductPricePerKg,
+      costPricePerKg: builtItems[0]?.costPricePerKg,
+      marginPerKg: overallMarginPerKg,
+      totalMargin: overallTotalMargin,
+      isCustomRate: hasAnyCustomRate,
+      rateOverrideReason: hasAnyCustomRate ? (rateOverrideReason || 'Rate configured on booking commodities') : undefined,
+      totalAmount: computedTotalAmount,
       paidAmount: 0,
       status: 'active',
       paymentStatus: 'unpaid',
@@ -1198,13 +1576,36 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     setBookings((prev) => [newBooking, ...prev]);
-    recordPrice(productId, pricePerKg, newBooking.createdAt, 'booking', `Agreed in ${bookingNum}`, newBooking.id);
+
+    // Record price history for each item
+    builtItems.forEach((it) => {
+      recordPrice(it.productId, it.pricePerKg, newBooking.createdAt, 'booking', `Agreed in ${bookingNum}`, newBooking.id);
+    });
+
+    if (hasAnyCustomRate) {
+      logAuditEvent(
+        'Rate Override',
+        `Booking ${bookingNum}: Contains customized rates across ${builtItems.length} commodity item(s). Total: ${formatCurrency(computedTotalAmount)}.`,
+        'warning',
+        'data'
+      );
+    }
 
     // Send instant WhatsApp booking confirmation
     const customer = customers.find((c) => c.id === customerId);
-    const product = products.find((p) => p.id === productId);
-    if (customer && product) {
-      const msgText = `📑 *Sarmaya Booking Confirmed*\n\nHello ${customer.name},\nYour booking *${bookingNum}* for *${totalKg.toLocaleString()} kg* of *${product.name}* has been scheduled at *${formatCurrency(pricePerKg)}/kg* (Total: *${formatCurrency(totalAmount)}*).\n\nDispatches will be notified automatically with truck & driver details upon release. Thank you for your business!`;
+    if (customer) {
+      let itemsBreakdown = '';
+      if (builtItems.length === 1 && primaryProduct) {
+        itemsBreakdown = `for *${computedTotalKg.toLocaleString()} kg* of *${primaryProduct.name}* at *${formatCurrency(builtItems[0].pricePerKg)}/kg*`;
+      } else {
+        itemsBreakdown = `for *${builtItems.length} commodities* (${computedTotalKg.toLocaleString()} kg total):\n` +
+          builtItems.map((it) => {
+            const prod = products.find((p) => p.id === it.productId);
+            return `• ${prod?.name || 'Item'}: ${it.totalKg.toLocaleString()} kg @ ${formatCurrency(it.pricePerKg)}/kg`;
+          }).join('\n');
+      }
+
+      const msgText = `📑 *Sarmaya Booking Confirmed*\n\nHello ${customer.name},\nYour booking *${bookingNum}* ${itemsBreakdown}\n\n*Total Contract Value:* ${formatCurrency(computedTotalAmount)}\n\nDispatches will be notified automatically with truck & driver details upon release. Thank you for your business!`;
 
       const waMsg: WhatsAppMessage = {
         id: uid('wa'),
@@ -1227,6 +1628,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const logDispatch = ({
     bookingId,
+    bookingItemId,
+    productId,
     kg,
     truckNumber,
     truckId = null,
@@ -1239,6 +1642,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     freightCharge = 0,
   }: {
     bookingId: string;
+    bookingItemId?: string;
+    productId?: string;
     kg: number;
     truckNumber: string;
     truckId?: string | null;
@@ -1253,33 +1658,71 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const booking = bookings.find((b) => b.id === bookingId);
     if (!booking) throw new Error('Booking not found');
 
+    // Find the targeted item if multi-item booking
+    let targetItem: BookingItem | undefined;
+    if (booking.items && booking.items.length > 0) {
+      if (bookingItemId) {
+        targetItem = booking.items.find((it) => it.id === bookingItemId);
+      } else if (productId) {
+        targetItem = booking.items.find((it) => it.productId === productId && it.remainingKg > 0) ||
+                     booking.items.find((it) => it.productId === productId);
+      } else {
+        targetItem = booking.items.find((it) => it.remainingKg > 0) || booking.items[0];
+      }
+    }
+
+    const effectiveProductId = targetItem ? targetItem.productId : (productId || booking.productId);
+    const effectivePricePerKg = targetItem ? targetItem.pricePerKg : booking.pricePerKg;
+
     const customer = customers.find((c) => c.id === booking.customerId);
-    const product = products.find((p) => p.id === booking.productId);
+    const product = products.find((p) => p.id === effectiveProductId);
     const today = new Date().toISOString().split('T')[0];
-    const dispatchAmount = round2(kg * booking.pricePerKg);
+    const dispatchAmount = round2(kg * effectivePricePerKg);
     const taxRatePct = settings.taxRatePct || 0;
     const freight = round2(Math.max(0, freightCharge || 0));
     const taxAmount = round2(((dispatchAmount + freight) * taxRatePct) / 100);
     const totalBilled = round2(dispatchAmount + freight + taxAmount);
 
-    // Recalculate kg
-    const newDispatchedKg = Number((booking.dispatchedKg + kg).toFixed(2));
-    const newRemainingKg = Math.max(0, Number((booking.totalKg - newDispatchedKg).toFixed(2)));
+    // Update item quantities
+    let updatedItems: BookingItem[] | undefined;
+    if (booking.items && booking.items.length > 0) {
+      updatedItems = booking.items.map((it) => {
+        const isMatch = targetItem ? it.id === targetItem.id : it.productId === effectiveProductId;
+        if (isMatch) {
+          const itemDispatched = round2(it.dispatchedKg + kg);
+          const itemRemaining = Math.max(0, round2(it.totalKg - itemDispatched));
+          return {
+            ...it,
+            dispatchedKg: itemDispatched,
+            remainingKg: itemRemaining,
+          };
+        }
+        return it;
+      });
+    }
+
+    const newDispatchedKg = updatedItems
+      ? round2(updatedItems.reduce((acc, it) => acc + it.dispatchedKg, 0))
+      : Number((booking.dispatchedKg + kg).toFixed(2));
+    const newRemainingKg = updatedItems
+      ? round2(updatedItems.reduce((acc, it) => acc + it.remainingKg, 0))
+      : Math.max(0, Number((booking.totalKg - newDispatchedKg).toFixed(2)));
     const newStatus: BookingStatus = newRemainingKg === 0 ? 'completed' : 'active';
 
     const dispatchNum = `DSP-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
 
     let generatedMessage = '';
     if (customer && product) {
-      generatedMessage = `🚚 *Sarmaya Dispatch Alert*\n\nHello ${customer.name},\nTruck *${truckNumber.toUpperCase()}* carrying *${kg.toLocaleString()} kg* of *${product.name}* is on its way to your destination.\n\n📊 *Booking Status (${booking.bookingNumber})*:\n• Dispatched Now: ${kg.toLocaleString()} kg\n• Remaining Balance: ${newRemainingKg.toLocaleString()} kg\n• Goods: ${formatCurrency(dispatchAmount)}${freight > 0 ? `\n• Freight: ${formatCurrency(freight)}` : ''}${taxAmount > 0 ? `\n• ${settings.taxLabel || 'Sales Tax'} (${taxRatePct}%): ${formatCurrency(taxAmount)}` : ''}\n• Invoice total: *${formatCurrency(totalBilled)}*\n\n💳 Kindly confirm once payment has been initiated for this shipment.\nThank you for trading with us!`;
+      generatedMessage = `🚚 *Sarmaya Dispatch Alert*\n\nHello ${customer.name},\nTruck *${truckNumber.toUpperCase()}* carrying *${kg.toLocaleString()} kg* of *${product.name}* is on its way to your destination.\n\n📊 *Booking Status (${booking.bookingNumber})*:\n• Dispatched Now: ${kg.toLocaleString()} kg of ${product.name}\n• Total Booking Balance: ${newRemainingKg.toLocaleString()} kg\n• Goods: ${formatCurrency(dispatchAmount)}${freight > 0 ? `\n• Freight: ${formatCurrency(freight)}` : ''}${taxAmount > 0 ? `\n• ${settings.taxLabel || 'Sales Tax'} (${taxRatePct}%): ${formatCurrency(taxAmount)}` : ''}\n• Invoice total: *${formatCurrency(totalBilled)}*\n\n💳 Kindly confirm once payment has been initiated for this shipment.\nThank you for trading with us!`;
     }
 
     const newDispatch: Dispatch = {
       id: uid('disp'),
       dispatchNumber: dispatchNum,
       bookingId,
+      bookingItemId: targetItem?.id,
       customerId: booking.customerId,
-      productId: booking.productId,
+      productId: effectiveProductId,
       kg,
       amount: dispatchAmount,
       truckNumber: truckNumber.toUpperCase(),
@@ -1309,6 +1752,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         b.id === bookingId
           ? {
               ...b,
+              items: updatedItems || b.items,
               dispatchedKg: newDispatchedKg,
               remainingKg: newRemainingKg,
               status: newStatus,
@@ -1324,10 +1768,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       )
     );
 
-    // 2. Update Product Stock
+    // 2. Update Product Stock for the dispatched commodity
     setProducts((prev) =>
       prev.map((p) =>
-        p.id === booking.productId
+        p.id === effectiveProductId
           ? { ...p, stockKg: Math.max(0, Number((p.stockKg - kg).toFixed(2))) }
           : p
       )
@@ -1523,16 +1967,48 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(auditLogs));
   }, [auditLogs]);
 
-  const logAuditEvent = (action: string, details: string, severity: 'info' | 'warning' | 'danger' = 'info') => {
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.ROLES, JSON.stringify(roles));
+  }, [roles]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.VISIBILITY, JSON.stringify(visibilitySettings));
+  }, [visibilitySettings]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SECURITY_POLICY, JSON.stringify(securityPolicy));
+  }, [securityPolicy]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem(STORAGE_KEYS.SESSION_USER, JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.SESSION_USER);
+    }
+  }, [currentUser]);
+
+  const logAuditEvent = (
+    action: string,
+    details: string,
+    severity: 'info' | 'warning' | 'danger' = 'info',
+    category: AuditCategory = 'system',
+    ip?: string
+  ) => {
     const newEntry: AuditLogEntry = {
       id: uid('audit'),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       action,
       details,
       severity,
-      user: currentUser?.name,
+      user: currentUser?.name || 'System',
+      category,
+      ip: ip || '127.0.0.1',
     };
-    setAuditLogs((prev) => [newEntry, ...prev.slice(0, 99)]);
+    setAuditLogs((prev) => [newEntry, ...prev.slice(0, 199)]);
   };
 
   const clearAuditLogs = () => {
@@ -1542,81 +2018,1102 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const unlockAdmin = (pin: string): boolean => {
     if (pin.trim() === adminPin.trim()) {
-      setCurrentUser({ id: 'master', name: 'Administrator', role: 'admin' });
+      const adminSession: SessionUser = {
+        id: 'master',
+        name: 'Administrator',
+        username: 'superadmin',
+        email: 'admin@sarmaya.pk',
+        role: 'super_admin',
+        roles: ['super_admin', 'admin'],
+      };
+      setCurrentUser(adminSession);
       setIsAdminUnlocked(true);
-      logAuditEvent('Session Unlocked', 'Master PIN verified (Administrator).', 'info');
+      logAuditEvent('Session Unlocked', 'Master PIN verified (Administrator).', 'info', 'auth');
       return true;
     }
-    logAuditEvent('Invalid PIN Attempt', `Unsuccessful master PIN entry attempt.`, 'warning');
+    logAuditEvent('Invalid PIN Attempt', 'Unsuccessful master PIN entry attempt.', 'warning', 'auth');
     return false;
   };
 
-  const unlockAsUser = (userId: string, pin: string): boolean => {
-    const user = users.find((u) => u.id === userId && u.active);
-    if (user && pin.trim() === user.pin.trim()) {
-      setCurrentUser({ id: user.id, name: user.name, role: user.role });
-      setIsAdminUnlocked(true);
-      setAuditLogs((prev) => [
-        {
-          id: uid('audit'),
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          action: 'Session Unlocked',
-          details: `${user.name} signed in as ${user.role}.`,
-          severity: 'info',
-          user: user.name,
-        },
-        ...prev.slice(0, 99),
-      ]);
-      return true;
+  const unlockAsUser = (
+    userId: string,
+    pin: string
+  ): { success: boolean; error?: string; remainingMinutes?: number; attemptsLeft?: number; isLocked?: boolean } => {
+    const user = users.find((u) => u.id === userId);
+    if (!user) {
+      logAuditEvent('Login Failed', 'Attempted PIN entry on non-existent user account.', 'warning', 'auth');
+      return { success: false, error: 'User account not found.' };
     }
-    logAuditEvent('Invalid PIN Attempt', `Unsuccessful PIN entry for user ${user?.name || userId}.`, 'warning');
-    return false;
+
+    if (!user.active || user.status === 'inactive' || user.status === 'suspended') {
+      logAuditEvent('Login Blocked', `Suspended or inactive user ${user.name} attempted login.`, 'warning', 'auth');
+      return { success: false, error: 'User account is inactive. Please contact Administrator.' };
+    }
+
+    // Check lockout
+    if (user.status === 'locked' && user.lockedUntil) {
+      const lockExpiry = new Date(user.lockedUntil).getTime();
+      const now = Date.now();
+      if (now < lockExpiry) {
+        const remainingMinutes = Math.ceil((lockExpiry - now) / 60000);
+        logAuditEvent('Locked Account Attempt', `User ${user.name} attempted PIN sign-in while locked out. ${remainingMinutes}m remaining.`, 'warning', 'auth');
+        return {
+          success: false,
+          error: `Account is temporarily locked due to repeated failed attempts. Please try again in ${remainingMinutes} minute(s).`,
+          isLocked: true,
+          remainingMinutes,
+        };
+      } else {
+        // Lockout expired
+        user.lockedUntil = undefined;
+        user.failedAttempts = 0;
+        user.status = 'active';
+      }
+    }
+
+    const cleanPin = pin.trim();
+    const isMatch = verifyPin(cleanPin, user.pinHash || user.pin);
+
+    if (!isMatch) {
+      const newFailedAttempts = (user.failedAttempts || 0) + 1;
+      const maxAttempts = securityPolicy.maxFailedAttempts || 5;
+      const attemptsLeft = Math.max(0, maxAttempts - newFailedAttempts);
+      const lockoutMinutes = securityPolicy.lockoutDurationMinutes || 15;
+      const isNowLocked = newFailedAttempts >= maxAttempts;
+
+      setUsers((prev) =>
+        prev.map((u) => {
+          if (u.id !== userId) return u;
+          if (isNowLocked) {
+            return {
+              ...u,
+              failedAttempts: newFailedAttempts,
+              status: 'locked',
+              lockedUntil: new Date(Date.now() + lockoutMinutes * 60000).toISOString(),
+            };
+          }
+          return { ...u, failedAttempts: newFailedAttempts };
+        })
+      );
+
+      if (isNowLocked) {
+        logAuditEvent(
+          'Account Locked Out',
+          `User ${user.name} exceeded ${maxAttempts} failed PIN attempts and is locked out for ${lockoutMinutes} minutes.`,
+          'danger',
+          'auth'
+        );
+        return {
+          success: false,
+          error: `Too many failed attempts. Account has been locked for ${lockoutMinutes} minutes.`,
+          isLocked: true,
+          remainingMinutes: lockoutMinutes,
+        };
+      }
+
+      logAuditEvent(
+        'Invalid PIN Attempt',
+        `Unsuccessful PIN attempt for user ${user.name}. ${attemptsLeft} attempt(s) remaining.`,
+        'warning',
+        'auth'
+      );
+      return {
+        success: false,
+        error: `Incorrect PIN. ${attemptsLeft} attempt(s) remaining before account lockout.`,
+        attemptsLeft,
+      };
+    }
+
+    // Success! Update user hash if needed, clear lockouts
+    const pinH = user.pinHash || hashPin(cleanPin);
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === userId
+          ? {
+              ...u,
+              pinHash: pinH,
+              failedAttempts: 0,
+              lockedUntil: undefined,
+              status: 'active',
+              lastLogin: new Date().toISOString(),
+            }
+          : u
+      )
+    );
+
+    const userRoles = user.roles && user.roles.length > 0 ? user.roles : [user.role];
+    const sessionUser: SessionUser = {
+      id: user.id,
+      name: user.name,
+      username: user.username || user.name.toLowerCase().replace(/\s+/g, '_'),
+      email: user.email,
+      role: user.role,
+      roles: userRoles,
+    };
+
+    const simulatedToken = `jwt_${user.id}_${Date.now()}`;
+    localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, simulatedToken);
+    setCurrentUser(sessionUser);
+    setIsAdminUnlocked(true);
+    logAuditEvent('User Login', `${user.name} signed in successfully via PIN (${user.role}).`, 'info', 'auth');
+
+    // Notify backend if online
+    fetch('/api/auth/pin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, pin: cleanPin }),
+    }).catch(() => {});
+
+    return { success: true };
   };
 
   const can = (permission: Permission): boolean => {
     if (!currentUser) return false;
-    return ROLE_PERMISSIONS[currentUser.role].includes(permission);
+    return hasPermission(currentUser, permission, roles, securityPolicy.enableRoleHierarchy);
+  };
+
+  const isScreenVisible = (screen: ActiveScreen): boolean => {
+    if (!currentUser) return true;
+    const userRoles = currentUser.roles && currentUser.roles.length > 0 ? currentUser.roles : [currentUser.role];
+    return isScreenVisibleForRoles(userRoles, screen, visibilitySettings);
+  };
+
+  const isFieldVisible = (field: SensitiveFieldKey): boolean => {
+    if (!currentUser) return true;
+    const userRoles = currentUser.roles && currentUser.roles.length > 0 ? currentUser.roles : [currentUser.role];
+    return isFieldVisibleForRoles(userRoles, field, visibilitySettings);
   };
 
   const lockAdmin = () => {
-    logAuditEvent('Session Locked', `${currentUser?.name || 'Session'} locked the terminal.`, 'info');
+    logAuditEvent('Session Locked', `${currentUser?.name || 'Session'} locked the terminal.`, 'info', 'auth');
     setIsAdminUnlocked(false);
     setCurrentUser(null);
+    localStorage.removeItem(STORAGE_KEYS.SESSION_USER);
+    localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
   };
 
   // ---------------------------------------------------------------------------
-  // Users & roles
+  // Credential-Based Authentication & 2FA
+  // ---------------------------------------------------------------------------
+  const loginWithCredentials = async (
+    identifier: string,
+    pass: string,
+    otpCode?: string
+  ): Promise<{ success: boolean; require2FA?: boolean; tempToken?: string; error?: string; remainingMinutes?: number; attemptsLeft?: number }> => {
+    const trimmedId = identifier.trim();
+    if (!trimmedId || !pass) {
+      return { success: false, error: 'Username/Email and Password are required.' };
+    }
+
+    // Attempt backend API first
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: trimmedId, password: pass, otpCode }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.require2FA) {
+          return { success: false, require2FA: true, tempToken: data.tempToken };
+        }
+        if (data.token && data.user) {
+          localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, data.token);
+          const sessionUser: SessionUser = {
+            id: data.user.id,
+            name: data.user.name,
+            username: data.user.username,
+            email: data.user.email,
+            role: data.user.role,
+            roles: data.user.roles || [data.user.role],
+          };
+          setCurrentUser(sessionUser);
+          setIsAdminUnlocked(true);
+          logAuditEvent('User Login', `${sessionUser.name} signed in via password.`, 'info', 'auth');
+          return { success: true };
+        }
+      } else if (res.status === 401 || res.status === 403) {
+        logAuditEvent('Login Failed', `Failed login attempt for ${trimmedId}: ${data.error}`, 'warning', 'auth');
+        return {
+          success: false,
+          error: data.error,
+          remainingMinutes: data.remainingMinutes,
+          attemptsLeft: data.attemptsLeft,
+        };
+      }
+    } catch {
+      // Backend not running in this environment, seamlessly perform resilient client-side auth
+    }
+
+    // Client-side authentication fallback
+    const userIndex = users.findIndex(
+      (u) =>
+        u.username?.toLowerCase() === trimmedId.toLowerCase() ||
+        u.email?.toLowerCase() === trimmedId.toLowerCase() ||
+        u.name?.toLowerCase() === trimmedId.toLowerCase()
+    );
+
+    if (userIndex === -1) {
+      logAuditEvent('Login Failed', `Unknown user attempted login: ${trimmedId}`, 'warning', 'auth');
+      return { success: false, error: 'Invalid username/email or password.' };
+    }
+
+    const user = users[userIndex];
+
+    // Check account status and lockouts
+    if (user.status === 'locked' && user.lockedUntil) {
+      const lockExpiry = new Date(user.lockedUntil).getTime();
+      const now = Date.now();
+      if (now < lockExpiry) {
+        const remainingMinutes = Math.ceil((lockExpiry - now) / 60000);
+        logAuditEvent('Login Blocked', `Account locked for ${user.username || user.name}`, 'warning', 'auth');
+        return {
+          success: false,
+          error: `Account is temporarily locked due to repeated failed attempts. Please try again in ${remainingMinutes} minute(s).`,
+          remainingMinutes,
+        };
+      } else {
+        // Unlock expired lockout
+        user.status = 'active';
+        user.failedAttempts = 0;
+        user.lockedUntil = undefined;
+      }
+    }
+
+    // Verify Password
+    let passwordMatches = false;
+    if (user.passwordHash) {
+      passwordMatches = verifyPassword(pass, user.passwordHash);
+    } else if (user.pin) {
+      // Backward compatibility if only PIN was set
+      passwordMatches = pass.trim() === user.pin.trim();
+    }
+
+    if (!passwordMatches) {
+      const updatedAttempts = (user.failedAttempts || 0) + 1;
+      const maxAllowed = securityPolicy.maxFailedAttempts || 5;
+      const updatedUsers = [...users];
+
+      if (updatedAttempts >= maxAllowed) {
+        const lockDuration = securityPolicy.lockoutDurationMinutes || 15;
+        const lockUntil = new Date(Date.now() + lockDuration * 60000).toISOString();
+        updatedUsers[userIndex] = {
+          ...user,
+          failedAttempts: updatedAttempts,
+          status: 'locked',
+          lockedUntil: lockUntil,
+        };
+        setUsers(updatedUsers);
+        logAuditEvent('Account Locked', `User ${user.username || user.name} locked out after ${updatedAttempts} failed attempts.`, 'danger', 'auth');
+        return {
+          success: false,
+          error: `Too many failed attempts. Account has been locked for ${lockDuration} minutes.`,
+          remainingMinutes: lockDuration,
+        };
+      } else {
+        updatedUsers[userIndex] = { ...user, failedAttempts: updatedAttempts };
+        setUsers(updatedUsers);
+        const attemptsLeft = maxAllowed - updatedAttempts;
+        logAuditEvent('Login Failed', `Incorrect password for ${user.username || user.name}. Attempts left: ${attemptsLeft}`, 'warning', 'auth');
+        return {
+          success: false,
+          error: `Invalid credentials. ${attemptsLeft} attempt(s) remaining before account lockout.`,
+          attemptsLeft,
+        };
+      }
+    }
+
+    // 2FA check
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      if (!otpCode) {
+        const tempToken = `temp_2fa_${user.id}_${Date.now()}`;
+        return { success: false, require2FA: true, tempToken };
+      }
+      const otpValid = verifyTOTP(user.twoFactorSecret, otpCode);
+      if (!otpValid) {
+        logAuditEvent('2FA Failed', `Invalid OTP submitted for ${user.username || user.name}`, 'warning', 'auth');
+        return { success: false, error: 'Invalid 2FA Authenticator code.' };
+      }
+    }
+
+    // Success: reset failed attempts
+    const updatedUsers = [...users];
+    updatedUsers[userIndex] = {
+      ...user,
+      failedAttempts: 0,
+      lockedUntil: undefined,
+      lastLogin: new Date().toISOString(),
+    };
+    setUsers(updatedUsers);
+
+    const userRoles = user.roles && user.roles.length > 0 ? user.roles : [user.role];
+    const sessionUser: SessionUser = {
+      id: user.id,
+      name: user.name,
+      username: user.username || user.name.toLowerCase().replace(/\s+/g, '_'),
+      email: user.email,
+      role: user.role,
+      roles: userRoles,
+    };
+
+    const simulatedToken = `jwt_${user.id}_${Date.now()}`;
+    localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, simulatedToken);
+    setCurrentUser(sessionUser);
+    setIsAdminUnlocked(true);
+    logAuditEvent('User Login', `${sessionUser.name} signed in successfully.`, 'info', 'auth');
+    return { success: true };
+  };
+
+  const verify2FACode = async (tempToken: string, otpCode: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch('/api/auth/verify-2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tempToken, otpCode }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, data.token);
+        const sessionUser: SessionUser = {
+          id: data.user.id,
+          name: data.user.name,
+          username: data.user.username,
+          email: data.user.email,
+          role: data.user.role,
+          roles: data.user.roles || [data.user.role],
+        };
+        setCurrentUser(sessionUser);
+        setIsAdminUnlocked(true);
+        logAuditEvent('2FA Verified', `${sessionUser.name} completed 2FA challenge.`, 'info', 'auth');
+        return { success: true };
+      }
+      return { success: false, error: data.error || 'Invalid 2FA code.' };
+    } catch {
+      // Offline fallback
+      const parts = tempToken.split('_');
+      const userId = parts[2];
+      const user = users.find((u) => u.id === userId);
+      if (!user || !user.twoFactorSecret) {
+        return { success: false, error: 'User or 2FA configuration not found.' };
+      }
+      if (verifyTOTP(user.twoFactorSecret, otpCode)) {
+        const userRoles = user.roles && user.roles.length > 0 ? user.roles : [user.role];
+        const sessionUser: SessionUser = {
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          roles: userRoles,
+        };
+        setCurrentUser(sessionUser);
+        setIsAdminUnlocked(true);
+        logAuditEvent('2FA Verified', `${sessionUser.name} completed 2FA challenge.`, 'info', 'auth');
+        return { success: true };
+      }
+      return { success: false, error: 'Invalid 2FA Authenticator code.' };
+    }
+  };
+
+  const requestPasswordReset = async (
+    emailOrUsername: string
+  ): Promise<{ success: boolean; message: string; previewToken?: string; previewUrl?: string }> => {
+    const clean = emailOrUsername.trim().toLowerCase();
+    if (!clean) return { success: false, message: 'Please enter your username or registered email.' };
+
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: clean }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        logAuditEvent('Password Reset Requested', `Reset requested for ${clean}`, 'info', 'auth');
+        return {
+          success: true,
+          message: data.message,
+          previewToken: data.previewToken,
+          previewUrl: data.previewUrl,
+        };
+      }
+    } catch {
+      // Client-side fallback
+    }
+
+    const user = users.find(
+      (u) => u.email?.toLowerCase() === clean || u.username?.toLowerCase() === clean
+    );
+    if (!user) {
+      // Do not reveal non-existence for security
+      return {
+        success: true,
+        message: 'If an account matches that email or username, password reset instructions have been generated.',
+      };
+    }
+
+    const resetToken = generateResetToken();
+    const tokenExpiry = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    setUsers((prev) =>
+      prev.map((u) => (u.id === user.id ? { ...u, resetPasswordToken: resetToken, resetPasswordExpires: tokenExpiry } : u))
+    );
+
+    logAuditEvent('Password Reset Requested', `Reset generated for ${user.username || user.name}`, 'info', 'auth');
+    return {
+      success: true,
+      message: 'Password reset link and security verification token generated successfully.',
+      previewToken: resetToken,
+      previewUrl: `${window.location.origin}/#reset-token=${resetToken}`,
+    };
+  };
+
+  const resetPasswordWithToken = async (
+    token: string,
+    newPass: string
+  ): Promise<{ success: boolean; message: string }> => {
+    if (!token.trim()) return { success: false, message: 'Reset token is required.' };
+    if (!newPass || newPass.length < 6) return { success: false, message: 'New password must be at least 6 characters.' };
+
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword: newPass }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        logAuditEvent('Password Changed', 'Password successfully reset via verification token.', 'warning', 'auth');
+        return { success: true, message: data.message };
+      }
+    } catch {
+      // Client-side fallback
+    }
+
+    const user = users.find(
+      (u) => u.resetPasswordToken === token.trim() && u.resetPasswordExpires && new Date(u.resetPasswordExpires).getTime() > Date.now()
+    );
+    if (!user) {
+      return { success: false, message: 'Invalid or expired password reset token.' };
+    }
+
+    const newHash = hashPassword(newPass);
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === user.id
+          ? {
+              ...u,
+              passwordHash: newHash,
+              resetPasswordToken: undefined,
+              resetPasswordExpires: undefined,
+              failedAttempts: 0,
+              status: 'active',
+            }
+          : u
+      )
+    );
+
+    logAuditEvent('Password Reset', `Password reset completed for ${user.username || user.name}`, 'warning', 'auth');
+    return { success: true, message: 'Password has been successfully reset. You can now log in with your new password.' };
+  };
+
+  // ---------------------------------------------------------------------------
+  // Role & Permissions Management
+  // ---------------------------------------------------------------------------
+  const createRole = (roleData: Omit<RoleDefinition, 'isSystem'>): { success: boolean; message: string } => {
+    if (!can('roles:manage')) {
+      return { success: false, message: 'You do not have permission to create roles.' };
+    }
+
+    const cleanName = roleData.name.trim();
+    const cleanId = roleData.id.trim().toLowerCase().replace(/\s+/g, '_');
+    if (!cleanName || !cleanId) return { success: false, message: 'Role ID and Name are required.' };
+    if (roles.some((r) => r.id === cleanId)) return { success: false, message: 'A role with this ID already exists.' };
+
+    const newRole: RoleDefinition = {
+      ...roleData,
+      id: cleanId,
+      name: cleanName,
+      isSystem: false,
+    };
+    setRoles((prev) => [...prev, newRole]);
+    setVisibilitySettings((prev) => ({
+      ...prev,
+      [cleanId]: prev[cleanId] || { hiddenScreens: [], hiddenFields: [] },
+    }));
+    logAuditEvent('Role Created', `Created custom role "${cleanName}" with ${newRole.permissions.length} permissions.`, 'warning', 'roles');
+
+    // Notify backend if available
+    fetch('/api/roles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newRole),
+    }).catch(() => {});
+
+    return { success: true, message: `Role "${cleanName}" created successfully.` };
+  };
+
+  const updateRole = (id: string, roleData: Partial<RoleDefinition>): { success: boolean; message: string } => {
+    if (!can('roles:manage')) {
+      return { success: false, message: 'You do not have permission to update roles.' };
+    }
+
+    const existing = roles.find((r) => r.id === id);
+    if (!existing) return { success: false, message: 'Role not found.' };
+
+    if (id === 'super_admin' && roleData.permissions) {
+      // Ensure super_admin always keeps core permissions
+      if (!roleData.permissions.includes('system:admin_screen') || !roleData.permissions.includes('roles:manage')) {
+        return { success: false, message: 'Super Admin must retain root administrative permissions.' };
+      }
+    }
+
+    const updatedRole = { ...existing, ...roleData };
+    setRoles((prev) => prev.map((r) => (r.id === id ? updatedRole : r)));
+    logAuditEvent('Role Updated', `Updated role "${existing.name}" settings and permissions.`, 'warning', 'roles');
+
+    fetch(`/api/roles/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedRole),
+    }).catch(() => {});
+
+    return { success: true, message: `Role "${existing.name}" updated successfully.` };
+  };
+
+  const deleteRole = (id: string): { success: boolean; message: string } => {
+    if (!can('roles:manage')) {
+      return { success: false, message: 'You do not have permission to delete roles.' };
+    }
+
+    const existing = roles.find((r) => r.id === id);
+    if (!existing) return { success: false, message: 'Role not found.' };
+    if (existing.isSystem) return { success: false, message: 'System default roles cannot be deleted.' };
+
+    // Check if any active user uses this role
+    const usersWithRole = users.filter((u) => u.role === id || (u.roles && u.roles.includes(id)));
+    if (usersWithRole.length > 0) {
+      return { success: false, message: `Cannot delete role: ${usersWithRole.length} user(s) currently assigned to it.` };
+    }
+
+    setRoles((prev) => prev.filter((r) => r.id !== id));
+    logAuditEvent('Role Deleted', `Removed custom role "${existing.name}".`, 'danger', 'roles');
+
+    fetch(`/api/roles/${id}`, { method: 'DELETE' }).catch(() => {});
+
+    return { success: true, message: `Role "${existing.name}" deleted.` };
+  };
+
+  const updatePermissionsMatrix = (matrix: Record<string, Permission[]>): { success: boolean; message: string } => {
+    if (!can('roles:matrix_edit')) {
+      return { success: false, message: 'You do not have permission to edit the permissions matrix.' };
+    }
+
+    setRoles((prev) =>
+      prev.map((role) => {
+        if (matrix[role.id]) {
+          return { ...role, permissions: matrix[role.id] };
+        }
+        return role;
+      })
+    );
+    logAuditEvent('Permissions Matrix Updated', 'Super-admin updated the global RBAC permissions matrix.', 'warning', 'roles');
+
+    fetch('/api/roles/matrix', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(matrix),
+    }).catch(() => {});
+
+    return { success: true, message: 'Permissions matrix saved successfully.' };
+  };
+
+  const updateVisibilitySettings = (settingsMap: Record<string, RoleVisibilitySettings>) => {
+    setVisibilitySettings(settingsMap);
+    logAuditEvent('Visibility Rules Updated', 'Role-based screen and sensitive field visibility settings updated.', 'warning', 'visibility');
+
+    fetch('/api/roles/visibility', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settingsMap),
+    }).catch(() => {});
+  };
+
+  const updateSecurityPolicy = (policy: Partial<SecurityPolicySettings>) => {
+    setSecurityPolicy((prev) => ({ ...prev, ...policy }));
+    logAuditEvent('Security Policy Changed', 'Updated system password and lockout security parameters.', 'warning', 'system');
+
+    fetch('/api/security/policy', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...securityPolicy, ...policy }),
+    }).catch(() => {});
+  };
+
+  // ---------------------------------------------------------------------------
+  // Users Management
   // ---------------------------------------------------------------------------
   const validPin = (pin: string) => /^\d{4,6}$/.test(pin.trim());
 
-  const addUser = ({ name, role, pin }: { name: string; role: UserRole; pin: string }) => {
-    const clean = name.trim();
-    if (!clean) return { success: false, message: 'Name is required.' };
-    if (!validPin(pin)) return { success: false, message: 'PIN must be 4 to 6 digits.' };
-    if (users.some((u) => u.name.toLowerCase() === clean.toLowerCase())) return { success: false, message: 'A user with that name already exists.' };
-    if (users.some((u) => u.pin === pin.trim() && u.active)) return { success: false, message: 'Another active user already uses that PIN. Pick a different one.' };
-    const user: AppUser = { id: uid('user'), name: clean, role, pin: pin.trim(), active: true, createdAt: todayISO() };
-    setUsers((prev) => [user, ...prev]);
-    logAuditEvent('User Added', `${clean} created with role ${role}.`, 'warning');
-    return { success: true, message: `${clean} added.` };
+  const addUser = (data: {
+    name: string;
+    role: UserRole;
+    roles?: string[];
+    pin?: string;
+    email?: string;
+    username?: string;
+    password?: string;
+    twoFactorEnabled?: boolean;
+  }): { success: boolean; message: string } => {
+    const cleanName = data.name.trim();
+    if (!cleanName) return { success: false, message: 'User display name is required.' };
+
+    const cleanPin = (data.pin || '1234').trim();
+    if (!validPin(cleanPin)) {
+      return { success: false, message: 'PIN must be 4 to 6 numeric digits.' };
+    }
+
+    const cleanUsername = (data.username || cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_')).trim();
+    if (users.some((u) => u.username?.toLowerCase() === cleanUsername.toLowerCase())) {
+      return { success: false, message: 'Username is already taken.' };
+    }
+
+    if (data.email && users.some((u) => u.email?.toLowerCase() === data.email!.trim().toLowerCase())) {
+      return { success: false, message: 'An account with this email address already exists.' };
+    }
+
+    const assignedRoles = data.roles && data.roles.length > 0 ? data.roles : [data.role];
+    const pinH = hashPin(cleanPin);
+
+    const newUser: AppUser = {
+      id: uid('user'),
+      name: cleanName,
+      username: cleanUsername,
+      email: data.email?.trim() || `${cleanUsername}@sarmaya.pk`,
+      role: data.role,
+      roles: assignedRoles,
+      pin: cleanPin,
+      pinHash: pinH,
+      passwordHash: hashPassword(data.password || 'Sarmaya@2026'),
+      twoFactorEnabled: !!data.twoFactorEnabled,
+      status: 'active',
+      active: true,
+      failedAttempts: 0,
+      createdAt: todayISO(),
+    };
+
+    setUsers((prev) => [newUser, ...prev]);
+    logAuditEvent('User Created', `Administrator created user "${cleanName}" with role [${assignedRoles.join(', ')}] and secure PIN.`, 'warning', 'users');
+
+    fetch('/api/users/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newUser),
+    }).catch(() => {});
+
+    return { success: true, message: `User "${cleanName}" successfully created.` };
   };
 
-  const updateUser = (id: string, data: Partial<Omit<AppUser, 'id' | 'createdAt'>>) => {
+  const updateUser = (
+    id: string,
+    data: Partial<Omit<AppUser, 'id' | 'createdAt'>> & { newPassword?: string }
+  ): { success: boolean; message: string } => {
     const existing = users.find((u) => u.id === id);
     if (!existing) return { success: false, message: 'User not found.' };
-    if (data.pin != null && !validPin(data.pin)) return { success: false, message: 'PIN must be 4 to 6 digits.' };
-    if (data.pin != null && users.some((u) => u.id !== id && u.active && u.pin === data.pin!.trim())) return { success: false, message: 'Another active user already uses that PIN.' };
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...data, pin: data.pin != null ? data.pin.trim() : u.pin } : u)));
-    logAuditEvent('User Updated', `${existing.name}: ${Object.keys(data).filter((k) => k !== 'pin').join(', ') || 'PIN'} changed.`, 'warning');
-    return { success: true, message: 'User updated.' };
+
+    const updatePayload: Partial<AppUser> = { ...data };
+
+    if (data.pin != null && data.pin.trim() !== '') {
+      if (!validPin(data.pin)) {
+        return { success: false, message: 'PIN must be 4 to 6 numeric digits.' };
+      }
+      const cleanP = data.pin.trim();
+      updatePayload.pin = cleanP;
+      updatePayload.pinHash = hashPin(cleanP);
+      updatePayload.failedAttempts = 0;
+      updatePayload.lockedUntil = undefined;
+      logAuditEvent('PIN Reset', `Administrator reset/updated the PIN for user "${existing.name}".`, 'warning', 'auth');
+    }
+
+    if (data.newPassword) {
+      updatePayload.passwordHash = hashPassword(data.newPassword);
+    }
+
+    if (data.roles && data.roles.length > 0) {
+      updatePayload.roles = data.roles;
+      updatePayload.role = (data.roles[0] as UserRole) || existing.role;
+      logAuditEvent('Role Assigned', `Updated roles for "${existing.name}" to [${data.roles.join(', ')}].`, 'warning', 'roles');
+    }
+
+    setUsers((prev) =>
+      prev.map((u) => (u.id === id ? { ...u, ...updatePayload } : u))
+    );
+
+    logAuditEvent('User Updated', `${existing.name}: profile/settings modified by administrator.`, 'info', 'users');
+
+    fetch(`/api/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatePayload),
+    }).catch(() => {});
+
+    return { success: true, message: 'User updated successfully.' };
   };
 
   const deleteUser = (id: string) => {
     const existing = users.find((u) => u.id === id);
     if (!existing) return;
+    if (existing.username === 'superadmin' || existing.id === 'user-super-admin') {
+      logAuditEvent('Action Denied', 'Attempted deletion of the primary Super Admin was blocked.', 'danger', 'system');
+      return;
+    }
     setUsers((prev) => prev.filter((u) => u.id !== id));
     removeRemote('users', [id]);
-    logAuditEvent('User Removed', `${existing.name} (${existing.role}) removed.`, 'danger');
+    logAuditEvent('User Deleted', `${existing.name} (${existing.role}) removed from system.`, 'danger', 'users');
+
+    fetch(`/api/users/${id}`, { method: 'DELETE' }).catch(() => {});
+  };
+
+  const unlockUserAccount = (id: string) => {
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === id
+          ? { ...u, status: 'active', failedAttempts: 0, lockedUntil: undefined }
+          : u
+      )
+    );
+    logAuditEvent('Account Unlocked', `Administrator lifted lockout on user account ID ${id}.`, 'info', 'auth');
+
+    fetch(`/api/users/${id}/unlock`, { method: 'POST' }).catch(() => {});
+  };
+
+  const forceLogoutUser = (id: string) => {
+    if (currentUser?.id === id) {
+      lockAdmin();
+    }
+    logAuditEvent('Force Logout', `Session terminated for user ID ${id}.`, 'warning', 'auth');
+  };
+
+  const resetUserPin = (userId: string, newPin: string): { success: boolean; message: string } => {
+    const clean = newPin.trim();
+    if (!validPin(clean)) {
+      return { success: false, message: 'PIN must be 4 to 6 numeric digits.' };
+    }
+    const user = users.find((u) => u.id === userId);
+    if (!user) return { success: false, message: 'User not found.' };
+
+    const pinH = hashPin(clean);
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === userId
+          ? {
+              ...u,
+              pin: clean,
+              pinHash: pinH,
+              failedAttempts: 0,
+              lockedUntil: undefined,
+              status: u.status === 'locked' ? 'active' : u.status,
+            }
+          : u
+      )
+    );
+
+    logAuditEvent('PIN Reset', `Administrator reset PIN for user "${user.name}".`, 'warning', 'auth');
+    return { success: true, message: `PIN for "${user.name}" has been successfully reset.` };
+  };
+
+  // ---------------------------------------------------------------------------
+  // Customer-Specific Agreed Rates
+  // ---------------------------------------------------------------------------
+  const getCustomerAgreedRate = (customerId: string, productId: string): number | null => {
+    const rateRecord = customerAgreedRates.find(
+      (r) => r.customerId === customerId && r.productId === productId
+    );
+    return rateRecord ? rateRecord.agreedRatePerKg : null;
+  };
+
+  const setCustomerAgreedRate = (
+    customerId: string,
+    productId: string,
+    agreedRatePerKg: number,
+    notes?: string
+  ): CustomerAgreedRate => {
+    const existingIndex = customerAgreedRates.findIndex(
+      (r) => r.customerId === customerId && r.productId === productId
+    );
+    const cust = customers.find((c) => c.id === customerId);
+    const prod = products.find((p) => p.id === productId);
+
+    let updatedRecord: CustomerAgreedRate;
+    if (existingIndex >= 0) {
+      updatedRecord = {
+        ...customerAgreedRates[existingIndex],
+        agreedRatePerKg: round2(agreedRatePerKg),
+        notes: notes?.trim() || customerAgreedRates[existingIndex].notes,
+        updatedAt: todayISO(),
+      };
+      setCustomerAgreedRates((prev) =>
+        prev.map((r, i) => (i === existingIndex ? updatedRecord : r))
+      );
+    } else {
+      updatedRecord = {
+        id: uid('car'),
+        customerId,
+        productId,
+        agreedRatePerKg: round2(agreedRatePerKg),
+        notes: notes?.trim(),
+        createdAt: todayISO(),
+        updatedAt: todayISO(),
+      };
+      setCustomerAgreedRates((prev) => [updatedRecord, ...prev]);
+    }
+
+    logAuditEvent(
+      'Agreed Rate Updated',
+      `Set agreed rate for ${cust?.name || customerId} on ${prod?.name || productId} to ${formatCurrency(agreedRatePerKg)}/kg.`,
+      'info',
+      'data'
+    );
+    return updatedRecord;
+  };
+
+  const deleteCustomerAgreedRate = (id: string) => {
+    setCustomerAgreedRates((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  // ---------------------------------------------------------------------------
+  // Invoicing & Billing
+  // ---------------------------------------------------------------------------
+  const addInvoice = (data: Omit<Invoice, 'id' | 'createdAt'>): Invoice => {
+    const newInvoice: Invoice = {
+      ...data,
+      id: uid('inv'),
+      createdAt: todayISO(),
+      createdBy: currentUser?.name,
+    };
+    setInvoices((prev) => [newInvoice, ...prev]);
+    logAuditEvent(
+      'Invoice Created',
+      `Invoice ${newInvoice.invoiceNumber} created for ${newInvoice.customerName} (${formatCurrency(newInvoice.totalAmount)}). Status: ${newInvoice.paymentStatus}.`,
+      'info',
+      'billing'
+    );
+    return newInvoice;
+  };
+
+  const updateInvoice = (id: string, data: Partial<Invoice>): { success: boolean; message: string } => {
+    const existing = invoices.find((inv) => inv.id === id);
+    if (!existing) return { success: false, message: 'Invoice not found.' };
+
+    const updated: Invoice = { ...existing, ...data };
+    const subtotal = updated.subtotal || 0;
+    const discount = updated.discount || 0;
+    const taxable = Math.max(0, subtotal - discount);
+    const tax = round2((taxable * (updated.taxRatePct || 0)) / 100);
+    const freight = updated.freightCharges || 0;
+    const handling = updated.handlingCharges || 0;
+    const total = round2(taxable + tax + freight + handling);
+    const balance = Math.max(0, round2(total - updated.paidAmount));
+    updated.taxAmount = tax;
+    updated.totalAmount = total;
+    updated.balanceDue = balance;
+    if (updated.paidAmount >= total && total > 0) {
+      updated.paymentStatus = 'paid';
+      updated.status = 'paid';
+    } else if (updated.paidAmount > 0) {
+      updated.paymentStatus = 'partial';
+      updated.status = 'partial';
+    } else {
+      updated.paymentStatus = 'unpaid';
+      if (updated.status === 'paid' || updated.status === 'partial') updated.status = 'issued';
+    }
+
+    setInvoices((prev) => prev.map((inv) => (inv.id === id ? updated : inv)));
+    logAuditEvent('Invoice Updated', `Invoice ${existing.invoiceNumber} updated. Total: ${formatCurrency(total)}.`, 'info', 'billing');
+    return { success: true, message: 'Invoice updated successfully.' };
+  };
+
+  const deleteInvoice = (id: string) => {
+    const inv = invoices.find((i) => i.id === id);
+    if (!inv) return;
+    setInvoices((prev) => prev.filter((i) => i.id !== id));
+    logAuditEvent('Invoice Deleted', `Invoice ${inv.invoiceNumber} removed from system.`, 'danger', 'billing');
+  };
+
+  const recordInvoicePayment = (
+    invoiceId: string,
+    amount: number,
+    paymentMethod: 'bank_transfer' | 'cash' | 'cheque' | 'online' = 'bank_transfer',
+    notes?: string
+  ): { success: boolean; message: string } => {
+    const inv = invoices.find((i) => i.id === invoiceId);
+    if (!inv) return { success: false, message: 'Invoice not found.' };
+
+    const payAmt = round2(Math.max(0, amount));
+    if (payAmt <= 0) return { success: false, message: 'Payment amount must be greater than zero.' };
+
+    const newPaid = round2(inv.paidAmount + payAmt);
+    const newBalance = Math.max(0, round2(inv.totalAmount - newPaid));
+    const newPaymentStatus: InvoicePaymentStatus = newBalance === 0 ? 'paid' : 'partial';
+    const newStatus: InvoiceStatus = newBalance === 0 ? 'paid' : 'partial';
+
+    const paymentRecord: InvoicePaymentRecord = {
+      id: uid('pay'),
+      date: todayISO(),
+      amount: payAmt,
+      method: paymentMethod,
+      notes,
+      recordedBy: currentUser?.name,
+    };
+
+    setInvoices((prev) =>
+      prev.map((i) =>
+        i.id === invoiceId
+          ? {
+              ...i,
+              paidAmount: newPaid,
+              balanceDue: newBalance,
+              paymentStatus: newPaymentStatus,
+              status: newStatus,
+              payments: [...(i.payments || []), paymentRecord],
+              updatedAt: todayISO(),
+            }
+          : i
+      )
+    );
+
+    const cust = customers.find((c) => c.id === inv.customerId);
+    if (cust) {
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === inv.customerId
+            ? { ...c, totalDue: Math.max(0, round2(c.totalDue - payAmt)) }
+            : c
+        )
+      );
+
+      const newLedgerEntry: LedgerEntry = {
+        id: uid('led'),
+        entityType: 'customer',
+        entityId: inv.customerId,
+        type: 'payment_received',
+        referenceId: inv.invoiceNumber,
+        date: todayISO(),
+        description: `Payment against Invoice ${inv.invoiceNumber}${notes ? ` (${notes})` : ''}`,
+        debit: 0,
+        credit: payAmt,
+        balanceAfter: Math.max(0, round2((cust.totalDue || 0) - payAmt)),
+      };
+      setLedger((prev) => [newLedgerEntry, ...prev]);
+    }
+
+    logAuditEvent(
+      'Invoice Payment',
+      `Recorded ${formatCurrency(payAmt)} payment against ${inv.invoiceNumber}. New balance: ${formatCurrency(newBalance)}.`,
+      'info',
+      'billing'
+    );
+
+    return { success: true, message: `Payment of ${formatCurrency(payAmt)} recorded successfully.` };
+  };
+
+  const generateInvoiceFromBookings = (
+    bookingIds: string[],
+    dueDate?: string,
+    notes?: string
+  ): Invoice | null => {
+    if (bookingIds.length === 0) return null;
+    const selectedBks = bookings.filter((b) => bookingIds.includes(b.id));
+    if (selectedBks.length === 0) return null;
+
+    const firstBk = selectedBks[0];
+    const customer = customers.find((c) => c.id === firstBk.customerId);
+    if (!customer) return null;
+
+    const invNum = `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const items: InvoiceItem[] = selectedBks.flatMap((bk) => {
+      if (bk.items && bk.items.length > 0) {
+        return bk.items.map((it) => {
+          const prod = products.find((p) => p.id === it.productId);
+          const amount = round2(it.totalKg * it.pricePerKg);
+          return {
+            id: uid('item'),
+            bookingId: bk.id,
+            productId: it.productId,
+            productName: prod?.name || it.productName || 'Bulk Commodity',
+            description: `Booking ${bk.bookingNumber} - ${it.totalKg.toLocaleString()} kg of ${prod?.name || 'Goods'}${it.notes ? ` (${it.notes})` : ''}`,
+            kg: it.totalKg,
+            ratePerKg: it.pricePerKg,
+            costPricePerKg: it.costPricePerKg,
+            amount,
+          };
+        });
+      }
+      const prod = products.find((p) => p.id === bk.productId);
+      const amount = round2(bk.totalKg * bk.pricePerKg);
+      return [{
+        id: uid('item'),
+        bookingId: bk.id,
+        productId: bk.productId,
+        productName: prod?.name || 'Bulk Commodity',
+        description: `Booking ${bk.bookingNumber} - ${bk.totalKg.toLocaleString()} kg of ${prod?.name || 'Goods'}${bk.notes ? ` (${bk.notes})` : ''}`,
+        kg: bk.totalKg,
+        ratePerKg: bk.pricePerKg,
+        costPricePerKg: bk.costPricePerKg,
+        amount,
+      }];
+    });
+
+    const subtotal = round2(items.reduce((acc, it) => acc + it.amount, 0));
+    const taxRate = settings.taxRatePct || 0;
+    const taxAmount = round2((subtotal * taxRate) / 100);
+    const totalAmount = round2(subtotal + taxAmount);
+
+    const paidFromBookings = round2(
+      selectedBks.reduce((acc, bk) => acc + (bk.paidAmount || 0), 0)
+    );
+    const balanceDue = Math.max(0, round2(totalAmount - paidFromBookings));
+    const paymentStatus: InvoicePaymentStatus =
+      balanceDue === 0 ? 'paid' : paidFromBookings > 0 ? 'partial' : 'unpaid';
+    const status: InvoiceStatus = balanceDue === 0 ? 'paid' : 'issued';
+
+    const invoice: Invoice = {
+      id: uid('inv'),
+      invoiceNumber: invNum,
+      customerId: customer.id,
+      customerName: customer.name,
+      customerCompany: customer.company,
+      customerPhone: customer.phone,
+      customerAddress: customer.city ? `${customer.city}, Pakistan` : undefined,
+      linkedBookingIds: bookingIds,
+      items,
+      subtotal,
+      freightCharges: 0,
+      handlingCharges: 0,
+      taxRatePct: taxRate,
+      taxAmount,
+      discount: 0,
+      totalAmount,
+      paidAmount: paidFromBookings,
+      balanceDue,
+      paymentStatus,
+      status,
+      payments: [],
+      issueDate: todayISO(),
+      dueDate: dueDate || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+      notes: notes?.trim() || `Generated for bookings: ${selectedBks.map((b) => b.bookingNumber).join(', ')}`,
+      createdAt: todayISO(),
+      createdBy: currentUser?.name,
+    };
+
+    setInvoices((prev) => [invoice, ...prev]);
+    logAuditEvent(
+      'Invoice Generated',
+      `Invoice ${invNum} generated from ${selectedBks.length} booking(s) for ${customer.name}. Total: ${formatCurrency(totalAmount)}.`,
+      'info',
+      'billing'
+    );
+    return invoice;
   };
 
   // ---------------------------------------------------------------------------
@@ -2162,6 +3659,34 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         exportSystemBackup,
         importSystemBackup,
         factoryResetAllData,
+        roles,
+        createRole,
+        updateRole,
+        deleteRole,
+        updatePermissionsMatrix,
+        visibilitySettings,
+        updateVisibilitySettings,
+        isScreenVisible,
+        isFieldVisible,
+        securityPolicy,
+        updateSecurityPolicy,
+        loginWithCredentials,
+        verify2FACode,
+        requestPasswordReset,
+        resetPasswordWithToken,
+        unlockUserAccount,
+        forceLogoutUser,
+        resetUserPin,
+        invoices,
+        addInvoice,
+        updateInvoice,
+        deleteInvoice,
+        recordInvoicePayment,
+        generateInvoiceFromBookings,
+        customerAgreedRates,
+        setCustomerAgreedRate,
+        deleteCustomerAgreedRate,
+        getCustomerAgreedRate,
       }}
     >
       {children}

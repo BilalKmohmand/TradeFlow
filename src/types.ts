@@ -29,6 +29,7 @@ export interface Product {
   name: string;
   category: string;
   unitPricePerKg: number;
+  costPricePerKg?: number; // Base procurement cost per kg
   stockKg: number;
   minThresholdKg: number;
   supplierId?: string | null;
@@ -38,15 +39,40 @@ export interface Product {
 export type BookingStatus = 'active' | 'completed' | 'cancelled';
 export type PaymentStatus = 'paid' | 'partial' | 'unpaid';
 
+export interface BookingItem {
+  id: string;
+  productId: string;
+  productName?: string;
+  totalKg: number;
+  pricePerKg: number;
+  dispatchedKg: number;
+  remainingKg: number;
+  totalAmount: number;
+  costPricePerKg?: number;
+  marginPerKg?: number;
+  totalMargin?: number;
+  defaultProductPricePerKg?: number;
+  isCustomRate?: boolean;
+  rateOverrideReason?: string;
+  notes?: string;
+}
+
 export interface Booking {
   id: string;
   bookingNumber: string;
   customerId: string;
+  items?: BookingItem[];
   productId: string;
   totalKg: number;
   dispatchedKg: number;
   remainingKg: number;
-  pricePerKg: number;
+  pricePerKg: number; // actual charged selling rate
+  defaultProductPricePerKg?: number; // product default rate when booked
+  costPricePerKg?: number; // product procurement cost per kg
+  marginPerKg?: number; // selling rate - cost price
+  totalMargin?: number; // margin per kg * total kg
+  isCustomRate?: boolean; // true if differs from default product rate
+  rateOverrideReason?: string;
   totalAmount: number;
   paidAmount: number;
   status: BookingStatus;
@@ -66,6 +92,7 @@ export interface Dispatch {
   id: string;
   dispatchNumber: string;
   bookingId: string;
+  bookingItemId?: string;
   customerId: string;
   productId: string;
   kg: number;
@@ -171,16 +198,90 @@ export interface PriceHistoryEntry {
 export type ReportsTab = 'daily' | 'monthly' | 'flow' | 'pnl' | 'aging' | 'balance' | 'cashbook';
 export type OpsTab = 'fleet' | 'expenses' | 'alerts' | 'tasks';
 
-export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'reports' | 'ops' | 'admin';
+export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'billing' | 'reports' | 'ops' | 'admin';
+
+export interface CustomerAgreedRate {
+  id: string;
+  customerId: string;
+  productId: string;
+  agreedRatePerKg: number;
+  effectiveDate?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type InvoicePaymentStatus = 'paid' | 'partial' | 'unpaid';
+export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'partial' | 'cancelled';
+
+export interface InvoiceItem {
+  id: string;
+  bookingId?: string;
+  dispatchId?: string;
+  productId: string;
+  productName: string;
+  description?: string;
+  kg: number;
+  ratePerKg: number; // actual charged rate
+  costPricePerKg?: number;
+  amount: number; // kg * ratePerKg
+}
+
+export interface InvoicePaymentRecord {
+  id: string;
+  date: string;
+  amount: number;
+  method: 'bank_transfer' | 'cash' | 'cheque' | 'online';
+  referenceNumber?: string;
+  notes?: string;
+  recordedBy?: string;
+}
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  customerId: string;
+  customerName: string;
+  customerCompany?: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  customerNtn?: string;
+  issueDate: string;
+  dueDate: string;
+  status: InvoiceStatus;
+  paymentStatus: InvoicePaymentStatus;
+  items: InvoiceItem[];
+  subtotal: number;
+  freightCharges?: number;
+  handlingCharges?: number;
+  taxRatePct: number;
+  taxAmount: number;
+  discount?: number;
+  totalAmount: number;
+  paidAmount: number;
+  balanceDue: number;
+  payments?: InvoicePaymentRecord[];
+  notes?: string;
+  terms?: string;
+  linkedBookingIds?: string[];
+  createdAt: string;
+  createdBy?: string;
+  updatedAt?: string;
+}
+
+export type AuditCategory = 'auth' | 'roles' | 'users' | 'visibility' | 'data' | 'system' | 'billing';
+export type AuditSeverity = 'info' | 'warning' | 'danger';
 
 export interface AuditLogEntry {
   id: string;
   timestamp: string;
   action: string;
   details: string;
-  severity: 'info' | 'warning' | 'danger';
+  severity: AuditSeverity;
   /** Name of the signed-in user who performed the action. */
   user?: string;
+  category?: AuditCategory;
+  ip?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,18 +343,89 @@ export interface Truck {
   createdAt: string;
 }
 
-export type UserRole = 'admin' | 'manager' | 'operator';
+export type StandardUserRole = 'super_admin' | 'admin' | 'manager' | 'editor' | 'viewer' | 'operator';
+export type UserRole = StandardUserRole | string;
+
+export type UserAccountStatus = 'active' | 'inactive' | 'suspended' | 'locked';
 
 export interface AppUser {
   id: string;
   name: string;
-  role: UserRole;
+  username?: string;
+  email?: string;
+  role: UserRole; // primary role for backwards compatibility
+  roles?: UserRole[]; // supports assigning one or more roles to a user
   pin: string;
+  pinHash?: string; // bcrypt-hashed PIN for secure storage
+  passwordHash?: string; // bcrypt-hashed password
   active: boolean;
+  status?: UserAccountStatus;
+  twoFactorEnabled?: boolean;
+  twoFactorSecret?: string;
+  failedAttempts?: number;
+  lockedUntil?: string | null; // ISO timestamp
+  lastLoginAt?: string | null;
+  lastLoginIp?: string;
+  passwordResetToken?: string | null;
+  passwordResetExpires?: string | null;
+  sessionToken?: string | null;
   createdAt: string;
 }
 
+export type GranularPermission =
+  | 'users:view'
+  | 'users:create'
+  | 'users:edit'
+  | 'users:delete'
+  | 'users:manage_roles'
+  | 'users:force_logout'
+  | 'roles:view'
+  | 'roles:manage'
+  | 'roles:matrix_edit'
+  | 'visibility:manage'
+  | 'customers:view'
+  | 'customers:create'
+  | 'customers:edit'
+  | 'customers:delete'
+  | 'suppliers:view'
+  | 'suppliers:create'
+  | 'suppliers:edit'
+  | 'suppliers:delete'
+  | 'products:view'
+  | 'products:create'
+  | 'products:edit_prices'
+  | 'products:delete'
+  | 'stock:adjust'
+  | 'bookings:view'
+  | 'bookings:create'
+  | 'bookings:edit'
+  | 'bookings:cancel'
+  | 'bookings:delete'
+  | 'billing:view'
+  | 'billing:create'
+  | 'billing:edit'
+  | 'billing:delete'
+  | 'dispatches:view'
+  | 'dispatches:create'
+  | 'dispatches:edit'
+  | 'dispatches:delete'
+  | 'fleet:manage'
+  | 'finance:view_ledger'
+  | 'finance:record_payment'
+  | 'finance:view_pnl'
+  | 'finance:manage_expenses'
+  | 'finance:cashbook'
+  | 'reports:view'
+  | 'reports:export'
+  | 'system:admin_screen'
+  | 'system:audit_view'
+  | 'system:audit_clear'
+  | 'system:backup_restore'
+  | 'system:purge_data'
+  | 'system:company_settings';
+
 export type Permission =
+  | GranularPermission
   | 'delete_records'
   | 'edit_prices'
   | 'override_credit'
@@ -264,16 +436,114 @@ export type Permission =
   | 'purge_data'
   | 'manage_users';
 
-export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  admin: ['delete_records', 'edit_prices', 'override_credit', 'view_finance', 'manage_fleet', 'manage_expenses', 'admin_screen', 'purge_data', 'manage_users'],
-  manager: ['delete_records', 'edit_prices', 'override_credit', 'view_finance', 'manage_fleet', 'manage_expenses', 'admin_screen'],
-  operator: ['manage_fleet', 'manage_expenses'],
+export interface RoleDefinition {
+  id: string; // role identifier key, e.g. 'super_admin', 'admin', 'manager', 'editor', 'viewer'
+  name: string;
+  description: string;
+  hierarchyLevel: number; // 100 = Super Admin, 80 = Admin, 50 = Manager, 30 = Editor, 10 = Viewer
+  isSystem: boolean; // cannot be deleted
+  permissions: Permission[];
+  color?: string;
+  badgeBg?: string;
+}
+
+export type SensitiveFieldKey =
+  | 'profit_margins'
+  | 'cash_balances'
+  | 'purchase_costs'
+  | 'credit_limits'
+  | 'tax_details';
+
+export interface RoleVisibilitySettings {
+  hiddenScreens: ActiveScreen[];
+  hiddenFields: SensitiveFieldKey[];
+}
+
+export interface SecurityPolicySettings {
+  maxFailedAttempts: number; // lockout threshold, default 5
+  lockoutDurationMinutes: number; // lockout duration, default 15
+  require2FAForAdmins: boolean;
+  sessionTimeoutHours: number;
+  enableRoleHierarchy: boolean;
+}
+
+export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
+  super_admin: [
+    'users:view', 'users:create', 'users:edit', 'users:delete', 'users:manage_roles', 'users:force_logout',
+    'roles:view', 'roles:manage', 'roles:matrix_edit', 'visibility:manage',
+    'customers:view', 'customers:create', 'customers:edit', 'customers:delete',
+    'suppliers:view', 'suppliers:create', 'suppliers:edit', 'suppliers:delete',
+    'products:view', 'products:create', 'products:edit_prices', 'products:delete', 'stock:adjust',
+    'bookings:view', 'bookings:create', 'bookings:edit', 'bookings:cancel', 'bookings:delete',
+    'dispatches:view', 'dispatches:create', 'dispatches:edit', 'dispatches:delete', 'fleet:manage',
+    'finance:view_ledger', 'finance:record_payment', 'finance:view_pnl', 'finance:manage_expenses', 'finance:cashbook',
+    'reports:view', 'reports:export',
+    'system:admin_screen', 'system:audit_view', 'system:audit_clear', 'system:backup_restore', 'system:purge_data', 'system:company_settings',
+    'delete_records', 'edit_prices', 'override_credit', 'view_finance', 'manage_fleet', 'manage_expenses', 'admin_screen', 'purge_data', 'manage_users'
+  ],
+  admin: [
+    'users:view', 'users:create', 'users:edit', 'users:delete', 'users:manage_roles', 'users:force_logout',
+    'roles:view', 'roles:manage', 'roles:matrix_edit', 'visibility:manage',
+    'customers:view', 'customers:create', 'customers:edit', 'customers:delete',
+    'suppliers:view', 'suppliers:create', 'suppliers:edit', 'suppliers:delete',
+    'products:view', 'products:create', 'products:edit_prices', 'products:delete', 'stock:adjust',
+    'bookings:view', 'bookings:create', 'bookings:edit', 'bookings:cancel', 'bookings:delete',
+    'dispatches:view', 'dispatches:create', 'dispatches:edit', 'dispatches:delete', 'fleet:manage',
+    'finance:view_ledger', 'finance:record_payment', 'finance:view_pnl', 'finance:manage_expenses', 'finance:cashbook',
+    'reports:view', 'reports:export',
+    'system:admin_screen', 'system:audit_view', 'system:backup_restore', 'system:purge_data', 'system:company_settings',
+    'delete_records', 'edit_prices', 'override_credit', 'view_finance', 'manage_fleet', 'manage_expenses', 'admin_screen', 'purge_data', 'manage_users'
+  ],
+  manager: [
+    'users:view',
+    'customers:view', 'customers:create', 'customers:edit', 'customers:delete',
+    'suppliers:view', 'suppliers:create', 'suppliers:edit', 'suppliers:delete',
+    'products:view', 'products:create', 'products:edit_prices', 'products:delete', 'stock:adjust',
+    'bookings:view', 'bookings:create', 'bookings:edit', 'bookings:cancel',
+    'dispatches:view', 'dispatches:create', 'dispatches:edit', 'fleet:manage',
+    'finance:view_ledger', 'finance:record_payment', 'finance:view_pnl', 'finance:manage_expenses', 'finance:cashbook',
+    'reports:view', 'reports:export',
+    'system:admin_screen', 'system:audit_view',
+    'delete_records', 'edit_prices', 'override_credit', 'view_finance', 'manage_fleet', 'manage_expenses', 'admin_screen'
+  ],
+  editor: [
+    'customers:view', 'customers:create', 'customers:edit',
+    'suppliers:view', 'suppliers:create', 'suppliers:edit',
+    'products:view', 'products:create',
+    'bookings:view', 'bookings:create', 'bookings:edit',
+    'dispatches:view', 'dispatches:create', 'dispatches:edit', 'fleet:manage',
+    'finance:view_ledger', 'finance:record_payment', 'finance:cashbook',
+    'reports:view',
+    'manage_fleet', 'manage_expenses'
+  ],
+  viewer: [
+    'customers:view',
+    'suppliers:view',
+    'products:view',
+    'bookings:view',
+    'dispatches:view',
+    'reports:view'
+  ],
+  operator: [
+    'customers:view', 'customers:create',
+    'suppliers:view',
+    'products:view',
+    'bookings:view', 'bookings:create',
+    'dispatches:view', 'dispatches:create', 'fleet:manage',
+    'finance:record_payment',
+    'manage_fleet', 'manage_expenses'
+  ],
 };
 
 export interface SessionUser {
   id: string;
   name: string;
+  username?: string;
+  email?: string;
   role: UserRole;
+  roles?: UserRole[];
+  permissions?: Permission[];
+  sessionToken?: string;
 }
 
 /** Manual cash movement not tied to a customer, supplier or expense (capital, drawings, loans, bank charges). */
