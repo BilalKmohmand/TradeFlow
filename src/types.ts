@@ -34,6 +34,8 @@ export interface Product {
   minThresholdKg: number;
   supplierId?: string | null;
   description?: string;
+  /** Selling unit shown on bills (bag, piece, kg, ton, litre...). unitPricePerKg is the price per this unit. */
+  unit?: string;
 }
 
 export type BookingStatus = 'active' | 'completed' | 'cancelled';
@@ -134,7 +136,8 @@ export type TransactionType =
   | 'payment_made'
   | 'purchase_received'
   | 'credit_note'
-  | 'debit_note';
+  | 'debit_note'
+  | 'bill_issued';
 
 export interface LedgerEntry {
   id: string;
@@ -198,7 +201,11 @@ export interface PriceHistoryEntry {
 export type ReportsTab = 'daily' | 'monthly' | 'flow' | 'pnl' | 'aging' | 'balance' | 'cashbook' | 'analytics';
 export type OpsTab = 'fleet' | 'expenses' | 'alerts' | 'tasks';
 
-export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'billing' | 'reports' | 'ops' | 'admin';
+export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'billing' | 'reports' | 'ops' | 'admin' | 'bills' | 'daily' | 'money';
+
+/** Payment methods treated as cash in hand; everything else is the bank account. */
+export const CASH_METHODS = ['Cash', 'Cash at Terminal'];
+export const isCashMethod = (method?: string) => !method || CASH_METHODS.some((m) => method.toLowerCase().startsWith(m.toLowerCase()));
 
 export interface CustomerAgreedRate {
   id: string;
@@ -225,6 +232,10 @@ export interface InvoiceItem {
   ratePerKg: number; // actual charged rate
   costPricePerKg?: number;
   amount: number; // kg * ratePerKg
+  /** Simple billing: quantity in the product's unit and the (editable) unit price. */
+  qty?: number;
+  unitPrice?: number;
+  unit?: string;
 }
 
 export interface InvoicePaymentRecord {
@@ -267,6 +278,9 @@ export interface Invoice {
   createdAt: string;
   createdBy?: string;
   updatedAt?: string;
+  /** Simple billing */
+  paymentMethod?: string;
+  billKind?: 'cash' | 'credit';
 }
 
 export type AuditCategory = 'auth' | 'roles' | 'users' | 'visibility' | 'data' | 'system' | 'billing';
@@ -299,9 +313,19 @@ export type ExpenseCategory =
   | 'maintenance'
   | 'tax'
   | 'commission'
+  | 'daily'
+  | 'employee'
+  | 'food'
+  | 'drawings'
+  | 'bank_charges'
   | 'other';
 
 export const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string }[] = [
+  { id: 'daily', label: 'Day-to-day' },
+  { id: 'employee', label: 'Employee expenses' },
+  { id: 'food', label: 'Food & refreshments' },
+  { id: 'drawings', label: 'Owner drawings' },
+  { id: 'bank_charges', label: 'Bank charges' },
   { id: 'transport', label: 'Transport & Freight' },
   { id: 'fuel', label: 'Fuel' },
   { id: 'labour', label: 'Loading / Labour' },
@@ -575,6 +599,10 @@ export interface AppSettings {
   companyTaxId?: string;
   /** Monthly sales target in Rs. shown on the dashboard (0 = off). */
   monthlyTargetRs?: number;
+  /** 'billing' = simple billing screens (default); 'trading' = full commodity/logistics suite. */
+  appMode?: 'billing' | 'trading';
+  /** Opening bank balance counted from cashOpeningDate (cashOpeningBalance is cash in hand). */
+  openingBankBalance?: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -584,11 +612,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   taxRatePct: 0,
   taxLabel: 'Sales Tax',
   companyName: 'Sarmaya',
-  companyTagline: 'Pakistani Bulk Commodity Trading & Logistics',
+  companyTagline: '',
   companyAddress: 'Karachi, Pakistan',
   companyPhone: '',
   companyTaxId: '',
   monthlyTargetRs: 0,
+  appMode: 'billing',
+  openingBankBalance: 0,
 };
 
 export type QuotationStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired' | 'converted';

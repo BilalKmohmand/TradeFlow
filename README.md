@@ -1,8 +1,24 @@
-# Sarmaya — Pakistani Bulk Trading & Logistics System
+# Sarmaya — Simple Billing & Daily Cash for Pakistani Traders
 
-A localised bulk-trading operations dashboard built for Pakistani commodity traders. Manage customers, suppliers, products, bookings, truck dispatches, ledger balances and automated WhatsApp alerts — with all currency in Pakistani Rupees (PKR).
+Out of the box the app runs in **Simple billing mode**: make a bill in one screen, take cash or give credit, and close the day with a daily sheet that shows cash in hand, bank, what customers owe and what you owe. Every product has one fixed price (per can, tin, bag, kg…) that can still be changed on any bill line. Works offline in the browser, and syncs to Supabase when configured.
 
-## Features
+The full bulk-trading suite (bookings, dispatches, per-kg pricing, fleet, P&L, balance sheet) is still there — switch **Admin → System & Backups → App mode** to *Full trading suite*.
+
+## Simple billing mode
+
+| Screen | What it does |
+|---|---|
+| **Home** | Today's sales, cash received, expenses and "money in business"; the four everyday buttons (New Bill, Add expense, Receive payment, Cash ↔ Bank); recent bills; low stock and unpaid-bill reminders. |
+| **Bills** | Every bill with search and Today / 7 days / Month / All / Unpaid filters. Open a bill to take a payment, print it, send it on WhatsApp or delete it. CSV export. |
+| **New Bill** | Customer (or type a new one inline), date, item lines with qty and an editable price, discount, paid-now + method, note. *Save* or *Save & Print*. Stock, the customer account, the ledger and the cash book all update from this one action. |
+| **Daily Sheet** | One day on one page: opening cash/bank, bills, money received, expenses grouped into sheets (Day-to-day, Employee, Food, Owner drawings, Bank charges…), supplier payments, deposits/withdrawals, closing cash/bank. Print it at closing time. |
+| **Money** | Cash in hand, bank, who owes you (with Receive and statement print), who you owe (suppliers + unpaid expenses), net "money in business". Tabs for monthly expense sheets and the cash book. Opening balances are set here or in Admin. |
+| **Items & Prices** | The price list: name, sold-per unit, fixed price, cost price, stock and low-stock level. |
+| **Customers / Suppliers / Admin** | Unchanged from the trading suite: accounts, ledgers, statements, users, roles, backups. |
+
+Printed bills follow the classic layout — INVOICE, number, date, Bill From / Bill To, Description · Qty · Price · Amount, Subtotal, Total in Rs., paid and balance. A full function-by-function guide is in [`docs/GUIDE.md`](docs/GUIDE.md).
+
+## Features (full trading suite)
 
 - **Customer & Supplier CRM** with Pakistani contact defaults (`+92` phones, `.com.pk` emails, local berths).
 - **Commodity / Product inventory** in kilograms with low-stock alerts.
@@ -78,10 +94,10 @@ A localised bulk-trading operations dashboard built for Pakistani commodity trad
 npm test          # run the Vitest suite once
 npm run test:watch
 npm run test:e2e  # real-browser end-to-end flow in the installed Google Chrome (Playwright)
-npm run check     # type-check + unit tests + e2e (what CI should run)
+npm run check     # build + type-check + unit tests + e2e (what CI should run)
 ```
 
-The end-to-end suite (`e2e/app.spec.ts`) unlocks the app, factory-resets, creates a user, supplier, product, customer and vehicle, books, dispatches with a fleet vehicle, receives stock, records an expense, checks the dashboard, P&L, aging, stock flow, invoice preview, price history and monthly sales, then signs in as an operator to verify hidden admin/delete controls, and checks the mobile layout. Screenshots land in `e2e/screenshots/`.
+The billing suite (`e2e/billing.spec.ts`) makes the client's sample invoice, a credit bill with an inline new customer and an edited price, takes part payments, adds an expense from the daily sheet, prints the bill and the daily sheet, moves cash to the bank, checks the money position, adds an item, switches app mode and reloads — on desktop and on a 390px phone. The trading suite (`e2e/app.spec.ts`) unlocks the app, factory-resets, creates a user, supplier, product, customer and vehicle, books, dispatches with a fleet vehicle, receives stock, records an expense, checks the dashboard, P&L, aging, stock flow, invoice preview, price history and monthly sales, then signs in as an operator to verify hidden admin/delete controls, and checks the mobile layout. Screenshots land in `e2e/screenshots/`.
 
 Unit and integration tests live in `src/__tests__/` and cover the finance maths (cost basis, P&L, aging, credit exposure), stock-flow grouping, price-history comparisons, alerts, and an integration suite that drives the real `TradingProvider` through bookings, dispatches, purchases, payments, cascading deletes with reversals, booking edits/cancellation, roles and permissions, plus App-level tests for navigation, the print preview and Escape handling.
 
@@ -97,6 +113,7 @@ Run the SQL files in `supabase/` in this order on an existing project:
 4. `migrate_v5_dispatch_tax_delivery.sql` (once) — weighbridge, freight, tax, delivery status, trip expenses, company profile.
 5. `migrate_v6_trade_documents.sql` (once) — quotations, purchase orders, returns, stock adjustments, tasks, broker commission.
 6. `migrate_v7_master_pin_sync.sql` (once) — master PIN and user account columns synced through cloud settings.
+7. `migrate_v8_simple_billing.sql` (once) — invoices/bills table, product unit, app mode and opening bank balance in settings.
 
 New projects can run `schema.sql` instead, which already contains everything.
 

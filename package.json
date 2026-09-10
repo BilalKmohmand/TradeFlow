@@ -12,7 +12,7 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "tsc --noEmit && vitest run && playwright test",
+    "check": "npm run build && tsc --noEmit && vitest run && playwright test",
     "test:e2e": "playwright test"
   },
   "dependencies": {

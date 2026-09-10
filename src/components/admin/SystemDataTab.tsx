@@ -89,6 +89,10 @@ export const SystemDataTab: React.FC = () => {
     taxRatePct: String(settings.taxRatePct ?? 0),
     taxLabel: settings.taxLabel || 'Sales Tax',
     monthlyTargetRs: String(settings.monthlyTargetRs ?? 0),
+    appMode: (settings.appMode || 'billing') as 'billing' | 'trading',
+    cashOpeningBalance: String(settings.cashOpeningBalance ?? 0),
+    openingBankBalance: String(settings.openingBankBalance ?? 0),
+    cashOpeningDate: settings.cashOpeningDate,
   });
   const [companySaved, setCompanySaved] = useState(false);
 
@@ -103,6 +107,10 @@ export const SystemDataTab: React.FC = () => {
       taxRatePct: Math.max(0, Math.min(100, parseFloat(company.taxRatePct) || 0)),
       taxLabel: company.taxLabel.trim() || 'Sales Tax',
       monthlyTargetRs: Math.max(0, parseFloat(company.monthlyTargetRs) || 0),
+      appMode: company.appMode,
+      cashOpeningBalance: parseFloat(company.cashOpeningBalance) || 0,
+      openingBankBalance: parseFloat(company.openingBankBalance) || 0,
+      cashOpeningDate: company.cashOpeningDate || settings.cashOpeningDate,
     });
     setCompanySaved(true);
     setTimeout(() => setCompanySaved(false), 1500);
@@ -427,6 +435,25 @@ export const SystemDataTab: React.FC = () => {
           <div>
             <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Tax label</label>
             <input value={company.taxLabel} onChange={(e) => setCompany({ ...company, taxLabel: e.target.value })} className={inputCls} />
+          </div>
+          <div className="lg:col-span-2">
+            <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5" htmlFor="app-mode">App mode</label>
+            <select id="app-mode" value={company.appMode} onChange={(e) => setCompany({ ...company, appMode: e.target.value as 'billing' | 'trading' })} className={inputCls}>
+              <option value="billing">Simple billing (bills, daily sheet, money)</option>
+              <option value="trading">Full trading suite (bookings, dispatches, per-kg pricing)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Opening cash (Rs.)</label>
+            <input type="number" step="any" value={company.cashOpeningBalance} onChange={(e) => setCompany({ ...company, cashOpeningBalance: e.target.value })} className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Opening bank (Rs.)</label>
+            <input type="number" step="any" value={company.openingBankBalance} onChange={(e) => setCompany({ ...company, openingBankBalance: e.target.value })} className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Counting from</label>
+            <input type="date" value={company.cashOpeningDate} onChange={(e) => setCompany({ ...company, cashOpeningDate: e.target.value })} className={inputCls} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Monthly sales target (Rs.)</label>

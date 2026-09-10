@@ -17,6 +17,11 @@ import {
   ShieldCheck,
   Bell,
   UserCircle2,
+  Home,
+  FileText,
+  CalendarDays,
+  Coins,
+  Tag,
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { computeAlerts } from '../utils/alerts';
@@ -49,6 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     tasks,
     quotations,
     purchaseOrders,
+    settings,
   } = useTrading();
   const alertCount = useMemo(
     () => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders }, new Date().toISOString().split('T')[0]).length,
@@ -79,7 +85,19 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const allNavItems: { id: ActiveScreen; label: string; icon: React.FC<{ className?: string }> }[] = [
+  const isBilling = (settings.appMode || 'billing') === 'billing';
+  const adminItem = can('admin_screen') || can('system:admin_screen') ? [{ id: 'admin' as ActiveScreen, label: 'Admin', icon: ShieldCheck }] : [];
+  const billingNavItems: { id: ActiveScreen; label: string; icon: React.FC<{ className?: string }> }[] = [
+    { id: 'dashboard', label: 'Home', icon: Home },
+    { id: 'bills', label: 'Bills', icon: FileText },
+    { id: 'daily', label: 'Daily Sheet', icon: CalendarDays },
+    { id: 'money', label: 'Money', icon: Coins },
+    { id: 'customers', label: 'Customers', icon: Users },
+    { id: 'suppliers', label: 'Suppliers', icon: Layers },
+    { id: 'products', label: 'Items', icon: Tag },
+    ...adminItem,
+  ];
+  const allNavItems: { id: ActiveScreen; label: string; icon: React.FC<{ className?: string }> }[] = isBilling ? billingNavItems : [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'customers', label: 'Customers', icon: Users },
     { id: 'suppliers', label: 'Suppliers', icon: Layers },
@@ -103,11 +121,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-serif italic font-bold text-lg sm:text-xl tracking-tight text-[#111827] dark:text-white">
-                  Sarmaya
+                <h1 className="font-serif italic font-bold text-lg sm:text-xl tracking-tight text-[#111827] dark:text-white truncate max-w-[40vw] sm:max-w-none">
+                  {settings.companyName || 'Sarmaya'}
                 </h1>
                 <span className="hidden sm:inline-flex text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 bg-[#FAF9F6] dark:bg-[#162436] text-teal-800 dark:text-teal-300 rounded-full border border-[#E5E5E1] dark:border-[#203248]">
-                  Bulk Trading
+                  {isBilling ? 'Billing' : 'Bulk Trading'}
                 </span>
               </div>
               <p className="text-[11px] text-[#8E9299] dark:text-[#94A3B8] font-medium hidden 2xl:block">

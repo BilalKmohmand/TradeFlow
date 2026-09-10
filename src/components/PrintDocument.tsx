@@ -4,7 +4,8 @@ import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
 import { todayISO } from '../utils/stockFlow';
 import { useEscape } from '../hooks/useEscape';
-import { dispatchBilledTotal } from '../types';
+import { dispatchBilledTotal, EXPENSE_CATEGORIES } from '../types';
+import { buildDailySheet, lineQty, linePrice } from '../utils/billing';
 
 export type PrintRequest =
   | { type: 'voucher'; ledgerId: string }
@@ -15,7 +16,9 @@ export type PrintRequest =
   | { type: 'challan'; dispatchId: string }
   | { type: 'booking'; bookingId: string }
   | { type: 'statement'; customerId: string; from: string; to: string }
-  | { type: 'supplier_statement'; supplierId: string; from: string; to: string };
+  | { type: 'supplier_statement'; supplierId: string; from: string; to: string }
+  | { type: 'bill'; invoiceId: string }
+  | { type: 'daily_sheet'; date: string };
 
 interface PrintDocumentProps {
   request: PrintRequest | null;
@@ -28,7 +31,7 @@ interface PrintDocumentProps {
  * print dialog, with CSS in index.css that prints only #print-root.
  */
 export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }) => {
-  const { dispatches, bookings, customers, suppliers, products, ledger, trucks, currentUser, settings, quotations, purchaseOrders, returns } = useTrading();
+  const { dispatches, bookings, customers, suppliers, products, ledger, trucks, currentUser, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries } = useTrading();
   const COMPANY = {
     name: settings.companyName || 'Sarmaya',
     tagline: settings.companyTagline || '',
@@ -40,6 +43,138 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
 
   const content = useMemo(() => {
     if (!request) return null;
+
+    if (request.type === 'bill') {
+      const inv = invoices.find((i) => i.id === request.invoiceId);
+      if (!inv) return null;
+      const customer = customers.find((c) => c.id === inv.customerId);
+      const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+      return {
+        title: 'INVOICE',
+        number: `Invoice #${inv.invoiceNumber.replace(/^INV-/, '')}`,
+        date: inv.issueDate,
+        body: (
+          <>
+            <div className="grid grid-cols-2 gap-6 text-xs">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Bill from</div>
+                <div className="font-bold text-sm">{COMPANY.name}</div>
+                <div>{COMPANY.address}</div>
+                <div className="font-mono">{COMPANY.phone}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Bill to</div>
+                <div className="font-bold text-sm">{inv.customerName}</div>
+                {inv.customerCompany && inv.customerCompany !== inv.customerName && <div>{inv.customerCompany}</div>}
+                {(inv.customerAddress || customer?.address) && <div>{inv.customerAddress || customer?.address}</div>}
+                <div className="font-mono">{inv.customerPhone || customer?.phone}</div>
+              </div>
+            </div>
+            <table className="w-full text-xs mt-6 border-collapse">
+              <thead>
+                <tr className="bg-gray-800 text-white text-[10px] uppercase tracking-widest">
+                  <th className="text-left py-2 px-3">Description</th>
+                  <th className="text-right py-2 px-3">Qty</th>
+                  <th className="text-right py-2 px-3">Price</th>
+                  <th className="text-right py-2 px-3">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inv.items.map((it) => (
+                  <tr key={it.id} className="border-b border-gray-200">
+                    <td className="py-3 px-3 font-bold">{it.productName}</td>
+                    <td className="py-3 px-3 text-right font-mono">{money(lineQty(it))}{it.unit && it.unit !== 'pcs' ? ` ${it.unit}` : ''}</td>
+                    <td className="py-3 px-3 text-right font-mono">{money(linePrice(it))}</td>
+                    <td className="py-3 px-3 text-right font-mono font-bold">{money(it.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr><td colSpan={3} className="pt-4 text-right text-[11px] text-gray-600">Subtotal</td><td className="pt-4 text-right font-mono px-3">{money(inv.subtotal)}</td></tr>
+                {(inv.discount || 0) > 0 && <tr><td colSpan={3} className="pt-1 text-right text-[11px] text-gray-600">Discount</td><td className="pt-1 text-right font-mono px-3">− {money(inv.discount || 0)}</td></tr>}
+                {inv.taxAmount > 0 && <tr><td colSpan={3} className="pt-1 text-right text-[11px] text-gray-600">{settings.taxLabel || 'Sales Tax'} ({inv.taxRatePct}%)</td><td className="pt-1 text-right font-mono px-3">{money(inv.taxAmount)}</td></tr>}
+                <tr><td colSpan={3} className="pt-3 text-right font-bold uppercase tracking-widest text-[10px] text-gray-600">Total</td><td className="pt-3 text-right font-mono font-extrabold text-base px-3">Rs. {money(inv.totalAmount)}</td></tr>
+                {inv.paidAmount > 0 && <tr><td colSpan={3} className="pt-1 text-right text-[11px] text-gray-600">Paid{inv.paymentMethod ? ` (${inv.paymentMethod})` : ''}</td><td className="pt-1 text-right font-mono px-3">{money(inv.paidAmount)}</td></tr>}
+                {inv.balanceDue > 0 ? (
+                  <tr><td colSpan={3} className="pt-1 text-right font-bold text-[11px] text-gray-800">Balance due</td><td className="pt-1 text-right font-mono font-bold px-3">Rs. {money(inv.balanceDue)}</td></tr>
+                ) : (
+                  <tr><td colSpan={4} className="pt-1 text-right text-[11px] text-teal-700 font-bold">PAID IN FULL</td></tr>
+                )}
+                {customer && customer.totalDue > 0 && <tr><td colSpan={4} className="pt-3 text-right text-[11px] text-gray-500">Total outstanding on account: Rs. {money(customer.totalDue)}</td></tr>}
+              </tfoot>
+            </table>
+            {inv.notes && <div className="mt-4 text-[11px] text-gray-600">Note: {inv.notes}</div>}
+            <div className="grid grid-cols-2 gap-10 mt-14 text-xs">
+              <div className="border-t border-gray-900 pt-2">For {COMPANY.name}</div>
+              <div className="border-t border-gray-900 pt-2">Received by</div>
+            </div>
+          </>
+        ),
+      };
+    }
+
+    if (request.type === 'daily_sheet') {
+      const sheet = buildDailySheet({ invoices, ledger, expenses, cashEntries, customers, suppliers, settings }, request.date);
+      const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+      const row = (label: string, value: number, bold = false) => (
+        <tr className={`border-b border-gray-100 ${bold ? 'font-bold' : ''}`}><td className="py-1.5">{label}</td><td className="py-1.5 text-right font-mono">{money(value)}</td></tr>
+      );
+      return {
+        title: 'DAILY SHEET',
+        number: formatDate(request.date),
+        date: request.date,
+        body: (
+          <>
+            <div className="grid grid-cols-4 gap-3 text-xs">
+              {[['Opening cash', sheet.opening.cash], ['Cash in', sheet.cashIn], ['Cash out', sheet.cashOut], ['Closing cash', sheet.closing.cash]].map(([l, v]) => (
+                <div key={String(l)} className="border border-gray-300 rounded p-2"><div className="text-[10px] uppercase tracking-widest text-gray-500">{l}</div><div className="font-mono font-bold text-sm">{money(Number(v))}</div></div>
+              ))}
+              {[['Opening bank', sheet.opening.bank], ['Bank in', sheet.bankIn], ['Bank out', sheet.bankOut], ['Closing bank', sheet.closing.bank]].map(([l, v]) => (
+                <div key={String(l)} className="border border-gray-200 rounded p-2"><div className="text-[10px] uppercase tracking-widest text-gray-500">{l}</div><div className="font-mono text-sm">{money(Number(v))}</div></div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-6 mt-6 text-xs">
+              <div>
+                <div className="font-bold uppercase tracking-widest text-[10px] border-b-2 border-gray-900 pb-1 mb-1">Bills ({sheet.bills.length}) — Rs. {money(sheet.summary.sales)}</div>
+                <table className="w-full"><tbody>
+                  {sheet.bills.length === 0 && <tr><td className="py-1.5 text-gray-500">No bills.</td></tr>}
+                  {sheet.bills.map((b) => (
+                    <tr key={b.id} className="border-b border-gray-100"><td className="py-1.5"><span className="font-mono text-gray-500">{b.invoiceNumber}</span> {b.customerName}<span className="text-gray-500">{b.balanceDue > 0 ? ` (credit ${money(b.balanceDue)})` : ''}</span></td><td className="py-1.5 text-right font-mono">{money(b.totalAmount)}</td></tr>
+                  ))}
+                </tbody></table>
+                <div className="font-bold uppercase tracking-widest text-[10px] border-b-2 border-gray-900 pb-1 mb-1 mt-5">Money received — Rs. {money(sheet.summary.received)}</div>
+                <table className="w-full"><tbody>
+                  {sheet.receipts.length === 0 && <tr><td className="py-1.5 text-gray-500">Nothing received.</td></tr>}
+                  {sheet.receipts.map((m) => row(`${m.counterparty} (${m.method || 'Cash'})`, m.amount))}
+                </tbody></table>
+              </div>
+              <div>
+                <div className="font-bold uppercase tracking-widest text-[10px] border-b-2 border-gray-900 pb-1 mb-1">Expenses — Rs. {money(sheet.summary.expenses)}</div>
+                <table className="w-full"><tbody>
+                  {sheet.expenses.length === 0 && <tr><td className="py-1.5 text-gray-500">No expenses.</td></tr>}
+                  {sheet.expenses.map((g) => (
+                    <React.Fragment key={g.category}>
+                      {row(EXPENSE_CATEGORIES.find((c) => c.id === g.category)?.label || g.label, g.total, true)}
+                      {g.rows.map((e) => <tr key={e.id} className="border-b border-gray-100 text-gray-600"><td className="py-1 pl-3">{e.description} ({e.paidVia || 'Cash'})</td><td className="py-1 text-right font-mono">{money(e.amount)}</td></tr>)}
+                    </React.Fragment>
+                  ))}
+                </tbody></table>
+                <div className="font-bold uppercase tracking-widest text-[10px] border-b-2 border-gray-900 pb-1 mb-1 mt-5">Suppliers paid & transfers</div>
+                <table className="w-full"><tbody>
+                  {sheet.supplierPayments.length + sheet.other.length === 0 && <tr><td className="py-1.5 text-gray-500">None.</td></tr>}
+                  {sheet.supplierPayments.map((m) => row(`${m.counterparty} (${m.method || 'Cash'})`, m.amount))}
+                  {sheet.other.map((m) => row(`${m.description} (${m.direction === 'in' ? 'into' : 'out of'} ${m.method || 'Cash'})`, m.amount))}
+                </tbody></table>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-10 mt-14 text-xs">
+              <div className="border-t border-gray-900 pt-2">Prepared by</div>
+              <div className="border-t border-gray-900 pt-2">Checked by</div>
+            </div>
+          </>
+        ),
+      };
+    }
 
     if (request.type === 'invoice' || request.type === 'challan') {
       const d = dispatches.find((x) => x.id === request.dispatchId);
@@ -400,7 +535,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       };
     }
     return null;
-  }, [request, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns]);
+  }, [request, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries]);
 
   if (!request) return null;
 
@@ -438,7 +573,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               <div className="mt-6">{content.body}</div>
               <div className="mt-10 pt-3 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-500">
                 <span>Generated by {COMPANY.name} on {formatDate(todayISO())}{currentUser ? ` by ${currentUser.name}` : ''}</span>
-                <span>All quantities in kg • amounts in PKR</span>
+                <span>{request.type === 'bill' || request.type === 'daily_sheet' ? 'All amounts in PKR (Rs.)' : 'All quantities in kg • amounts in PKR'}</span>
               </div>
             </>
           ) : (

@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS products (
   "stockKg" NUMERIC DEFAULT 0,
   "minThresholdKg" NUMERIC DEFAULT 0,
   "supplierId" TEXT,
-  description TEXT
+  description TEXT,
+  unit TEXT
 );
 
 CREATE TABLE IF NOT EXISTS bookings (
@@ -263,6 +264,41 @@ CREATE TABLE IF NOT EXISTS tasks (
   "doneAt" TEXT
 );
 
+-- Bills / invoices (simple billing). Items are stored as JSON.
+CREATE TABLE IF NOT EXISTS invoices (
+  id TEXT PRIMARY KEY,
+  "invoiceNumber" TEXT NOT NULL,
+  "customerId" TEXT,
+  "customerName" TEXT,
+  "customerCompany" TEXT,
+  "customerPhone" TEXT,
+  "customerAddress" TEXT,
+  "customerNtn" TEXT,
+  "issueDate" TEXT,
+  "dueDate" TEXT,
+  status TEXT DEFAULT 'issued',
+  "paymentStatus" TEXT DEFAULT 'unpaid',
+  items JSONB DEFAULT '[]'::jsonb,
+  subtotal NUMERIC DEFAULT 0,
+  "freightCharges" NUMERIC DEFAULT 0,
+  "handlingCharges" NUMERIC DEFAULT 0,
+  "taxRatePct" NUMERIC DEFAULT 0,
+  "taxAmount" NUMERIC DEFAULT 0,
+  discount NUMERIC DEFAULT 0,
+  "totalAmount" NUMERIC DEFAULT 0,
+  "paidAmount" NUMERIC DEFAULT 0,
+  "balanceDue" NUMERIC DEFAULT 0,
+  payments JSONB DEFAULT '[]'::jsonb,
+  notes TEXT,
+  terms TEXT,
+  "linkedBookingIds" JSONB,
+  "createdAt" TEXT,
+  "createdBy" TEXT,
+  "updatedAt" TEXT,
+  "paymentMethod" TEXT,
+  "billKind" TEXT
+);
+
 CREATE TABLE IF NOT EXISTS ledger (
   id TEXT PRIMARY KEY,
   "entityType" TEXT,
@@ -313,5 +349,6 @@ ALTER TABLE purchase_orders DISABLE ROW LEVEL SECURITY;
 ALTER TABLE returns DISABLE ROW LEVEL SECURITY;
 ALTER TABLE stock_adjustments DISABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks DISABLE ROW LEVEL SECURITY;
+ALTER TABLE invoices DISABLE ROW LEVEL SECURITY;
 ALTER TABLE ledger DISABLE ROW LEVEL SECURITY;
 ALTER TABLE whatsapp_messages DISABLE ROW LEVEL SECURITY;

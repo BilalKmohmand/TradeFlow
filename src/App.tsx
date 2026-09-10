@@ -30,6 +30,12 @@ import { BookingsScreen } from './screens/BookingsScreen';
 import { ReportsScreen } from './screens/ReportsScreen';
 import { AdminScreen } from './screens/AdminScreen';
 import { AppStartPinGate } from './components/AppStartPinGate';
+import { BillingUIProvider } from './components/billing/BillingUI';
+import { BillingHomeScreen } from './screens/billing/BillingHomeScreen';
+import { BillsScreen } from './screens/billing/BillsScreen';
+import { ItemsScreen } from './screens/billing/ItemsScreen';
+import { DailySheetScreen } from './screens/billing/DailySheetScreen';
+import { MoneyScreen } from './screens/billing/MoneyScreen';
 
 function MainApp() {
   const {
@@ -49,7 +55,9 @@ function MainApp() {
     setPrintRequest,
     editRequest,
     setEditRequest,
+    settings,
   } = useTrading();
+  const isBilling = (settings.appMode || 'billing') === 'billing';
 
   // Modal States
   const [isCommandBarOpen, setIsCommandBarOpen] = useState<boolean>(false);
@@ -116,6 +124,7 @@ function MainApp() {
   }
 
   return (
+    <BillingUIProvider>
     <div className="min-h-screen w-full overflow-x-hidden bg-[#FAF9F6] dark:bg-[#090F17] text-[#111827] dark:text-[#F1F5F9] font-sans flex flex-col selection:bg-teal-700 selection:text-white transition-colors">
       {/* Navigation Header */}
       <Navbar
@@ -135,7 +144,12 @@ function MainApp() {
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
-            {activeScreen === 'dashboard' && (
+            {activeScreen === 'dashboard' && isBilling && <BillingHomeScreen />}
+            {activeScreen === 'bills' && <BillsScreen />}
+            {activeScreen === 'daily' && <DailySheetScreen />}
+            {activeScreen === 'money' && <MoneyScreen />}
+            {activeScreen === 'products' && isBilling && <ItemsScreen />}
+            {activeScreen === 'dashboard' && !isBilling && (
               <DashboardScreen
                 onOpenDispatch={handleOpenDispatch}
                 onOpenBooking={() => setIsBookingModalOpen(true)}
@@ -162,7 +176,7 @@ function MainApp() {
               />
             )}
 
-            {activeScreen === 'products' && (
+            {activeScreen === 'products' && !isBilling && (
               <ProductsScreen
                 onOpenAddProduct={() => setIsProductModalOpen(true)}
                 onOpenBooking={() => setIsBookingModalOpen(true)}
@@ -325,6 +339,7 @@ function MainApp() {
       {/* Printable documents (invoice, delivery challan, statements) */}
       <PrintDocument request={printRequest as PrintRequest | null} onClose={() => setPrintRequest(null)} />
     </div>
+    </BillingUIProvider>
   );
 }
 

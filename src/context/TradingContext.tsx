@@ -205,6 +205,11 @@ interface TradingContextType {
       notes?: string;
     }
   ) => { success: boolean; message: string };
+  /** Simple billing: one call creates the bill, books the sale, takes stock and records any cash paid now. */
+  createBill: (input: CreateBillInput) => { success: boolean; message: string; invoice?: Invoice };
+  payBill: (invoiceId: string, amount: number, method: string, notes?: string, date?: string) => { success: boolean; message: string };
+  deleteBill: (invoiceId: string) => { success: boolean; message: string };
+  addCashTransfer: (input: { amount: number; from: 'cash' | 'bank'; date?: string; note?: string }) => { success: boolean; message: string };
   generateInvoiceFromBookings: (
     bookingIds: string[],
     customOptions?: {
@@ -364,7 +369,9 @@ export type PrintRequestLike =
   | { type: 'challan'; dispatchId: string }
   | { type: 'booking'; bookingId: string }
   | { type: 'statement'; customerId: string; from: string; to: string }
-  | { type: 'supplier_statement'; supplierId: string; from: string; to: string };
+  | { type: 'supplier_statement'; supplierId: string; from: string; to: string }
+  | { type: 'bill'; invoiceId: string }
+  | { type: 'daily_sheet'; date: string };
 
 /** Collision-safe id generator (Date.now() alone repeats when called in a tight loop). */
 let idCounter = 0;
@@ -374,6 +381,46 @@ export const uid = (prefix: string): string => {
 };
 
 const round2 = (n: number) => Number(n.toFixed(2));
+
+export interface CreateBillItemInput {
+  productId: string;
+  name: string;
+  qty: number;
+  unitPrice: number;
+  unit?: string;
+}
+export interface CreateBillInput {
+  customerId: string;
+  /** Create this customer on the spot (used when customerId is empty). */
+  newCustomer?: { name: string; phone: string };
+  items: CreateBillItemInput[];
+  discount?: number;
+  paidNow?: number;
+  paymentMethod?: string;
+  notes?: string;
+  date?: string;
+}
+
+/** Payment methods offered on bills. Anything starting with "Cash" counts as cash in hand. */
+export const BILL_PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'Cheque', 'Easypaisa / JazzCash', 'Card'];
+
+/** Map a free-text method onto the invoice payment record enum. */
+const invoiceMethod = (m: string): InvoicePaymentRecord['method'] => {
+  const l = m.toLowerCase();
+  if (l.startsWith('cash')) return 'cash';
+  if (l.includes('cheque')) return 'cheque';
+  if (l.includes('easypaisa') || l.includes('jazz') || l.includes('card') || l.includes('online')) return 'online';
+  return 'bank_transfer';
+};
+
+/** Next sequential bill number: highest trailing number across all invoices + 1. */
+export const nextBillNumber = (invoices: Invoice[]): string => {
+  const max = invoices.reduce((m, i) => {
+    const n = parseInt((i.invoiceNumber.match(/(\d+)\s*$/) || [])[1] || '0', 10);
+    return Number.isFinite(n) && n > m ? n : m;
+  }, 0);
+  return `INV-${max + 1}`;
+};
 
 const TradingContext = createContext<TradingContextType | undefined>(undefined);
 
@@ -713,6 +760,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
         setLedger(data.ledger);
         setWhatsappMessages(data.whatsappMessages);
+        // Bills: keep local copies if the cloud table is empty (e.g. migration v8 not run yet).
+        if (data.invoices.length > 0) setInvoices(data.invoices);
         setIsCloudSyncReady(true);
       })
       .catch((err) => {
@@ -828,6 +877,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { void syncToSupabase('price_history', priceHistory); }, [priceHistory, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('expenses', expenses); }, [expenses, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('trucks', trucks); }, [trucks, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('invoices', invoices); }, [invoices, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('users', users); }, [users, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('cash_entries', cashEntries); }, [cashEntries, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('settings', [settings]); }, [settings, isCloudSyncReady]);
@@ -1450,6 +1500,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       settings: () => setSettings({ ...DEFAULT_SETTINGS, cashOpeningDate: todayISO() }),
       ledger: () => setLedger([]),
       whatsapp_messages: () => setWhatsappMessages([]),
+      invoices: () => setInvoices([]),
     };
     setters[table]();
     if (isCloudSyncReady) void clearTable(table);
@@ -2947,6 +2998,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const inv = invoices.find((i) => i.id === id);
     if (!inv) return;
     setInvoices((prev) => prev.filter((i) => i.id !== id));
+    removeRemote('invoices', [id]);
     logAuditEvent('Invoice Deleted', `Invoice ${inv.invoiceNumber} removed from system.`, 'danger', 'billing');
   };
 
@@ -3025,6 +3077,192 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
 
     return { success: true, message: `Payment of ${formatCurrency(payAmt)} recorded successfully.` };
+  };
+
+  // ---------------------------------------------------------------------------
+  // Simple billing: bills, payments, cash/bank transfers
+  // ---------------------------------------------------------------------------
+  const createBill = (input: CreateBillInput): { success: boolean; message: string; invoice?: Invoice } => {
+    const items = (input.items || []).filter((it) => it.productId && it.qty > 0);
+    if (items.length === 0) return { success: false, message: 'Add at least one item with a quantity.' };
+    let customer = customers.find((c) => c.id === input.customerId);
+    if (!customer && input.newCustomer?.name.trim()) {
+      const name = input.newCustomer.name.trim();
+      customer = addCustomer({ name, company: name, phone: input.newCustomer.phone.trim(), email: '', address: '', creditLimit: 0 });
+    }
+    if (!customer) return { success: false, message: 'Pick a customer first.' };
+    const date = input.date || todayISO();
+    const subtotal = round2(items.reduce((a, it) => a + it.qty * it.unitPrice, 0));
+    const discount = round2(Math.min(Math.max(0, input.discount || 0), subtotal));
+    const taxRatePct = settings.taxRatePct ?? 0;
+    const taxAmount = round2(((subtotal - discount) * taxRatePct) / 100);
+    const totalAmount = round2(subtotal - discount + taxAmount);
+    const paidAmount = round2(Math.min(Math.max(0, input.paidNow || 0), totalAmount));
+    const balanceDue = round2(totalAmount - paidAmount);
+    const method = input.paymentMethod || 'Cash';
+    const invoiceNumber = nextBillNumber(invoices);
+    const invoiceItems: InvoiceItem[] = items.map((it) => {
+      const product = products.find((p) => p.id === it.productId);
+      return {
+        id: uid('bi'),
+        productId: it.productId,
+        productName: it.name || product?.name || 'Item',
+        kg: it.qty,
+        ratePerKg: round2(it.unitPrice),
+        costPricePerKg: product?.costPricePerKg,
+        amount: round2(it.qty * it.unitPrice),
+        qty: it.qty,
+        unitPrice: round2(it.unitPrice),
+        unit: it.unit || product?.unit || 'pcs',
+      };
+    });
+    const payments: InvoicePaymentRecord[] =
+      paidAmount > 0 ? [{ id: uid('pay'), date, amount: paidAmount, method: invoiceMethod(method), notes: method, recordedBy: currentUser?.name }] : [];
+    const invoice: Invoice = {
+      id: uid('inv'),
+      invoiceNumber,
+      customerId: customer.id,
+      customerName: customer.name,
+      customerCompany: customer.company,
+      customerPhone: customer.phone,
+      customerAddress: customer.address,
+      issueDate: date,
+      dueDate: date,
+      status: balanceDue === 0 ? 'paid' : paidAmount > 0 ? 'partial' : 'issued',
+      paymentStatus: balanceDue === 0 ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid',
+      items: invoiceItems,
+      subtotal,
+      taxRatePct,
+      taxAmount,
+      discount,
+      totalAmount,
+      paidAmount,
+      balanceDue,
+      payments,
+      notes: input.notes?.trim() || undefined,
+      paymentMethod: method,
+      billKind: balanceDue === 0 ? 'cash' : 'credit',
+      createdAt: todayISO(),
+      createdBy: currentUser?.name,
+    };
+    setInvoices((prev) => [invoice, ...prev]);
+
+    // Stock comes off in the product's own unit.
+    setProducts((prev) =>
+      prev.map((p) => {
+        const sold = items.filter((it) => it.productId === p.id).reduce((a, it) => a + it.qty, 0);
+        return sold > 0 ? { ...p, stockKg: round2(p.stockKg - sold) } : p;
+      })
+    );
+
+    // Customer account: bill goes on, cash paid now comes off.
+    const dueAfterBill = round2((customer.totalDue || 0) + totalAmount);
+    const dueAfterPayment = round2(dueAfterBill - paidAmount);
+    setCustomers((prev) => prev.map((c) => (c.id === customer.id ? { ...c, totalDue: Math.max(0, dueAfterPayment) } : c)));
+    const entries: LedgerEntry[] = [
+      {
+        id: uid('led'),
+        entityType: 'customer',
+        entityId: customer.id,
+        type: 'bill_issued',
+        referenceId: invoiceNumber,
+        date,
+        description: `Bill ${invoiceNumber}: ${invoiceItems.map((it) => `${it.productName} × ${it.qty}`).join(', ')}`,
+        debit: totalAmount,
+        credit: 0,
+        balanceAfter: dueAfterBill,
+      },
+    ];
+    if (paidAmount > 0) {
+      entries.unshift({
+        id: uid('led'),
+        entityType: 'customer',
+        entityId: customer.id,
+        type: 'payment_received',
+        referenceId: invoiceNumber,
+        date,
+        description: `Payment received: ${method} - Bill ${invoiceNumber}`,
+        debit: 0,
+        credit: paidAmount,
+        balanceAfter: dueAfterPayment,
+      });
+    }
+    setLedger((prev) => [...entries, ...prev]);
+    logAuditEvent('Bill Created', `${invoiceNumber} for ${customer.name}: ${formatCurrency(totalAmount)} (${paidAmount > 0 ? `${formatCurrency(paidAmount)} paid by ${method}` : 'on credit'}).`, 'info', 'billing');
+    return { success: true, message: `Bill ${invoiceNumber} saved.`, invoice };
+  };
+
+  const payBill = (invoiceId: string, amount: number, method: string, notes?: string, date?: string): { success: boolean; message: string } => {
+    const inv = invoices.find((i) => i.id === invoiceId);
+    if (!inv) return { success: false, message: 'Bill not found.' };
+    const payAmt = round2(Math.max(0, amount));
+    if (payAmt <= 0) return { success: false, message: 'Enter an amount greater than zero.' };
+    if (payAmt > inv.balanceDue + 0.005) return { success: false, message: `Only ${formatCurrency(inv.balanceDue)} is left on this bill.` };
+    const when = date || todayISO();
+    const newPaid = round2(inv.paidAmount + payAmt);
+    const newBalance = Math.max(0, round2(inv.totalAmount - newPaid));
+    const record: InvoicePaymentRecord = { id: uid('pay'), date: when, amount: payAmt, method: invoiceMethod(method), notes: notes ? `${method} - ${notes}` : method, recordedBy: currentUser?.name };
+    setInvoices((prev) =>
+      prev.map((i) =>
+        i.id === invoiceId
+          ? { ...i, paidAmount: newPaid, balanceDue: newBalance, paymentStatus: newBalance === 0 ? 'paid' : 'partial', status: newBalance === 0 ? 'paid' : 'partial', billKind: newBalance === 0 ? 'cash' : 'credit', payments: [...(i.payments || []), record], updatedAt: todayISO() }
+          : i
+      )
+    );
+    const cust = customers.find((c) => c.id === inv.customerId);
+    const dueAfter = Math.max(0, round2((cust?.totalDue || 0) - payAmt));
+    if (cust) setCustomers((prev) => prev.map((c) => (c.id === cust.id ? { ...c, totalDue: dueAfter } : c)));
+    setLedger((prev) => [
+      {
+        id: uid('led'),
+        entityType: 'customer',
+        entityId: inv.customerId,
+        type: 'payment_received',
+        referenceId: inv.invoiceNumber,
+        date: when,
+        description: `Payment received: ${method} - Bill ${inv.invoiceNumber}${notes ? ` (${notes})` : ''}`,
+        debit: 0,
+        credit: payAmt,
+        balanceAfter: dueAfter,
+      },
+      ...prev,
+    ]);
+    logAuditEvent('Bill Payment', `${formatCurrency(payAmt)} by ${method} against ${inv.invoiceNumber}. Left: ${formatCurrency(newBalance)}.`, 'info', 'billing');
+    return { success: true, message: `${formatCurrency(payAmt)} received. ${newBalance === 0 ? 'Bill fully paid.' : `${formatCurrency(newBalance)} still due.`}` };
+  };
+
+  const deleteBill = (invoiceId: string): { success: boolean; message: string } => {
+    const inv = invoices.find((i) => i.id === invoiceId);
+    if (!inv) return { success: false, message: 'Bill not found.' };
+    // Put stock back, take the unpaid part off the customer, drop the bill's ledger lines.
+    setProducts((prev) =>
+      prev.map((p) => {
+        const qty = inv.items.filter((it) => it.productId === p.id).reduce((a, it) => a + (it.qty ?? it.kg), 0);
+        return qty > 0 ? { ...p, stockKg: round2(p.stockKg + qty) } : p;
+      })
+    );
+    setCustomers((prev) => prev.map((c) => (c.id === inv.customerId ? { ...c, totalDue: Math.max(0, round2(c.totalDue - inv.balanceDue)) } : c)));
+    const ledgerIds = ledger.filter((l) => l.referenceId === inv.invoiceNumber && l.entityType === 'customer').map((l) => l.id);
+    setLedger((prev) => prev.filter((l) => !ledgerIds.includes(l.id)));
+    removeRemote('ledger', ledgerIds);
+    setInvoices((prev) => prev.filter((i) => i.id !== invoiceId));
+    removeRemote('invoices', [invoiceId]);
+    logAuditEvent('Bill Deleted', `${inv.invoiceNumber} (${formatCurrency(inv.totalAmount)}) for ${inv.customerName} removed; stock and account reversed.`, 'danger', 'billing');
+    return { success: true, message: `Bill ${inv.invoiceNumber} deleted.` };
+  };
+
+  const addCashTransfer = ({ amount, from, date, note }: { amount: number; from: 'cash' | 'bank'; date?: string; note?: string }): { success: boolean; message: string } => {
+    const amt = round2(Math.max(0, amount));
+    if (amt <= 0) return { success: false, message: 'Enter an amount greater than zero.' };
+    const when = date || todayISO();
+    const to = from === 'cash' ? 'bank' : 'cash';
+    const label = from === 'cash' ? 'Deposited cash to bank' : 'Withdrew cash from bank';
+    const description = `${label}${note ? ` - ${note}` : ''}`;
+    const out: CashEntry = { id: uid('cash'), date: when, direction: 'out', amount: amt, description, method: from === 'cash' ? 'Cash' : 'Bank Transfer', createdAt: todayISO(), createdBy: currentUser?.name };
+    const inn: CashEntry = { id: uid('cash'), date: when, direction: 'in', amount: amt, description, method: to === 'cash' ? 'Cash' : 'Bank Transfer', createdAt: todayISO(), createdBy: currentUser?.name };
+    setCashEntries((prev) => [inn, out, ...prev]);
+    logAuditEvent('Cash Transfer', `${label}: ${formatCurrency(amt)}`, 'info');
+    return { success: true, message: `${label}: ${formatCurrency(amt)}.` };
   };
 
   const generateInvoiceFromBookings = (
@@ -3447,6 +3685,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       tasks,
       ledger,
       whatsappMessages,
+      invoices,
       auditLogs,
     };
     const jsonString = JSON.stringify(backupData, null, 2);
@@ -3504,6 +3743,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       if (Array.isArray(data.ledger)) setLedger(data.ledger.map(normalizeLedger));
       if (Array.isArray(data.whatsappMessages)) setWhatsappMessages(data.whatsappMessages);
+      if (Array.isArray(data.invoices)) setInvoices(data.invoices);
       if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
 
       logAuditEvent('Backup Restored', 'Full system database restored from JSON backup.', 'warning');
@@ -3532,6 +3772,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTasks([]);
     setLedger([]);
     setWhatsappMessages([]);
+    setInvoices([]);
+    localStorage.removeItem(STORAGE_KEYS.INVOICES);
     [STORAGE_KEYS.QUOTES, STORAGE_KEYS.POS, STORAGE_KEYS.RETURNS, STORAGE_KEYS.ADJUSTMENTS, STORAGE_KEYS.TASKS].forEach((k) => localStorage.removeItem(k));
     localStorage.removeItem(STORAGE_KEYS.CASH);
     localStorage.removeItem(STORAGE_KEYS.EXPENSES);
@@ -3693,6 +3935,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updateInvoice,
         deleteInvoice,
         recordInvoicePayment,
+        createBill,
+        payBill,
+        deleteBill,
+        addCashTransfer,
         generateInvoiceFromBookings,
         customerAgreedRates,
         setCustomerAgreedRate,

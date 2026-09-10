@@ -1,4 +1,4 @@
-import { AppSettings, CashEntry, Customer, Dispatch, Expense, ExpenseCategory, LedgerEntry, Product, Purchase, Supplier } from '../types';
+import { AppSettings, CashEntry, Customer, Dispatch, Expense, ExpenseCategory, LedgerEntry, Product, Purchase, Supplier, isCashMethod, EXPENSE_CATEGORIES } from '../types';
 
 const round2 = (n: number) => Number(n.toFixed(2));
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -425,7 +425,7 @@ export const collectCashMovements = (
     }
   });
   expenses.filter((e) => e.paidVia !== 'Credit (unpaid)').forEach((e) => {
-    out.push({ id: `cm-${e.id}`, date: e.date, direction: 'out', amount: e.amount, description: e.description, source: 'expense', counterparty: e.category, method: e.paidVia, recordedBy: e.createdBy, sourceId: e.id });
+    out.push({ id: `cm-${e.id}`, date: e.date, direction: 'out', amount: e.amount, description: e.description, source: 'expense', counterparty: EXPENSE_CATEGORIES.find((c) => c.id === e.category)?.label || e.category, method: e.paidVia, recordedBy: e.createdBy, sourceId: e.id });
   });
   cashEntries.forEach((c) => {
     out.push({ id: `cm-${c.id}`, date: c.date, direction: c.direction, amount: c.amount, description: c.description, source: 'manual', method: c.method, recordedBy: c.createdBy, sourceId: c.id });
@@ -461,3 +461,39 @@ export const buildCashBook = (movements: CashMovement[], settings: AppSettings, 
 /** Cash on hand as of a date (opening balance + all movements since the opening date). */
 export const cashBalanceOn = (movements: CashMovement[], settings: AppSettings, asOf: string): number =>
   round2(settings.cashOpeningBalance + movements.filter((m) => m.date >= settings.cashOpeningDate && m.date <= asOf).reduce((a, m) => a + (m.direction === 'in' ? m.amount : -m.amount), 0));
+
+// ---------------------------------------------------------------------------
+// Cash in hand vs bank: split every cash-book movement by its payment method.
+// ---------------------------------------------------------------------------
+export interface AccountBalances {
+  cash: number;
+  bank: number;
+  total: number;
+}
+
+export const accountBalancesOn = (movements: CashMovement[], settings: AppSettings, asOf: string): AccountBalances => {
+  let cash = settings.cashOpeningBalance || 0;
+  let bank = settings.openingBankBalance || 0;
+  movements
+    .filter((m) => m.date >= settings.cashOpeningDate && m.date <= asOf)
+    .forEach((m) => {
+      const signed = m.direction === 'in' ? m.amount : -m.amount;
+      if (isCashMethod(m.method)) cash += signed;
+      else bank += signed;
+    });
+  return { cash: round2(cash), bank: round2(bank), total: round2(cash + bank) };
+};
+
+/** Everything the business owes and is owed, for the Money screen. */
+export const positionSummary = (
+  customers: Customer[],
+  suppliers: Supplier[],
+  expenses: Expense[],
+  balances: AccountBalances
+) => {
+  const receivables = round2(customers.reduce((a, c) => a + c.totalDue, 0));
+  const supplierPayables = round2(suppliers.reduce((a, s) => a + s.totalOwed, 0));
+  const unpaidExpenses = round2(expenses.filter((e) => e.paidVia === 'Credit (unpaid)').reduce((a, e) => a + e.amount, 0));
+  const payables = round2(supplierPayables + unpaidExpenses);
+  return { receivables, supplierPayables, unpaidExpenses, payables, netPosition: round2(balances.total + receivables - payables) };
+};

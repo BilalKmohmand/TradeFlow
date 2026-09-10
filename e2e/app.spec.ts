@@ -21,6 +21,8 @@ test.describe.serial('Sarmaya end-to-end', () => {
     const errors: string[] = [];
     page.on('console', (m) => { if (m.type() === 'error') errors.push(`${m.text()} @ ${m.location()?.url || ''}`); });
     await page.addInitScript(() => {
+      localStorage.setItem('tradeflow_settings_v2', JSON.stringify({ appMode: 'trading' }));
+      localStorage.setItem('tradeflow_settings_v2', JSON.stringify({ appMode: 'trading' }));
       localStorage.setItem('tradeflow_users_v2', JSON.stringify([
         { id: 'u-admin', name: 'Bilal Khan Mohmand', username: 'superadmin', role: 'super_admin', roles: ['super_admin'], pin: '7860', active: true, status: 'active', createdAt: '2026-09-04' },
         { id: 'u1', name: 'Bilal', username: 'bilal', role: 'operator', roles: ['operator'], pin: '1234', active: true, status: 'active', createdAt: '2026-09-04' },
@@ -171,6 +173,8 @@ test.describe.serial('Sarmaya end-to-end', () => {
   test('operator sign-in hides admin and delete controls', async ({ page }) => {
     // Fresh browser profile per test: seed an operator user and one customer.
     await page.addInitScript(() => {
+      localStorage.setItem('tradeflow_settings_v2', JSON.stringify({ appMode: 'trading' }));
+      localStorage.setItem('tradeflow_settings_v2', JSON.stringify({ appMode: 'trading' }));
       localStorage.setItem('tradeflow_users_v2', JSON.stringify([{ id: 'u1', name: 'Bilal', role: 'operator', pin: '1234', active: true, createdAt: '2026-09-04' }]));
       localStorage.setItem('tradeflow_customers_v2', JSON.stringify([{ id: 'c1', name: 'Ali Raza', company: 'Raza Traders', phone: '+92 300 2222222', email: '', address: '', totalDue: 0, creditLimit: 100000, createdAt: '2026-09-04' }]));
     });
@@ -187,6 +191,9 @@ test.describe.serial('Sarmaya end-to-end', () => {
   });
 
   test('mobile layout has no horizontal overflow', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('tradeflow_settings_v2', JSON.stringify({ appMode: 'trading' }));
+    });
     await page.setViewportSize({ width: 390, height: 844 });
     await unlock(page);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

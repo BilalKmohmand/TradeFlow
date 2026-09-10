@@ -1,6 +1,7 @@
 export const seed = () => {
   const set = (k: string, v: unknown) => localStorage.setItem(k, JSON.stringify(v));
   const today = new Date().toISOString().split('T')[0];
+  set('tradeflow_settings_v2', { appMode: 'trading' });
   set('tradeflow_customers_v2', [{ id: 'c1', name: 'Ali Raza', company: 'Raza Traders', phone: '+92 300 2222222', email: 'ali@raza.pk', address: 'Karachi Port Trust, Karachi', totalDue: 500000, creditLimit: 800000, createdAt: today }]);
   set('tradeflow_suppliers_v2', [{ id: 's1', name: 'Ahmed', company: 'Lucky Cement', phone: '+92 300 1111111', email: '', materialCategory: 'Cement & Materials', address: 'Port Qasim, Karachi', totalOwed: 200000, createdAt: today }]);
   set('tradeflow_products_v2', [{ id: 'p1', name: 'OPC Cement', category: 'Construction & Cement', unitPricePerKg: 25, stockKg: 480000, minThresholdKg: 100000, supplierId: 's1' }, { id: 'p2', name: 'Steel Bars', category: 'Metals & Alloys', unitPricePerKg: 240, stockKg: 5000, minThresholdKg: 20000, supplierId: 's1' }]);

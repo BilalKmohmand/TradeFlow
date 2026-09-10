@@ -24,6 +24,11 @@ import {
   TrendingUp,
   Cloud,
   CloudOff,
+  Home,
+  FileText as BillIcon,
+  CalendarDays,
+  Coins,
+  Tag,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { computeAlerts } from '../utils/alerts';
@@ -76,6 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReceiveStock }) => {
     isCloudSyncEnabled,
     isCloudSyncReady,
     settings,
+    invoices,
   } = useTrading();
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
@@ -107,7 +113,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReceiveStock }) => {
   const inTransit = dispatches.filter((d) => (d.status ?? 'in_transit') === 'in_transit').length;
   const canFinance = can('view_finance') || can('finance:view_pnl');
 
-  const sections: Section[] = ([
+  const isBilling = (settings.appMode || 'billing') === 'billing';
+  const unpaidBills = invoices.filter((i) => i.balanceDue > 0 && i.status !== 'cancelled').length;
+  const billingSections: Section[] = [
+    { id: 'dashboard', label: 'Home', icon: Home, group: 'Daily work' },
+    { id: 'bills', label: 'Bills', icon: BillIcon, group: 'Daily work', badge: unpaidBills },
+    { id: 'daily', label: 'Daily Sheet', icon: CalendarDays, group: 'Daily work' },
+    { id: 'customers', label: 'Customers', icon: Users, group: 'People' },
+    { id: 'suppliers', label: 'Suppliers', icon: Layers, group: 'People' },
+    { id: 'products', label: 'Items & Prices', icon: Tag, group: 'Stock' },
+    { id: 'money', label: 'Money', icon: Coins, group: 'Money' },
+    ...(can('admin_screen') || can('system:admin_screen') ? [{ id: 'admin' as ActiveScreen, label: 'Admin', icon: ShieldCheck, group: 'Administration' }] : []),
+  ];
+
+  const sections: Section[] = (isBilling ? billingSections : [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'Overview' },
     {
       id: 'bookings',
