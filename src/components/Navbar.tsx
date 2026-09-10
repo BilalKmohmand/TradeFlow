@@ -55,6 +55,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     quotations,
     purchaseOrders,
     settings,
+    updateSettings,
   } = useTrading();
   const alertCount = useMemo(
     () => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders }, new Date().toISOString().split('T')[0]).length,
@@ -333,6 +334,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Mobile Navigation Bar: equal-width tabs so all screens fit without scrolling */}
+        {!isBilling && adminItem.length > 0 && (
+          <button type="button" onClick={() => updateSettings({ appMode: 'billing' })} className="lg:hidden w-full text-left px-1 pt-1.5 text-[11px] font-bold text-indigo-700 dark:text-indigo-300">← Back to simple billing</button>
+        )}
         <nav className="grid lg:hidden grid-cols-4 gap-0.5 py-1.5 border-t border-[#E5E5E1] dark:border-[#203248]">
           {navItems.map((item) => {
             const Icon = item.icon;
