@@ -82,21 +82,36 @@ Admin tools. Backups now include `invoices`. Factory reset clears bills too.
 
 ### Home (`BillingHomeScreen`)
 Four tiles: **Sales today**, **Cash received today**, **Expenses today**, **Money in business** (each opens the matching screen). Four buttons: New Bill, Add expense, Receive payment, Cash ↔ Bank, plus Daily sheet. Recent bills (tap to open). "Money now" card with cash, bank, owed to you, you owe. "Needs attention" lists unpaid bills and low-stock items.
+![Home](screenshots/01-home.jpg)
+
 
 ### Bills (`BillsScreen`)
 Search box, period chips, Unpaid toggle, CSV download. Each row: customer, number, date, items, total, Paid / due. Printer icon prints straight away; tapping the row opens the bill.
+![Bills](screenshots/04-bills.jpg)
+
 
 ### Daily Sheet (`DailySheetScreen`)
 Date picker with previous/next day. Tiles: opening cash, cash in, cash out, closing cash (bank figures underneath). Quick buttons. Four panels: Bills, Money received, Expenses (with per-category "+" chips), Suppliers paid & other. Delete "✕" on expenses and manual entries (permission-gated). **Print** opens the daily-sheet printout.
+![Daily Sheet](screenshots/07-daily-sheet.jpg)
+
 
 ### Money (`MoneyScreen`)
 *Overview*: cash, bank, others owe you, you owe others; net position with the formula spelled out; Cash ↔ Bank, Receive and Opening balances buttons; the debtor list (Receive + statement print per customer) and the creditor list (suppliers + unpaid expenses). *Expense sheets*: one card per category for a chosen month. *Cash book*: every movement in a month with in/out totals.
+![Money](screenshots/09-money.jpg)
+
+![Expense sheets](screenshots/11-expense-sheets.jpg)
+
+![Cash book](screenshots/12-cash-book.jpg)
+
 
 ### Items & Prices (`ItemsScreen`)
 Table of items with price, stock (red with a warning when at or below the low-stock level) and all-time sold quantity. Edit and delete per row; New item.
+![Items & Prices](screenshots/13-items.jpg)
+
 
 ### Customers, Suppliers, Admin
 The existing screens. Admin → **System & Backups** holds the company profile, app mode, opening balances, backups and factory reset.
+![Admin settings](screenshots/15-admin-settings.jpg)
 
 ## 5. Dialogs (`src/components/billing/`)
 
@@ -110,6 +125,16 @@ The existing screens. Admin → **System & Backups** holds the company profile, 
 | **Item** (`ItemModal`) | Items | Name, sold-per unit, selling price, cost price, stock, low-stock level. |
 
 All dialogs are hosted once by `BillingUIProvider`; screens call `useBillingUI().newBill()` etc. Each open remounts the dialog so it always starts clean. Escape closes only the top-most layer.
+![New Bill](screenshots/02-new-bill.jpg)
+
+![Bill detail](screenshots/05-bill-detail.jpg)
+
+![Add expense](screenshots/06-add-expense.jpg)
+
+![Cash ↔ Bank](screenshots/10-cash-bank.jpg)
+
+![New item](screenshots/14-new-item.jpg)
+
 
 ## 6. Printouts (`src/components/PrintDocument.tsx`)
 
@@ -118,12 +143,48 @@ All dialogs are hosted once by `BillingUIProvider`; screens call `useBillingUI()
 - Customer **statement** (from Money → printer icon) and the existing vouchers, challans and trading invoices are unchanged.
 
 "Print / Save PDF" uses the browser print dialog; only the document area prints.
+![Printed bill](screenshots/03-print-invoice.jpg)
+
+![Printed daily sheet](screenshots/08-print-daily-sheet.jpg)
+
 
 ## 7. Navigation and modes
 
 `settings.appMode` (default `billing`) picks the navigation and the Home / Items screens. Billing nav: Home, Bills, Daily Sheet, Customers, Suppliers, Items & Prices, Money, Admin. On phones the same items sit in a two-row grid under the header. Trading nav and screens appear when the mode is `trading`.
 
-## 8. Tests
+## 8. On a phone
+
+Same screens at 390px; the navigation becomes a two-row grid and dialogs slide up from the bottom.
+
+| | | |
+|---|---|---|
+| ![Home](screenshots/m1-home.jpg) | ![New Bill](screenshots/m2-new-bill.jpg) | ![Bills](screenshots/m3-bills.jpg) |
+| ![Bill detail](screenshots/m4-bill-detail.jpg) | ![Daily Sheet](screenshots/m5-daily-sheet.jpg) | ![Money](screenshots/m6-money.jpg) |
+
+## 9. The full ERP is still there
+
+Admin → System & Backups → App mode → *Full trading suite* switches the navigation to the complete system. Nothing was removed; billing shares the same customers, suppliers, items, ledger, cash book and users.
+
+| Area | What's there |
+|---|---|
+| Sales | Quotations → bookings (multi-item contracts, agreed customer rates, broker commission) → dispatches per truck with weighbridge, freight, tax, delivery status → tax invoice, delivery challan, credit notes, customer statements, WhatsApp alerts. |
+| Purchasing | Purchase orders, receive stock against a PO, supplier payables and payments, supplier statements, debit notes. |
+| Inventory | Stock in kg with low-stock alerts, stock adjustments, daily stock-flow log, price history with last-year comparisons, product sales by month. |
+| Finance | Daily/monthly reports, sales analytics, Profit & Loss, cash book, balance sheet, receivables/payables aging, expenses by category and per trip, CSV exports. |
+| Operations | Alerts centre and header notifications, fleet & drivers, follow-up tasks, dispatch tracking. |
+| Administration | Users with PINs, roles and RBAC matrix, screen/field visibility per role, security policy, audit trail, JSON backups, CSV import, purge, factory reset, Supabase sync. |
+
+![Trading dashboard](screenshots/trading/d-01-dashboard.jpg)
+![Bookings](screenshots/trading/d-02-bookings.jpg)
+![Purchase orders](screenshots/trading/d-06-purchase-orders.jpg)
+![Stock flow](screenshots/trading/10-stock-flow.jpg)
+![Price history](screenshots/trading/12-price-history.jpg)
+![Profit & Loss](screenshots/trading/d-13-pnl.jpg)
+![Balance sheet](screenshots/trading/d-12-balance.jpg)
+![Alerts](screenshots/trading/d-10-alerts.jpg)
+![Admin](screenshots/trading/02-admin-users.jpg)
+
+## 10. Tests
 
 - `src/__tests__/billing.test.tsx` — bill maths against the client's sample invoice (300 × 2,065 + 300 × 1,037.5 + 40 × 6,535 = 1,192,150), stock and customer effects, discount and cash-book routing by method, sequential numbering, part payments and refusal of over-payment, delete reversal, cash↔bank transfer, the daily sheet's opening/closing/grouping, the money position, and bill filtering.
 - `e2e/billing.spec.ts` — the full desktop flow and a 390px phone flow in real Chrome, with screenshots in `e2e/screenshots/billing-*.png`.
