@@ -1,0 +1,65 @@
+[
+  {
+    "file": "m01.jpg",
+    "section": "On a phone",
+    "title": "Sign in",
+    "caption": "Same keypad on the phone.",
+    "full": false
+  },
+  {
+    "file": "m02.jpg",
+    "section": "On a phone",
+    "title": "Home",
+    "caption": "The menu is a two-row grid under the header; the big New Bill button is first.",
+    "full": false
+  },
+  {
+    "file": "m03.jpg",
+    "section": "On a phone",
+    "title": "New bill",
+    "caption": "Item, Qty, Price and Amount are labelled; the totals box and Save buttons are at the bottom.",
+    "full": false
+  },
+  {
+    "file": "m04.jpg",
+    "section": "On a phone",
+    "title": "Print preview",
+    "caption": "The bill preview on the phone; \"Print / Save PDF\" lets you share it on WhatsApp.",
+    "full": false
+  },
+  {
+    "file": "m05.jpg",
+    "section": "On a phone",
+    "title": "Bills",
+    "caption": "Bills list with the amber due amount.",
+    "full": false
+  },
+  {
+    "file": "m06.jpg",
+    "section": "On a phone",
+    "title": "Bill and payment",
+    "caption": "The bill slides up from the bottom with the Receive payment form.",
+    "full": false
+  },
+  {
+    "file": "m07.jpg",
+    "section": "On a phone",
+    "title": "Daily sheet",
+    "caption": "The whole day on the phone.",
+    "full": true
+  },
+  {
+    "file": "m08.jpg",
+    "section": "On a phone",
+    "title": "Money",
+    "caption": "Cash, bank, who owes you, who you owe.",
+    "full": true
+  },
+  {
+    "file": "m09.jpg",
+    "section": "On a phone",
+    "title": "Customers",
+    "caption": "Customers with what they owe; the bill icon starts a bill.",
+    "full": false
+  }
+]

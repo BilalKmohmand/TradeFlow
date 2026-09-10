@@ -1,0 +1,289 @@
+[
+  {
+    "file": "01.jpg",
+    "section": "Signing in",
+    "title": "The sign-in screen",
+    "caption": "Pick your name from the list, type your PIN on the keypad and press Unlock. A wrong PIN shakes and counts; repeated wrong PINs lock the account for a while.",
+    "full": false
+  },
+  {
+    "file": "02.jpg",
+    "section": "Home",
+    "title": "Home before the day starts",
+    "caption": "Today's four numbers are zero, the four everyday buttons are ready, and \"Needs attention\" already warns that 15.7 kgs Tin is below its low-stock level.",
+    "full": true
+  },
+  {
+    "file": "03.jpg",
+    "section": "Making a bill",
+    "title": "Step 1 — press New Bill",
+    "caption": "The bill form opens with one empty item line and today's date.",
+    "full": false
+  },
+  {
+    "file": "04.jpg",
+    "section": "Making a bill",
+    "title": "Step 2 — pick the customer and an item",
+    "caption": "Choosing \"5 kgs Can\" fills its fixed price 2,065 automatically. Quantity starts at 1.",
+    "full": false
+  },
+  {
+    "file": "05.jpg",
+    "section": "Making a bill",
+    "title": "Step 3 — quantities and more lines",
+    "caption": "Three lines: 300 × 2,065, 300 × 1,037.5 and 40 × 6,535. Each amount and the subtotal update as you type. The amber note warns that only 45 tins are in stock.",
+    "full": false
+  },
+  {
+    "file": "06.jpg",
+    "section": "Making a bill",
+    "title": "Step 4 — change a price on one line",
+    "caption": "The tin price was changed from 6,535 to 6,500 for this bill only; the item keeps its normal price for next time.",
+    "full": false
+  },
+  {
+    "file": "07.jpg",
+    "section": "Making a bill",
+    "title": "Step 5 — discount and payment",
+    "caption": "A 2,150 discount brings the total to 1,190,000. \"Full\" fills Paid now with the whole amount; method is Cash. The footer confirms \"Fully paid\".",
+    "full": false
+  },
+  {
+    "file": "08.jpg",
+    "section": "Making a bill",
+    "title": "Step 6 — Save & Print",
+    "caption": "The bill is saved as Invoice #1 and the printout opens: Bill From / Bill To, Description · Qty · Price · Amount, Subtotal, Discount, Total Rs., Paid, PAID IN FULL. Press \"Print / Save PDF\".",
+    "full": false
+  },
+  {
+    "file": "09.jpg",
+    "section": "Making a bill",
+    "title": "Result on Home",
+    "caption": "Sales today 1,190,000, cash received 1,190,000, one bill in Recent bills, cash in hand went up by the same amount.",
+    "full": true
+  },
+  {
+    "file": "10.jpg",
+    "section": "Credit bills",
+    "title": "A bill on credit for a new customer",
+    "caption": "Press \"New\" beside the customer box and type the name and phone — no need to leave the bill. 2 tins = 13,070; the customer pays 5,000 now, so 8,070 is shown \"on credit\".",
+    "full": false
+  },
+  {
+    "file": "11.jpg",
+    "section": "Credit bills",
+    "title": "The Bills list",
+    "caption": "Both bills, newest first. INV-1 shows Paid; INV-2 shows \"Rs. 8,070 due\" in amber. Search, Today / 7 days / This month / All, Unpaid filter and CSV download are at the top.",
+    "full": true
+  },
+  {
+    "file": "12.jpg",
+    "section": "Credit bills",
+    "title": "Unpaid filter",
+    "caption": "Only bills with money still due. Tap a row to open it.",
+    "full": false
+  },
+  {
+    "file": "13.jpg",
+    "section": "Credit bills",
+    "title": "Open a bill",
+    "caption": "Lines, Total / Paid / Balance, what the customer owes across all bills, the payment already taken, and the Receive payment form.",
+    "full": false
+  },
+  {
+    "file": "14.jpg",
+    "section": "Credit bills",
+    "title": "Receive a part payment",
+    "caption": "3,000 by Easypaisa / JazzCash. The balance drops to 5,070, the payment appears in the list, and the message confirms what is still due. Bank balance goes up (Easypaisa counts as bank).",
+    "full": false
+  },
+  {
+    "file": "15.jpg",
+    "section": "Credit bills",
+    "title": "Receive the rest",
+    "caption": "\"Full\" fills the remaining 5,070. The bill is now fully paid and the Receive form disappears.",
+    "full": false
+  },
+  {
+    "file": "16.jpg",
+    "section": "Credit bills",
+    "title": "Print a bill later",
+    "caption": "Any bill can be printed again; this one now shows every payment and PAID IN FULL.",
+    "full": false
+  },
+  {
+    "file": "17.jpg",
+    "section": "Customers",
+    "title": "Customers list",
+    "caption": "Every customer with phone and what they owe (\"Clear\" when nothing). The bill icon on a row starts a new bill for that customer. Gul Khan was created from inside the bill.",
+    "full": true
+  },
+  {
+    "file": "18.jpg",
+    "section": "Customers",
+    "title": "One customer",
+    "caption": "Owes you, number of bills, bought so far, every bill (tap to open), money received, and the buttons: New bill, Statement, Edit, Delete.",
+    "full": false
+  },
+  {
+    "file": "19.jpg",
+    "section": "Customers",
+    "title": "Customer statement",
+    "caption": "A printable statement of account for the year: opening balance, every bill and payment, running balance.",
+    "full": false
+  },
+  {
+    "file": "20.jpg",
+    "section": "Expenses",
+    "title": "Add an expense",
+    "caption": "From the Daily Sheet the \"+ Food & refreshments\" chip opens the form with the category and date already set. Fill what for, amount, and how it was paid.",
+    "full": false
+  },
+  {
+    "file": "21.jpg",
+    "section": "Expenses",
+    "title": "Expenses on the sheet",
+    "caption": "Three expenses in three sheets: Food (cash), Employee (paid from bank), Owner drawings (cash). Each sheet shows its own total. Cash out and Bank out tiles update.",
+    "full": true
+  },
+  {
+    "file": "22.jpg",
+    "section": "Cash and bank",
+    "title": "Deposit cash to the bank",
+    "caption": "Choose Deposit to bank or Withdraw cash; the buttons show what is in the drawer and in the bank right now. You cannot move more than you have.",
+    "full": false
+  },
+  {
+    "file": "23.jpg",
+    "section": "Cash and bank",
+    "title": "The daily sheet after the deposit",
+    "caption": "Closing cash fell by 1,000,000 and closing bank rose by the same. The deposit is listed once under \"Suppliers paid, deposits & withdrawals\".",
+    "full": true
+  },
+  {
+    "file": "24.jpg",
+    "section": "Closing the day",
+    "title": "Print the daily sheet",
+    "caption": "Opening and closing for cash and bank, bills, money received, expenses by sheet, deposits — with Prepared by / Checked by lines. Print this at closing time.",
+    "full": false
+  },
+  {
+    "file": "25.jpg",
+    "section": "Closing the day",
+    "title": "Any earlier day",
+    "caption": "The arrows or the date box show any past day. Yesterday is empty but carries the opening and closing balances.",
+    "full": true
+  },
+  {
+    "file": "26.jpg",
+    "section": "Money",
+    "title": "Where the money is",
+    "caption": "Cash in hand, in bank, customers owe you, you owe others, and \"Money in business\" with its formula. The debtor list has Receive and a statement printer per customer; the creditor list shows the supplier and the unpaid expense.",
+    "full": true
+  },
+  {
+    "file": "27.jpg",
+    "section": "Money",
+    "title": "Opening balances",
+    "caption": "The starting cash, bank and date that all balances count from. Set once on day one; change only if the count was wrong.",
+    "full": false
+  },
+  {
+    "file": "28.jpg",
+    "section": "Money",
+    "title": "Receive against an account",
+    "caption": "Money from a customer that is not tied to one bill (old dues). The dropdown shows what each customer owes; \"Full\" fills it. Overpaying is refused.",
+    "full": false
+  },
+  {
+    "file": "29.jpg",
+    "section": "Money",
+    "title": "Monthly expense sheets",
+    "caption": "One card per category for the chosen month: Owner drawings, Employee, Food… with every entry and its total.",
+    "full": true
+  },
+  {
+    "file": "30.jpg",
+    "section": "Money",
+    "title": "Cash book",
+    "caption": "Every rupee in and out this month, each with its method, plus In / Out totals.",
+    "full": true
+  },
+  {
+    "file": "31.jpg",
+    "section": "Items and prices",
+    "title": "The price list",
+    "caption": "15.7 kgs Tin is red: 45 − 40 − 2 = 3 left, below its warning level of 50. \"Sold (all time)\" counts every bill.",
+    "full": true
+  },
+  {
+    "file": "32.jpg",
+    "section": "Items and prices",
+    "title": "Add an item",
+    "caption": "Name, sold per, fixed selling price, optional cost, stock on hand and the low-stock warning level.",
+    "full": false
+  },
+  {
+    "file": "33.jpg",
+    "section": "Items and prices",
+    "title": "Edit an item",
+    "caption": "Pencil on any row. Here the tin stock is corrected to 60 after new stock arrived.",
+    "full": false
+  },
+  {
+    "file": "34.jpg",
+    "section": "Items and prices",
+    "title": "After the changes",
+    "caption": "1 kg Pouch is in the list and the tin is no longer red.",
+    "full": true
+  },
+  {
+    "file": "35.jpg",
+    "section": "Suppliers",
+    "title": "Suppliers",
+    "caption": "Who you buy from and what you owe them. Record a payment to a supplier from here; it shows under \"You owe others\" on Money and in the cash book.",
+    "full": true
+  },
+  {
+    "file": "36.jpg",
+    "section": "Admin",
+    "title": "Users and PINs",
+    "caption": "Add staff with a role: operator (bills and payments only), manager, admin. Change PINs. Deactivate old accounts.",
+    "full": true
+  },
+  {
+    "file": "37.jpg",
+    "section": "Admin",
+    "title": "System & Backups",
+    "caption": "Master PIN, Export / Import backup, factory reset, the company profile printed on bills, App mode, opening cash and bank, CSV exports and table purges.",
+    "full": true
+  },
+  {
+    "file": "38.jpg",
+    "section": "Admin",
+    "title": "Audit trail",
+    "caption": "Every bill, payment, expense, delete and setting change with who did it and when.",
+    "full": true
+  },
+  {
+    "file": "39.jpg",
+    "section": "Full trading suite",
+    "title": "One tap to the full suite",
+    "caption": "The navigation changes to Dashboard, Bookings, Customers, Suppliers, Products, Reports, Ops, Admin. Same data underneath.",
+    "full": true
+  },
+  {
+    "file": "40.jpg",
+    "section": "Full trading suite",
+    "title": "Reports",
+    "caption": "Daily & monthly, Sales analytics, Profit & Loss, Cash Book, Balance Sheet, Receivables aging.",
+    "full": true
+  },
+  {
+    "file": "41.jpg",
+    "section": "Full trading suite",
+    "title": "Back to simple billing",
+    "caption": "The sidebar button brings the simple screens straight back.",
+    "full": true
+  }
+]

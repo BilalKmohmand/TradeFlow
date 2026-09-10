@@ -271,7 +271,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReceiveStock }) => {
           {!collapsed && <span className="truncate">{isCloudSyncReady ? 'Cloud sync live' : isCloudSyncEnabled ? 'Offline • local data' : 'Local only'}</span>}
         </div>
         {!isBilling && (can('admin_screen') || can('system:admin_screen')) && (
-          <button onClick={() => updateSettings({ appMode: 'billing' })} title="Back to simple billing" aria-label="Back to simple billing" className={`w-full flex items-center gap-2 rounded-2xl px-3 py-2 text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 hover:bg-indigo-100 ${collapsed ? 'justify-center' : ''}`}>
+          <button onClick={() => { updateSettings({ appMode: 'billing' }); setActiveScreen('dashboard'); }} title="Back to simple billing" aria-label="Back to simple billing" className={`w-full flex items-center gap-2 rounded-2xl px-3 py-2 text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 hover:bg-indigo-100 ${collapsed ? 'justify-center' : ''}`}>
             <ArrowLeftRight className="w-3.5 h-3.5 shrink-0" />
             {!collapsed && <span className="truncate">Back to simple billing</span>}
           </button>
