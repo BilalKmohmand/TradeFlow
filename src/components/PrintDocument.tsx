@@ -83,9 +83,9 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 {inv.items.map((it) => (
                   <tr key={it.id} className="border-b border-gray-200">
                     <td className="py-3 px-3 font-bold">{it.productName}</td>
-                    <td className="py-3 px-3 text-right font-mono">{money(lineQty(it))}{it.unit && it.unit !== 'pcs' ? ` ${it.unit}` : ''}</td>
-                    <td className="py-3 px-3 text-right font-mono">{money(linePrice(it))}</td>
-                    <td className="py-3 px-3 text-right font-mono font-bold">{money(it.amount)}</td>
+                    <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(lineQty(it))}{it.unit && it.unit !== 'pcs' ? ` ${it.unit}` : ''}</td>
+                    <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(linePrice(it))}</td>
+                    <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap">{money(it.amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -93,10 +93,10 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 <tr><td colSpan={3} className="pt-4 text-right text-[11px] text-gray-600">Subtotal</td><td className="pt-4 text-right font-mono px-3">{money(inv.subtotal)}</td></tr>
                 {(inv.discount || 0) > 0 && <tr><td colSpan={3} className="pt-1 text-right text-[11px] text-gray-600">Discount</td><td className="pt-1 text-right font-mono px-3">− {money(inv.discount || 0)}</td></tr>}
                 {inv.taxAmount > 0 && <tr><td colSpan={3} className="pt-1 text-right text-[11px] text-gray-600">{settings.taxLabel || 'Sales Tax'} ({inv.taxRatePct}%)</td><td className="pt-1 text-right font-mono px-3">{money(inv.taxAmount)}</td></tr>}
-                <tr><td colSpan={3} className="pt-3 text-right font-bold uppercase tracking-widest text-[10px] text-gray-600">Total</td><td className="pt-3 text-right font-mono font-extrabold text-base px-3">Rs. {money(inv.totalAmount)}</td></tr>
+                <tr><td colSpan={3} className="pt-3 text-right font-bold uppercase tracking-widest text-[10px] text-gray-600">Total</td><td className="pt-3 text-right font-mono font-extrabold text-base px-3 whitespace-nowrap">Rs. {money(inv.totalAmount)}</td></tr>
                 {inv.paidAmount > 0 && <tr><td colSpan={3} className="pt-1 text-right text-[11px] text-gray-600">Paid{inv.paymentMethod ? ` (${inv.paymentMethod})` : ''}</td><td className="pt-1 text-right font-mono px-3">{money(inv.paidAmount)}</td></tr>}
                 {inv.balanceDue > 0 ? (
-                  <tr><td colSpan={3} className="pt-1 text-right font-bold text-[11px] text-gray-800">Balance due</td><td className="pt-1 text-right font-mono font-bold px-3">Rs. {money(inv.balanceDue)}</td></tr>
+                  <tr><td colSpan={3} className="pt-1 text-right font-bold text-[11px] text-gray-800">Balance due</td><td className="pt-1 text-right font-mono font-bold px-3 whitespace-nowrap">Rs. {money(inv.balanceDue)}</td></tr>
                 ) : (
                   <tr><td colSpan={4} className="pt-1 text-right text-[11px] text-teal-700 font-bold">PAID IN FULL</td></tr>
                 )}

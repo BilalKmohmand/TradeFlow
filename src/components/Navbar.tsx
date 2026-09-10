@@ -122,7 +122,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-serif italic font-bold text-lg sm:text-xl tracking-tight text-[#111827] dark:text-white truncate max-w-[40vw] sm:max-w-none">
+                <h1 className="font-serif italic font-bold text-lg sm:text-xl tracking-tight text-[#111827] dark:text-white truncate max-w-[28vw] sm:max-w-none">
                   {settings.companyName || 'Sarmaya'}
                 </h1>
                 <span className="hidden sm:inline-flex text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 bg-[#FAF9F6] dark:bg-[#162436] text-teal-800 dark:text-teal-300 rounded-full border border-[#E5E5E1] dark:border-[#203248]">
@@ -156,7 +156,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Right Action Hub */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Automated System-Aware Theme Toggle */}
-            <div className="relative" ref={themeMenuRef}>
+            <div className="relative hidden sm:block" ref={themeMenuRef}>
               <button
                 onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
                 title={`Theme: ${timeLabel}. Click to switch theme.`}
