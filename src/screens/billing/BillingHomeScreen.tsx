@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { FilePlus2, Receipt, Wallet, ArrowLeftRight, HandCoins, AlertTriangle, ChevronRight, Landmark, Banknote } from 'lucide-react';
+import { FilePlus2, Receipt, Wallet, ArrowLeftRight, HandCoins, AlertTriangle, ChevronRight, Landmark, Banknote, Boxes } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
 import { Tile, cardCls, primaryBtn, secondaryBtn, rs } from '../../components/billing/ui';
@@ -10,7 +10,8 @@ import { formatDate } from '../../utils/formatters';
 
 /** The first screen every morning: today's numbers, the four buttons you press all day, recent bills. */
 export const BillingHomeScreen: React.FC = () => {
-  const { invoices, ledger, expenses, cashEntries, customers, suppliers, products, settings, setActiveScreen, currentUser } = useTrading();
+  const { invoices, ledger, expenses, cashEntries, customers, suppliers, products, settings, setActiveScreen, currentUser, can, updateSettings } = useTrading();
+  const isAdmin = can('admin_screen') || can('system:admin_screen');
   const ui = useBillingUI();
   const today = todayISO();
   const movements = useMemo(() => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), [ledger, expenses, cashEntries, customers, suppliers]);
@@ -93,6 +94,16 @@ export const BillingHomeScreen: React.FC = () => {
           )}
         </div>
       </div>
+
+      {isAdmin && (
+        <div className={`${cardCls} p-5 flex flex-col sm:flex-row sm:items-center gap-4`}>
+          <div className="flex-1 min-w-0">
+            <h2 className="font-bold text-[#111827] dark:text-white flex items-center gap-2"><Boxes className="w-4 h-4 text-indigo-600" /> Full trading suite is one tap away</h2>
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">Same customers, items, ledger and cash book — plus quotations, multi-item bookings, truck dispatches with challans and tax invoices, purchase orders and stock receiving, stock flow and price history, Profit &amp; Loss, balance sheet, receivables aging, fleet, alerts, follow-ups and CSV import. Switch back any time from Admin.</p>
+          </div>
+          <button type="button" onClick={() => updateSettings({ appMode: 'trading' })} className={`${secondaryBtn} shrink-0`}>Open full suite <ChevronRight className="w-4 h-4" /></button>
+        </div>
+      )}
     </div>
   );
 };

@@ -2,7 +2,7 @@
 
 Out of the box the app runs in **Simple billing mode**: make a bill in one screen, take cash or give credit, and close the day with a daily sheet that shows cash in hand, bank, what customers owe and what you owe. Every product has one fixed price (per can, tin, bag, kg…) that can still be changed on any bill line. Works offline in the browser, and syncs to Supabase when configured.
 
-The full bulk-trading suite (bookings, dispatches, per-kg pricing, fleet, P&L, balance sheet) is still there — switch **Admin → System & Backups → App mode** to *Full trading suite*.
+The full bulk-trading ERP is still there and shares the same data — day to day you only see the simple billing screens, and the complete system is one setting away (**Admin → System & Backups → App mode**, or the *Open full suite* card on Home). That gives you quotations, multi-item bookings with agreed rates and broker commission, truck dispatches with weighbridge, freight, tax and delivery status, tax invoices and challans, purchase orders and stock receiving, kg inventory with stock flow and price history, Profit & Loss, balance sheet, cash book, receivables and payables aging, sales analytics, fleet and drivers, alerts, follow-up tasks, users with roles and permissions, audit trail, backups and CSV import.
 
 ## Simple billing mode
 
