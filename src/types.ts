@@ -151,6 +151,10 @@ export interface LedgerEntry {
   credit: number;  // For customer: payments reduce debt
   balanceAfter: number;
   kg?: number;
+  /** Id of the bill or payment that produced this row (used to reverse exactly this record). */
+  sourceId?: string;
+  /** Payment method for payment rows; decides cash in hand vs bank. */
+  method?: string;
 }
 
 export interface WhatsAppMessage {
@@ -580,6 +584,8 @@ export interface CashEntry {
   method?: string;
   createdAt: string;
   createdBy?: string;
+  /** Both legs of a cash<->bank transfer share one pairId and are deleted together. */
+  pairId?: string;
 }
 
 export interface AppSettings {

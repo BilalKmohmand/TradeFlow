@@ -238,7 +238,7 @@ export const AppStartPinGate: React.FC = () => {
               </span>
             </div>
             <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
-              Bulk Commodity Trading & Fleet Logistics
+              Billing &amp; daily cash book
             </div>
           </div>
         </div>
@@ -297,7 +297,7 @@ export const AppStartPinGate: React.FC = () => {
 
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF9F6] dark:bg-[#162436] text-[11px] font-bold text-teal-800 dark:text-teal-300 border border-[#E5E5E1] dark:border-[#203248] mb-2 uppercase tracking-wider">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Authorized Terminal Access</span>
+            <span>Sign in with your PIN</span>
           </div>
 
           <h2 className="font-serif italic text-2xl sm:text-3xl font-bold text-[#111827] dark:text-white mb-1">
@@ -523,7 +523,7 @@ export const AppStartPinGate: React.FC = () => {
               </>
             ) : (
               <>
-                <span>Unlock Terminal</span>
+                <span>Unlock</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}

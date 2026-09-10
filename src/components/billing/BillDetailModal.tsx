@@ -103,7 +103,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
                     <label className={labelCls} htmlFor="pay-amount">Amount</label>
                     <div className="flex gap-1">
                       <input id="pay-amount" type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} font-mono`} placeholder="0" />
-                      <button type="button" onClick={() => setAmount(String(inv.balanceDue))} className="shrink-0 px-2 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-[11px] font-bold text-teal-700 dark:text-teal-300">Full</button>
+                      <button type="button" onClick={() => setAmount(String(inv.balanceDue))} className="shrink-0 px-3 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-[11px] font-bold text-teal-700 dark:text-teal-300">Full</button>
                     </div>
                   </div>
                   <div>
@@ -125,7 +125,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
       <ConfirmDialog
         isOpen={confirmDelete}
         title={`Delete bill ${inv?.invoiceNumber || ''}?`}
-        message="The bill will be removed. Stock goes back to the items and the unpaid amount comes off the customer's account."
+        message="The bill will be removed as if it never happened: stock goes back to the items, the unpaid amount comes off the customer's account, and any money received on it is taken out of the cash book (treat it as refunded)."
         details={inv ? [`Total ${rs(inv.totalAmount)}, paid ${rs(inv.paidAmount)}`, `Customer: ${inv.customerName}`, `Dated ${formatDate(inv.issueDate)} (today is ${formatDate(todayISO())})`] : []}
         confirmLabel="Delete bill"
         onCancel={() => setConfirmDelete(false)}

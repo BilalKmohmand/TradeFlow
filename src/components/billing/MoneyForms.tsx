@@ -3,6 +3,8 @@ import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
 import { EXPENSE_CATEGORIES, ExpenseCategory } from '../../types';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice } from './ui';
 import { todayISO } from '../../utils/stockFlow';
+import { collectCashMovements, accountBalancesOn } from '../../utils/finance';
+import { rs } from './ui';
 
 const EXPENSE_PAID_VIA = ['Cash', 'Bank Transfer', 'Easypaisa / JazzCash', 'Card', 'Credit (unpaid)'];
 
@@ -56,7 +58,8 @@ export const ExpenseModal: React.FC<{ isOpen: boolean; onClose: () => void; date
 
 /** Move money between the cash drawer and the bank account (deposit or withdrawal). */
 export const TransferModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const { addCashTransfer } = useTrading();
+  const { addCashTransfer, ledger, expenses, cashEntries, customers, suppliers, settings } = useTrading();
+  const balances = accountBalancesOn(collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), settings, todayISO());
   const [from, setFrom] = useState<'cash' | 'bank'>('cash');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(todayISO());
@@ -64,7 +67,10 @@ export const TransferModal: React.FC<{ isOpen: boolean; onClose: () => void }> =
   const [error, setError] = useState('');
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const r = addCashTransfer({ amount: parseFloat(amount) || 0, from, date, note: note.trim() || undefined });
+    const amt = parseFloat(amount) || 0;
+    const available = from === 'cash' ? balances.cash : balances.bank;
+    if (amt > available + 0.005) return setError(`Only ${rs(available)} is ${from === 'cash' ? 'in the cash drawer' : 'in the bank'} right now.`);
+    const r = addCashTransfer({ amount: amt, from, date, note: note.trim() || undefined });
     if (!r.success) return setError(r.message);
     onClose();
   };
@@ -73,8 +79,8 @@ export const TransferModal: React.FC<{ isOpen: boolean; onClose: () => void }> =
       <form onSubmit={submit} className="space-y-4">
         {error && <Notice kind="error">{error}</Notice>}
         <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={() => setFrom('cash')} className={`rounded-2xl border p-3 text-sm font-bold ${from === 'cash' ? 'border-teal-600 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300' : 'border-[#E5E5E1] dark:border-[#203248] text-[#6B7280]'}`}>Deposit to bank<div className="text-[11px] font-normal">cash → bank</div></button>
-          <button type="button" onClick={() => setFrom('bank')} className={`rounded-2xl border p-3 text-sm font-bold ${from === 'bank' ? 'border-teal-600 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300' : 'border-[#E5E5E1] dark:border-[#203248] text-[#6B7280]'}`}>Withdraw cash<div className="text-[11px] font-normal">bank → cash</div></button>
+          <button type="button" onClick={() => setFrom('cash')} className={`rounded-2xl border p-3 text-sm font-bold ${from === 'cash' ? 'border-teal-600 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300' : 'border-[#E5E5E1] dark:border-[#203248] text-[#6B7280]'}`}>Deposit to bank<div className="text-[11px] font-normal">cash in hand {rs(balances.cash)}</div></button>
+          <button type="button" onClick={() => setFrom('bank')} className={`rounded-2xl border p-3 text-sm font-bold ${from === 'bank' ? 'border-teal-600 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300' : 'border-[#E5E5E1] dark:border-[#203248] text-[#6B7280]'}`}>Withdraw cash<div className="text-[11px] font-normal">in bank {rs(balances.bank)}</div></button>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -113,6 +119,7 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
     const amt = parseFloat(amount) || 0;
     if (!c) return setError('Pick the customer.');
     if (amt <= 0) return setError('Enter the amount.');
+    if (amt > c.totalDue + 0.005) return setError(c.totalDue > 0 ? `${c.name} owes only ${rs(c.totalDue)}. Enter up to that amount.` : `${c.name} owes nothing right now. Make a bill first.`);
     recordCustomerPayment(c.id, amt, `${method}${note.trim() ? ` - ${note.trim()}` : ''}`);
     onClose();
   };

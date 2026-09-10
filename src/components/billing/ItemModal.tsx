@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useTrading } from '../../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice } from './ui';
 
@@ -21,9 +21,13 @@ export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
   const [stock, setStock] = useState(editing ? String(editing.stockKg) : '');
   const [minStock, setMinStock] = useState(editing ? String(editing.minThresholdKg) : '');
   const [error, setError] = useState('');
+  const busy = useRef(false);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy.current) return;
+    busy.current = true;
+    setTimeout(() => { busy.current = false; }, 800);
     if (!name.trim()) return setError('Give the item a name.');
     const p = parseFloat(price);
     if (!Number.isFinite(p) || p < 0) return setError('Enter the selling price.');

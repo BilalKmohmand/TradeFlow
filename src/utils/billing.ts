@@ -20,15 +20,21 @@ export interface DaySummary {
 }
 
 /** What happened on one day, in the numbers a shop owner asks for at closing time. */
-export const daySummary = (invoices: Invoice[], movements: CashMovement[], date: string): DaySummary => {
-  const bills = invoices.filter((i) => i.issueDate === date && i.status !== 'cancelled');
+/** Bills made on the billing screens (trading-suite invoices are handled by bookings/dispatches). */
+export const billsOnly = (invoices: Invoice[]) => invoices.filter((i) => i.billKind && i.status !== 'cancelled');
+
+export const daySummary = (invoices: Invoice[], movements: CashMovement[], date: string, allExpenses?: Expense[]): DaySummary => {
+  // Expenses for the day include unpaid ones (they are still costs of that day).
+  const expensesTotal = allExpenses ? round2(allExpenses.filter((e) => e.date === date).reduce((a, e) => a + e.amount, 0)) : round2(movements.filter((m) => m.date === date && m.source === 'expense').reduce((a, m) => a + m.amount, 0));
+  const bills = billsOnly(invoices).filter((i) => i.issueDate === date);
   const todays = movements.filter((m) => m.date === date);
   const sales = round2(bills.reduce((a, b) => a + b.totalAmount, 0));
   const received = round2(todays.filter((m) => m.direction === 'in' && m.source === 'customer_payment').reduce((a, m) => a + m.amount, 0));
   const expenses = round2(todays.filter((m) => m.source === 'expense').reduce((a, m) => a + m.amount, 0));
+  void expenses;
   const supplierPayments = round2(todays.filter((m) => m.source === 'supplier_payment').reduce((a, m) => a + m.amount, 0));
   const creditGiven = round2(bills.reduce((a, b) => a + (b.totalAmount - (b.payments || []).filter((p) => p.date === date).reduce((x, p) => x + p.amount, 0)), 0));
-  return { date, billCount: bills.length, sales, received, expenses, supplierPayments, creditGiven: Math.max(0, creditGiven) };
+  return { date, billCount: bills.length, sales, received, expenses: expensesTotal, supplierPayments, creditGiven: Math.max(0, creditGiven) };
 };
 
 export interface ExpenseGroup {
@@ -83,18 +89,23 @@ export const buildDailySheet = (src: DailySheetSources, date: string): DailyShee
   const todays = movements.filter((m) => m.date === date);
   const opening = accountBalancesOn(movements, src.settings, shiftDate(date, -1));
   const closing = accountBalancesOn(movements, src.settings, date);
-  const bills = src.invoices.filter((i) => i.issueDate === date && i.status !== 'cancelled').sort((a, b) => (a.invoiceNumber < b.invoiceNumber ? -1 : 1));
+  const bills = billsOnly(src.invoices).filter((i) => i.issueDate === date).sort((a, b) => (a.invoiceNumber < b.invoiceNumber ? -1 : 1));
   const sum = (rows: CashMovement[]) => round2(rows.reduce((a, m) => a + m.amount, 0));
   return {
     date,
     opening,
     closing,
-    summary: daySummary(src.invoices, movements, date),
+    summary: daySummary(src.invoices, movements, date, src.expenses),
     bills,
     receipts: todays.filter((m) => m.direction === 'in' && m.source === 'customer_payment'),
     supplierPayments: todays.filter((m) => m.source === 'supplier_payment'),
     expenses: groupExpenses(src.expenses.filter((e) => e.date === date)),
-    other: todays.filter((m) => m.source === 'manual'),
+    // A cash<->bank transfer has two legs; show it once (the "out" leg carries the direction in its text).
+    other: todays.filter((m) => m.source === 'manual').filter((m, _, arr) => {
+      const entry = src.cashEntries.find((c) => c.id === m.sourceId);
+      if (!entry?.pairId) return true;
+      return m.direction === 'out' || !arr.some((o) => o.direction === 'out' && src.cashEntries.find((c) => c.id === o.sourceId)?.pairId === entry.pairId);
+    }),
     cashIn: sum(todays.filter((m) => m.direction === 'in' && isCashMethod(m.method))),
     cashOut: sum(todays.filter((m) => m.direction === 'out' && isCashMethod(m.method))),
     bankIn: sum(todays.filter((m) => m.direction === 'in' && !isCashMethod(m.method))),
@@ -106,7 +117,7 @@ export const buildDailySheet = (src: DailySheetSources, date: string): DailyShee
 export const filterBills = (invoices: Invoice[], query: string, period: 'today' | 'week' | 'month' | 'all', today: string, unpaidOnly = false): Invoice[] => {
   const q = query.trim().toLowerCase();
   const from = period === 'today' ? today : period === 'week' ? shiftDate(today, -6) : period === 'month' ? today.slice(0, 7) + '-01' : '0000-00-00';
-  return invoices
+  return billsOnly(invoices)
     .filter((i) => i.issueDate >= from)
     .filter((i) => !unpaidOnly || i.balanceDue > 0)
     .filter((i) => !q || i.invoiceNumber.toLowerCase().includes(q) || i.customerName.toLowerCase().includes(q) || (i.customerPhone || '').includes(q) || i.items.some((it) => it.productName.toLowerCase().includes(q)))

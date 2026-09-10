@@ -36,6 +36,7 @@ import { BillsScreen } from './screens/billing/BillsScreen';
 import { ItemsScreen } from './screens/billing/ItemsScreen';
 import { DailySheetScreen } from './screens/billing/DailySheetScreen';
 import { MoneyScreen } from './screens/billing/MoneyScreen';
+import { CustomersBillingScreen } from './screens/billing/CustomersBillingScreen';
 
 function MainApp() {
   const {
@@ -159,7 +160,8 @@ function MainApp() {
               />
             )}
 
-            {activeScreen === 'customers' && (
+            {activeScreen === 'customers' && isBilling && <CustomersBillingScreen onAdd={() => setIsCustomerModalOpen(true)} />}
+            {activeScreen === 'customers' && !isBilling && (
               <CustomersScreen
                 onSelectCustomer={(cId) => setSelectedCustomerId(cId)}
                 onOpenAddCustomer={() => setIsCustomerModalOpen(true)}

@@ -323,7 +323,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Lock Terminal Button */}
             <button
               onClick={() => lockAdmin()}
-              title="Lock Trading Terminal (Requires PIN to enter)"
+              title="Lock the app (PIN needed to open again)"
               className="flex items-center gap-1.5 px-2.5 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#E5E5E1] dark:border-[#203248] hover:border-rose-200 dark:hover:border-rose-900/60 text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600 dark:hover:text-rose-400 transition-all shadow-2xs active:scale-95"
             >
               <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />

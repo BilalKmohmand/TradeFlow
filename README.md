@@ -114,6 +114,7 @@ Run the SQL files in `supabase/` in this order on an existing project:
 5. `migrate_v6_trade_documents.sql` (once) — quotations, purchase orders, returns, stock adjustments, tasks, broker commission.
 6. `migrate_v7_master_pin_sync.sql` (once) — master PIN and user account columns synced through cloud settings.
 7. `migrate_v8_simple_billing.sql` (once) — invoices/bills table, product unit, app mode and opening bank balance in settings.
+8. `migrate_v9_billing_integrity.sql` (once) — cost price on items, ledger source/method columns, paired cash↔bank transfers.
 
 New projects can run `schema.sql` instead, which already contains everything.
 

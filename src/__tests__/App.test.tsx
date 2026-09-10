@@ -19,7 +19,7 @@ const unlock = async () => {
     });
   }
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /Unlock Terminal/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Unlock/ }));
   });
   await act(async () => {
     await new Promise((r) => setTimeout(r, 600));

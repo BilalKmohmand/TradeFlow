@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
 import { useEscape } from '../../hooks/useEscape';
@@ -15,14 +15,37 @@ export const secondaryBtn =
 export const dangerBtn =
   'inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-sm font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-100 transition';
 
+const FOCUSABLE = 'input:not([disabled]),select:not([disabled]),textarea:not([disabled]),button:not([disabled]),[href],[tabindex]:not([tabindex="-1"])';
+
 export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; subtitle?: string; wide?: boolean; children: React.ReactNode; footer?: React.ReactNode }> = ({ isOpen, onClose, title, subtitle, wide, children, footer }) => {
   useEscape(isOpen, onClose);
+  const box = useRef<HTMLDivElement>(null);
+  // Put focus on the first field and keep Tab inside the dialog.
+  useEffect(() => {
+    if (!isOpen) return;
+    const t = setTimeout(() => {
+      const el = box.current?.querySelector<HTMLElement>('input,select,textarea');
+      el?.focus();
+    }, 50);
+    return () => clearTimeout(t);
+  }, [isOpen]);
+  const trap = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Tab' || !box.current) return;
+    const items = (Array.from(box.current.querySelectorAll(FOCUSABLE)) as HTMLElement[]).filter((n) => n.offsetParent !== null);
+    if (items.length === 0) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
   return (
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" />
           <motion.div
+            ref={box}
+            onKeyDown={trap}
             role="dialog"
             aria-modal="true"
             aria-label={title}

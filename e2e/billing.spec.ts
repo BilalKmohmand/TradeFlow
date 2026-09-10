@@ -29,9 +29,9 @@ const seedBilling = () => {
 
 async function unlock(page: Page) {
   await page.goto('/');
-  await expect(page.getByRole('button', { name: /Unlock Terminal/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Unlock/ })).toBeVisible();
   for (const d of '7860') await page.getByRole('button', { name: d, exact: true }).click();
-  await page.getByRole('button', { name: /Unlock Terminal/ }).click();
+  await page.getByRole('button', { name: /^Unlock/ }).click();
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible({ timeout: 10_000 });
 }
 
@@ -110,6 +110,12 @@ test.describe('Simple billing', () => {
     await detail.getByRole('button', { name: 'Receive', exact: true }).click();
     await expect(detail.getByText(/10,000 still due/)).toBeVisible();
     await shot(page, 'billing-bill-detail');
+    // Escape under a print preview closes only the preview, the bill stays open.
+    await detail.getByRole('button', { name: 'Print', exact: true }).click();
+    await expect(page.locator('#print-root')).toContainText('Invoice #2');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#print-root')).toHaveCount(0);
+    await expect(detail).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(detail).toBeHidden();
     await page.getByRole('button', { name: 'Unpaid' }).click();
@@ -142,6 +148,9 @@ test.describe('Simple billing', () => {
     await expect(page.getByText('Rs. 45,000').first()).toBeVisible(); // supplier owed
     await page.getByRole('button', { name: 'Cash ↔ Bank' }).first().click();
     const tr = page.getByRole('dialog', { name: 'Cash ↔ Bank' });
+    await tr.getByLabel('Amount (Rs.)', { exact: true }).fill('99999999');
+    await tr.getByRole('button', { name: 'Record' }).click();
+    await expect(tr.getByText(/is in the cash drawer right now/)).toBeVisible();
     await tr.getByLabel('Amount (Rs.)', { exact: true }).fill('1000000');
     await tr.getByRole('button', { name: 'Record' }).click();
     await expect(tr).toBeHidden();

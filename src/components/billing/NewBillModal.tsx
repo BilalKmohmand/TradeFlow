@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Plus, Trash2, Printer, Save, UserPlus } from 'lucide-react';
 import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice, rs } from './ui';
@@ -35,6 +35,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
   const [method, setMethod] = useState('Cash');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
+  const busy = useRef(false);
 
   const sortedCustomers = useMemo(() => [...customers].sort((a, b) => a.name.localeCompare(b.name)), [customers]);
   const sortedProducts = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name)), [products]);
@@ -57,13 +58,20 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
   const taxRate = settings.taxRatePct ?? 0;
   const tax = ((subtotal - disc) * taxRate) / 100;
   const total = Math.round((subtotal - disc + tax) * 100) / 100;
-  const paid = Math.min(Math.max(0, parseFloat(paidNow) || 0), total);
+  const given = Math.max(0, parseFloat(paidNow) || 0);
+  const paid = Math.min(given, total);
   const balance = Math.round((total - paid) * 100) / 100;
+  const change = Math.round((given - total) * 100) / 100;
 
   const submit = (print: boolean) => {
+    if (busy.current) return; // a double tap must not make two bills
+    busy.current = true;
+    setTimeout(() => { busy.current = false; }, 800);
     setError('');
     if (newCustomer && !newCustomer.name.trim()) return setError('Enter the new customer name.');
     if (!newCustomer && !customer) return setError('Pick a customer (or add a new one).');
+    if (lines.some((l) => l.productId && l.price < 0)) return setError('A price cannot be negative.');
+    if (total <= 0) return setError('The bill total must be more than zero.');
     const items = lines.filter((l) => l.productId && l.qty > 0);
     if (items.length === 0) return setError('Add at least one item with a quantity.');
     const result = createBill({
@@ -118,13 +126,13 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
                     <option key={c.id} value={c.id}>{c.name}{c.phone ? ` • ${c.phone}` : ''}{c.totalDue > 0 ? ` (due ${rs(c.totalDue)})` : ''}</option>
                   ))}
                 </select>
-                <button type="button" onClick={() => setNewCustomer({ name: '', phone: '' })} className={`${secondaryBtn} shrink-0 px-3`} title="Add a new customer"><UserPlus className="w-4 h-4" /><span className="hidden sm:inline">New</span></button>
+                <button type="button" onClick={() => setNewCustomer({ name: '', phone: '' })} className={`${secondaryBtn} shrink-0 px-3`} title="Add a new customer"><UserPlus className="w-4 h-4" /><span>New</span></button>
               </div>
             )}
           </div>
           <div>
             <label className={labelCls} htmlFor="bill-date">Date</label>
-            <input id="bill-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+            <input id="bill-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
           </div>
         </div>
 
@@ -148,12 +156,17 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
                   </select>
                 </div>
                 <div className="col-span-4 sm:col-span-2">
+                  <span className="sm:hidden block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1">Qty</span>
                   <input aria-label={`Quantity ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.qty} onChange={(e) => setRow(l.key, { qty: e.target.value })} className={`${inputCls} font-mono`} placeholder="Qty" />
                 </div>
                 <div className="col-span-4 sm:col-span-2">
+                  <span className="sm:hidden block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1">Price</span>
                   <input aria-label={`Price ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.price} onChange={(e) => setRow(l.key, { price: e.target.value })} className={`${inputCls} font-mono`} placeholder="Price" />
                 </div>
-                <div className="col-span-3 sm:col-span-2 text-right font-mono font-bold text-sm text-[#111827] dark:text-white">{rs(l.amount)}</div>
+                <div className="col-span-3 sm:col-span-2 text-right font-mono font-bold text-sm text-[#111827] dark:text-white"><span className="sm:hidden block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1 font-sans">Amount</span>{rs(l.amount)}</div>
+                {l.product && l.qty > l.product.stockKg && (
+                  <div className="col-span-12 text-[11px] font-semibold text-amber-700 dark:text-amber-300">Only {l.product.stockKg} {l.product.unit || 'pcs'} of {l.product.name} in stock — the bill will still save.</div>
+                )}
                 <div className="col-span-1 flex justify-end">
                   <button type="button" onClick={() => removeRow(l.key)} aria-label={`Remove item ${idx + 1}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-30" disabled={rows.length === 1}><Trash2 className="w-4 h-4" /></button>
                 </div>
@@ -195,7 +208,8 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
                 </select>
               </div>
             </div>
-            <div className="flex justify-between text-xs font-bold pt-1"><span className={balance > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}>{balance > 0 ? 'Balance (credit)' : 'Balance'}</span><span className="font-mono">{rs(balance)}</span></div>
+            <div className="flex justify-between text-xs font-bold pt-1 text-[#111827] dark:text-white"><span className={balance > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}>{balance > 0 ? 'Balance (credit)' : 'Balance'}</span><span className="font-mono">{rs(balance)}</span></div>
+            {change > 0 && <div className="flex justify-between text-xs font-bold text-indigo-700 dark:text-indigo-300"><span>Change to return</span><span className="font-mono">{rs(change)}</span></div>}
           </div>
         </div>
       </div>

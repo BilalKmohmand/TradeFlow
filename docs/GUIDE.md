@@ -12,7 +12,7 @@ This is the "what does each part do" reference for the Simple Billing build. It 
 | **Bill** (`Invoice`) | Bills | One sale. Lines (`items[]` with `qty`, `unitPrice`, `amount`), `subtotal`, `discount`, `taxAmount`, `totalAmount`, `paidAmount`, `balanceDue`, `payments[]`, `paymentMethod`, `billKind` = `cash` (fully paid) or `credit`. Numbered `INV-1`, `INV-2`… printed as *Invoice #1*. |
 | **Money movements** | Daily Sheet / Money | Three sources feed one cash book: **ledger** payments (customer payments in, supplier payments out), **expenses** (out, unless "Credit (unpaid)"), and **cash entries** (manual in/out and cash↔bank transfers). The payment *method* decides whether it hits cash or bank: anything starting with "Cash" is cash in hand; Bank Transfer, Cheque, Easypaisa / JazzCash, Card are bank. |
 
-Everything is saved in the browser immediately (localStorage) and, when Supabase is configured, upserted to the cloud table of the same name. Bills use the `invoices` table (migration `supabase/migrate_v8_simple_billing.sql`).
+Everything is saved in the browser immediately (localStorage) and, when Supabase is configured, upserted to the cloud table of the same name. Bills use the `invoices` table (migrations `supabase/migrate_v8_simple_billing.sql` and `migrate_v9_billing_integrity.sql`).
 
 ## 2. Context functions (`src/context/TradingContext.tsx`)
 

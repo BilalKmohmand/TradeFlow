@@ -12,7 +12,8 @@ type Tab = 'overview' | 'expenses' | 'cashbook';
 
 /** Where the money is: cash, bank, who owes you, who you owe; plus expense sheets and the cash book. */
 export const MoneyScreen: React.FC = () => {
-  const { ledger, expenses, cashEntries, customers, suppliers, settings, updateSettings, setSelectedCustomerId, setSelectedSupplierId, setActiveScreen, setPrintRequest, deleteExpense } = useTrading();
+  const { ledger, expenses, cashEntries, customers, suppliers, settings, updateSettings, setSelectedCustomerId, setSelectedSupplierId, setActiveScreen, setPrintRequest, deleteExpense, can } = useTrading();
+  const canDelete = can('delete_records');
   const ui = useBillingUI();
   const today = todayISO();
   const [tab, setTab] = useState<Tab>('overview');
@@ -55,7 +56,7 @@ export const MoneyScreen: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Tile label="Cash in hand" value={rs(balances.cash)} icon={<Banknote className="w-4 h-4" />} />
             <Tile label="In bank" value={rs(balances.bank)} icon={<Landmark className="w-4 h-4" />} />
-            <Tile label="Others owe you" value={rs(position.receivables)} tone="good" hint={`${debtors.length} customer${debtors.length === 1 ? '' : 's'}`} />
+            <Tile label="Customers owe you" value={rs(position.receivables)} tone="good" hint={`${debtors.length} customer${debtors.length === 1 ? '' : 's'}`} />
             <Tile label="You owe others" value={rs(position.payables)} tone={position.payables > 0 ? 'bad' : 'default'} hint={`${creditors.length} supplier${creditors.length === 1 ? '' : 's'}${unpaidExpenses.length ? ` + ${unpaidExpenses.length} unpaid expense${unpaidExpenses.length === 1 ? '' : 's'}` : ''}`} />
           </div>
           <div className={`${cardCls} p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
@@ -80,15 +81,15 @@ export const MoneyScreen: React.FC = () => {
           )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className={`${cardCls} overflow-hidden`}>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">Customers who owe you</h2><span className="font-mono font-bold text-sm text-teal-700 dark:text-teal-300">{rs(position.receivables)}</span></div>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">Customers owe you</h2><span className="font-mono font-bold text-sm text-teal-700 dark:text-teal-300">{rs(position.receivables)}</span></div>
               {debtors.length === 0 ? <div className="px-5 py-5 text-sm text-[#8E9299]">Nobody owes you anything.</div> : (
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                   {debtors.map((c) => (
                     <li key={c.id} className="flex items-center gap-2 px-5 py-2.5">
                       <button type="button" onClick={() => setSelectedCustomerId(c.id)} className="flex-1 min-w-0 text-left"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{c.name}</span><span className="text-[11px] text-[#8E9299]">{c.phone}</span></button>
                       <span className="font-mono font-bold text-sm">{rs(c.totalDue)}</span>
-                      <button type="button" onClick={() => ui.receive(c.id)} className="text-xs font-bold text-teal-700 dark:text-teal-300 px-2 py-1 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40">Receive</button>
-                      <button type="button" onClick={() => setPrintRequest({ type: 'statement', customerId: c.id, from: `${today.slice(0, 4)}-01-01`, to: today })} aria-label={`Print statement for ${c.name}`} className="p-1.5 text-[#9CA3AF] hover:text-[#111827] dark:hover:text-white"><Printer className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => ui.receive(c.id)} className="text-xs font-bold text-teal-700 dark:text-teal-300 px-3 py-2 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40">Receive</button>
+                      <button type="button" onClick={() => setPrintRequest({ type: 'statement', customerId: c.id, from: `${today.slice(0, 4)}-01-01`, to: today })} aria-label={`Print statement for ${c.name}`} className="p-2 text-[#9CA3AF] hover:text-[#111827] dark:hover:text-white"><Printer className="w-4 h-4" /></button>
                     </li>
                   ))}
                 </ul>
@@ -134,7 +135,7 @@ export const MoneyScreen: React.FC = () => {
               <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">{g.label} sheet</h2><span className="font-mono font-bold text-sm">{rs(g.total)}</span></div>
               <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                 {g.rows.sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (
-                  <li key={e.id} className="flex items-center gap-2 px-5 py-2.5 text-sm"><span className="font-mono text-xs text-[#8E9299] w-20 shrink-0">{formatDate(e.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#8E9299]"> • {e.paidVia || 'Cash'}{e.createdBy ? ` • ${e.createdBy}` : ''}</span></span><span className="font-mono font-bold">{rs(e.amount)}</span><button type="button" onClick={() => deleteExpense(e.id)} aria-label={`Delete expense ${e.description}`} className="text-[#9CA3AF] hover:text-rose-600 text-xs px-1">✕</button></li>
+                  <li key={e.id} className="flex items-center gap-2 px-5 py-2.5 text-sm"><span className="font-mono text-xs text-[#8E9299] w-20 shrink-0">{formatDate(e.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#8E9299]"> • {e.paidVia || 'Cash'}{e.createdBy ? ` • ${e.createdBy}` : ''}</span></span><span className="font-mono font-bold">{rs(e.amount)}</span>{canDelete && <button type="button" onClick={() => deleteExpense(e.id)} aria-label={`Delete expense ${e.description}`} className="text-[#9CA3AF] hover:text-rose-600 text-sm px-2 py-1">✕</button>}</li>
                 ))}
               </ul>
             </div>

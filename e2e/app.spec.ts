@@ -5,9 +5,9 @@ const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${n
 
 async function unlock(page: Page) {
   await page.goto('/');
-  await expect(page.getByRole('button', { name: /Unlock Terminal/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Unlock/ })).toBeVisible();
   for (const d of '7860') await page.getByRole('button', { name: d, exact: true }).click();
-  await page.getByRole('button', { name: /Unlock Terminal/ }).click();
+  await page.getByRole('button', { name: /^Unlock/ }).click();
   await expect(page.getByRole('heading', { name: 'Trading Overview' })).toBeVisible({ timeout: 10_000 });
 }
 
@@ -181,7 +181,7 @@ test.describe.serial('Sarmaya end-to-end', () => {
     await page.goto('/');
     await page.getByRole('combobox').first().selectOption({ label: /Bilal/ } as any).catch(() => {});
     for (const d of '1234') await page.getByRole('button', { name: d, exact: true }).click();
-    await page.getByRole('button', { name: /Unlock Terminal/ }).click();
+    await page.getByRole('button', { name: /^Unlock/ }).click();
     await expect(page.getByRole('heading', { name: 'Trading Overview' })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'Admin' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Customers' }).first().click();

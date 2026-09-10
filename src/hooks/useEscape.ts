@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 /**
  * Escape-key stack: only the most recently opened layer (modal, preview, dialog) responds to
  * Escape, so pressing it once closes the top layer instead of everything underneath.
+ * A layer registers once when it becomes active (not on every render), and always calls the
+ * latest onClose it was given.
  */
 const stack: Array<() => void> = [];
 let listening = false;
@@ -14,20 +16,23 @@ const onKey = (e: KeyboardEvent) => {
 };
 
 export const useEscape = (active: boolean, onClose: () => void) => {
+  const latest = useRef(onClose);
+  latest.current = onClose;
   useEffect(() => {
     if (!active) return;
-    stack.push(onClose);
+    const handler = () => latest.current();
+    stack.push(handler);
     if (!listening) {
       window.addEventListener('keydown', onKey);
       listening = true;
     }
     return () => {
-      const i = stack.lastIndexOf(onClose);
+      const i = stack.lastIndexOf(handler);
       if (i >= 0) stack.splice(i, 1);
       if (stack.length === 0 && listening) {
         window.removeEventListener('keydown', onKey);
         listening = false;
       }
     };
-  }, [active, onClose]);
+  }, [active]);
 };

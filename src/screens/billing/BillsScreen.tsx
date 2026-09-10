@@ -18,7 +18,7 @@ export const BillsScreen: React.FC = () => {
   const [period, setPeriod] = useState<Period>('today');
   const [unpaidOnly, setUnpaidOnly] = useState(false);
   const today = todayISO();
-  const rows = useMemo(() => filterBills(invoices.filter((i) => i.status !== 'cancelled'), query, period, today, unpaidOnly), [invoices, query, period, today, unpaidOnly]);
+  const rows = useMemo(() => filterBills(invoices, query, period, today, unpaidOnly), [invoices, query, period, today, unpaidOnly]);
   const total = rows.reduce((a, i) => a + i.totalAmount, 0);
   const due = rows.reduce((a, i) => a + i.balanceDue, 0);
 

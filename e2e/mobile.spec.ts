@@ -45,7 +45,7 @@ test('every screen and modal on a phone', async ({ page }) => {
   await page.goto('/');
   await shot(page, '00-lock');
   for (const d of '7860') await page.getByRole('button', { name: d, exact: true }).click();
-  await page.getByRole('button', { name: /Unlock Terminal/ }).click();
+  await page.getByRole('button', { name: /^Unlock/ }).click();
   await expect(page.getByRole('heading', { name: 'Trading Overview' })).toBeVisible({ timeout: 10_000 });
   await page.keyboard.press('Escape');
   await noOverflow(page, 'dashboard');

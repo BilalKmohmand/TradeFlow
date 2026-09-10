@@ -4,7 +4,7 @@ import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
 import { Tile, cardCls, primaryBtn, secondaryBtn, rs } from '../../components/billing/ui';
 import { collectCashMovements, accountBalancesOn, positionSummary } from '../../utils/finance';
-import { daySummary } from '../../utils/billing';
+import { daySummary, billsOnly } from '../../utils/billing';
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 
@@ -15,12 +15,12 @@ export const BillingHomeScreen: React.FC = () => {
   const ui = useBillingUI();
   const today = todayISO();
   const movements = useMemo(() => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), [ledger, expenses, cashEntries, customers, suppliers]);
-  const day = useMemo(() => daySummary(invoices, movements, today), [invoices, movements, today]);
+  const day = useMemo(() => daySummary(invoices, movements, today, expenses), [invoices, movements, today, expenses]);
   const balances = useMemo(() => accountBalancesOn(movements, settings, today), [movements, settings, today]);
   const position = useMemo(() => positionSummary(customers, suppliers, expenses, balances), [customers, suppliers, expenses, balances]);
-  const recent = useMemo(() => [...invoices].filter((i) => i.status !== 'cancelled').sort((a, b) => (a.issueDate < b.issueDate ? 1 : a.issueDate > b.issueDate ? -1 : b.createdAt.localeCompare(a.createdAt))).slice(0, 8), [invoices]);
+  const recent = useMemo(() => billsOnly(invoices).sort((a, b) => (a.issueDate < b.issueDate ? 1 : a.issueDate > b.issueDate ? -1 : b.createdAt.localeCompare(a.createdAt))).slice(0, 8), [invoices]);
   const lowStock = products.filter((p) => p.minThresholdKg > 0 && p.stockKg <= p.minThresholdKg);
-  const unpaid = invoices.filter((i) => i.balanceDue > 0 && i.status !== 'cancelled');
+  const unpaid = billsOnly(invoices).filter((i) => i.balanceDue > 0);
 
   return (
     <div className="space-y-6">
@@ -99,7 +99,7 @@ export const BillingHomeScreen: React.FC = () => {
         <div className={`${cardCls} p-5 flex flex-col sm:flex-row sm:items-center gap-4`}>
           <div className="flex-1 min-w-0">
             <h2 className="font-bold text-[#111827] dark:text-white flex items-center gap-2"><Boxes className="w-4 h-4 text-indigo-600" /> Full trading suite is one tap away</h2>
-            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">Same customers, items, ledger and cash book — plus quotations, multi-item bookings, truck dispatches with challans and tax invoices, purchase orders and stock receiving, stock flow and price history, Profit &amp; Loss, balance sheet, receivables aging, fleet, alerts, follow-ups and CSV import. Switch back any time from Admin.</p>
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">Bookings, truck dispatches, purchase orders, stock reports, Profit &amp; Loss and balance sheet — on the same data. Come back with one tap.</p>
           </div>
           <button type="button" onClick={() => updateSettings({ appMode: 'trading' })} className={`${secondaryBtn} shrink-0`}>Open full suite <ChevronRight className="w-4 h-4" /></button>
         </div>

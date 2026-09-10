@@ -40,7 +40,8 @@ export interface AppData {
   returns: StockReturn[];
   adjustments: StockAdjustment[];
   tasks: Task[];
-  invoices: Invoice[];
+  /** null when the invoices table does not exist yet (migration v8 not run). */
+  invoices: Invoice[] | null;
   ledger: LedgerEntry[];
   whatsappMessages: WhatsAppMessage[];
 }
@@ -162,29 +163,42 @@ const stripLegacy = <T,>(rows: T[]): T[] =>
 /** Tables that may be missing on a project that has not run the migration yet. */
 const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices'];
 
+/** Read a whole table in pages (PostgREST caps a single select at 1000 rows). */
+const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { message: string } | null }> => {
+  const page = 1000;
+  const rows: any[] = [];
+  for (let from = 0; ; from += page) {
+    const { data, error } = await supabase.from(table).select('*').range(from, from + page - 1);
+    if (error) return { data: null, error };
+    rows.push(...(data || []));
+    if (!data || data.length < page) break;
+  }
+  return { data: rows, error: null };
+};
+
 export const loadAllData = async (): Promise<AppData> => {
   const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, cashEntries, settings, quotations, purchaseOrders, returns, adjustments, tasks, invoices, ledger, whatsappMessages] =
     await Promise.all([
-      supabase.from('customers').select('*'),
-      supabase.from('suppliers').select('*'),
-      supabase.from('products').select('*'),
-      supabase.from('bookings').select('*'),
-      supabase.from('dispatches').select('*'),
-      supabase.from('purchases').select('*'),
-      supabase.from('price_history').select('*'),
-      supabase.from('expenses').select('*'),
-      supabase.from('trucks').select('*'),
-      supabase.from('users').select('*'),
-      supabase.from('cash_entries').select('*'),
-      supabase.from('settings').select('*'),
-      supabase.from('quotations').select('*'),
-      supabase.from('purchase_orders').select('*'),
-      supabase.from('returns').select('*'),
-      supabase.from('stock_adjustments').select('*'),
-      supabase.from('tasks').select('*'),
-      supabase.from('invoices').select('*'),
-      supabase.from('ledger').select('*'),
-      supabase.from('whatsapp_messages').select('*'),
+      fetchAll('customers'),
+      fetchAll('suppliers'),
+      fetchAll('products'),
+      fetchAll('bookings'),
+      fetchAll('dispatches'),
+      fetchAll('purchases'),
+      fetchAll('price_history'),
+      fetchAll('expenses'),
+      fetchAll('trucks'),
+      fetchAll('users'),
+      fetchAll('cash_entries'),
+      fetchAll('settings'),
+      fetchAll('quotations'),
+      fetchAll('purchase_orders'),
+      fetchAll('returns'),
+      fetchAll('stock_adjustments'),
+      fetchAll('tasks'),
+      fetchAll('invoices'),
+      fetchAll('ledger'),
+      fetchAll('whatsapp_messages'),
     ]);
 
   const maybeThrow = (result: { error?: { message: string } | null }, label: TableName) => {
@@ -236,7 +250,7 @@ export const loadAllData = async (): Promise<AppData> => {
     returns: (returns.data || []) as StockReturn[],
     adjustments: (adjustments.data || []) as StockAdjustment[],
     tasks: (tasks.data || []) as Task[],
-    invoices: (invoices.data || []) as Invoice[],
+    invoices: invoices.error ? null : ((invoices.data || []) as Invoice[]),
     ledger: stripLegacy((ledger.data || []).map(normalizeLedger)),
     whatsappMessages: (whatsappMessages.data || []) as WhatsAppMessage[],
   };

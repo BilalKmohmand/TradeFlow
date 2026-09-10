@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS products (
   "minThresholdKg" NUMERIC DEFAULT 0,
   "supplierId" TEXT,
   description TEXT,
-  unit TEXT
+  unit TEXT,
+  "costPricePerKg" NUMERIC
 );
 
 CREATE TABLE IF NOT EXISTS bookings (
@@ -166,7 +167,8 @@ CREATE TABLE IF NOT EXISTS cash_entries (
   description TEXT,
   method TEXT,
   "createdAt" TEXT,
-  "createdBy" TEXT
+  "createdBy" TEXT,
+  "pairId" TEXT
 );
 
 -- Single-row app settings (opening cash balance)
@@ -182,7 +184,9 @@ CREATE TABLE IF NOT EXISTS settings (
   "companyPhone" TEXT,
   "companyTaxId" TEXT,
   "monthlyTargetRs" NUMERIC DEFAULT 0,
-  "masterPin" TEXT
+  "masterPin" TEXT,
+  "appMode" TEXT,
+  "openingBankBalance" NUMERIC DEFAULT 0
 );
 
 -- Customer quotations (convert to bookings)
@@ -310,7 +314,9 @@ CREATE TABLE IF NOT EXISTS ledger (
   debit NUMERIC DEFAULT 0,
   credit NUMERIC DEFAULT 0,
   "balanceAfter" NUMERIC DEFAULT 0,
-  kg NUMERIC
+  kg NUMERIC,
+  "sourceId" TEXT,
+  method TEXT
 );
 
 CREATE TABLE IF NOT EXISTS whatsapp_messages (

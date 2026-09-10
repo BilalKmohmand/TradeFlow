@@ -402,7 +402,7 @@ export interface CashBook {
 }
 
 const methodFromDescription = (d: string): string | undefined => {
-  const m = d.match(/:\s*([^-]+?)(?:\s-\s|$)/);
+  const m = d.match(/:\s*(.+?)(?:\s-\s|\s\(|$)/);
   return m ? m[1].trim() : undefined;
 };
 
@@ -417,11 +417,11 @@ export const collectCashMovements = (
   ledger.forEach((l) => {
     if (l.entityType === 'customer' && l.type === 'payment_received' && l.credit > 0) {
       const c = customers.find((x) => x.id === l.entityId);
-      out.push({ id: `cm-${l.id}`, date: l.date, direction: 'in', amount: l.credit, description: l.description, source: 'customer_payment', counterparty: c?.name || 'Customer', reference: l.referenceId, method: methodFromDescription(l.description), link: c ? { type: 'customer', id: c.id } : undefined, sourceId: l.id });
+      out.push({ id: `cm-${l.id}`, date: l.date, direction: 'in', amount: l.credit, description: l.description, source: 'customer_payment', counterparty: c?.name || 'Customer', reference: l.referenceId, method: l.method || methodFromDescription(l.description), link: c ? { type: 'customer', id: c.id } : undefined, sourceId: l.id });
     }
     if (l.entityType === 'supplier' && l.type === 'payment_made' && l.credit > 0) {
       const s = suppliers.find((x) => x.id === l.entityId);
-      out.push({ id: `cm-${l.id}`, date: l.date, direction: 'out', amount: l.credit, description: l.description, source: 'supplier_payment', counterparty: s?.company || 'Supplier', reference: l.referenceId, method: methodFromDescription(l.description), link: s ? { type: 'supplier', id: s.id } : undefined, sourceId: l.id });
+      out.push({ id: `cm-${l.id}`, date: l.date, direction: 'out', amount: l.credit, description: l.description, source: 'supplier_payment', counterparty: s?.company || 'Supplier', reference: l.referenceId, method: l.method || methodFromDescription(l.description), link: s ? { type: 'supplier', id: s.id } : undefined, sourceId: l.id });
     }
   });
   expenses.filter((e) => e.paidVia !== 'Credit (unpaid)').forEach((e) => {

@@ -163,7 +163,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 <table className="w-full"><tbody>
                   {sheet.supplierPayments.length + sheet.other.length === 0 && <tr><td className="py-1.5 text-gray-500">None.</td></tr>}
                   {sheet.supplierPayments.map((m) => row(`${m.counterparty} (${m.method || 'Cash'})`, m.amount))}
-                  {sheet.other.map((m) => row(`${m.description} (${m.direction === 'in' ? 'into' : 'out of'} ${m.method || 'Cash'})`, m.amount))}
+                  {sheet.other.map((m) => row(m.description, m.amount))}
                 </tbody></table>
               </div>
             </div>
@@ -551,7 +551,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
           </div>
         </div>
 
-        <div id="print-root" className="bg-white text-gray-900 rounded-2xl print:rounded-none shadow-2xl print:shadow-none p-8 sm:p-10">
+        <div id="print-root" className="bg-white text-gray-900 rounded-2xl print:rounded-none shadow-2xl print:shadow-none p-4 sm:p-10 overflow-x-auto">
           {content ? (
             <>
               <div className="flex items-start justify-between border-b-2 border-gray-900 pb-4">

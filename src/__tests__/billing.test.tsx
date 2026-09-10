@@ -189,7 +189,7 @@ describe('cash ↔ bank transfers and the daily sheet', () => {
     expect(sheet.summary.sales).toBe(3000);
     expect(sheet.summary.received).toBe(1000);
     expect(sheet.summary.creditGiven).toBe(2000);
-    expect(sheet.summary.expenses).toBe(2700); // the unpaid one is not cash out
+    expect(sheet.summary.expenses).toBe(3000); // includes the unpaid one; cashOut/bankOut below exclude it
     expect(sheet.expenses.map((g) => g.category)).toEqual(['employee', 'food', 'drawings']);
     expect(sheet.cashIn).toBe(1000);
     expect(sheet.cashOut).toBe(700);
@@ -210,7 +210,7 @@ describe('cash ↔ bank transfers and the daily sheet', () => {
 
   it('filterBills searches by customer, number and item and honours the period', () => {
     const today = todayISO();
-    const mk = (n: number, date: string, cust: string, bal = 0): Invoice => ({ id: `i${n}`, invoiceNumber: `INV-${n}`, customerId: 'c', customerName: cust, issueDate: date, dueDate: date, status: 'issued', paymentStatus: 'unpaid', items: [{ id: 'x', productId: 'p', productName: 'Tin', kg: 1, ratePerKg: 1, amount: 1 }], subtotal: 1, taxRatePct: 0, taxAmount: 0, totalAmount: 1, paidAmount: 0, balanceDue: bal, createdAt: date });
+    const mk = (n: number, date: string, cust: string, bal = 0): Invoice => ({ id: `i${n}`, invoiceNumber: `INV-${n}`, customerId: 'c', customerName: cust, issueDate: date, dueDate: date, status: 'issued', paymentStatus: 'unpaid', billKind: 'credit', items: [{ id: 'x', productId: 'p', productName: 'Tin', kg: 1, ratePerKg: 1, amount: 1 }], subtotal: 1, taxRatePct: 0, taxAmount: 0, totalAmount: 1, paidAmount: 0, balanceDue: bal, createdAt: date });
     const rows = [mk(1, today, 'Ali'), mk(2, shiftDate(today, -3), 'Zaman', 5), mk(3, shiftDate(today, -40), 'Ali')];
     expect(filterBills(rows, '', 'today', today).map((i) => i.id)).toEqual(['i1']);
     expect(filterBills(rows, '', 'week', today).map((i) => i.id)).toEqual(['i1', 'i2']);
@@ -218,5 +218,76 @@ describe('cash ↔ bank transfers and the daily sheet', () => {
     expect(filterBills(rows, 'tin', 'all', today).length).toBe(3);
     expect(filterBills(rows, 'INV-3', 'all', today).map((i) => i.id)).toEqual(['i3']);
     expect(filterBills(rows, '', 'all', today, true).map((i) => i.id)).toEqual(['i2']);
+  });
+});
+
+describe('integrity rules', () => {
+  it('a transfer is deleted as a pair, and deleting a customer removes their bills', () => {
+    const { result } = setup();
+    act(() => {
+      result.current.addCashTransfer({ amount: 4000, from: 'cash' });
+    });
+    expect(result.current.cashEntries.length).toBe(2);
+    act(() => {
+      result.current.deleteCashEntry(result.current.cashEntries[0].id);
+    });
+    expect(result.current.cashEntries.length).toBe(0);
+    act(() => {
+      result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'Can', qty: 1, unitPrice: 100 }] });
+    });
+    act(() => {
+      result.current.deleteCustomer('c1');
+    });
+    expect(result.current.invoices.length).toBe(0);
+    expect(result.current.ledger.length).toBe(0);
+  });
+
+  it('cash book reads the method column, and subtotal equals the sum of printed line amounts', () => {
+    const { result } = setup();
+    act(() => {
+      result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'x', qty: 3, unitPrice: 0.335 }, { productId: 'p1', name: 'y', qty: 3, unitPrice: 0.335 }, { productId: 'p1', name: 'z', qty: 3, unitPrice: 0.335 }], paidNow: 3.03, paymentMethod: 'Cheque' });
+    });
+    const inv = result.current.invoices[0];
+    expect(inv.items.map((i) => i.amount)).toEqual([1.01, 1.01, 1.01]);
+    expect(inv.subtotal).toBe(3.03);
+    const pay = result.current.ledger.find((l) => l.type === 'payment_received')!;
+    expect(pay.method).toBe('Cheque');
+    expect(pay.sourceId).toBe(inv.id);
+    const mv = collectCashMovements(result.current.ledger, [], [], result.current.customers, []);
+    expect(mv[0].method).toBe('Cheque');
+    expect(accountBalancesOn(mv, result.current.settings, todayISO()).bank).toBe(50003.03);
+    // legacy delete name reverses fully too
+    act(() => {
+      result.current.deleteInvoice(inv.id);
+    });
+    expect(result.current.ledger.length).toBe(0);
+    expect(result.current.products.find((p) => p.id === 'p1')!.stockKg).toBe(500);
+  });
+});
+
+describe('QA rules', () => {
+  it('refuses negative prices, zero totals and future dates; reuses an inline customer with the same name', () => {
+    const { result } = setup();
+    let a: any, b: any, c: any, d: any;
+    act(() => {
+      a = result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'x', qty: 2, unitPrice: -100 }] });
+      b = result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'x', qty: 2, unitPrice: 100 }], discount: 200 });
+      c = result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'x', qty: 2, unitPrice: 100 }], date: '2099-01-01' });
+      d = result.current.createBill({ customerId: '', newCustomer: { name: 'zaman & co', phone: '' }, items: [{ productId: 'p1', name: 'x', qty: 1, unitPrice: 100 }] });
+    });
+    expect(a.success).toBe(false);
+    expect(b.success).toBe(false);
+    expect(c.success).toBe(false);
+    expect(d.success).toBe(true);
+    expect(result.current.customers.length).toBe(1);
+    expect(d.invoice.customerId).toBe('c1');
+  });
+  it('two bills created in the same tick get different numbers', () => {
+    const { result } = setup();
+    act(() => {
+      result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'x', qty: 1, unitPrice: 10 }] });
+      result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'x', qty: 1, unitPrice: 10 }] });
+    });
+    expect(result.current.invoices.map((i) => i.invoiceNumber).sort()).toEqual(['INV-1', 'INV-2']);
   });
 });
