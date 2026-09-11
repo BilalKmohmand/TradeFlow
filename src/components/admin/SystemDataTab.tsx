@@ -86,6 +86,8 @@ export const SystemDataTab: React.FC = () => {
     companyAddress: settings.companyAddress || '',
     companyPhone: settings.companyPhone || '',
     companyTaxId: settings.companyTaxId || '',
+    companyEmail: settings.companyEmail || '',
+    companyLogo: settings.companyLogo || '',
     taxRatePct: String(settings.taxRatePct ?? 0),
     taxLabel: settings.taxLabel || 'Sales Tax',
     monthlyTargetRs: String(settings.monthlyTargetRs ?? 0),
@@ -104,6 +106,8 @@ export const SystemDataTab: React.FC = () => {
       companyAddress: company.companyAddress.trim(),
       companyPhone: company.companyPhone.trim(),
       companyTaxId: company.companyTaxId.trim(),
+      companyEmail: company.companyEmail.trim(),
+      companyLogo: company.companyLogo,
       taxRatePct: Math.max(0, Math.min(100, parseFloat(company.taxRatePct) || 0)),
       taxLabel: company.taxLabel.trim() || 'Sales Tax',
       monthlyTargetRs: Math.max(0, parseFloat(company.monthlyTargetRs) || 0),
@@ -423,6 +427,25 @@ export const SystemDataTab: React.FC = () => {
           <div>
             <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Phone</label>
             <input value={company.companyPhone} onChange={(e) => setCompany({ ...company, companyPhone: e.target.value })} className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Email (printed on bills)</label>
+            <input value={company.companyEmail} onChange={(e) => setCompany({ ...company, companyEmail: e.target.value })} className={inputCls} placeholder="shop@example.com" />
+          </div>
+          <div className="lg:col-span-2">
+            <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5" htmlFor="company-logo">Logo (printed on bills)</label>
+            <div className="flex items-center gap-3">
+              {company.companyLogo ? <img src={company.companyLogo} alt="Company logo" className="w-12 h-12 rounded-xl object-contain border border-[#E5E5E1] dark:border-[#203248] bg-white" /> : <div className="w-12 h-12 rounded-xl border border-dashed border-[#E5E5E1] dark:border-[#203248] text-[10px] text-[#8E9299] flex items-center justify-center">none</div>}
+              <input id="company-logo" type="file" accept="image/png,image/jpeg,image/webp" className="text-xs" onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                if (f.size > 400 * 1024) { alert('Please use a logo under 400 KB.'); e.target.value = ''; return; }
+                const r = new FileReader();
+                r.onload = () => setCompany((c) => ({ ...c, companyLogo: String(r.result || '') }));
+                r.readAsDataURL(f);
+              }} />
+              {company.companyLogo && <button type="button" onClick={() => setCompany({ ...company, companyLogo: '' })} className="text-xs font-semibold text-rose-600">Remove</button>}
+            </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">NTN / STRN</label>

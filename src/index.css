@@ -79,6 +79,9 @@
 
 /* Printable documents: only #print-root is printed (see PrintDocument.tsx). */
 @media print {
+  html, body {
+    background: #fff !important;
+  }
   body * {
     visibility: hidden !important;
   }
@@ -86,10 +89,9 @@
   #print-root * {
     visibility: visible !important;
   }
+  /* The app layout is display:none in print (see App.tsx / Navbar.tsx), so the document flows from the top. */
   #print-root {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    position: static !important;
     width: 100% !important;
     margin: 0 !important;
     padding: 24px !important;

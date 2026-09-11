@@ -10,7 +10,7 @@ const seedBilling = () => {
   localStorage.setItem('e2e_billing_seeded', '1');
   const set = (k: string, v: unknown) => localStorage.setItem(k, JSON.stringify(v));
   const today = new Date().toISOString().split('T')[0];
-  set('tradeflow_settings_v2', { appMode: 'billing', companyName: 'Rohail Zaman Traders', companyAddress: 'Amandarra, Alladand Road', companyPhone: '3410550055', cashOpeningBalance: 20000, openingBankBalance: 100000, cashOpeningDate: '2026-01-01', taxRatePct: 0 });
+  set('tradeflow_settings_v2', { appMode: 'billing', companyName: 'Rohail Zaman Traders', companyAddress: 'Amandarra, Alladand Road', companyPhone: '3410550055', cashOpeningBalance: 20000, openingBankBalance: 100000, cashOpeningDate: '2026-01-01', taxRatePct: 0, companyEmail: 'rohailxaman7@gmail.com' });
   set('tradeflow_customers_v2', [
     { id: 'c1', name: 'Zaman and Co BTK', company: 'Zaman and Co BTK', phone: '03443838294', email: '', address: 'Batkhela', totalDue: 0, creditLimit: 0, createdAt: today },
     { id: 'c2', name: 'Haji Karim', company: 'Karim Store', phone: '03001234567', email: '', address: '', totalDue: 0, creditLimit: 0, createdAt: today },
@@ -75,6 +75,7 @@ test.describe('Simple billing', () => {
     await expect(page.locator('#print-root')).toContainText('Zaman and Co BTK');
     await expect(page.locator('#print-root')).toContainText('1,192,150');
     await expect(page.locator('#print-root')).toContainText('PAID IN FULL');
+    await expect(page.locator('#print-root')).toContainText('rohailxaman7@gmail.com');
     await shot(page, 'billing-print-invoice');
     await page.keyboard.press('Escape');
     await expect(page.locator('#print-root')).toHaveCount(0);

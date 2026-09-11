@@ -126,14 +126,14 @@ function MainApp() {
 
   return (
     <BillingUIProvider>
-    <div className="min-h-screen w-full overflow-x-hidden bg-[#FAF9F6] dark:bg-[#090F17] text-[#111827] dark:text-[#F1F5F9] font-sans flex flex-col selection:bg-teal-700 selection:text-white transition-colors">
+    <div className="min-h-screen print:min-h-0 w-full overflow-x-hidden bg-[#FAF9F6] dark:bg-[#090F17] text-[#111827] dark:text-[#F1F5F9] font-sans flex flex-col selection:bg-teal-700 selection:text-white transition-colors">
       {/* Navigation Header */}
       <Navbar
         onOpenCommandBar={() => setIsCommandBarOpen(true)}
       />
 
       {/* Sidebar + content */}
-      <div className="flex-1 flex min-w-0 w-full">
+      <div className="flex-1 flex min-w-0 w-full print:hidden">
       <Sidebar onReceiveStock={() => handleOpenPurchase()} />
       {/* Main Content View with Smooth Transitions */}
       <main className="flex-1 max-w-7xl min-w-0 w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-6 pb-12">

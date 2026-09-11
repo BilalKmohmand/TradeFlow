@@ -186,7 +186,9 @@ CREATE TABLE IF NOT EXISTS settings (
   "monthlyTargetRs" NUMERIC DEFAULT 0,
   "masterPin" TEXT,
   "appMode" TEXT,
-  "openingBankBalance" NUMERIC DEFAULT 0
+  "openingBankBalance" NUMERIC DEFAULT 0,
+  "companyEmail" TEXT,
+  "companyLogo" TEXT
 );
 
 -- Customer quotations (convert to bookings)
@@ -300,7 +302,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   "createdBy" TEXT,
   "updatedAt" TEXT,
   "paymentMethod" TEXT,
-  "billKind" TEXT
+  "billKind" TEXT,
+  "issuedAt" TEXT
 );
 
 CREATE TABLE IF NOT EXISTS ledger (

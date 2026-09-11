@@ -38,6 +38,8 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
     address: settings.companyAddress || '',
     phone: settings.companyPhone || '',
     taxId: settings.companyTaxId || '',
+    email: settings.companyEmail || '',
+    logo: settings.companyLogo || '',
   };
   useEscape(Boolean(request), onClose);
 
@@ -53,6 +55,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
         title: 'INVOICE',
         number: `Invoice #${inv.invoiceNumber.replace(/^INV-/, '')}`,
         date: inv.issueDate,
+        time: inv.issuedAt ? new Date(inv.issuedAt).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' }) : undefined,
         body: (
           <>
             <div className="grid grid-cols-2 gap-6 text-xs">
@@ -60,6 +63,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Bill from</div>
                 <div className="font-bold text-sm">{COMPANY.name}</div>
                 <div>{COMPANY.address}</div>
+                {COMPANY.email && <div>{COMPANY.email}</div>}
                 <div className="font-mono">{COMPANY.phone}</div>
               </div>
               <div>
@@ -540,7 +544,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
   if (!request) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 overflow-y-auto print:static print:p-0 print:block">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 overflow-y-auto print:static print:p-0 print:block print:overflow-visible">
       <div onClick={onClose} className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs print:hidden" />
       <div className="relative z-10 w-full max-w-3xl my-6 print:my-0 print:max-w-none">
         <div className="flex items-center justify-between mb-3 print:hidden">
@@ -556,7 +560,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
             <>
               <div className="flex items-start justify-between border-b-2 border-gray-900 pb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-gray-900 flex items-center justify-center text-white"><Truck className="w-5 h-5 text-teal-400" /></div>
+                  {COMPANY.logo ? <img src={COMPANY.logo} alt="" className="w-14 h-14 rounded-xl object-contain" /> : <div className="w-11 h-11 rounded-2xl bg-gray-900 flex items-center justify-center text-white"><Truck className="w-5 h-5 text-teal-400" /></div>}
                   <div>
                     <div className="font-serif italic font-bold text-2xl leading-none">{COMPANY.name}</div>
                     <div className="text-[11px] text-gray-500 mt-1">{COMPANY.tagline}</div>
@@ -567,7 +571,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 <div className="text-right">
                   <div className="text-lg font-extrabold tracking-widest">{content.title}</div>
                   <div className="font-mono text-sm">{content.number}</div>
-                  <div className="text-[11px] text-gray-500">Date: {formatDate(content.date)}</div>
+                  <div className="text-[11px] text-gray-500">Date: {formatDate(content.date)}{(content as any).time ? ` ${(content as any).time}` : ''}</div>
                 </div>
               </div>
               <div className="mt-6">{content.body}</div>

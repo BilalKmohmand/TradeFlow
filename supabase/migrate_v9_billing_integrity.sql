@@ -5,5 +5,8 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS "costPricePerKg" NUMERIC;
 ALTER TABLE ledger ADD COLUMN IF NOT EXISTS "sourceId" TEXT;   -- id of the bill/payment that produced the row
 ALTER TABLE ledger ADD COLUMN IF NOT EXISTS method TEXT;       -- payment method (cash vs bank) without parsing text
 ALTER TABLE cash_entries ADD COLUMN IF NOT EXISTS "pairId" TEXT; -- both legs of a cash<->bank transfer share this
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS "companyEmail" TEXT;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS "companyLogo" TEXT;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS "issuedAt" TEXT;
 CREATE INDEX IF NOT EXISTS invoices_number_idx ON invoices ("invoiceNumber");
 COMMIT;

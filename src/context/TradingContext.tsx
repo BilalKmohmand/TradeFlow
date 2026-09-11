@@ -3096,6 +3096,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       notes: input.notes?.trim() || undefined,
       paymentMethod: method,
       billKind: balanceDue === 0 ? 'cash' : 'credit',
+      issuedAt: date === todayISO() ? new Date().toISOString() : undefined,
       createdAt: todayISO(),
       createdBy: currentUser?.name,
     };

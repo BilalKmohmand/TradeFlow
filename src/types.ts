@@ -285,6 +285,8 @@ export interface Invoice {
   /** Simple billing */
   paymentMethod?: string;
   billKind?: 'cash' | 'credit';
+  /** Exact date-time the bill was made (printed under the number). */
+  issuedAt?: string;
 }
 
 export type AuditCategory = 'auth' | 'roles' | 'users' | 'visibility' | 'data' | 'system' | 'billing';
@@ -603,6 +605,9 @@ export interface AppSettings {
   companyAddress?: string;
   companyPhone?: string;
   companyTaxId?: string;
+  companyEmail?: string;
+  /** Logo printed on bills, stored as a small data URL. */
+  companyLogo?: string;
   /** Monthly sales target in Rs. shown on the dashboard (0 = off). */
   monthlyTargetRs?: number;
   /** 'billing' = simple billing screens (default); 'trading' = full commodity/logistics suite. */
@@ -622,6 +627,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   companyAddress: 'Karachi, Pakistan',
   companyPhone: '',
   companyTaxId: '',
+  companyEmail: '',
+  companyLogo: '',
   monthlyTargetRs: 0,
   appMode: 'billing',
   openingBankBalance: 0,
