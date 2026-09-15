@@ -18,6 +18,17 @@ The full bulk-trading ERP is still there and shares the same data — day to day
 
 Printed bills follow the classic layout — INVOICE, number, date, Bill From / Bill To, Description · Qty · Price · Amount, Subtotal, Total in Rs., paid and balance. A full function-by-function guide is in [`docs/GUIDE.md`](docs/GUIDE.md).
 
+## Installing it as a mobile app (PWA)
+
+The web build is a real installable app, not just a bookmark. Open the site on a phone and:
+
+- **Android (Chrome)**: menu → **Install app** (or the install banner that appears automatically). It gets its own icon and opens full-screen, no address bar.
+- **iPhone (Safari)**: Share → **Add to Home Screen**. Same result — its own icon, opens full-screen.
+
+Once installed it also **works with the phone fully offline** — the app itself (screens, buttons, print layouts) is cached on the device by a service worker, so it opens even with no signal; bills already made are read from local storage as always, and anything typed while offline saves locally and reaches Supabase the next time there's a connection, exactly like the browser tab does. Updates to the app (a new deploy) are picked up automatically in the background the next time it's opened — nothing for the shopkeeper to tap.
+
+This is a Progressive Web App (`vite-plugin-pwa`, manifest at `public/icons/`, generated `sw.js`/`manifest.webmanifest` on every build) — there is no separate iOS/Android app-store app, and none is needed for this to feel and behave like one. If a real App Store / Play Store listing is ever wanted, the same codebase can be wrapped with [Capacitor](https://capacitorjs.com) without a rewrite; nobody has asked for that yet.
+
 ## Features (full trading suite)
 
 - **Customer & Supplier CRM** with Pakistani contact defaults (`+92` phones, `.com.pk` emails, local berths).
