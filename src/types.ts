@@ -596,6 +596,8 @@ export interface CashEntry {
   createdBy?: string;
   /** Both legs of a cash<->bank transfer share one pairId and are deleted together. */
   pairId?: string;
+  /** Ledger account the other side posts to (e.g. '2900' suspense). Set explicitly; never guessed from bank text. */
+  accountCode?: string;
 }
 
 export interface AppSettings {
@@ -701,7 +703,7 @@ export interface StockReturn {
   createdBy?: string;
 }
 
-export type AdjustmentReason = 'count' | 'wastage' | 'moisture' | 'damage' | 'theft' | 'other';
+export type AdjustmentReason = 'count' | 'wastage' | 'moisture' | 'damage' | 'theft' | 'other' | 'received';
 export const ADJUSTMENT_REASONS: { id: AdjustmentReason; label: string }[] = [
   { id: 'count', label: 'Physical count correction' },
   { id: 'wastage', label: 'Handling wastage' },
@@ -709,6 +711,7 @@ export const ADJUSTMENT_REASONS: { id: AdjustmentReason; label: string }[] = [
   { id: 'damage', label: 'Damaged / unsaleable' },
   { id: 'theft', label: 'Shortage / theft' },
   { id: 'other', label: 'Other' },
+  { id: 'received', label: 'Stock received (no supplier bill)' },
 ];
 
 export interface StockAdjustment {
@@ -716,6 +719,8 @@ export interface StockAdjustment {
   productId: string;
   deltaKg: number;
   reason: AdjustmentReason;
+  /** Cost per unit at the time, so the ledger values it at what it cost then, not today's price. */
+  costPerKg?: number;
   note?: string;
   date: string;
   createdAt: string;

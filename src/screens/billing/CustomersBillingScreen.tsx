@@ -53,8 +53,9 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
                   <div className="text-[11px] text-[#8E9299] flex items-center gap-1"><Phone className="w-3 h-3" /> {c.phone || 'no phone'}</div>
                 </button>
                 <div className="text-right shrink-0">
-                  <div className={`font-mono font-bold text-sm ${c.totalDue > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-[#111827] dark:text-white'}`}>{c.totalDue > 0 ? rs(c.totalDue) : 'Clear'}</div>
+                  <div className={`font-mono font-bold text-sm ${c.totalDue > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-[#111827] dark:text-white'}`}>{c.totalDue > 0 ? rs(c.totalDue) : c.totalDue < 0 ? rs(-c.totalDue) : 'Clear'}</div>
                   {c.totalDue > 0 && <div className="text-[11px] text-[#8E9299]">owes you</div>}
+                  {c.totalDue < 0 && <div className="text-[11px] text-teal-700 dark:text-teal-300">advance paid</div>}
                 </div>
                 <button type="button" onClick={() => ui.newBill(c.id)} aria-label={`New bill for ${c.name}`} className="p-2.5 rounded-xl text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/40"><FilePlus2 className="w-4 h-4" /></button>
               </li>
@@ -79,7 +80,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
         {open && (
           <div className="space-y-5">
             <div className="grid grid-cols-3 gap-2 text-sm">
-              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Owes you</div><div className={`font-mono font-extrabold ${open.totalDue > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-[#111827] dark:text-white'}`}>{rs(open.totalDue)}</div></div>
+              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">{open.totalDue < 0 ? 'Advance paid' : 'Owes you'}</div><div className={`font-mono font-extrabold ${open.totalDue > 0 ? 'text-amber-700 dark:text-amber-300' : open.totalDue < 0 ? 'text-teal-700 dark:text-teal-300' : 'text-[#111827] dark:text-white'}`}>{rs(Math.abs(open.totalDue))}</div></div>
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Bills</div><div className="font-mono font-extrabold text-[#111827] dark:text-white">{openBills.length}</div></div>
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Bought so far</div><div className="font-mono font-extrabold text-[#111827] dark:text-white">{rs(openBills.reduce((a, b) => a + b.totalAmount, 0))}</div></div>
             </div>

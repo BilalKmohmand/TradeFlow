@@ -233,3 +233,38 @@ describe('bank reconciliation in the app', () => {
     expect(result.current.auditLogs.some((l) => l.action === 'Bank Reconciled')).toBe(true);
   });
 });
+
+describe('review fixes: cut-off at the statement date, deleted records', () => {
+  it('a cheque written before month-end that clears after it is still outstanding at month-end', () => {
+    // Opening bank 100,000. Cheque 100 written Sep 29, reaches the bank Oct 2 (matched).
+    const moves = [mv('chq', '2026-09-29', 'out', 100)];
+    const lines = [line('l1', '2026-10-02', -100, { status: 'matched', matchedMovementIds: ['chq'] })];
+    const sep = reconciliationSummary({ movements: moves, settings, lines, statementDate: '2026-09-30', closingBalance: 100000, clearedMovementIds: [] });
+    expect(sep.outstandingPayments.map((m) => m.id)).toEqual(['chq']);
+    expect(sep.reconciled).toBe(true); // statement still shows 100,000; books show 99,900 + 100 uncleared
+    const oct = reconciliationSummary({ movements: moves, settings, lines, statementDate: '2026-10-31', closingBalance: 99900, clearedMovementIds: [] });
+    expect(oct.outstandingPayments).toEqual([]);
+    expect(oct.reconciled).toBe(true);
+  });
+  it('a statement line before the cut-off matched to a book entry dated after it counts as not yet in the books', () => {
+    const moves = [mv('dep', '2026-10-01', 'in', 500)];
+    const lines = [line('l1', '2026-09-30', 500, { status: 'matched', matchedMovementIds: ['dep'] })];
+    const s = reconciliationSummary({ movements: moves, settings, lines, statementDate: '2026-09-30', closingBalance: 100500, clearedMovementIds: [] });
+    expect(s.unrecorded.map((l) => l.id)).toEqual(['l1']);
+    expect(s.reconciled).toBe(true);
+  });
+  it('lines matched to records that were later deleted are treated as unmatched again', () => {
+    const lines = [line('l1', '2026-03-10', -250, { status: 'matched', matchedMovementIds: ['gone'] })];
+    const s = reconciliationSummary({ movements: [], settings, lines, statementDate: '2026-03-31', closingBalance: 99750, clearedMovementIds: [] });
+    expect(s.unrecorded.map((l) => l.id)).toEqual(['l1']);
+    expect(s.reconciled).toBe(true);
+    // and auto-match can use it again for a replacement record
+    const again = autoMatch(lines, [mv('new', '2026-03-10', 'out', 250)]);
+    expect(again.map((p) => `${p.lineId}->${p.movementId}`)).toEqual(['l1->new']);
+  });
+  it('statement lines dated before the counting-from date are left out of the reconciliation', () => {
+    const lines = [line('old', '2025-12-20', -999)];
+    const s = reconciliationSummary({ movements: [], settings, lines, statementDate: '2026-01-31', closingBalance: 100000, clearedMovementIds: [] });
+    expect(s.unrecorded).toEqual([]);
+  });
+});

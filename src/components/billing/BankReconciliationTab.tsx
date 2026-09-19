@@ -52,6 +52,8 @@ export const BankReconciliationTab: React.FC = () => {
     addBankStatementLines, deleteBankStatementLine, autoMatchBankLines, matchBankLine, unmatchBankLine, setBankLineIgnored, createEntryFromBankLine, saveBankReconciliation,
   } = useTrading();
   const canDelete = can('delete_records');
+  /** Importing, matching and adding records changes the books: cash book permission (not operators). */
+  const canEdit = can('finance:cashbook');
   const today = todayISO();
   const fileRef = useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -63,6 +65,8 @@ export const BankReconciliationTab: React.FC = () => {
   const [creatingId, setCreatingId] = useState<string | null>(null);
   const [createCat, setCreateCat] = useState<ExpenseCategory>('bank_charges');
   const [createDesc, setCreateDesc] = useState('');
+  /** '' = expense / unassigned receipt; otherwise the customer (money in) or supplier (money out) id. */
+  const [createParty, setCreateParty] = useState('');
   const [filter, setFilter] = useState<'all' | 'unmatched' | 'matched' | 'ignored'>('all');
 
   const movements = useMemo(() => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), [ledger, expenses, cashEntries, customers, suppliers]);
@@ -153,9 +157,13 @@ export const BankReconciliationTab: React.FC = () => {
     const d = l.description;
     setCreateCat(/salary|wage/i.test(d) ? 'salaries' : /\brent\b/i.test(d) ? 'rent' : /electric|sngpl|ptcl|utility|water bill|gas bill/i.test(d) ? 'utilities' : 'bank_charges');
     setCreateDesc(l.description);
+    // Guess the customer / supplier from the statement text (e.g. "IBFT Zaman & Co").
+    const text = l.description.toLowerCase();
+    const who = (l.amount > 0 ? customers : suppliers).find((x: { name: string; company?: string }) => [x.name, x.company].some((n) => n && n.trim().length > 2 && text.includes(n.trim().toLowerCase())));
+    setCreateParty(who ? (who as { id: string }).id : '');
   };
   const doCreate = (l: BankStatementLine) => {
-    const r = createEntryFromBankLine(l.id, { category: createCat, description: createDesc });
+    const r = createEntryFromBankLine(l.id, { category: createCat, description: createDesc, ...(createParty ? (l.amount > 0 ? { customerId: createParty } : { supplierId: createParty }) : {}) });
     setNotice({ kind: r.success ? 'ok' : 'error', text: r.message });
     if (r.success) setCreatingId(null);
   };
@@ -179,14 +187,15 @@ export const BankReconciliationTab: React.FC = () => {
           <h2 className="font-bold text-[#111827] dark:text-white">Check your bank statement</h2>
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Bring in the statement from your bank. Sarmaya pairs each line with the bank entries already in your books (same amount, within 3 days), so you only look at what doesn't match.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        {!canEdit && <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">You can view the reconciliation. Importing statements and matching lines needs a manager or admin.</p>}
+        {canEdit && <div className="flex flex-wrap gap-2">
           <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} className="hidden" aria-label="Bank statement CSV file" data-testid="bank-csv-input" />
           <button type="button" onClick={() => fileRef.current?.click()} className={primaryBtn}><Upload className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Upload statement (CSV)</button>
           <button type="button" onClick={() => setShowManual((v) => !v)} className={secondaryBtn}><Plus className="w-4 h-4" /> Type a line</button>
           {counts.unmatched > 0 && (
             <button type="button" onClick={() => { const n = autoMatchBankLines(); setNotice({ kind: 'ok', text: n ? `${n} more line${n === 1 ? '' : 's'} matched.` : 'No new matches found.' }); }} className={secondaryBtn}><Wand2 className="w-4 h-4 text-indigo-600" /> Match again</button>
           )}
-        </div>
+        </div>}
         {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
 
         {pending && (
@@ -264,39 +273,49 @@ export const BankReconciliationTab: React.FC = () => {
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-bold"><CheckCircle2 className="w-3.5 h-3.5" /> Matched</span>
                         {l.matchConfidence && <span className="text-[#6B7280] dark:text-[#94A3B8]">{CONFIDENCE_LABEL[l.matchConfidence]}</span>}
                         {lost ? <span className="text-rose-700 dark:text-rose-300 font-semibold">The matched record was deleted.</span> : <span className="text-[#6B7280] dark:text-[#94A3B8] min-w-0 break-words">→ {matched.map(moveLabel).join('; ')}</span>}
-                        <button type="button" onClick={() => unmatchBankLine(l.id)} className="inline-flex items-center gap-1 font-bold text-[#6B7280] hover:text-[#111827] dark:hover:text-white"><Unlink className="w-3.5 h-3.5" /> Unmatch</button>
+                        {canEdit && <button type="button" onClick={() => unmatchBankLine(l.id)} className="inline-flex items-center gap-1 font-bold text-[#6B7280] hover:text-[#111827] dark:hover:text-white"><Unlink className="w-3.5 h-3.5" /> Unmatch</button>}
                       </div>
                     )}
                     {l.status === 'ignored' && (
                       <div className="flex flex-wrap items-center gap-2 text-xs sm:pl-[4.75rem]">
                         <span className="px-2 py-0.5 rounded-full bg-[#F4F3EF] dark:bg-[#162436] text-[#6B7280] font-bold">Ignored</span>
-                        <button type="button" onClick={() => setBankLineIgnored(l.id, false)} className="inline-flex items-center gap-1 font-bold text-[#6B7280] hover:text-[#111827] dark:hover:text-white"><Eye className="w-3.5 h-3.5" /> Undo</button>
+                        {canEdit && <button type="button" onClick={() => setBankLineIgnored(l.id, false)} className="inline-flex items-center gap-1 font-bold text-[#6B7280] hover:text-[#111827] dark:hover:text-white"><Eye className="w-3.5 h-3.5" /> Undo</button>}
                       </div>
                     )}
                     {l.status === 'unmatched' && (
                       <div className="flex flex-wrap items-center gap-1.5 text-xs sm:pl-[4.75rem]">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold"><AlertTriangle className="w-3.5 h-3.5" /> Not in your books</span>
-                        <button type="button" onClick={() => startCreate(l)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-[#E5E5E1] dark:border-[#203248] font-bold text-teal-700 dark:text-teal-300"><FilePlus2 className="w-3.5 h-3.5" /> {l.amount < 0 ? 'Add as expense' : 'Add as money received'}</button>
-                        <button type="button" onClick={() => startMatch(l)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-[#E5E5E1] dark:border-[#203248] font-bold text-[#374151] dark:text-[#CBD5E1]"><Link2 className="w-3.5 h-3.5" /> Match…</button>
-                        <button type="button" onClick={() => setBankLineIgnored(l.id, true)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-bold text-[#6B7280]"><EyeOff className="w-3.5 h-3.5" /> Ignore</button>
+                        {canEdit && <button type="button" onClick={() => startCreate(l)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-[#E5E5E1] dark:border-[#203248] font-bold text-teal-700 dark:text-teal-300"><FilePlus2 className="w-3.5 h-3.5" /> {l.amount < 0 ? 'Add as expense' : 'Add as money received'}</button>}
+                        {canEdit && <button type="button" onClick={() => startMatch(l)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-[#E5E5E1] dark:border-[#203248] font-bold text-[#374151] dark:text-[#CBD5E1]"><Link2 className="w-3.5 h-3.5" /> Match…</button>}
+                        {canEdit && <button type="button" onClick={() => setBankLineIgnored(l.id, true)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-bold text-[#6B7280]"><EyeOff className="w-3.5 h-3.5" /> Ignore</button>}
                         {canDelete && <button type="button" onClick={() => deleteBankStatementLine(l.id)} aria-label={`Delete statement line ${l.description}`} className="px-2 py-1.5 text-[#9CA3AF] hover:text-rose-600">✕</button>}
                       </div>
                     )}
                     {creatingId === l.id && l.status === 'unmatched' && (
                       <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        {l.amount < 0 && (
+                        <div><label className={labelCls} htmlFor={`party-${l.id}`}>{l.amount > 0 ? 'Received from' : 'Paid to'}</label>
+                          <select id={`party-${l.id}`} value={createParty} onChange={(e) => setCreateParty(e.target.value)} className={inputCls}>
+                            <option value="">{l.amount > 0 ? 'Someone else (accountant decides)' : 'An expense'}</option>
+                            {(l.amount > 0 ? [...customers].sort((a, b) => a.name.localeCompare(b.name)) : [...suppliers].sort((a, b) => (a.company || a.name).localeCompare(b.company || b.name))).map((x) => (
+                              <option key={x.id} value={x.id}>{l.amount > 0 ? x.name : x.company || x.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {l.amount < 0 && !createParty && (
                           <div><label className={labelCls} htmlFor={`cat-${l.id}`}>Expense type</label>
                             <select id={`cat-${l.id}`} value={createCat} onChange={(e) => setCreateCat(e.target.value as ExpenseCategory)} className={inputCls}>
                               {EXPENSE_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                             </select>
                           </div>
                         )}
-                        <div className={l.amount < 0 ? '' : 'sm:col-span-2'}><label className={labelCls} htmlFor={`desc-${l.id}`}>Description</label><input id={`desc-${l.id}`} value={createDesc} onChange={(e) => setCreateDesc(e.target.value)} className={inputCls} /></div>
+                        <div className={l.amount < 0 && !createParty ? '' : 'sm:col-span-2'}><label className={labelCls} htmlFor={`desc-${l.id}`}>Description</label><input id={`desc-${l.id}`} value={createDesc} onChange={(e) => setCreateDesc(e.target.value)} className={inputCls} /></div>
                         <div className="flex items-end gap-2">
-                          <button type="button" onClick={() => doCreate(l)} className={`${primaryBtn} flex-1 px-3`}>{l.amount < 0 ? 'Add expense' : 'Add receipt'}</button>
+                          <button type="button" onClick={() => doCreate(l)} className={`${primaryBtn} flex-1 px-3`}>{createParty ? 'Record payment' : l.amount < 0 ? 'Add expense' : 'Add receipt'}</button>
                           <button type="button" onClick={() => setCreatingId(null)} className={`${secondaryBtn} px-3`}>Cancel</button>
                         </div>
-                        <p className="sm:col-span-3 text-[11px] text-[#8E9299]">{l.amount < 0 ? `Records ${rs(Math.abs(l.amount))} paid from the bank on ${formatDate(l.date)}.` : `Records ${rs(l.amount)} received into the bank on ${formatDate(l.date)}.`}</p>
+                        <p className="sm:col-span-3 text-[11px] text-[#8E9299]">{l.amount < 0
+                          ? createParty ? `Records ${rs(Math.abs(l.amount))} paid to this supplier from the bank on ${formatDate(l.date)}; what you owe them goes down.` : `Records ${rs(Math.abs(l.amount))} paid from the bank on ${formatDate(l.date)}.`
+                          : createParty ? `Records ${rs(l.amount)} received from this customer by bank on ${formatDate(l.date)}; what they owe goes down.` : `Records ${rs(l.amount)} received into the bank on ${formatDate(l.date)}. Your accountant can later say where it came from.`}</p>
                       </div>
                     )}
                     {matchingId === l.id && l.status === 'unmatched' && (() => {

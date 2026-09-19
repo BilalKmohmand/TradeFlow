@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Godown, Invoice, Product, Purchase, StockBatch, StockTransfer, Supplier } from '../types';
+import { Godown, Invoice, Product, Purchase, StockAdjustment, StockBatch, StockTransfer, Supplier } from '../types';
 import {
   BillStockPlan,
   MAIN_GODOWN,
@@ -69,6 +69,7 @@ interface Deps {
   isCloudSyncReady: boolean;
   syncToSupabase: (table: string, rows: unknown[]) => Promise<void>;
   removeRemote: (table: any, ids: string[]) => void;
+  recordAdjustment?: (a: Omit<StockAdjustment, 'id' | 'createdAt' | 'createdBy'>) => void;
 }
 
 const today = () => new Date().toISOString().split('T')[0];
@@ -87,7 +88,7 @@ const load = <T,>(key: string): T[] => {
  * use it; product.stockKg stays the total (see utils/inventory.ts for the model).
  */
 export const useInventoryStore = (deps: Deps) => {
-  const { products, setProducts, suppliers, addPurchase, logAuditEvent, userName, isCloudSyncReady, syncToSupabase, removeRemote } = deps;
+  const { products, setProducts, suppliers, addPurchase, logAuditEvent, userName, isCloudSyncReady, syncToSupabase, removeRemote, recordAdjustment } = deps;
   const [storedGodowns, setGodowns] = useState<Godown[]>(() => load(INVENTORY_STORAGE_KEYS.GODOWNS));
   const [stockBatches, setStockBatches] = useState<StockBatch[]>(() => load(INVENTORY_STORAGE_KEYS.STOCK_BATCHES));
   const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>(() => load(INVENTORY_STORAGE_KEYS.STOCK_TRANSFERS));
@@ -168,6 +169,7 @@ export const useInventoryStore = (deps: Deps) => {
       purchase = addPurchase({ supplierId: input.supplierId, productId: product.id, kg: qty, pricePerKg: cost, date, notes: [input.batchNo && `Batch ${input.batchNo}`, input.note].filter(Boolean).join(' • ') || undefined });
     } else {
       setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, stockKg: round2(p.stockKg + qty) } : p)));
+      recordAdjustment?.({ productId: product.id, deltaKg: qty, reason: 'received', ...(cost != null ? { costPerKg: cost } : {}), note: [input.batchNo && `Batch ${input.batchNo}`, input.note].filter(Boolean).join(' • ') || 'Stock received', date });
     }
     const { rows, batch } = receiveIntoRows(stockBatches, storedGodowns, { product, godownId, qty, batchNo: input.batchNo, expiryDate: input.expiryDate, costPrice: cost, supplierId: input.supplierId, purchaseId: purchase?.id, date });
     if (rows !== stockBatches) {
@@ -254,7 +256,15 @@ export const useInventoryStore = (deps: Deps) => {
     stock_transfers: () => setStockTransfers([]),
   };
 
+  /** A deleted purchase takes its own batch with it (not whichever batch happens to sort first). */
+  const removePurchaseRows = (purchaseId: string) => {
+    const ids = stockBatches.filter((r) => r.purchaseId === purchaseId).map((r) => r.id);
+    if (ids.length === 0) return;
+    setStockBatches((prev) => prev.filter((r) => !ids.includes(r.id)));
+    removeRemote('stock_batches', ids);
+  };
+
   const api: InventoryApi = { godowns, stockBatches, stockTransfers, addGodown, updateGodown, deleteGodown, receiveStock, transferStock };
-  return { api, planBill, applyBill, restoreBill, hydrate, backupData, reset, purgeSetters };
+  return { api, planBill, applyBill, restoreBill, hydrate, backupData, reset, purgeSetters, removePurchaseRows };
 };
 

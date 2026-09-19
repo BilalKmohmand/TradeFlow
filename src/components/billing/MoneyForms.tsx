@@ -5,12 +5,13 @@ import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice } from './u
 import { todayISO } from '../../utils/stockFlow';
 import { collectCashMovements, accountBalancesOn } from '../../utils/finance';
 import { rs } from './ui';
+import { booksLockedFor } from '../../utils/accounting';
 
 const EXPENSE_PAID_VIA = ['Cash', 'Bank Transfer', 'Easypaisa / JazzCash', 'Card', 'Credit (unpaid)'];
 
 /** Record an expense: what, how much, which sheet (category) it belongs to, and how it was paid. */
 export const ExpenseModal: React.FC<{ isOpen: boolean; onClose: () => void; date?: string; category?: ExpenseCategory }> = ({ isOpen, onClose, date, category }) => {
-  const { addExpense } = useTrading();
+  const { addExpense, settings } = useTrading();
   const [form, setForm] = useState({ date: date || todayISO(), category: (category || 'daily') as ExpenseCategory, amount: '', description: '', paidVia: 'Cash' });
   const [error, setError] = useState('');
   const submit = (e: React.FormEvent) => {
@@ -18,6 +19,8 @@ export const ExpenseModal: React.FC<{ isOpen: boolean; onClose: () => void; date
     const amount = parseFloat(form.amount) || 0;
     if (amount <= 0) return setError('Enter the amount.');
     if (!form.description.trim()) return setError('Write what this expense was for.');
+    const closed = booksLockedFor(settings, form.date);
+    if (closed) return setError(closed);
     addExpense({ date: form.date, category: form.category, amount, description: form.description.trim(), paidVia: form.paidVia, truckId: null, dispatchId: null });
     onClose();
   };
@@ -107,7 +110,7 @@ export const TransferModal: React.FC<{ isOpen: boolean; onClose: () => void }> =
 
 /** Take money from a customer against their whole account (old dues), not a specific bill. */
 export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; customerId?: string | null }> = ({ isOpen, onClose, customerId }) => {
-  const { customers, recordCustomerPayment } = useTrading();
+  const { customers, recordCustomerPayment, settings } = useTrading();
   const [cust, setCust] = useState(customerId || '');
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Cash');
@@ -119,6 +122,8 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
     const amt = parseFloat(amount) || 0;
     if (!c) return setError('Pick the customer.');
     if (amt <= 0) return setError('Enter the amount.');
+    const closed = booksLockedFor(settings, todayISO());
+    if (closed) return setError(closed);
     if (amt > c.totalDue + 0.005) return setError(c.totalDue > 0 ? `${c.name} owes only ${rs(c.totalDue)}. Enter up to that amount.` : `${c.name} owes nothing right now. Make a bill first.`);
     recordCustomerPayment(c.id, amt, `${method}${note.trim() ? ` - ${note.trim()}` : ''}`);
     onClose();

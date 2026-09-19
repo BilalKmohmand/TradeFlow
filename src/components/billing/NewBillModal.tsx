@@ -60,15 +60,18 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
     return { ...r, qty, price, amount: qty * price, product: p };
   });
   // Where each line's stock would come from (batch items, or a godown other than the main one).
-  const stockNote = (l: (typeof lines)[number]): { warn: boolean; text: string } | null => {
+  // Lines are planned together, in order, so two lines of the same item share the same stock, exactly
+  // as saving the bill will. Expiry is judged against today, so a back-dated bill can't sell expired stock.
+  const stockNote = (l: (typeof lines)[number], idx: number): { warn: boolean; text: string } | null => {
     if (!l.product || l.qty <= 0) return null;
     const unit = l.product.unit || 'pcs';
     if (!l.product.trackBatches && godowns.length < 2) {
       return l.qty > l.product.stockKg ? { warn: true, text: `Only ${l.product.stockKg} ${unit} of ${l.product.name} in stock — the bill will still save.` } : null;
     }
-    const plan = planBillStock(products, stockBatches, godowns, [{ productId: l.product.id, qty: l.qty }], godownId, date);
+    const upTo = lines.slice(0, idx + 1).filter((x) => x.product && x.qty > 0).map((x) => ({ productId: x.product!.id, qty: x.qty }));
+    const plan = planBillStock(products, stockBatches, godowns, upTo, godownId, todayISO());
     if (!plan.ok) return { warn: true, text: plan.message || 'Not enough stock.' };
-    const from = batchLines({ ...plan.lines[0] });
+    const from = batchLines({ ...plan.lines[plan.lines.length - 1] });
     if (from.length) return { warn: false, text: `From ${from.join(', ')}` };
     if (godowns.length > 1) {
       const have = stockByGodown(l.product, stockBatches, godowns)[godownId] ?? 0;
@@ -85,7 +88,11 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
   const paid = Math.min(given, total);
   const balance = Math.round((total - paid) * 100) / 100;
   const change = Math.round((given - total) * 100) / 100;
-  const credit = creditCheck(newCustomer ? null : customers.find((c) => c.id === customer), balance);
+  // A typed "new" customer that matches an existing one (same name or phone) is that customer, as on save.
+  const typedMatch = newCustomer
+    ? customers.find((c) => c.name.trim().toLowerCase() === newCustomer.name.trim().toLowerCase() || (newCustomer.phone.trim() && c.phone.replace(/\D/g, '') === newCustomer.phone.replace(/\D/g, '')))
+    : undefined;
+  const credit = creditCheck(newCustomer ? typedMatch || null : customers.find((c) => c.id === customer), balance);
   const canOverride = can('override_credit');
   const creditBlocked = credit.over && !(canOverride && allowOver && overReason.trim());
 
@@ -208,7 +215,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
                 </div>
                 <div className="col-span-3 sm:col-span-2 text-right font-mono font-bold text-sm text-[#111827] dark:text-white"><span className="sm:hidden block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1 font-sans">Amount</span>{rs(l.amount)}</div>
                 {(() => {
-                  const note = stockNote(l);
+                  const note = stockNote(l, idx);
                   return note ? <div data-testid={`stock-note-${idx + 1}`} className={`col-span-12 text-[11px] font-semibold ${note.warn ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{note.text}</div> : null;
                 })()}
                 <div className="col-span-1 flex justify-end">

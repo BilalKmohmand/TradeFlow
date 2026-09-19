@@ -169,7 +169,8 @@ CREATE TABLE IF NOT EXISTS cash_entries (
   method TEXT,
   "createdAt" TEXT,
   "createdBy" TEXT,
-  "pairId" TEXT
+  "pairId" TEXT,
+  "accountCode" TEXT
 );
 
 -- Single-row app settings (opening cash balance)
@@ -252,6 +253,7 @@ CREATE TABLE IF NOT EXISTS stock_adjustments (
   "productId" TEXT,
   "deltaKg" NUMERIC DEFAULT 0,
   reason TEXT,
+  "costPerKg" NUMERIC,
   note TEXT,
   date TEXT,
   "createdAt" TEXT,

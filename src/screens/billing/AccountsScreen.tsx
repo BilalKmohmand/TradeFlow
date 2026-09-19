@@ -41,6 +41,9 @@ export const AccountsScreen: React.FC = () => {
   const { can, settings, updateSettings, setPrintRequest, deleteManualJournal, addAccount, deleteAccount, isAdminUnlocked } = useTrading();
   const ui = useBillingUI();
   const allowed = can('view_finance');
+  // Viewing the books needs finance access; posting or changing them is for managers and admins.
+  const canPost = can('finance:view_pnl');
+  const canRemove = canPost && can('delete_records');
   const { accounts, journal } = useAccounting(allowed);
   const today = todayISO();
   const [tab, setTab] = useState<Tab>('tb');
@@ -135,7 +138,7 @@ export const AccountsScreen: React.FC = () => {
           <h1 className="text-2xl font-bold text-[#111827] dark:text-white flex items-center gap-2"><BookOpen className="w-6 h-6 text-teal-700 dark:text-teal-300" /> Accounts</h1>
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Double-entry books, posted automatically from your bills, payments and expenses.</p>
         </div>
-        <button type="button" onClick={() => setNewJournal((n) => n + 1)} className={primaryBtn}><Plus className="w-4 h-4" /> New journal entry</button>
+        {canPost && <button type="button" onClick={() => setNewJournal((n) => n + 1)} className={primaryBtn}><Plus className="w-4 h-4" /> New journal entry</button>}
       </div>
 
       <div role="tablist" aria-label="Accounts views" className="flex flex-wrap gap-1.5">{TABS.map(tabBtn)}</div>
@@ -144,7 +147,7 @@ export const AccountsScreen: React.FC = () => {
       {settings.booksLockedUntil && (
         <div className="rounded-2xl px-4 py-3 text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900 flex items-center gap-2">
           <Lock className="w-4 h-4 shrink-0" />
-          <span>Books are closed up to {formatDate(settings.booksLockedUntil)}. Manual journals on or before that date are refused. Bills and payments can still be changed from their own screens — doing so changes closed periods.</span>
+          <span>Books are closed up to {formatDate(settings.booksLockedUntil)}. Nothing dated on or before that day can be added or deleted: bills, payments, expenses, transfers and journals. An admin can reopen the period below.</span>
         </div>
       )}
       {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
@@ -255,7 +258,7 @@ export const AccountsScreen: React.FC = () => {
                 )}
                 <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${e.source === 'manual' ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300' : 'bg-[#F4F3EF] dark:bg-[#162436] text-[#6B7280]'}`}>{e.source === 'manual' ? 'manual' : 'auto'}</span>
                 <span className="text-sm font-semibold text-[#111827] dark:text-white min-w-0 flex-1 truncate">{e.memo}</span>
-                {e.source === 'manual' && can('delete_records') && (
+                {e.source === 'manual' && canRemove && (
                   <button type="button" aria-label={`Delete journal entry ${e.ref}`} onClick={() => { if (window.confirm(`Delete journal entry ${e.ref}?`)) flash(deleteManualJournal(e.id)); }} className="p-1.5 text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
                 )}
               </div>
@@ -296,7 +299,7 @@ export const AccountsScreen: React.FC = () => {
                       <td className={`${tdCls} text-xs capitalize`}>{a.type}{a.system ? <span className="ml-1.5 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-[#F4F3EF] dark:bg-[#162436] text-[#6B7280]">system</span> : null}</td>
                       <td className={numCls}>{drCr(balances.get(a.code)?.net ?? 0)}</td>
                       <td className="px-2 text-right">
-                        {!a.system && (
+                        {!a.system && canRemove && (
                           <button type="button" aria-label={`Delete account ${a.code}`} onClick={() => flash(deleteAccount(a.code))} className="p-1.5 text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
                         )}
                       </td>
@@ -306,7 +309,7 @@ export const AccountsScreen: React.FC = () => {
               </table>
             </div>
           </div>
-          <form
+          {canPost && <form
             onSubmit={(e) => {
               e.preventDefault();
               const r = addAccount({ code: acc.code, name: acc.name, type: acc.type, description: acc.description });
@@ -320,12 +323,12 @@ export const AccountsScreen: React.FC = () => {
             <div className="min-w-0"><label className={labelCls} htmlFor="acc-type">Type</label><select id="acc-type" value={acc.type} onChange={(e) => setAcc({ ...acc, type: e.target.value as AccountType })} className={inputCls}>{ACCOUNT_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></div>
             <div className="col-span-2 min-w-0"><label className={labelCls} htmlFor="acc-name">Name</label><input id="acc-name" value={acc.name} onChange={(e) => setAcc({ ...acc, name: e.target.value })} placeholder="e.g. Meezan Bank current account" className={inputCls} /></div>
             <div className="col-span-2 sm:col-span-1 flex items-end"><button type="submit" className={`${primaryBtn} w-full`}>Add account</button></div>
-          </form>
+          </form>}
           {isAdminUnlocked && can('admin_screen') && (
             <div className={`${cardCls} p-4 sm:p-5 flex flex-col sm:flex-row sm:items-end gap-3`}>
               <div className="flex-1 min-w-0">
                 <h2 className="font-bold text-[#111827] dark:text-white">Close the books (period lock)</h2>
-                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">After the accountant has finished a period, lock it so nobody can add or delete manual journals dated on or before this date.</p>
+                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">After the accountant has finished a period, lock it so nobody can add or delete anything dated on or before this date — bills, payments, expenses, transfers or journals.</p>
               </div>
               <div className="w-44"><label className={labelCls} htmlFor="lock-date">Locked up to</label><input id="lock-date" type="date" value={lockDate} onChange={(e) => setLockDate(e.target.value)} className={inputCls} /></div>
               <button type="button" disabled={!lockDate} onClick={() => { updateSettings({ booksLockedUntil: lockDate }); setNotice({ kind: 'ok', text: `Books locked up to ${lockDate}.` }); }} className={secondaryBtn}><Lock className="w-4 h-4" /> Lock</button>

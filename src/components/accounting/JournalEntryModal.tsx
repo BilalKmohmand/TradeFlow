@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { Modal, Notice, inputCls, labelCls, primaryBtn, secondaryBtn, rs } from '../billing/ui';
@@ -36,8 +36,13 @@ export const JournalEntryModal: React.FC<{ isOpen: boolean; onClose: () => void;
 
   const setLine = (i: number, patch: Partial<DraftLine>) => setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
 
+  const busy = useRef(false);
   const save = (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy.current) return; // a double tap must not post the entry twice
+    if (date > todayISO()) return setError('The date cannot be in the future.');
+    busy.current = true;
+    setTimeout(() => { busy.current = false; }, 800);
     const r = addManualJournal({ date, ref, memo, lines: parsed });
     if (!r.success) {
       setError(r.message);
@@ -83,7 +88,7 @@ export const JournalEntryModal: React.FC<{ isOpen: boolean; onClose: () => void;
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className={labelCls} htmlFor="je-date">Date</label>
-            <input id="je-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} required />
+            <input id="je-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} required />
           </div>
           <div>
             <label className={labelCls} htmlFor="je-ref">Reference (optional)</label>

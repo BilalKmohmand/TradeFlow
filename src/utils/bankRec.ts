@@ -195,9 +195,14 @@ export interface MatchProposal {
  * Greedy: the closest dates are paired first; ties go to the earliest statement line.
  * Movements already matched to another line are never proposed again.
  */
+/** A matched line whose book records were all deleted since is really unmatched again. */
+export const isLiveMatch = (l: BankStatementLine, movementIds: Set<string>) =>
+  l.status === 'matched' && l.matchedMovementIds.length > 0 && l.matchedMovementIds.some((id) => movementIds.has(id));
+
 export const autoMatch = (lines: BankStatementLine[], movements: CashMovement[], windowDays = 3): MatchProposal[] => {
-  const used = new Set(lines.flatMap((l) => (l.status === 'matched' ? l.matchedMovementIds : [])));
-  const open = lines.filter((l) => l.status === 'unmatched');
+  const ids = new Set(movements.map((m) => m.id));
+  const used = new Set(lines.flatMap((l) => (isLiveMatch(l, ids) ? l.matchedMovementIds : [])));
+  const open = lines.filter((l) => l.status === 'unmatched' || (l.status === 'matched' && !isLiveMatch(l, ids)));
   const pool = bankMovements(movements).filter((m) => !used.has(m.id));
   const candidates: MatchProposal[] = [];
   open.forEach((l) => {
@@ -255,9 +260,16 @@ export interface ReconciliationSummary {
   clearedCount: number;
 }
 
-/** Movement ids that are cleared: ticked by the user or matched to a statement line. */
-export const clearedIdSet = (lines: BankStatementLine[], clearedMovementIds: string[]) =>
-  new Set([...clearedMovementIds, ...lines.filter((l) => l.status === 'matched').flatMap((l) => l.matchedMovementIds)]);
+/**
+ * Movement ids that are cleared AS OF the statement date: ticked by the user, or matched to a
+ * statement line dated on/before the statement date. A cheque written on the 29th that reaches
+ * the bank on the 2nd is still outstanding at month-end.
+ */
+export const clearedIdSet = (lines: BankStatementLine[], clearedMovementIds: string[], statementDate?: string) =>
+  new Set([
+    ...clearedMovementIds,
+    ...lines.filter((l) => l.status === 'matched' && (!statementDate || l.date <= statementDate)).flatMap((l) => l.matchedMovementIds),
+  ]);
 
 export const reconciliationSummary = (input: {
   movements: CashMovement[];
@@ -269,14 +281,22 @@ export const reconciliationSummary = (input: {
 }): ReconciliationSummary => {
   const { movements, settings, lines, statementDate, closingBalance } = input;
   const bookBalance = accountBalancesOn(movements, settings, statementDate).bank;
-  const cleared = clearedIdSet(lines, input.clearedMovementIds);
+  const cleared = clearedIdSet(lines, input.clearedMovementIds, statementDate);
   const inBook = bankMovements(movements).filter((m) => m.date >= settings.cashOpeningDate && m.date <= statementDate);
+  const byId = new Map(movements.map((m) => [m.id, m]));
+  const ids = new Set(byId.keys());
   const outstanding = inBook.filter((m) => !cleared.has(m.id));
   const outstandingDeposits = outstanding.filter((m) => m.direction === 'in');
   const outstandingPayments = outstanding.filter((m) => m.direction === 'out');
   const outstandingDepositsTotal = round2(outstandingDeposits.reduce((a, m) => a + m.amount, 0));
   const outstandingPaymentsTotal = round2(outstandingPayments.reduce((a, m) => a + m.amount, 0));
-  const unrecorded = lines.filter((l) => l.status === 'unmatched' && l.date <= statementDate);
+  // On the statement by the statement date but not in the books by then: unmatched lines, lines whose
+  // matched records were deleted, and lines matched to a book entry dated after the statement date.
+  const unrecorded = lines.filter((l) => {
+    if (l.date > statementDate || l.date < settings.cashOpeningDate || l.status === 'ignored') return false;
+    if (l.status === 'unmatched' || !isLiveMatch(l, ids)) return true;
+    return l.matchedMovementIds.every((id) => { const m = byId.get(id); return !m || m.date > statementDate; });
+  });
   const unrecordedTotal = round2(unrecorded.reduce((a, l) => a + l.amount, 0));
   const expectedStatementBalance = round2(bookBalance - outstandingDepositsTotal + outstandingPaymentsTotal + unrecordedTotal);
   const difference = round2((Number(closingBalance) || 0) - expectedStatementBalance);

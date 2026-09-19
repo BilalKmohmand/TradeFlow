@@ -38,4 +38,7 @@ CREATE TABLE IF NOT EXISTS bank_reconciliations (
 ALTER TABLE bank_statement_lines DISABLE ROW LEVEL SECURITY;
 ALTER TABLE bank_reconciliations DISABLE ROW LEVEL SECURITY;
 
+-- Bank-reconciliation receipts post to an explicit account (suspense) instead of guessing from bank text.
+ALTER TABLE cash_entries ADD COLUMN IF NOT EXISTS "accountCode" TEXT;
+
 COMMIT;

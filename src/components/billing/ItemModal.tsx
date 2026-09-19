@@ -13,7 +13,7 @@ interface Props {
 
 /** Add or edit an item: name, unit, fixed selling price, stock on hand, low-stock alert level. */
 export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
-  const { products, addProduct, updateProduct, can, stockBatches } = useTrading();
+  const { products, addProduct, updateProduct, adjustStock, can, stockBatches } = useTrading();
   const editing = editId ? products.find((p) => p.id === editId) : undefined;
   const [name, setName] = useState(editing?.name || '');
   const [unit, setUnit] = useState(editing?.unit || 'pcs');
@@ -46,7 +46,12 @@ export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
       // Only write the flag when it is (or was) on, so shops that never use batches keep their data shape.
       ...(trackBatches || editing?.trackBatches != null ? { trackBatches } : {}),
     };
-    if (editing) updateProduct(editing.id, data);
+    if (editing) {
+      // A changed stock figure is kept as a stock-count record, so the books and history can explain it.
+      const { stockKg, ...rest } = data;
+      updateProduct(editing.id, rest);
+      if (Math.abs(stockKg - editing.stockKg) > 0.0001) adjustStock(editing.id, stockKg, 'count', 'Changed on the item form');
+    }
     else if (products.some((x) => x.name.toLowerCase() === data.name.toLowerCase())) return setError('An item with this name already exists.');
     else addProduct({ ...data, supplierId: null });
     onClose();

@@ -53,4 +53,7 @@ ALTER TABLE godowns DISABLE ROW LEVEL SECURITY;
 ALTER TABLE stock_batches DISABLE ROW LEVEL SECURITY;
 ALTER TABLE stock_transfers DISABLE ROW LEVEL SECURITY;
 
+-- Stock received without a supplier bill is recorded as an adjustment at its cost.
+ALTER TABLE stock_adjustments ADD COLUMN IF NOT EXISTS "costPerKg" NUMERIC;
+
 COMMIT;

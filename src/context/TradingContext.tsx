@@ -51,7 +51,7 @@ import {
   BankReconciliation,
 } from '../types';
 import { creditCheck } from '../utils/credit';
-import { collectCashMovements } from '../utils/finance';
+import { collectCashMovements, costPerKgOn } from '../utils/finance';
 import { BankRecApi, createBankRecApi } from './bankRecActions';
 import {
   DEFAULT_ROLES,
@@ -82,7 +82,7 @@ import {
 } from '../lib/database';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { useInventoryStore, InventoryApi, INVENTORY_STORAGE_KEYS } from './inventoryStore';
-import { Account, JournalEntry, mergeAccounts, validateEntry, validateAccount } from '../utils/accounting';
+import { Account, JournalEntry, mergeAccounts, validateEntry, validateAccount, booksLockedFor } from '../utils/accounting';
 import {
   initialCustomers,
   initialSuppliers,
@@ -287,8 +287,8 @@ interface TradingContextType extends InventoryApi {
   markDelivered: (dispatchId: string, data?: { receivedBy?: string; podNote?: string; deliveredAt?: string }) => void;
   reopenDispatch: (dispatchId: string) => void;
   
-  recordCustomerPayment: (customerId: string, amount: number, notes?: string) => void;
-  recordSupplierPayment: (supplierId: string, amount: number, notes?: string) => void;
+  recordCustomerPayment: (customerId: string, amount: number, notes?: string, date?: string) => LedgerEntry | undefined;
+  recordSupplierPayment: (supplierId: string, amount: number, notes?: string, date?: string) => LedgerEntry | undefined;
   
   sendWhatsAppReminder: (customerId: string, customText?: string) => WhatsAppMessage;
   sendWhatsAppDirect: (phone: string, text: string) => void;
@@ -812,15 +812,18 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setLedger(data.ledger);
         setWhatsappMessages(data.whatsappMessages);
         // Bills: only when the cloud table exists (migration v8); otherwise keep local copies.
+        // A table that exists but is still empty (migration just run, nothing uploaded yet) must not
+        // wipe what this device already has; the sync effects then upload the local rows.
+        const cloudOrLocal = <T,>(cloud: T[]) => (prev: T[]) => (cloud.length > 0 || prev.length === 0 ? cloud : prev);
         if (data.invoices) setInvoices(data.invoices);
         // Bank reconciliation: only when the cloud tables exist (migration v12).
-        if (data.bankStatementLines) setBankStatementLines(data.bankStatementLines);
-        if (data.bankReconciliations) setBankReconciliations(data.bankReconciliations);
+        if (data.bankStatementLines) setBankStatementLines(cloudOrLocal(data.bankStatementLines));
+        if (data.bankReconciliations) setBankReconciliations(cloudOrLocal(data.bankReconciliations));
         // Godowns / batches / transfers: only when the cloud tables exist (migration v11).
         inventory.hydrate({ godowns: data.godowns, stockBatches: data.stockBatches, stockTransfers: data.stockTransfers }, { keepLocalIfEmpty: true });
         // Accounts: only when the cloud tables exist (migration v10); otherwise keep local copies.
-        if (data.journalEntries) setManualJournals(data.journalEntries);
-        if (data.accounts) setCustomAccounts(data.accounts);
+        if (data.journalEntries) setManualJournals(cloudOrLocal(data.journalEntries));
+        if (data.accounts) setCustomAccounts(cloudOrLocal(data.accounts));
         setIsCloudSyncReady(true);
       })
       .catch((err) => {
@@ -981,6 +984,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCashEntries([]);
     setLedger(initialLedgerEntries);
     setWhatsappMessages(initialWhatsAppMessages);
+    // Everything else is cleared too, so nothing from the old data leaks into the sample (old journals
+    // in the trial balance, old batches on sample items, bank lines pointing at deleted records).
+    setInvoices([]);
+    setQuotations([]);
+    setPurchaseOrders([]);
+    setReturns([]);
+    setAdjustments([]);
+    setTasks([]);
+    setBankStatementLines([]);
+    setBankReconciliations([]);
+    setManualJournals([]);
+    setCustomAccounts([]);
+    inventory.reset();
     logAuditEvent('Sample Data Loaded', 'All business data replaced with the built-in sample dataset.', 'warning');
   };
 
@@ -1174,9 +1190,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const ledgerIds = ledger.filter((l) => refs.has(l.referenceId)).map((l) => l.id);
 
     setProducts((prev) => prev.map((p) => (p.id === target.productId ? { ...p, stockKg: Math.max(0, round2(p.stockKg - target.kg)) } : p)));
+    inventory.removePurchaseRows(id);
     if (!target.paymentMadeImmediately) {
       setSuppliers((prev) =>
-        prev.map((s) => (s.id === target.supplierId ? { ...s, totalOwed: Math.max(0, round2(s.totalOwed - target.amount)) } : s))
+        prev.map((s) => (s.id === target.supplierId ? { ...s, totalOwed: round2(s.totalOwed - target.amount) } : s))
       );
     }
     setLedger((prev) => prev.filter((l) => !refs.has(l.referenceId)));
@@ -1263,7 +1280,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       .forEach((d) => dueDelta.set(d.customerId, (dueDelta.get(d.customerId) || 0) + dispatchBilledTotal(d)));
     setCustomers((prev) =>
       prev.map((c) =>
-        dueDelta.has(c.id) ? { ...c, totalDue: Math.max(0, round2(c.totalDue - (dueDelta.get(c.id) || 0))) } : c
+        dueDelta.has(c.id) ? { ...c, totalDue: round2(c.totalDue - (dueDelta.get(c.id) || 0)) } : c
       )
     );
 
@@ -1987,12 +2004,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return { dispatch: newDispatch, message: waMessage };
   };
 
-  const recordCustomerPayment = (customerId: string, amount: number, notes?: string) => {
+  const recordCustomerPayment = (customerId: string, amount: number, notes?: string, date?: string): LedgerEntry | undefined => {
     const customer = customers.find((c) => c.id === customerId);
-    if (!customer) return;
+    if (!customer) return undefined;
 
-    const today = new Date().toISOString().split('T')[0];
-    const newTotalDue = Math.max(0, Number((customer.totalDue - amount).toFixed(2)));
+    const today = date || new Date().toISOString().split('T')[0];
+    // A payment bigger than what is owed is an advance: the balance goes negative, it is not lost.
+    const newTotalDue = Number((customer.totalDue - amount).toFixed(2));
     const quiet = (settings.appMode || 'billing') === 'billing';
 
     setCustomers((prev) =>
@@ -2034,14 +2052,15 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setWhatsappMessages((prev) => [waMsg, ...prev]);
       setRecentWhatsAppAlert(waMsg);
     }
+    return newLedger;
   };
 
-  const recordSupplierPayment = (supplierId: string, amount: number, notes?: string) => {
+  const recordSupplierPayment = (supplierId: string, amount: number, notes?: string, date?: string): LedgerEntry | undefined => {
     const supplier = suppliers.find((s) => s.id === supplierId);
-    if (!supplier) return;
+    if (!supplier) return undefined;
 
-    const today = new Date().toISOString().split('T')[0];
-    const newTotalOwed = Math.max(0, Number((supplier.totalOwed - amount).toFixed(2)));
+    const today = date || new Date().toISOString().split('T')[0];
+    const newTotalOwed = Number((supplier.totalOwed - amount).toFixed(2));
 
     setSuppliers((prev) =>
       prev.map((s) => (s.id === supplierId ? { ...s, totalOwed: newTotalOwed } : s))
@@ -2062,7 +2081,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     setLedger((prev) => [newLedger, ...prev]);
+    return newLedger;
   };
+
 
   const sendWhatsAppReminder = (customerId: string, customText?: string): WhatsAppMessage => {
     const customer = customers.find((c) => c.id === customerId);
@@ -3101,7 +3122,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (items.length === 0) return { success: false, message: 'Add at least one item with a quantity.' };
     if (items.some((it) => !(it.unitPrice >= 0))) return { success: false, message: 'A price cannot be negative.' };
     // Where the stock comes from (godown, batches first-expiry-first-out). Plain items are unchanged.
-    const stockPlan = inventory.planBill(items, input.godownId, input.date || todayISO());
+    // Expiry is judged against today (not the bill date), so a back-dated bill can't sell an expired batch.
+    const stockPlan = inventory.planBill(items, input.godownId, todayISO());
     if (!stockPlan.ok) return { success: false, message: stockPlan.message || 'Not enough stock.' };
     let customer = customers.find((c) => c.id === input.customerId);
     // An inline new customer is only created once every check below has passed, so a refused
@@ -3120,6 +3142,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!customer) return { success: false, message: 'Pick a customer first.' };
     const date = input.date || todayISO();
     if (date > todayISO()) return { success: false, message: 'The bill date cannot be in the future.' };
+    const closedBill = booksLockedFor(settings, date);
+    if (closedBill) return { success: false, message: closedBill };
     const subtotal = round2(items.reduce((a, it) => a + round2(it.qty * it.unitPrice), 0));
     const discount = round2(Math.min(Math.max(0, input.discount || 0), subtotal));
     const taxRatePct = settings.taxRatePct ?? 0;
@@ -3144,6 +3168,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const invoiceNumber = nextBillNumber(invoicesRef.current);
     const invoiceItems: InvoiceItem[] = items.map((it, idx) => {
       const product = products.find((p) => p.id === it.productId);
+      // Unit cost at the time of sale: the batches actually used (when they carry a cost), else the
+      // purchase cost up to the bill date, else the item's cost price. Kept on the line for the ledger.
+      const allocs = (stockPlan.lines[idx] as { batches?: { batchId: string; qty: number }[] })?.batches || [];
+      const batchCosted = allocs.length > 0 && allocs.every((a) => (inventory.api.stockBatches.find((b) => b.id === a.batchId)?.costPrice || 0) > 0);
+      const unitCost = batchCosted
+        ? round2(allocs.reduce((a, x) => a + x.qty * (inventory.api.stockBatches.find((b) => b.id === x.batchId)!.costPrice || 0), 0) / allocs.reduce((a, x) => a + x.qty, 0))
+        : costPerKgOn(purchases, it.productId, date) ?? (product?.costPricePerKg && product.costPricePerKg > 0 ? product.costPricePerKg : undefined);
       return {
         ...stockPlan.lines[idx],
         id: uid('bi'),
@@ -3151,7 +3182,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         productName: it.name || product?.name || 'Item',
         kg: it.qty,
         ratePerKg: round2(it.unitPrice),
-        costPricePerKg: product?.costPricePerKg,
+        costPricePerKg: unitCost,
         amount: round2(it.qty * it.unitPrice),
         qty: it.qty,
         unitPrice: round2(it.unitPrice),
@@ -3204,7 +3235,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Customer account: bill goes on, cash paid now comes off.
     const dueAfterBill = round2((customer.totalDue || 0) + totalAmount);
     const dueAfterPayment = round2(dueAfterBill - paidAmount);
-    setCustomers((prev) => prev.map((c) => (c.id === customer!.id ? { ...c, totalDue: Math.max(0, round2((c.totalDue || 0) + totalAmount - paidAmount)) } : c)));
+    setCustomers((prev) => prev.map((c) => (c.id === customer!.id ? { ...c, totalDue: round2((c.totalDue || 0) + totalAmount - paidAmount) } : c)));
     const entries: LedgerEntry[] = [
       {
         id: uid('led'),
@@ -3249,6 +3280,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (payAmt <= 0) return { success: false, message: 'Enter an amount greater than zero.' };
     if (payAmt > inv.balanceDue + 0.005) return { success: false, message: `Only ${formatCurrency(inv.balanceDue)} is left on this bill.` };
     const when = date || todayISO();
+    const closedPay = booksLockedFor(settings, when);
+    if (closedPay) return { success: false, message: closedPay };
     const newPaid = round2(inv.paidAmount + payAmt);
     const newBalance = Math.max(0, round2(inv.totalAmount - newPaid));
     const record: InvoicePaymentRecord = { id: uid('pay'), date: when, amount: payAmt, method: invoiceMethod(method), notes: notes ? `${method} - ${notes}` : method, recordedBy: currentUser?.name };
@@ -3260,8 +3293,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       )
     );
     const cust = customers.find((c) => c.id === inv.customerId);
-    const dueAfter = Math.max(0, round2((cust?.totalDue || 0) - payAmt));
-    if (cust) setCustomers((prev) => prev.map((c) => (c.id === cust.id ? { ...c, totalDue: Math.max(0, round2((c.totalDue || 0) - payAmt)) } : c)));
+    const dueAfter = round2((cust?.totalDue || 0) - payAmt);
+    if (cust) setCustomers((prev) => prev.map((c) => (c.id === cust.id ? { ...c, totalDue: round2((c.totalDue || 0) - payAmt) } : c)));
     setLedger((prev) => [
       {
         id: uid('led'),
@@ -3286,6 +3319,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const deleteBill = (invoiceId: string): { success: boolean; message: string } => {
     const inv = invoices.find((i) => i.id === invoiceId);
     if (!inv) return { success: false, message: 'Bill not found.' };
+    const closedDel = booksLockedFor(settings, [inv.issueDate, ...(inv.payments || []).map((p) => p.date)].sort()[0]);
+    if (closedDel) return { success: false, message: `This bill is in a closed period. ${closedDel}` };
     // Put stock back, take the unpaid part off the customer, drop the bill's ledger lines.
     setProducts((prev) =>
       prev.map((p) => {
@@ -3295,7 +3330,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       })
     );
     inventory.restoreBill(inv);
-    setCustomers((prev) => prev.map((c) => (c.id === inv.customerId ? { ...c, totalDue: Math.max(0, round2(c.totalDue - inv.balanceDue)) } : c)));
+    setCustomers((prev) => prev.map((c) => (c.id === inv.customerId ? { ...c, totalDue: round2(c.totalDue - inv.balanceDue) } : c)));
     const ledgerIds = ledger.filter((l) => l.entityType === 'customer' && (l.sourceId ? l.sourceId === inv.id : l.referenceId === inv.invoiceNumber && l.entityId === inv.customerId)).map((l) => l.id);
     setLedger((prev) => prev.filter((l) => !ledgerIds.includes(l.id)));
     removeRemote('ledger', ledgerIds);
@@ -3309,6 +3344,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const amt = round2(Math.max(0, amount));
     if (amt <= 0) return { success: false, message: 'Enter an amount greater than zero.' };
     const when = date || todayISO();
+    const closedXfer = booksLockedFor(settings, when);
+    if (closedXfer) return { success: false, message: closedXfer };
     const to = from === 'cash' ? 'bank' : 'cash';
     const label = from === 'cash' ? 'Deposited cash to bank' : 'Withdrew cash from bank';
     const description = `${label}${note ? ` - ${note}` : ''}`;
@@ -3437,6 +3474,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const deleteExpense = (id: string) => {
     const existing = expenses.find((e) => e.id === id);
     if (!existing) return;
+    if (booksLockedFor(settings, existing.date)) return; // closed period: the screens hide the delete button too
     setExpenses((prev) => prev.filter((e) => e.id !== id));
     removeRemote('expenses', [id]);
     logAuditEvent('Expense Deleted', `${existing.category}: ${formatCurrency(existing.amount)} — ${existing.description}`, 'danger');
@@ -3479,6 +3517,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const deleteCashEntry = (id: string) => {
     const existing = cashEntries.find((e) => e.id === id);
     if (!existing) return;
+    if (booksLockedFor(settings, existing.date)) return; // closed period: the screens hide the delete button too
     // A transfer has two legs; remove both so cash and bank stay in step.
     const ids = existing.pairId ? cashEntries.filter((e) => e.pairId === existing.pairId).map((e) => e.id) : [id];
     setCashEntries((prev) => prev.filter((e) => !ids.includes(e.id)));
@@ -3606,7 +3645,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (data.kind === 'sales' && data.customerId) {
       const customer = customers.find((c) => c.id === data.customerId);
       setProducts((prev) => prev.map((p) => (p.id === data.productId ? { ...p, stockKg: round2(p.stockKg + data.kg) } : p)));
-      setCustomers((prev) => prev.map((c) => (c.id === data.customerId ? { ...c, totalDue: Math.max(0, round2(c.totalDue - amount)) } : c)));
+      setCustomers((prev) => prev.map((c) => (c.id === data.customerId ? { ...c, totalDue: round2(c.totalDue - amount) } : c)));
       setLedger((prev) => [
         { id: uid('led'), entityType: 'customer', entityId: data.customerId!, type: 'credit_note', referenceId: r.returnNumber, date: onDate, description: `Credit note ${r.returnNumber}: ${data.kg.toLocaleString()} kg ${product?.name || 'goods'} returned — ${r.reason}`, debit: 0, credit: amount, balanceAfter: Math.max(0, round2((customer?.totalDue || 0) - amount)), kg: data.kg },
         ...prev,
@@ -3614,7 +3653,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } else if (data.kind === 'purchase' && data.supplierId) {
       const supplier = suppliers.find((s) => s.id === data.supplierId);
       setProducts((prev) => prev.map((p) => (p.id === data.productId ? { ...p, stockKg: Math.max(0, round2(p.stockKg - data.kg)) } : p)));
-      setSuppliers((prev) => prev.map((s) => (s.id === data.supplierId ? { ...s, totalOwed: Math.max(0, round2(s.totalOwed - amount)) } : s)));
+      setSuppliers((prev) => prev.map((s) => (s.id === data.supplierId ? { ...s, totalOwed: round2(s.totalOwed - amount) } : s)));
       setLedger((prev) => [
         { id: uid('led'), entityType: 'supplier', entityId: data.supplierId!, type: 'debit_note', referenceId: r.returnNumber, date: onDate, description: `Debit note ${r.returnNumber}: ${data.kg.toLocaleString()} kg ${product?.name || 'goods'} returned — ${r.reason}`, debit: 0, credit: amount, balanceAfter: Math.max(0, round2((supplier?.totalOwed || 0) - amount)), kg: data.kg },
         ...prev,
@@ -3651,7 +3690,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!product) return null;
     const deltaKg = round2(newStockKg - product.stockKg);
     if (deltaKg === 0) return null;
-    const adj: StockAdjustment = { id: uid('adj'), productId, deltaKg, reason, note: note?.trim() || undefined, date: todayISO(), createdAt: todayISO(), createdBy: currentUser?.name };
+    const cost = costPerKgOn(purchases, productId, todayISO()) ?? (product.costPricePerKg && product.costPricePerKg > 0 ? product.costPricePerKg : undefined);
+    const adj: StockAdjustment = { id: uid('adj'), productId, deltaKg, reason, ...(cost ? { costPerKg: round2(cost) } : {}), note: note?.trim() || undefined, date: todayISO(), createdAt: todayISO(), createdBy: currentUser?.name };
     setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, stockKg: Math.max(0, round2(newStockKg)) } : p)));
     setAdjustments((prev) => [adj, ...prev]);
     logAuditEvent('Stock Adjusted', `${product.name}: ${deltaKg > 0 ? '+' : ''}${deltaKg.toLocaleString()} kg (${reason})${note ? ` — ${note}` : ''}.`, 'warning');
@@ -3726,6 +3766,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     getMovements: () => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers),
     addExpense,
     addCashEntry,
+    recordCustomerPayment,
+    recordSupplierPayment,
+    lockedFor: (d) => booksLockedFor(settings, d),
+    canEdit: () => can('finance:cashbook'),
     logAuditEvent: (a, dt, sev) => logAuditEvent(a, dt, sev),
     removeRemote,
     uid,
@@ -3739,6 +3783,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const lines = (input.lines || [])
       .map((l) => ({ accountCode: l.accountCode, debit: round2(Number(l.debit) || 0), credit: round2(Number(l.credit) || 0), ...(l.memo?.trim() ? { memo: l.memo.trim() } : {}) }))
       .filter((l) => l.accountCode || l.debit || l.credit);
+    if (!can('finance:view_pnl')) return { success: false, message: 'Only a manager or admin can post journal entries.' };
     const check = validateEntry({ date: input.date, lines }, mergeAccounts(customAccounts));
     if (!check.ok) return { success: false, message: check.errors[0] };
     if (!input.memo.trim()) return { success: false, message: 'Write what this entry is for (narration).' };
@@ -3748,7 +3793,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const entry: JournalEntry = {
       id: uid('je'),
       date: input.date,
-      ref: input.ref?.trim() || `JV-${manualJournals.length + 1}`,
+      ref: input.ref?.trim() || `JV-${manualJournals.reduce((m, j) => Math.max(m, parseInt((j.ref.match(/^JV-(\d+)$/) || [])[1] || '0', 10)), 0) + 1}`,
       memo: input.memo.trim(),
       lines,
       source: 'manual',
@@ -3763,6 +3808,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const deleteManualJournal = (id: string): { success: boolean; message: string } => {
     const target = manualJournals.find((j) => j.id === id);
     if (!target) return { success: false, message: 'Journal entry not found.' };
+    if (!can('finance:view_pnl') || !can('delete_records')) return { success: false, message: 'Only a manager or admin can delete journal entries.' };
     if (settings.booksLockedUntil && target.date <= settings.booksLockedUntil) {
       return { success: false, message: `The books are locked up to ${settings.booksLockedUntil}; this entry cannot be removed.` };
     }
@@ -3773,6 +3819,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const addAccount = (acc: { code: string; name: string; type: Account['type']; parent?: string; description?: string }): { success: boolean; message: string } => {
+    if (!can('finance:view_pnl')) return { success: false, message: 'Only a manager or admin can add accounts.' };
     const error = validateAccount(acc, mergeAccounts(customAccounts));
     if (error) return { success: false, message: error };
     const code = acc.code.trim();
@@ -3793,6 +3840,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const deleteAccount = (code: string): { success: boolean; message: string } => {
+    if (!can('finance:view_pnl') || !can('delete_records')) return { success: false, message: 'Only a manager or admin can delete accounts.' };
     const target = customAccounts.find((a) => a.code === code);
     if (!target) return { success: false, message: 'System accounts cannot be deleted.' };
     if (manualJournals.some((j) => j.lines.some((l) => l.accountCode === code))) {
@@ -3956,7 +4004,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     logAuditEvent('Factory Data Purged', 'Administrator performed complete system wipe.', 'danger');
   };
 
-  const inventory = useInventoryStore({ products, setProducts, suppliers, addPurchase, logAuditEvent, userName: currentUser?.name, isCloudSyncReady, syncToSupabase, removeRemote });
+  const inventory = useInventoryStore({
+    products, setProducts, suppliers, addPurchase, logAuditEvent, userName: currentUser?.name, isCloudSyncReady, syncToSupabase, removeRemote,
+    // Stock received with no supplier bill is kept as a stock record (not a silent stock change).
+    recordAdjustment: (a) => setAdjustments((prev) => [{ ...a, id: uid('adj'), createdAt: todayISO(), createdBy: currentUser?.name }, ...prev]),
+  });
 
   return (
     <TradingContext.Provider

@@ -134,7 +134,8 @@ describe('trading flow', () => {
     expect(result.current.products[0].stockKg).toBe(10000);
     expect(result.current.bookings[0].remainingKg).toBe(5000);
     expect(result.current.bookings[0].status).toBe('active');
-    expect(result.current.customers[0].totalDue).toBe(0); // 50000 - 80000 clamped
+    // The 30,000 already paid is not lost when the dispatch goes: it is now an advance the shop owes back.
+    expect(result.current.customers[0].totalDue).toBe(-30000);
     expect(result.current.ledger.filter((l) => l.type === 'dispatch_billed')).toHaveLength(0);
     expect(result.current.whatsappMessages.filter((m) => m.type === 'dispatch_alert')).toHaveLength(0);
   });
@@ -173,7 +174,8 @@ describe('trading flow', () => {
       result.current.deletePurchase(purchaseId);
     });
     expect(result.current.products[0].stockKg).toBe(10000);
-    expect(result.current.suppliers[0].totalOwed).toBe(0);
+    // The 25,000 already paid for goods that were then removed: the supplier now owes it back.
+    expect(result.current.suppliers[0].totalOwed).toBe(-25000);
     expect(result.current.ledger.filter((l) => l.type === 'purchase_received')).toHaveLength(0);
   });
 

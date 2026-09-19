@@ -7,6 +7,7 @@ import { collectCashMovements, accountBalancesOn, positionSummary } from '../../
 import { groupExpenses } from '../../utils/billing';
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
+import { booksLockedFor } from '../../utils/accounting';
 import { BankReconciliationTab } from '../../components/billing/BankReconciliationTab';
 
 type Tab = 'overview' | 'expenses' | 'cashbook' | 'bank';
@@ -27,6 +28,8 @@ export const MoneyScreen: React.FC = () => {
   const position = useMemo(() => positionSummary(customers, suppliers, expenses, balances), [customers, suppliers, expenses, balances]);
   const debtors = useMemo(() => customers.filter((c) => c.totalDue > 0).sort((a, b) => b.totalDue - a.totalDue), [customers]);
   const creditors = useMemo(() => suppliers.filter((s) => s.totalOwed > 0).sort((a, b) => b.totalOwed - a.totalOwed), [suppliers]);
+  // Customers who paid in advance: the shop owes them goods or money back.
+  const advances = useMemo(() => customers.filter((c) => c.totalDue < 0).sort((a, b) => a.totalDue - b.totalDue), [customers]);
   const unpaidExpenses = useMemo(() => expenses.filter((e) => e.paidVia === 'Credit (unpaid)'), [expenses]);
   const monthExpenses = useMemo(() => groupExpenses(expenses.filter((e) => e.date.startsWith(month))), [expenses, month]);
   const monthTotal = monthExpenses.reduce((a, g) => a + g.total, 0);
@@ -98,12 +101,18 @@ export const MoneyScreen: React.FC = () => {
             </div>
             <div className={`${cardCls} overflow-hidden`}>
               <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">You owe</h2><span className="font-mono font-bold text-sm text-rose-700 dark:text-rose-300">{rs(position.payables)}</span></div>
-              {creditors.length + unpaidExpenses.length === 0 ? <div className="px-5 py-5 text-sm text-[#8E9299]">You owe nothing right now.</div> : (
+              {creditors.length + unpaidExpenses.length + advances.length === 0 ? <div className="px-5 py-5 text-sm text-[#8E9299]">You owe nothing right now.</div> : (
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                   {creditors.map((s) => (
                     <li key={s.id} className="flex items-center gap-2 px-5 py-2.5">
                       <button type="button" onClick={() => setSelectedSupplierId(s.id)} className="flex-1 min-w-0 text-left"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{s.company || s.name}</span><span className="text-[11px] text-[#8E9299]">supplier • {s.phone}</span></button>
                       <span className="font-mono font-bold text-sm">{rs(s.totalOwed)}</span>
+                    </li>
+                  ))}
+                  {advances.map((c) => (
+                    <li key={c.id} className="flex items-center gap-2 px-5 py-2.5">
+                      <button type="button" onClick={() => setSelectedCustomerId(c.id)} className="flex-1 min-w-0 text-left"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{c.name}</span><span className="text-[11px] text-[#8E9299]">customer paid in advance</span></button>
+                      <span className="font-mono font-bold text-sm">{rs(-c.totalDue)}</span>
                     </li>
                   ))}
                   {unpaidExpenses.map((e) => (
@@ -138,7 +147,7 @@ export const MoneyScreen: React.FC = () => {
               <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">{g.label} sheet</h2><span className="font-mono font-bold text-sm">{rs(g.total)}</span></div>
               <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                 {g.rows.sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (
-                  <li key={e.id} className="flex items-center gap-2 px-5 py-2.5 text-sm"><span className="font-mono text-xs text-[#8E9299] w-20 shrink-0">{formatDate(e.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#8E9299]"> • {e.paidVia || 'Cash'}{e.createdBy ? ` • ${e.createdBy}` : ''}</span></span><span className="font-mono font-bold">{rs(e.amount)}</span>{canDelete && <button type="button" onClick={() => deleteExpense(e.id)} aria-label={`Delete expense ${e.description}`} className="text-[#9CA3AF] hover:text-rose-600 text-sm px-2 py-1">✕</button>}</li>
+                  <li key={e.id} className="flex items-center gap-2 px-5 py-2.5 text-sm"><span className="font-mono text-xs text-[#8E9299] w-20 shrink-0">{formatDate(e.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#8E9299]"> • {e.paidVia || 'Cash'}{e.createdBy ? ` • ${e.createdBy}` : ''}</span></span><span className="font-mono font-bold">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && <button type="button" onClick={() => deleteExpense(e.id)} aria-label={`Delete expense ${e.description}`} className="text-[#9CA3AF] hover:text-rose-600 text-sm px-2 py-1">✕</button>}</li>
                 ))}
               </ul>
             </div>

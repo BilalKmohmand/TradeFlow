@@ -6,6 +6,7 @@ import { Tile, cardCls, inputCls, primaryBtn, secondaryBtn, rs } from '../../com
 import { buildDailySheet } from '../../utils/billing';
 import { todayISO, shiftDate } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
+import { booksLockedFor } from '../../utils/accounting';
 import { EXPENSE_CATEGORIES } from '../../types';
 
 /** One day on one page: bills, money in, money out (by category), cash & bank opening/closing. */
@@ -92,7 +93,7 @@ export const DailySheetScreen: React.FC = () => {
                   <div className="flex justify-between text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]"><span>{g.label}</span><span className="font-mono">{rs(g.total)}</span></div>
                   <ul className="mt-1 space-y-1">
                     {g.rows.map((e) => (
-                      <li key={e.id} className="flex items-center justify-between gap-2 text-sm"><span className="min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#8E9299]"> • {e.paidVia || 'Cash'}</span></span><span className="flex items-center gap-1 shrink-0"><span className="font-mono">{rs(e.amount)}</span>{canDelete && <button type="button" onClick={() => deleteExpense(e.id)} aria-label={`Delete expense ${e.description}`} className="text-[#9CA3AF] hover:text-rose-600 text-sm px-2 py-1">✕</button>}</span></li>
+                      <li key={e.id} className="flex items-center justify-between gap-2 text-sm"><span className="min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#8E9299]"> • {e.paidVia || 'Cash'}</span></span><span className="flex items-center gap-1 shrink-0"><span className="font-mono">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && <button type="button" onClick={() => deleteExpense(e.id)} aria-label={`Delete expense ${e.description}`} className="text-[#9CA3AF] hover:text-rose-600 text-sm px-2 py-1">✕</button>}</span></li>
                     ))}
                   </ul>
                 </div>
@@ -111,7 +112,7 @@ export const DailySheetScreen: React.FC = () => {
                 <li key={m.id} className="flex items-center justify-between gap-3 px-5 py-2.5"><span className="min-w-0"><span className="font-semibold text-sm text-[#111827] dark:text-white">{m.counterparty}</span><span className="block text-[11px] text-[#8E9299]">{m.method || 'Cash'}</span></span><span className="font-mono font-bold text-sm text-rose-700 dark:text-rose-300">− {rs(m.amount)}</span></li>
               ))}
               {sheet.other.map((m) => (
-                <li key={m.id} className="flex items-center justify-between gap-3 px-5 py-2.5"><span className="min-w-0"><span className="font-semibold text-sm text-[#111827] dark:text-white">{m.description}</span><span className="block text-[11px] text-[#8E9299]">{m.description.startsWith('Deposited') ? 'cash → bank' : m.description.startsWith('Withdrew') ? 'bank → cash' : `${m.direction === 'in' ? 'into' : 'out of'} ${m.method || 'Cash'}`}</span></span><span className="flex items-center gap-1"><span className="font-mono font-bold text-sm text-[#111827] dark:text-white">{rs(m.amount)}</span>{canDelete && <button type="button" onClick={() => deleteCashEntry(m.sourceId)} aria-label={`Delete entry ${m.description}`} className="text-[#9CA3AF] hover:text-rose-600 text-sm px-2 py-1">✕</button>}</span></li>
+                <li key={m.id} className="flex items-center justify-between gap-3 px-5 py-2.5"><span className="min-w-0"><span className="font-semibold text-sm text-[#111827] dark:text-white">{m.description}</span><span className="block text-[11px] text-[#8E9299]">{m.description.startsWith('Deposited') ? 'cash → bank' : m.description.startsWith('Withdrew') ? 'bank → cash' : `${m.direction === 'in' ? 'into' : 'out of'} ${m.method || 'Cash'}`}</span></span><span className="flex items-center gap-1"><span className="font-mono font-bold text-sm text-[#111827] dark:text-white">{rs(m.amount)}</span>{canDelete && !booksLockedFor(settings, m.date) && <button type="button" onClick={() => deleteCashEntry(m.sourceId)} aria-label={`Delete entry ${m.description}`} className="text-[#9CA3AF] hover:text-rose-600 text-sm px-2 py-1">✕</button>}</span></li>
               ))}
             </ul>
           )}

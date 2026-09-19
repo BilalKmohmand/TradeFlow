@@ -491,9 +491,14 @@ export const positionSummary = (
   expenses: Expense[],
   balances: AccountBalances
 ) => {
-  const receivables = round2(customers.reduce((a, c) => a + c.totalDue, 0));
-  const supplierPayables = round2(suppliers.reduce((a, s) => a + s.totalOwed, 0));
+  // A negative customer balance is an advance the shop owes back; a negative supplier balance is
+  // money the supplier owes the shop. Each is counted on the correct side, never netted away.
+  const customerDues = round2(customers.reduce((a, c) => a + Math.max(0, c.totalDue), 0));
+  const customerAdvances = round2(customers.reduce((a, c) => a + Math.max(0, -c.totalDue), 0));
+  const supplierPayables = round2(suppliers.reduce((a, s) => a + Math.max(0, s.totalOwed), 0));
+  const supplierAdvances = round2(suppliers.reduce((a, s) => a + Math.max(0, -s.totalOwed), 0));
   const unpaidExpenses = round2(expenses.filter((e) => e.paidVia === 'Credit (unpaid)').reduce((a, e) => a + e.amount, 0));
-  const payables = round2(supplierPayables + unpaidExpenses);
-  return { receivables, supplierPayables, unpaidExpenses, payables, netPosition: round2(balances.total + receivables - payables) };
+  const receivables = round2(customerDues + supplierAdvances);
+  const payables = round2(supplierPayables + unpaidExpenses + customerAdvances);
+  return { receivables, customerDues, customerAdvances, supplierPayables, supplierAdvances, unpaidExpenses, payables, netPosition: round2(balances.total + receivables - payables) };
 };

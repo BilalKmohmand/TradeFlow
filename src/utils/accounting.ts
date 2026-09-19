@@ -302,6 +302,12 @@ class EntryBuilder {
 const cashDrawingRe = /drawing|personal|owner (took|withdrew)/i;
 const cashCapitalRe = /capital|investment|owner (put|added|brought)/i;
 
+/** Refusal text when a date falls inside a closed period (books locked up to that date), else null. */
+export const booksLockedFor = (settings: Pick<AppSettings, 'booksLockedUntil'>, date: string): string | null =>
+  settings.booksLockedUntil && date && date <= settings.booksLockedUntil
+    ? `The books are closed up to ${settings.booksLockedUntil}. Use a later date, or ask an admin to reopen the period in Accounts.`
+    : null;
+
 export const buildJournal = (src: JournalSources): JournalEntry[] => {
   const {
     settings,
@@ -334,10 +340,12 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
   /** Cash or bank account for a movement; before the opening date it is already in the opening figures. */
   const moneyAccount = (method: string | undefined, date: string) => (date < openingDate ? ACC.OPENING_EQUITY : isCashMethod(method) ? ACC.CASH : ACC.BANK);
 
+  /** Cost on a date: what it was bought for up to then; the item's current cost price only as a last resort. */
   const productCost = (productId: string, date: string): number | null => {
+    const dated = costPerKgOn(purchases, productId, date);
+    if (dated != null && dated > 0) return dated;
     const p = products.find((x) => x.id === productId);
-    if (p?.costPricePerKg != null && p.costPricePerKg > 0) return p.costPricePerKg;
-    return costPerKgOn(purchases, productId, date);
+    return p?.costPricePerKg != null && p.costPricePerKg > 0 ? p.costPricePerKg : null;
   };
 
   // --- 1. Opening cash and bank -------------------------------------------------------------
@@ -381,7 +389,11 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
             b.dr(ACC.SALES_DISCOUNTS, discount).cr(ACC.SALES_TAX, tax).cr(ACC.FREIGHT_INCOME, charges);
             // Sales takes whatever is left so the entry always balances with the ledger amount.
             b.cr(ACC.SALES, debit + discount - tax - charges);
-            const cogs = inv.items.reduce((a, it) => a + (it.costPricePerKg && it.costPricePerKg > 0 ? it.costPricePerKg * (it.qty ?? it.kg ?? 0) : 0), 0);
+            // Cost captured on the bill line (batch cost when batches were used); older bills fall back to the purchase cost then.
+            const cogs = inv.items.reduce((a, it) => {
+              const unitCost = it.costPricePerKg && it.costPricePerKg > 0 ? it.costPricePerKg : productCost(it.productId, inv.issueDate);
+              return a + (unitCost ? unitCost * (it.qty ?? it.kg ?? 0) : 0);
+            }, 0);
             b.dr(ACC.COGS, cogs, 'Cost of items sold').cr(ACC.INVENTORY, cogs);
           } else {
             b.cr(ACC.SALES, debit);
@@ -509,10 +521,10 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
     const money = moneyAccount(methodOf.get(c.id) ?? c.method, c.date);
     const b = new EntryBuilder();
     if (c.direction === 'in') {
-      const other = cashCapitalRe.test(c.description || '') ? ACC.CAPITAL : ACC.SUSPENSE;
+      const other = c.accountCode || (cashCapitalRe.test(c.description || '') ? ACC.CAPITAL : ACC.SUSPENSE);
       b.dr(money, amount).cr(other, amount, c.description);
     } else {
-      const other = cashDrawingRe.test(c.description || '') ? ACC.DRAWINGS : ACC.SUSPENSE;
+      const other = c.accountCode || (cashDrawingRe.test(c.description || '') ? ACC.DRAWINGS : ACC.SUSPENSE);
       b.dr(other, amount, c.description).cr(money, amount);
     }
     push({ id: `auto-cash-${c.id}`, date: c.date, ref: c.direction === 'in' ? 'CASH IN' : 'CASH OUT', memo: c.description || 'Cash entry', sourceType: 'cash', sourceId: c.id, builder: b });
@@ -520,11 +532,13 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
 
   // --- 6. Stock: adjustments and opening stock ---------------------------------------------
   adjustments.forEach((a) => {
-    const cost = productCost(a.productId, a.date);
+    const cost = a.costPerKg && a.costPerKg > 0 ? a.costPerKg : productCost(a.productId, a.date);
     if (cost == null || !a.deltaKg) return;
     const value = round2(Math.abs(a.deltaKg) * cost);
     const b = new EntryBuilder();
-    if (a.deltaKg < 0) b.dr(ACC.STOCK_LOSSES, value, a.note || a.reason).cr(ACC.INVENTORY, value);
+    // Stock that arrived with no supplier bill: where it came from is for the accountant to decide.
+    if (a.reason === 'received' && a.deltaKg > 0) b.dr(ACC.INVENTORY, value).cr(ACC.SUSPENSE, value, a.note || 'Stock received without a supplier bill');
+    else if (a.deltaKg < 0) b.dr(ACC.STOCK_LOSSES, value, a.note || a.reason).cr(ACC.INVENTORY, value);
     else b.dr(ACC.INVENTORY, value).cr(ACC.STOCK_LOSSES, value, a.note || a.reason);
     push({ id: `auto-adj-${a.id}`, date: a.date.slice(0, 10), ref: 'STOCK ADJ', memo: `Stock adjustment (${a.reason})`, sourceType: 'stock_adjustment', sourceId: a.id, builder: b });
   });

@@ -192,8 +192,22 @@ export const planBillStock = (
       }
     }
     if (need > EPS) {
-      if (!p.trackBatches && gid === mainId) {
-        need = 0; // plain item in the main godown: allowed to oversell, as before
+      // A plain item that has never been split across godowns may oversell from the main godown, as
+      // before. Once some of it sits in another godown, overselling main would silently eat that
+      // godown's stock, so the bill is refused and the shopkeeper is told where the stock is.
+      const elsewhere = round2(work.filter((r) => r.productId === p.id && r.godownId !== gid && r.qty > EPS).reduce((a, r) => a + r.qty, 0));
+      if (!p.trackBatches && gid === mainId && elsewhere <= EPS) {
+        need = 0;
+      } else if (!p.trackBatches && gid === mainId) {
+        const unit = p.unit || 'pcs';
+        const here = round2(it.qty - need);
+        const others = withMainGodown(godowns)
+          .filter((g) => g.id !== gid)
+          .map((g) => ({ g, q: round2(work.filter((r) => r.productId === p.id && r.godownId === g.id).reduce((a, r) => a + r.qty, 0)) }))
+          .filter((x) => x.q > EPS)
+          .map((x) => `${x.q} in ${x.g.name}`)
+          .join(', ');
+        return { ok: false, message: `${p.name}: only ${Math.max(0, here)} ${unit} in ${gName}. ${others} — pick that godown on the bill or move the stock first.`, lines: [], deltas: {} };
       } else {
         const unit = p.unit || 'pcs';
         const usable = round2(it.qty - need);
@@ -232,6 +246,10 @@ export const restoreBillRows = (
   onDate: string
 ): StockBatch[] => {
   const mainId = mainGodownId(godowns);
+  // Stock going back to a godown that has since been deleted returns to the main godown instead of
+  // landing in rows nobody can see or move.
+  const live = new Set(withMainGodown(godowns).map((g) => g.id));
+  const home = (gid?: string) => (gid && live.has(gid) ? gid : mainId);
   let out = rows;
   for (const line of lines) {
     if (line.qty == null) continue;
@@ -239,11 +257,11 @@ export const restoreBillRows = (
     for (const a of line.batches || []) {
       inBatches = round2(inBatches + a.qty);
       const hit = out.find((r) => r.id === a.batchId);
-      if (hit) out = out.map((r) => (r.id === a.batchId ? { ...r, qty: round2(r.qty + a.qty) } : r));
-      else out = [...out, { id: a.batchId, productId: line.productId, godownId: a.godownId || line.godownId || mainId, batchNo: a.batchNo, expiryDate: a.expiryDate, qty: round2(a.qty), receivedDate: onDate, createdAt: onDate }];
+      if (hit) out = out.map((r) => (r.id === a.batchId ? { ...r, godownId: home(r.godownId), qty: round2(r.qty + a.qty) } : r));
+      else out = [...out, { id: a.batchId, productId: line.productId, godownId: home(a.godownId || line.godownId), batchNo: a.batchNo, expiryDate: a.expiryDate, qty: round2(a.qty), receivedDate: onDate, createdAt: onDate }];
     }
     const loose = round2(line.qty - inBatches);
-    if (loose > EPS && line.godownId && line.godownId !== mainId) out = addLoose(out, line.productId, line.godownId, loose, onDate);
+    if (loose > EPS && home(line.godownId) !== mainId) out = addLoose(out, line.productId, home(line.godownId), loose, onDate);
   }
   return out;
 };
