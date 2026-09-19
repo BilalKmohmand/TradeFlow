@@ -3,6 +3,8 @@ import { Plus, Trash2, Printer, Save, UserPlus } from 'lucide-react';
 import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice, rs } from './ui';
 import { todayISO } from '../../utils/stockFlow';
+import { creditCheck } from '../../utils/credit';
+import { BillCreditPanel } from './CreditLimit';
 
 interface Row {
   key: string;
@@ -25,7 +27,7 @@ interface Props {
  * but can be changed per line), enter what was paid now, save or save-and-print.
  */
 export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) => {
-  const { customers, products, settings, createBill, setPrintRequest } = useTrading();
+  const { customers, products, settings, createBill, setPrintRequest, can } = useTrading();
   const [customer, setCustomer] = useState(customerId || '');
   const [newCustomer, setNewCustomer] = useState<{ name: string; phone: string } | null>(null);
   const [date, setDate] = useState(todayISO());
@@ -35,6 +37,8 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
   const [method, setMethod] = useState('Cash');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
+  const [allowOver, setAllowOver] = useState(false);
+  const [overReason, setOverReason] = useState('');
   const busy = useRef(false);
 
   const sortedCustomers = useMemo(() => [...customers].sort((a, b) => a.name.localeCompare(b.name)), [customers]);
@@ -62,6 +66,9 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
   const paid = Math.min(given, total);
   const balance = Math.round((total - paid) * 100) / 100;
   const change = Math.round((given - total) * 100) / 100;
+  const credit = creditCheck(newCustomer ? null : customers.find((c) => c.id === customer), balance);
+  const canOverride = can('override_credit');
+  const creditBlocked = credit.over && !(canOverride && allowOver && overReason.trim());
 
   const submit = (print: boolean) => {
     if (busy.current) return; // a double tap must not make two bills
@@ -74,6 +81,8 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
     if (total <= 0) return setError('The bill total must be more than zero.');
     const items = lines.filter((l) => l.productId && l.qty > 0);
     if (items.length === 0) return setError('Add at least one item with a quantity.');
+    if (credit.over && !(canOverride && allowOver)) return setError(canOverride ? 'This bill is over the credit limit. Tick "Allow over limit" and give a reason, or take more payment now.' : 'This bill is over the customer\'s credit limit. Take more payment now, or ask a manager to allow it.');
+    if (credit.over && !overReason.trim()) return setError('Write a short reason for allowing this bill over the credit limit.');
     const result = createBill({
       customerId: newCustomer ? '' : customer,
       newCustomer: newCustomer || undefined,
@@ -83,6 +92,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
       paymentMethod: method,
       notes,
       date,
+      ...(credit.over ? { allowOverLimit: allowOver, overrideReason: overReason } : {}),
     });
     if (!result.success) return setError(result.message);
     onClose();
@@ -98,8 +108,8 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
         {total > 0 && balance === 0 && <span className="ml-2 text-xs font-bold text-teal-700 dark:text-teal-300">Fully paid</span>}
       </div>
       <div className="flex gap-2">
-        <button type="button" onClick={() => submit(false)} className={secondaryBtn}><Save className="w-4 h-4" /> Save</button>
-        <button type="button" onClick={() => submit(true)} className={primaryBtn}><Printer className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Save &amp; Print</button>
+        <button type="button" onClick={() => submit(false)} disabled={creditBlocked} title={creditBlocked ? 'Over the credit limit' : undefined} className={secondaryBtn}><Save className="w-4 h-4" /> Save</button>
+        <button type="button" onClick={() => submit(true)} disabled={creditBlocked} title={creditBlocked ? 'Over the credit limit' : undefined} className={primaryBtn}><Printer className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Save &amp; Print</button>
       </div>
     </div>
   );
@@ -130,6 +140,11 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
               </div>
             )}
           </div>
+          {credit.hasLimit && (
+            <div className="sm:col-span-3 sm:order-last">
+              <BillCreditPanel check={credit} canOverride={canOverride} allow={allowOver} onAllow={setAllowOver} reason={overReason} onReason={setOverReason} />
+            </div>
+          )}
           <div>
             <label className={labelCls} htmlFor="bill-date">Date</label>
             <input id="bill-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />

@@ -303,7 +303,36 @@ CREATE TABLE IF NOT EXISTS invoices (
   "updatedAt" TEXT,
   "paymentMethod" TEXT,
   "billKind" TEXT,
-  "issuedAt" TEXT
+  "issuedAt" TEXT,
+  "creditOverride" JSONB
+);
+
+-- Bank reconciliation (migration v12): statement lines (+ in / − out) and one reconciliation per statement date.
+CREATE TABLE IF NOT EXISTS bank_statement_lines (
+  id TEXT PRIMARY KEY,
+  date TEXT NOT NULL,
+  description TEXT,
+  amount NUMERIC NOT NULL DEFAULT 0,
+  reference TEXT,
+  "importedAt" TEXT,
+  "matchedMovementIds" JSONB DEFAULT '[]'::jsonb,
+  status TEXT DEFAULT 'unmatched',
+  "matchConfidence" TEXT,
+  "createdEntryId" TEXT
+);
+CREATE INDEX IF NOT EXISTS bank_statement_lines_date_idx ON bank_statement_lines (date);
+
+CREATE TABLE IF NOT EXISTS bank_reconciliations (
+  id TEXT PRIMARY KEY,
+  "statementDate" TEXT NOT NULL,
+  "closingBalance" NUMERIC DEFAULT 0,
+  "clearedMovementIds" JSONB DEFAULT '[]'::jsonb,
+  "bookBalance" NUMERIC,
+  difference NUMERIC,
+  reconciled BOOLEAN DEFAULT FALSE,
+  "createdAt" TEXT,
+  "updatedAt" TEXT,
+  "createdBy" TEXT
 );
 
 CREATE TABLE IF NOT EXISTS ledger (
@@ -361,3 +390,5 @@ ALTER TABLE tasks DISABLE ROW LEVEL SECURITY;
 ALTER TABLE invoices DISABLE ROW LEVEL SECURITY;
 ALTER TABLE ledger DISABLE ROW LEVEL SECURITY;
 ALTER TABLE whatsapp_messages DISABLE ROW LEVEL SECURITY;
+ALTER TABLE bank_statement_lines DISABLE ROW LEVEL SECURITY;
+ALTER TABLE bank_reconciliations DISABLE ROW LEVEL SECURITY;

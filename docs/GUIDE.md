@@ -57,6 +57,14 @@ Plain CRUD; deletes cascade through bookings, ledger and bills that reference th
 ### `updateSettings(partial)`
 Company profile (name, address, phone, tax id printed on bills), `taxRatePct`, `appMode` (`billing` or `trading`), `cashOpeningBalance`, `openingBankBalance`, `cashOpeningDate` (the date from which cash and bank are counted).
 
+### Credit limit in `createBill`
+`CreateBillInput` takes `allowOverLimit?` and `overrideReason?`. When the customer has `creditLimit > 0` and `totalDue + (total − paidNow)` would exceed it, `createBill` refuses unless `allowOverLimit` is true, the user has `can('override_credit')`, and a reason is given. An allowed bill stores `Invoice.creditOverride = {by, reason, at, limit, dueAfter}` and logs *Credit Limit Overridden*. Maths in `utils/credit.ts` (`creditCheck`, `creditUsage`, `customersOverLimit`); UI in `components/billing/CreditLimit.tsx`.
+
+### Bank reconciliation (`context/bankRecActions.ts`)
+State `bankStatementLines` (`BankStatementLine`: +in / −out, `status` unmatched|matched|ignored, `matchedMovementIds` = cash-book movement ids like `cm-<expenseId>`) and `bankReconciliations` (one per `statementDate`: `closingBalance`, `clearedMovementIds`). Actions: `addBankStatementLines` (skips already-imported lines, then auto-matches), `autoMatchBankLines`, `matchBankLine`, `unmatchBankLine`, `setBankLineIgnored`, `createEntryFromBankLine` (money out → `addExpense` paid via Bank Transfer, default category bank_charges; money in → `addCashEntry` in, method Bank Transfer; then matched), `saveBankReconciliation`, `deleteBankStatementLine`, `deleteBankReconciliation`. Stored in localStorage (`tradeflow_bank_statement_lines_v1`, `tradeflow_bank_reconciliations_v1`), synced to the optional Supabase tables `bank_statement_lines` / `bank_reconciliations`, included in backup, purge and factory reset.
+
+Pure helpers in `utils/bankRec.ts`: `parseStatementDate`, `parseAmount`, `guessMapping`, `statementLinesFromRows`, `splitNewLines`, `bankMovements` (non-cash methods), `autoMatch` (exact amount and sign, ±3 days, one-to-one, greedy by closest date; confidence exact / high / medium), `manualCandidates`, `reconciliationSummary` (expected statement = book bank balance − uncleared deposits + uncleared payments + unmatched statement lines; reconciled when the typed closing balance equals it).
+
 ### `purgeTable`, `exportSystemBackup`, `importSystemBackup`, `factoryResetAllData`
 Admin tools. Backups now include `invoices`. Factory reset clears bills too.
 
@@ -97,6 +105,7 @@ Date picker with previous/next day. Tiles: opening cash, cash in, cash out, clos
 
 ### Money (`MoneyScreen`)
 *Overview*: cash, bank, others owe you, you owe others; net position with the formula spelled out; Cash ↔ Bank, Receive and Opening balances buttons; the debtor list (Receive + statement print per customer) and the creditor list (suppliers + unpaid expenses). *Expense sheets*: one card per category for a chosen month. *Cash book*: every movement in a month with in/out totals.
+*Bank reconciliation* (`components/billing/BankReconciliationTab.tsx`): upload a bank statement CSV (mapping step; `parseCsv` from the Data Import tab), or type lines; auto-match; per-line *Add as expense / Add as money received*, *Match…*, *Ignore*, *Unmatch*; statement end date + closing balance → summary with **Reconciled ✓**; tick book entries as cleared; Save; Print.
 ![Money](screenshots/09-money.jpg)
 
 ![Expense sheets](screenshots/11-expense-sheets.jpg)
@@ -140,6 +149,7 @@ All dialogs are hosted once by `BillingUIProvider`; screens call `useBillingUI()
 
 - **Bill** (`type: 'bill'`): company header, *INVOICE*, *Invoice #n*, date; Bill From / Bill To; dark table header Description · Qty · Price · Amount; Subtotal, Discount, Tax (if any), **Total Rs.**, Paid (method), Balance due or *PAID IN FULL*; the customer's total outstanding; signature lines.
 - **Daily sheet** (`type: 'daily_sheet'`): opening/in/out/closing for cash and bank, then Bills, Money received, Expenses by category, Suppliers paid & transfers; Prepared by / Checked by.
+- **Bank reconciliation** (`type: 'bank_reconciliation'`, `statementDate`, `closingBalance`): balance per statement vs books, uncleared deposits/payments, bank items not in the books, difference or *Reconciled ✓*; Prepared by / Checked by.
 - Customer **statement** (from Money → printer icon) and the existing vouchers, challans and trading invoices are unchanged.
 
 "Print / Save PDF" uses the browser print dialog; only the document area prints.

@@ -47,7 +47,12 @@ import {
   InvoicePaymentRecord,
   InvoicePaymentStatus,
   InvoiceStatus,
+  BankStatementLine,
+  BankReconciliation,
 } from '../types';
+import { creditCheck } from '../utils/credit';
+import { collectCashMovements } from '../utils/finance';
+import { BankRecApi, createBankRecApi } from './bankRecActions';
 import {
   DEFAULT_ROLES,
   DEFAULT_VISIBILITY_SETTINGS,
@@ -210,6 +215,18 @@ interface TradingContextType {
   payBill: (invoiceId: string, amount: number, method: string, notes?: string, date?: string) => { success: boolean; message: string };
   deleteBill: (invoiceId: string) => { success: boolean; message: string };
   addCashTransfer: (input: { amount: number; from: 'cash' | 'bank'; date?: string; note?: string }) => { success: boolean; message: string };
+  // Bank reconciliation (see bankRecActions.ts)
+  bankStatementLines: BankRecApi['bankStatementLines'];
+  bankReconciliations: BankRecApi['bankReconciliations'];
+  addBankStatementLines: BankRecApi['addBankStatementLines'];
+  deleteBankStatementLine: BankRecApi['deleteBankStatementLine'];
+  autoMatchBankLines: BankRecApi['autoMatchBankLines'];
+  matchBankLine: BankRecApi['matchBankLine'];
+  unmatchBankLine: BankRecApi['unmatchBankLine'];
+  setBankLineIgnored: BankRecApi['setBankLineIgnored'];
+  createEntryFromBankLine: BankRecApi['createEntryFromBankLine'];
+  saveBankReconciliation: BankRecApi['saveBankReconciliation'];
+  deleteBankReconciliation: BankRecApi['deleteBankReconciliation'];
   generateInvoiceFromBookings: (
     bookingIds: string[],
     customOptions?: {
@@ -371,7 +388,8 @@ export type PrintRequestLike =
   | { type: 'statement'; customerId: string; from: string; to: string }
   | { type: 'supplier_statement'; supplierId: string; from: string; to: string }
   | { type: 'bill'; invoiceId: string }
-  | { type: 'daily_sheet'; date: string };
+  | { type: 'daily_sheet'; date: string }
+  | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number };
 
 /** Collision-safe id generator (Date.now() alone repeats when called in a tight loop). */
 let idCounter = 0;
@@ -399,6 +417,9 @@ export interface CreateBillInput {
   paymentMethod?: string;
   notes?: string;
   date?: string;
+  /** Allow this bill to take the customer over their credit limit (needs the override_credit permission). */
+  allowOverLimit?: boolean;
+  overrideReason?: string;
 }
 
 /** Payment methods offered on bills. Anything starting with "Cash" counts as cash in hand. */
@@ -609,6 +630,8 @@ const STORAGE_KEYS = {
   SESSION_USER: 'sarmaya_current_user_v1',
   INVOICES: 'tradeflow_invoices_v1',
   AGREED_RATES: 'tradeflow_agreed_rates_v1',
+  BANK_LINES: 'tradeflow_bank_statement_lines_v1',
+  BANK_RECS: 'tradeflow_bank_reconciliations_v1',
 };
 
 /**
@@ -692,6 +715,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     loadLocal(STORAGE_KEYS.AGREED_RATES, initialCustomerAgreedRates)
   );
 
+  const [bankStatementLines, setBankStatementLines] = useState<BankStatementLine[]>(() => loadLocal(STORAGE_KEYS.BANK_LINES, []));
+  const [bankReconciliations, setBankReconciliations] = useState<BankReconciliation[]>(() => loadLocal(STORAGE_KEYS.BANK_RECS, []));
+
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>('dashboard');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
@@ -767,6 +793,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setWhatsappMessages(data.whatsappMessages);
         // Bills: only when the cloud table exists (migration v8); otherwise keep local copies.
         if (data.invoices) setInvoices(data.invoices);
+        // Bank reconciliation: only when the cloud tables exist (migration v12).
+        if (data.bankStatementLines) setBankStatementLines(data.bankStatementLines);
+        if (data.bankReconciliations) setBankReconciliations(data.bankReconciliations);
         setIsCloudSyncReady(true);
       })
       .catch((err) => {
@@ -862,6 +891,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.AGREED_RATES, JSON.stringify(customerAgreedRates));
   }, [customerAgreedRates]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.BANK_LINES, JSON.stringify(bankStatementLines)); }, [bankStatementLines]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.BANK_RECS, JSON.stringify(bankReconciliations)); }, [bankReconciliations]);
 
   const syncToSupabase = async (table: string, rows: unknown[]) => {
     if (!isCloudSyncReady || rows.length === 0) return;
@@ -896,6 +927,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { void syncToSupabase('tasks', tasks); }, [tasks, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('ledger', ledger); }, [ledger, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('whatsapp_messages', whatsappMessages); }, [whatsappMessages, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('bank_statement_lines', bankStatementLines); }, [bankStatementLines, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('bank_reconciliations', bankReconciliations); }, [bankReconciliations, isCloudSyncReady]);
 
   /** Remote delete helper; only touches Supabase when cloud sync is live. */
   const removeRemote = (table: TableName, ids: string[]) => {
@@ -1512,6 +1545,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ledger: () => setLedger([]),
       whatsapp_messages: () => setWhatsappMessages([]),
       invoices: () => setInvoices([]),
+      bank_statement_lines: () => setBankStatementLines([]),
+      bank_reconciliations: () => setBankReconciliations([]),
     };
     setters[table]();
     if (isCloudSyncReady) void clearTable(table);
@@ -3054,6 +3089,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const paidAmount = round2(Math.min(Math.max(0, input.paidNow || 0), totalAmount));
     const balanceDue = round2(totalAmount - paidAmount);
     const method = input.paymentMethod || 'Cash';
+    // Credit limit: the unpaid part of this bill must fit under the customer's limit (0 = no limit).
+    const credit = creditCheck(customer, balanceDue);
+    let creditOverride: Invoice['creditOverride'];
+    if (credit.over) {
+      const msg = `${customer.name} would owe ${formatCurrency(credit.after)}, which is over their credit limit of ${formatCurrency(credit.limit)} (only ${formatCurrency(credit.available)} left).`;
+      if (!input.allowOverLimit) return { success: false, message: `${msg} Take more payment now, or ask a manager to allow it.` };
+      if (!can('override_credit')) return { success: false, message: `${msg} Only a manager or admin can allow a bill over the limit.` };
+      const reason = (input.overrideReason || '').trim();
+      if (!reason) return { success: false, message: 'Write a short reason for allowing this bill over the credit limit.' };
+      creditOverride = { by: currentUser?.name || 'Unknown', reason, at: new Date().toISOString(), limit: credit.limit, dueAfter: credit.after };
+    }
     const invoiceNumber = nextBillNumber(invoicesRef.current);
     const invoiceItems: InvoiceItem[] = items.map((it) => {
       const product = products.find((p) => p.id === it.productId);
@@ -3099,6 +3145,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       issuedAt: date === todayISO() ? new Date().toISOString() : undefined,
       createdAt: todayISO(),
       createdBy: currentUser?.name,
+      ...(creditOverride ? { creditOverride } : {}),
     };
     invoicesRef.current = [invoice, ...invoicesRef.current];
     setInvoices((prev) => [invoice, ...prev]);
@@ -3147,6 +3194,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
     }
     setLedger((prev) => [...entries, ...prev]);
+    if (creditOverride) logAuditEvent('Credit Limit Overridden', `${invoiceNumber} for ${customer.name}: owes ${formatCurrency(credit.after)} vs limit ${formatCurrency(credit.limit)}. Allowed by ${creditOverride.by}. Reason: ${creditOverride.reason}`, 'warning', 'billing');
     logAuditEvent('Bill Created', `${invoiceNumber} for ${customer.name}: ${formatCurrency(totalAmount)} (${paidAmount > 0 ? `${formatCurrency(paidAmount)} paid by ${method}` : 'on credit'}).`, 'info', 'billing');
     return { success: true, message: `Bill ${invoiceNumber} saved.`, invoice };
   };
@@ -3626,6 +3674,21 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     logAuditEvent('Master PIN Reset', 'Master PIN restored to factory default (7860).', 'warning');
   };
 
+  const bankRec = createBankRecApi({
+    lines: bankStatementLines,
+    setLines: setBankStatementLines,
+    recs: bankReconciliations,
+    setRecs: setBankReconciliations,
+    getMovements: () => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers),
+    addExpense,
+    addCashEntry,
+    logAuditEvent: (a, dt, sev) => logAuditEvent(a, dt, sev),
+    removeRemote,
+    uid,
+    userName: currentUser?.name,
+    today: todayISO,
+  });
+
   const exportSystemBackup = (): string => {
     const backupData = {
       appName: 'Sarmaya - Pakistani Bulk Trading & Logistics',
@@ -3651,6 +3714,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ledger,
       whatsappMessages,
       invoices,
+      bankStatementLines,
+      bankReconciliations,
       auditLogs,
     };
     const jsonString = JSON.stringify(backupData, null, 2);
@@ -3710,6 +3775,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (Array.isArray(data.ledger)) setLedger(data.ledger.map(normalizeLedger));
       if (Array.isArray(data.whatsappMessages)) setWhatsappMessages(data.whatsappMessages);
       if (Array.isArray(data.invoices)) setInvoices(data.invoices);
+      if (Array.isArray(data.bankStatementLines)) setBankStatementLines(data.bankStatementLines);
+      if (Array.isArray(data.bankReconciliations)) setBankReconciliations(data.bankReconciliations);
       if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
       logAuditEvent('Backup Restored', 'Full system database restored from JSON backup.', 'warning');
       };
@@ -3741,7 +3808,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLedger([]);
     setWhatsappMessages([]);
     setInvoices([]);
+    setBankStatementLines([]);
+    setBankReconciliations([]);
     localStorage.removeItem(STORAGE_KEYS.INVOICES);
+    localStorage.removeItem(STORAGE_KEYS.BANK_LINES);
+    localStorage.removeItem(STORAGE_KEYS.BANK_RECS);
     [STORAGE_KEYS.QUOTES, STORAGE_KEYS.POS, STORAGE_KEYS.RETURNS, STORAGE_KEYS.ADJUSTMENTS, STORAGE_KEYS.TASKS].forEach((k) => localStorage.removeItem(k));
     localStorage.removeItem(STORAGE_KEYS.CASH);
     localStorage.removeItem(STORAGE_KEYS.EXPENSES);
@@ -3907,6 +3978,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         payBill,
         deleteBill,
         addCashTransfer,
+        ...bankRec,
         generateInvoiceFromBookings,
         customerAgreedRates,
         setCustomerAgreedRate,
