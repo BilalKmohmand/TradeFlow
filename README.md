@@ -16,6 +16,17 @@ The full bulk-trading ERP is still there and shares the same data — day to day
 | **Items & Prices** | The price list: name, sold-per unit, fixed price, cost price, stock and low-stock level. |
 | **Customers / Suppliers / Admin** | Unchanged from the trading suite: accounts, ledgers, statements, users, roles, backups. |
 
+### Credit limits on bills
+
+Set a customer's **credit limit** (Rs., 0 = no limit) on the customer form. New Bill then shows *Credit limit Rs. X · owes Rs. Y · available Rs. Z*. If what they already owe plus the unpaid part of this bill goes over the limit, Save is blocked with a clear warning — take more payment now, or a user with the `override_credit` permission (manager / admin) ticks **Allow over limit** and types a short reason. The reason is saved on the bill (`creditOverride`) and in the audit log. `createBill` enforces the same rule, so it cannot be bypassed. Customers shows an **Over limit** badge and a "% of limit used" bar; Home lists customers over their limit under *Needs attention*.
+
+### Bank reconciliation (Money → Bank reconciliation)
+
+1. **Upload statement (CSV)** from your bank — columns date, description and either one amount column (+ in / − out) or separate money out (debit) / money in (credit) columns. Headings are guessed and can be changed in the mapping step. Dates in dd/mm/yyyy, yyyy-mm-dd (and dd-mm-yy, "05 Mar 2026") are read. Lines can also be typed by hand. Lines already imported are skipped.
+2. Each line is **auto-matched** to a bank-side entry in your books (anything not paid in cash: bank transfer, cheque, Easypaisa/JazzCash, card, and the bank leg of Cash ↔ Bank transfers): same amount and direction to the paisa, dates within ±3 days, each entry used once, closest dates paired first. Confidence: *same day* / *1 day apart* / *2–3 days apart, please check*. You can match by hand, unmatch, or ignore a line.
+3. For lines missing from your books, one tap adds the record — an expense paid from the bank (Bank charges by default) or money received into the bank — and matches it.
+4. Type the statement end date and **closing balance**. The summary shows the book bank balance, money in your books not yet on the statement (deposits in transit, uncleared cheques — tick them when they clear), bank lines not in your books, and **Reconciled ✓** when the difference is 0. Save it and **Print** a reconciliation report.
+
 Printed bills follow the classic layout — INVOICE, number, date, Bill From / Bill To, Description · Qty · Price · Amount, Subtotal, Total in Rs., paid and balance. A full function-by-function guide is in [`docs/GUIDE.md`](docs/GUIDE.md).
 
 ## Installing it as a mobile app (PWA)
@@ -126,6 +137,7 @@ Run the SQL files in `supabase/` in this order on an existing project:
 6. `migrate_v7_master_pin_sync.sql` (once) — master PIN and user account columns synced through cloud settings.
 7. `migrate_v8_simple_billing.sql` (once) — invoices/bills table, product unit, app mode and opening bank balance in settings.
 8. `migrate_v9_billing_integrity.sql` (once) — cost price on items, ledger source/method columns, paired cash↔bank transfers.
+9. `migrate_v12_credit_bankrec.sql` (once) — `invoices.creditOverride`, `bank_statement_lines` and `bank_reconciliations` tables (RLS disabled). Both tables are optional: without them bank reconciliation stays on the device.
 
 New projects can run `schema.sql` instead, which already contains everything.
 

@@ -7,8 +7,9 @@ import { collectCashMovements, accountBalancesOn, positionSummary } from '../../
 import { groupExpenses } from '../../utils/billing';
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
+import { BankReconciliationTab } from '../../components/billing/BankReconciliationTab';
 
-type Tab = 'overview' | 'expenses' | 'cashbook';
+type Tab = 'overview' | 'expenses' | 'cashbook' | 'bank';
 
 /** Where the money is: cash, bank, who owes you, who you owe; plus expense sheets and the cash book. */
 export const MoneyScreen: React.FC = () => {
@@ -48,7 +49,7 @@ export const MoneyScreen: React.FC = () => {
           <h1 className="text-2xl font-bold text-[#111827] dark:text-white">Money</h1>
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">How much is in the business, who owes you, and who you owe.</p>
         </div>
-        <div className="flex gap-1.5">{tabBtn('overview', 'Overview')}{tabBtn('expenses', 'Expense sheets')}{tabBtn('cashbook', 'Cash book')}</div>
+        <div className="flex flex-wrap gap-1.5">{tabBtn('overview', 'Overview')}{tabBtn('expenses', 'Expense sheets')}{tabBtn('cashbook', 'Cash book')}{tabBtn('bank', 'Bank reconciliation')}</div>
       </div>
 
       {tab === 'overview' && (
@@ -119,7 +120,9 @@ export const MoneyScreen: React.FC = () => {
         </>
       )}
 
-      {tab !== 'overview' && (
+      {tab === 'bank' && <BankReconciliationTab />}
+
+      {tab !== 'overview' && tab !== 'bank' && (
         <div className="flex items-center gap-2">
           <label className="text-xs font-bold text-[#6B7280] dark:text-[#94A3B8]" htmlFor="money-month">Month</label>
           <input id="money-month" type="month" value={month} max={today.slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} className={`${inputCls} w-auto`} />

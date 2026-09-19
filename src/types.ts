@@ -287,6 +287,8 @@ export interface Invoice {
   billKind?: 'cash' | 'credit';
   /** Exact date-time the bill was made (printed under the number). */
   issuedAt?: string;
+  /** Set when a bill was allowed over the customer's credit limit (who allowed it and why). */
+  creditOverride?: CreditOverride;
 }
 
 export type AuditCategory = 'auth' | 'roles' | 'users' | 'visibility' | 'data' | 'system' | 'billing';
@@ -738,4 +740,53 @@ export interface AppAlert {
   detail: string;
   /** Click-through target */
   link?: { type: 'customer' | 'supplier' | 'product' | 'booking' | 'truck' | 'task' | 'quotation' | 'po'; id: string; dispatchId?: string };
+}
+
+// ---------------------------------------------------------------------------
+// Credit limits on bills
+// ---------------------------------------------------------------------------
+export interface CreditOverride {
+  by: string;
+  reason: string;
+  at?: string;
+  /** Credit limit and what the customer owed after this bill, at the time it was allowed. */
+  limit?: number;
+  dueAfter?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Bank reconciliation
+// ---------------------------------------------------------------------------
+export type BankLineStatus = 'unmatched' | 'matched' | 'ignored';
+export type BankMatchConfidence = 'exact' | 'high' | 'medium' | 'manual';
+
+/** One line of a bank statement: + money into the bank, − money out. */
+export interface BankStatementLine {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  reference?: string;
+  importedAt: string;
+  /** Cash-book movement ids (CashMovement.id, e.g. "cm-exp-…") this line was matched to. */
+  matchedMovementIds: string[];
+  status: BankLineStatus;
+  matchConfidence?: BankMatchConfidence;
+  /** Expense / cash entry created from this line ("add missing record"). */
+  createdEntryId?: string;
+}
+
+/** A reconciliation for one statement end date. */
+export interface BankReconciliation {
+  id: string;
+  statementDate: string;
+  closingBalance: number;
+  /** Book movements the user ticked as cleared (shown on the bank statement). */
+  clearedMovementIds: string[];
+  bookBalance?: number;
+  difference?: number;
+  reconciled?: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  createdBy?: string;
 }

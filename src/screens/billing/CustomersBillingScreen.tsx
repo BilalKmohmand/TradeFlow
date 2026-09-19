@@ -8,6 +8,7 @@ import { billsOnly } from '../../utils/billing';
 import { formatDate } from '../../utils/formatters';
 import { todayISO } from '../../utils/stockFlow';
 import { Customer } from '../../types';
+import { OverLimitBadge, CreditUsageBar } from '../../components/billing/CreditLimit';
 
 /** Customers the simple way: who they are, what they owe, and their bills. */
 export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd }) => {
@@ -48,7 +49,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
             {rows.map((c) => (
               <li key={c.id} className="flex items-center gap-2 px-3 sm:px-5 py-3 hover:bg-[#FAF9F6] dark:hover:bg-[#162436]">
                 <button type="button" onClick={() => setOpenId(c.id)} className="flex-1 min-w-0 text-left">
-                  <div className="font-semibold text-sm text-[#111827] dark:text-white truncate">{c.name}</div>
+                  <div className="font-semibold text-sm text-[#111827] dark:text-white truncate">{c.name} <OverLimitBadge customer={c} /></div>
                   <div className="text-[11px] text-[#8E9299] flex items-center gap-1"><Phone className="w-3 h-3" /> {c.phone || 'no phone'}</div>
                 </button>
                 <div className="text-right shrink-0">
@@ -82,6 +83,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Bills</div><div className="font-mono font-extrabold text-[#111827] dark:text-white">{openBills.length}</div></div>
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Bought so far</div><div className="font-mono font-extrabold text-[#111827] dark:text-white">{rs(openBills.reduce((a, b) => a + b.totalAmount, 0))}</div></div>
             </div>
+            <CreditUsageBar customer={open} />
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Bills</h3>
               {openBills.length === 0 ? <p className="text-sm text-[#8E9299]">No bills yet.</p> : (

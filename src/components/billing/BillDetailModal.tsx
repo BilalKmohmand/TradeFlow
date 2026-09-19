@@ -82,6 +82,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Customer owes (all bills)</div><div className="font-mono font-extrabold text-[#111827] dark:text-white">{rs(customer?.totalDue || 0)}</div></div>
             </div>
             {inv.notes && <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Note: {inv.notes}</p>}
+            {inv.creditOverride && <p className="text-xs font-semibold text-rose-700 dark:text-rose-300">Allowed over credit limit by {inv.creditOverride.by}: {inv.creditOverride.reason}</p>}
 
             {(inv.payments || []).length > 0 && (
               <div>
