@@ -50,6 +50,17 @@ Once installed it also **works with the phone fully offline** — the app itself
 
 This is a Progressive Web App (`vite-plugin-pwa`, manifest at `public/icons/`, generated `sw.js`/`manifest.webmanifest` on every build) — there is no separate iOS/Android app-store app, and none is needed for this to feel and behave like one. If a real App Store / Play Store listing is ever wanted, the same codebase can be wrapped with [Capacitor](https://capacitorjs.com) without a rewrite; nobody has asked for that yet.
 
+## Accounts (double-entry)
+
+**Money → Accounts** (needs the *view finance* permission) keeps a proper general ledger that an accountant can sign off, without changing how the shop works. Nothing extra is typed in: every bill, payment, expense, purchase, cash↔bank transfer, return and stock adjustment is **posted automatically** as a balanced journal entry (Dr = Cr), derived live from the records the app already keeps — delete a bill and its postings go with it.
+
+- **Chart of accounts** for a Pakistani trading shop: 1000 Cash in hand, 1010 Bank (incl. Easypaisa/JazzCash, cheques, cards), 1100 Receivable, 1200 Inventory, 2000 Payable, 2010 Unpaid expenses, 2100 Sales tax payable, 2900 Suspense, 3000 Capital, 3100 Drawings, 3900 Opening balance equity, 4000 Sales, 4010 Discounts, 4020 Returns, 4100 Freight income, 5000 COGS, 5100 Stock losses, and one 6xxx account per expense category. The accountant can add accounts; system accounts can't be deleted.
+- **Posting rules**: bill → Dr Receivable / Cr Sales, Dr Discounts, Cr Sales tax, plus Dr COGS / Cr Inventory at the item cost; payment → Dr Cash or Bank (by method) / Cr Receivable; purchase → Dr Inventory / Cr Payable; supplier payment → Dr Payable / Cr Cash or Bank; expense → Dr expense (drawings → equity) / Cr Cash, Bank or Unpaid expenses; transfer → one entry between Cash and Bank; opening balances and old customer/supplier dues → Opening balance equity. Cash, Bank, Receivable and Payable always equal the Money, Customers and Suppliers screens.
+- **Tabs**: Trial balance (Balanced ✓ check), General ledger per account with running balance and links back to bills, Journal (auto + manual, filters), Chart of accounts, Profit & Loss, Balance sheet (Assets = Liabilities + Equity, with profit to date). Trial balance, P&L and balance sheet print like every other document.
+- **Manual journal entries** for corrections and accruals: any number of lines, saves only when debits equal credits. **Period lock** (admin): manual journals dated on or before the lock date are refused.
+
+Logic lives in `src/utils/accounting.ts` (pure, unit-tested); run `supabase/migrate_v10_accounting.sql` to sync manual journals and custom accounts to Supabase.
+
 ## Features (full trading suite)
 
 - **Customer & Supplier CRM** with Pakistani contact defaults (`+92` phones, `.com.pk` emails, local berths).
@@ -149,8 +160,9 @@ Run the SQL files in `supabase/` in this order on an existing project:
 6. `migrate_v7_master_pin_sync.sql` (once) — master PIN and user account columns synced through cloud settings.
 7. `migrate_v8_simple_billing.sql` (once) — invoices/bills table, product unit, app mode and opening bank balance in settings.
 8. `migrate_v9_billing_integrity.sql` (once) — cost price on items, ledger source/method columns, paired cash↔bank transfers.
-9. `migrate_v11_inventory.sql` (once) — godowns, stock batches with expiry, stock transfers, and the item's `trackBatches` flag. Existing data needs no conversion. Run it before turning on batch tracking on a cloud-synced shop (the products sync needs the new column).
-10. `migrate_v12_credit_bankrec.sql` (once) — `invoices.creditOverride`, `bank_statement_lines` and `bank_reconciliations` tables (RLS disabled). Both tables are optional: without them bank reconciliation stays on the device.
+9. `migrate_v10_accounting.sql` (once) — double-entry accounts: manual journal entries, custom accounts, period lock in settings.
+10. `migrate_v11_inventory.sql` (once) — godowns, stock batches with expiry, stock transfers, and the item's `trackBatches` flag. Existing data needs no conversion. Run it before turning on batch tracking on a cloud-synced shop (the products sync needs the new column).
+11. `migrate_v12_credit_bankrec.sql` (once) — `invoices.creditOverride`, `bank_statement_lines` and `bank_reconciliations` tables (RLS disabled). Both tables are optional: without them bank reconciliation stays on the device.
 
 New projects can run `schema.sql` instead, which already contains everything.
 

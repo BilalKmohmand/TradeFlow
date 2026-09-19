@@ -22,6 +22,7 @@ import {
   CalendarDays,
   Coins,
   Tag,
+  BookOpen,
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { computeAlerts } from '../utils/alerts';
@@ -93,6 +94,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'bills', label: 'Bills', icon: FileText },
     { id: 'daily', label: 'Daily Sheet', icon: CalendarDays },
     { id: 'money', label: 'Money', icon: Coins },
+    ...(can('view_finance') ? [{ id: 'accounts' as ActiveScreen, label: 'Accounts', icon: BookOpen }] : []),
     { id: 'customers', label: 'Customers', icon: Users },
     { id: 'suppliers', label: 'Suppliers', icon: Layers },
     { id: 'products', label: 'Items', icon: Tag },

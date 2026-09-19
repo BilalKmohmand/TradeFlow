@@ -210,3 +210,27 @@ Admin → System & Backups → App mode → *Full trading suite* switches the na
 - `e2e/inventory.spec.ts` — batch tracking on, two batches received, expiring-soon alert on Home, the earlier-expiring batch used and printed on the bill, a second godown, a stock move and a bill from it; desktop and a 390px phone with no sideways scroll.
 - `e2e/billing.spec.ts` — the full desktop flow and a 390px phone flow in real Chrome, with screenshots in `e2e/screenshots/billing-*.png`.
 - `npm run check` builds, type-checks, runs unit tests and all Playwright specs.
+
+## 11. Accounts (double-entry)
+
+`AccountsScreen` (Money group in the nav, `ActiveScreen` `'accounts'`, only with `can('view_finance')`) shows the books. Nothing is typed twice: `buildJournal()` in `src/utils/accounting.ts` derives balanced journal entries from the data the app already keeps, and `useAccounting()` (`src/hooks/useAccounting.ts`) combines them with the accountant's manual entries.
+
+| Event | Posting |
+|---|---|
+| Opening balances (settings) | Dr Cash 1000 / Bank 1010, Cr Opening balance equity 3900 |
+| Bill (`bill_issued` ledger row) | Dr Receivable 1100 total; Cr Sales 4000 subtotal; Dr Sales discounts 4010; Cr Sales tax 2100; Dr COGS 5000 / Cr Inventory 1200 at the item cost on the bill |
+| Payment on a bill or account | Dr Cash or Bank (by method, `isCashMethod`), Cr Receivable — posted once, from the ledger row |
+| Dispatch billed (trading) | Dr Receivable; Cr Sales, Freight income 4100, Sales tax; COGS at purchase cost |
+| Sales return / purchase return | Dr Sales returns 4020 / Cr Receivable (+ stock back at cost); Dr Payable / Cr Inventory |
+| Stock received / supplier payment | Dr Inventory / Cr Payable 2000; Dr Payable / Cr Cash or Bank |
+| Expense | Dr its 6xxx account (drawings → 3100 equity), Cr Cash, Bank or Unpaid expenses 2010 for "Credit (unpaid)" |
+| Cash ↔ Bank transfer | one entry, Dr receiving side / Cr giving side |
+| Other cash entries | against Capital 3000 ("capital"), Drawings 3100 ("drawing") or Suspense 2900 |
+| Stock adjustment / opening stock | Stock losses 5100 ↔ Inventory at cost; opening stock Dr Inventory / Cr 3900 |
+| Customer/supplier balances not explained by their history | Receivable / Payable against Opening balance equity, so the GL always equals the Customers and Suppliers screens |
+
+Money dated before the opening date is already inside the opening cash/bank figures, so its cash side goes to Opening balance equity; this keeps Cash and Bank equal to the Money screen.
+
+Tabs (each with a one-line explanation for non-accountants): **Trial balance** (as-of date, Balanced ✓ or the difference), **General ledger** (account + date range, running balance, bill refs open the bill), **Journal** (auto/manual filter, search, delete manual entries), **Chart of accounts** (balances, add account, period lock for admins), **Profit & Loss**, **Balance sheet**. Trial balance, P&L and balance sheet print through `PrintDocument` (`trial_balance`, `profit_loss`, `balance_sheet`).
+
+Context: `manualJournals`, `customAccounts`, `addManualJournal` (must balance; refused on/before `settings.booksLockedUntil`), `deleteManualJournal`, `addAccount`, `deleteAccount` (custom, unused accounts only). Stored in localStorage, Supabase tables `journal_entries` / `accounts` (`migrate_v10_accounting.sql`), backups, purge and factory reset. Tests: `src/__tests__/accounting.test.tsx`, `e2e/accounting.spec.ts`.

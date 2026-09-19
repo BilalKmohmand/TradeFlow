@@ -29,6 +29,7 @@ import {
   CalendarDays,
   Coins,
   Tag,
+  BookOpen,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { computeAlerts } from '../utils/alerts';
@@ -124,6 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReceiveStock }) => {
     { id: 'suppliers', label: 'Suppliers', icon: Layers, group: 'People' },
     { id: 'products', label: 'Items & Prices', icon: Tag, group: 'Stock' },
     { id: 'money', label: 'Money', icon: Coins, group: 'Money' },
+    ...(can('view_finance') ? [{ id: 'accounts' as ActiveScreen, label: 'Accounts', icon: BookOpen, group: 'Money' }] : []),
     ...(can('admin_screen') || can('system:admin_screen') ? [{ id: 'admin' as ActiveScreen, label: 'Admin', icon: ShieldCheck, group: 'Administration' }] : []),
   ];
 
@@ -178,6 +180,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReceiveStock }) => {
               { label: 'Cash Book', icon: Wallet, go: () => openReports('cashbook') },
               { label: 'Balance Sheet', icon: Landmark, go: () => openReports('balance') },
               { label: 'Receivables aging', icon: Scale, go: () => openReports('aging') },
+              ...(can('view_finance') ? [{ label: 'Accounts (double-entry)', icon: BookOpen, go: () => setActiveScreen('accounts') }] : []),
             ]
           : []),
       ],

@@ -82,6 +82,7 @@ import {
 } from '../lib/database';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { useInventoryStore, InventoryApi, INVENTORY_STORAGE_KEYS } from './inventoryStore';
+import { Account, JournalEntry, mergeAccounts, validateEntry, validateAccount } from '../utils/accounting';
 import {
   initialCustomers,
   initialSuppliers,
@@ -338,6 +339,14 @@ interface TradingContextType extends InventoryApi {
   resetPasswordWithToken: (token: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
   unlockUserAccount: (id: string) => void;
   forceLogoutUser: (id: string) => void;
+
+  // Accounts (double-entry): manual journals and custom accounts on top of the automatic postings
+  manualJournals: JournalEntry[];
+  customAccounts: Account[];
+  addManualJournal: (entry: { date: string; ref?: string; memo: string; lines: JournalEntry['lines'] }) => { success: boolean; message: string; entry?: JournalEntry };
+  deleteManualJournal: (id: string) => { success: boolean; message: string };
+  addAccount: (acc: { code: string; name: string; type: Account['type']; parent?: string; description?: string }) => { success: boolean; message: string };
+  deleteAccount: (code: string) => { success: boolean; message: string };
 }
 
 export interface DeleteSummary {
@@ -390,7 +399,10 @@ export type PrintRequestLike =
   | { type: 'supplier_statement'; supplierId: string; from: string; to: string }
   | { type: 'bill'; invoiceId: string }
   | { type: 'daily_sheet'; date: string }
-  | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number };
+  | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number }
+  | { type: 'trial_balance'; asOf: string }
+  | { type: 'profit_loss'; from: string; to: string }
+  | { type: 'balance_sheet'; asOf: string };
 
 /** Collision-safe id generator (Date.now() alone repeats when called in a tight loop). */
 let idCounter = 0;
@@ -636,6 +648,8 @@ const STORAGE_KEYS = {
   BANK_LINES: 'tradeflow_bank_statement_lines_v1',
   BANK_RECS: 'tradeflow_bank_reconciliations_v1',
   ...INVENTORY_STORAGE_KEYS,
+  JOURNALS: 'tradeflow_journal_entries_v1',
+  ACCOUNTS: 'tradeflow_accounts_v1',
 };
 
 /**
@@ -710,6 +724,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [invoices, setInvoices] = useState<Invoice[]>(() =>
     loadLocal(STORAGE_KEYS.INVOICES, [])
   );
+  const [manualJournals, setManualJournals] = useState<JournalEntry[]>(() => loadLocal(STORAGE_KEYS.JOURNALS, []));
+  const [customAccounts, setCustomAccounts] = useState<Account[]>(() => loadLocal(STORAGE_KEYS.ACCOUNTS, []));
   // Mirror of invoices that updates synchronously, so two bills saved in one tick never share a number.
   const invoicesRef = useRef<Invoice[]>([]);
   useEffect(() => {
@@ -802,6 +818,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (data.bankReconciliations) setBankReconciliations(data.bankReconciliations);
         // Godowns / batches / transfers: only when the cloud tables exist (migration v11).
         inventory.hydrate({ godowns: data.godowns, stockBatches: data.stockBatches, stockTransfers: data.stockTransfers }, { keepLocalIfEmpty: true });
+        // Accounts: only when the cloud tables exist (migration v10); otherwise keep local copies.
+        if (data.journalEntries) setManualJournals(data.journalEntries);
+        if (data.accounts) setCustomAccounts(data.accounts);
         setIsCloudSyncReady(true);
       })
       .catch((err) => {
@@ -893,6 +912,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(invoices));
   }, [invoices]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.JOURNALS, JSON.stringify(manualJournals)); }, [manualJournals]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(customAccounts)); }, [customAccounts]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.AGREED_RATES, JSON.stringify(customerAgreedRates));
@@ -935,6 +956,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { void syncToSupabase('whatsapp_messages', whatsappMessages); }, [whatsappMessages, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('bank_statement_lines', bankStatementLines); }, [bankStatementLines, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('bank_reconciliations', bankReconciliations); }, [bankReconciliations, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('journal_entries', manualJournals); }, [manualJournals, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('accounts', customAccounts); }, [customAccounts, isCloudSyncReady]);
 
   /** Remote delete helper; only touches Supabase when cloud sync is live. */
   const removeRemote = (table: TableName, ids: string[]) => {
@@ -1554,6 +1577,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       bank_statement_lines: () => setBankStatementLines([]),
       bank_reconciliations: () => setBankReconciliations([]),
       ...inventory.purgeSetters,
+      journal_entries: () => setManualJournals([]),
+      accounts: () => setCustomAccounts([]),
     };
     setters[table]();
     if (isCloudSyncReady) void clearTable(table);
@@ -3707,6 +3732,77 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     userName: currentUser?.name,
     today: todayISO,
   });
+  // ---------------------------------------------------------------------------
+  // Accounts (double-entry): manual journals, custom accounts, period lock
+  // ---------------------------------------------------------------------------
+  const addManualJournal = (input: { date: string; ref?: string; memo: string; lines: JournalEntry['lines'] }): { success: boolean; message: string; entry?: JournalEntry } => {
+    const lines = (input.lines || [])
+      .map((l) => ({ accountCode: l.accountCode, debit: round2(Number(l.debit) || 0), credit: round2(Number(l.credit) || 0), ...(l.memo?.trim() ? { memo: l.memo.trim() } : {}) }))
+      .filter((l) => l.accountCode || l.debit || l.credit);
+    const check = validateEntry({ date: input.date, lines }, mergeAccounts(customAccounts));
+    if (!check.ok) return { success: false, message: check.errors[0] };
+    if (!input.memo.trim()) return { success: false, message: 'Write what this entry is for (narration).' };
+    if (settings.booksLockedUntil && input.date <= settings.booksLockedUntil) {
+      return { success: false, message: `The books are locked up to ${settings.booksLockedUntil}. Pick a later date.` };
+    }
+    const entry: JournalEntry = {
+      id: uid('je'),
+      date: input.date,
+      ref: input.ref?.trim() || `JV-${manualJournals.length + 1}`,
+      memo: input.memo.trim(),
+      lines,
+      source: 'manual',
+      createdAt: new Date().toISOString(),
+      createdBy: currentUser?.name,
+    };
+    setManualJournals((prev) => [entry, ...prev]);
+    logAuditEvent('Journal Entry Posted', `${entry.ref} on ${entry.date}: ${entry.memo} (${formatCurrency(lines.reduce((a, l) => a + l.debit, 0))})`, 'info', 'data');
+    return { success: true, message: `Journal entry ${entry.ref} saved.`, entry };
+  };
+
+  const deleteManualJournal = (id: string): { success: boolean; message: string } => {
+    const target = manualJournals.find((j) => j.id === id);
+    if (!target) return { success: false, message: 'Journal entry not found.' };
+    if (settings.booksLockedUntil && target.date <= settings.booksLockedUntil) {
+      return { success: false, message: `The books are locked up to ${settings.booksLockedUntil}; this entry cannot be removed.` };
+    }
+    setManualJournals((prev) => prev.filter((j) => j.id !== id));
+    removeRemote('journal_entries', [id]);
+    logAuditEvent('Journal Entry Deleted', `${target.ref} on ${target.date}: ${target.memo}`, 'danger', 'data');
+    return { success: true, message: `Journal entry ${target.ref} deleted.` };
+  };
+
+  const addAccount = (acc: { code: string; name: string; type: Account['type']; parent?: string; description?: string }): { success: boolean; message: string } => {
+    const error = validateAccount(acc, mergeAccounts(customAccounts));
+    if (error) return { success: false, message: error };
+    const code = acc.code.trim();
+    const account: Account = {
+      id: `acc-${code}`,
+      code,
+      name: acc.name.trim(),
+      type: acc.type,
+      system: false,
+      parent: acc.parent || undefined,
+      description: acc.description?.trim() || undefined,
+      createdAt: new Date().toISOString(),
+      createdBy: currentUser?.name,
+    };
+    setCustomAccounts((prev) => [...prev, account]);
+    logAuditEvent('Account Added', `${code} ${account.name} (${account.type})`, 'info', 'data');
+    return { success: true, message: `Account ${code} ${account.name} added.` };
+  };
+
+  const deleteAccount = (code: string): { success: boolean; message: string } => {
+    const target = customAccounts.find((a) => a.code === code);
+    if (!target) return { success: false, message: 'System accounts cannot be deleted.' };
+    if (manualJournals.some((j) => j.lines.some((l) => l.accountCode === code))) {
+      return { success: false, message: `Account ${code} is used in journal entries; delete those entries first.` };
+    }
+    setCustomAccounts((prev) => prev.filter((a) => a.code !== code));
+    if (target.id) removeRemote('accounts', [target.id]);
+    logAuditEvent('Account Deleted', `${code} ${target.name}`, 'warning', 'data');
+    return { success: true, message: `Account ${code} deleted.` };
+  };
 
   const exportSystemBackup = (): string => {
     const backupData = {
@@ -3736,6 +3832,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       bankStatementLines,
       bankReconciliations,
       ...inventory.backupData(),
+      manualJournals,
+      customAccounts,
       auditLogs,
     };
     const jsonString = JSON.stringify(backupData, null, 2);
@@ -3798,6 +3896,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (Array.isArray(data.bankStatementLines)) setBankStatementLines(data.bankStatementLines);
       if (Array.isArray(data.bankReconciliations)) setBankReconciliations(data.bankReconciliations);
       inventory.hydrate({ godowns: data.godowns ?? [], stockBatches: data.stockBatches ?? [], stockTransfers: data.stockTransfers ?? [] });
+      if (Array.isArray(data.manualJournals)) setManualJournals(data.manualJournals);
+      if (Array.isArray(data.customAccounts)) setCustomAccounts(data.customAccounts);
       if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
       logAuditEvent('Backup Restored', 'Full system database restored from JSON backup.', 'warning');
       };
@@ -3835,6 +3935,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.removeItem(STORAGE_KEYS.INVOICES);
     localStorage.removeItem(STORAGE_KEYS.BANK_LINES);
     localStorage.removeItem(STORAGE_KEYS.BANK_RECS);
+    setManualJournals([]);
+    setCustomAccounts([]);
+    localStorage.removeItem(STORAGE_KEYS.INVOICES);
+    localStorage.removeItem(STORAGE_KEYS.JOURNALS);
+    localStorage.removeItem(STORAGE_KEYS.ACCOUNTS);
     [STORAGE_KEYS.QUOTES, STORAGE_KEYS.POS, STORAGE_KEYS.RETURNS, STORAGE_KEYS.ADJUSTMENTS, STORAGE_KEYS.TASKS].forEach((k) => localStorage.removeItem(k));
     localStorage.removeItem(STORAGE_KEYS.CASH);
     localStorage.removeItem(STORAGE_KEYS.EXPENSES);
@@ -4009,6 +4114,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setCustomerAgreedRate,
         deleteCustomerAgreedRate,
         getCustomerAgreedRate,
+        manualJournals,
+        customAccounts,
+        addManualJournal,
+        deleteManualJournal,
+        addAccount,
+        deleteAccount,
       }}
     >
       {children}

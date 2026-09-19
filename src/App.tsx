@@ -37,6 +37,7 @@ import { ItemsScreen } from './screens/billing/ItemsScreen';
 import { DailySheetScreen } from './screens/billing/DailySheetScreen';
 import { MoneyScreen } from './screens/billing/MoneyScreen';
 import { CustomersBillingScreen } from './screens/billing/CustomersBillingScreen';
+import { AccountsScreen } from './screens/billing/AccountsScreen';
 
 function MainApp() {
   const {
@@ -149,6 +150,7 @@ function MainApp() {
             {activeScreen === 'bills' && <BillsScreen />}
             {activeScreen === 'daily' && <DailySheetScreen />}
             {activeScreen === 'money' && <MoneyScreen />}
+            {activeScreen === 'accounts' && <AccountsScreen />}
             {activeScreen === 'products' && isBilling && <ItemsScreen />}
             {activeScreen === 'dashboard' && !isBilling && (
               <DashboardScreen
