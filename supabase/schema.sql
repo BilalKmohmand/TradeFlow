@@ -188,7 +188,8 @@ CREATE TABLE IF NOT EXISTS settings (
   "appMode" TEXT,
   "openingBankBalance" NUMERIC DEFAULT 0,
   "companyEmail" TEXT,
-  "companyLogo" TEXT
+  "companyLogo" TEXT,
+  "booksLockedUntil" TEXT
 );
 
 -- Customer quotations (convert to bookings)
@@ -335,6 +336,37 @@ CREATE TABLE IF NOT EXISTS whatsapp_messages (
   "dispatchId" TEXT
 );
 
+-- Accounts (double-entry): manual journal entries and the accountant's own accounts.
+-- Automatic postings are derived from bills, payments and expenses in the app and are not stored.
+CREATE TABLE IF NOT EXISTS journal_entries (
+  id TEXT PRIMARY KEY,
+  date TEXT,
+  ref TEXT,
+  memo TEXT,
+  lines JSONB DEFAULT '[]'::jsonb,
+  source TEXT DEFAULT 'manual',
+  "sourceType" TEXT,
+  "sourceId" TEXT,
+  "billId" TEXT,
+  "createdAt" TEXT,
+  "createdBy" TEXT
+);
+
+CREATE TABLE IF NOT EXISTS accounts (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL,
+  name TEXT,
+  type TEXT,
+  system BOOLEAN DEFAULT FALSE,
+  parent TEXT,
+  description TEXT,
+  "createdAt" TEXT,
+  "createdBy" TEXT
+);
+
+CREATE INDEX IF NOT EXISTS journal_entries_date_idx ON journal_entries (date);
+CREATE UNIQUE INDEX IF NOT EXISTS accounts_code_idx ON accounts (code);
+
 CREATE INDEX IF NOT EXISTS expenses_date_idx ON expenses (date);
 CREATE INDEX IF NOT EXISTS dispatches_date_idx ON dispatches (date);
 CREATE INDEX IF NOT EXISTS purchases_date_idx ON purchases (date);
@@ -361,3 +393,5 @@ ALTER TABLE tasks DISABLE ROW LEVEL SECURITY;
 ALTER TABLE invoices DISABLE ROW LEVEL SECURITY;
 ALTER TABLE ledger DISABLE ROW LEVEL SECURITY;
 ALTER TABLE whatsapp_messages DISABLE ROW LEVEL SECURITY;
+ALTER TABLE journal_entries DISABLE ROW LEVEL SECURITY;
+ALTER TABLE accounts DISABLE ROW LEVEL SECURITY;

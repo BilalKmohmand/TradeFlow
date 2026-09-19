@@ -205,7 +205,7 @@ export interface PriceHistoryEntry {
 export type ReportsTab = 'daily' | 'monthly' | 'flow' | 'pnl' | 'aging' | 'balance' | 'cashbook' | 'analytics';
 export type OpsTab = 'fleet' | 'expenses' | 'alerts' | 'tasks';
 
-export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'billing' | 'reports' | 'ops' | 'admin' | 'bills' | 'daily' | 'money';
+export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'billing' | 'reports' | 'ops' | 'admin' | 'bills' | 'daily' | 'money' | 'accounts';
 
 /** Payment methods treated as cash in hand; everything else is the bank account. */
 export const CASH_METHODS = ['Cash', 'Cash at Terminal'];
@@ -614,6 +614,8 @@ export interface AppSettings {
   appMode?: 'billing' | 'trading';
   /** Opening bank balance counted from cashOpeningDate (cashOpeningBalance is cash in hand). */
   openingBankBalance?: number;
+  /** Accounts: manual journal entries dated on or before this date are refused (period lock). */
+  booksLockedUntil?: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
