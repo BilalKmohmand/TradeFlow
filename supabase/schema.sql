@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS products (
   "supplierId" TEXT,
   description TEXT,
   unit TEXT,
-  "costPricePerKg" NUMERIC
+  "costPricePerKg" NUMERIC,
+  "trackBatches" BOOLEAN
 );
 
 CREATE TABLE IF NOT EXISTS bookings (
@@ -369,6 +370,46 @@ CREATE INDEX IF NOT EXISTS dispatches_date_idx ON dispatches (date);
 CREATE INDEX IF NOT EXISTS purchases_date_idx ON purchases (date);
 CREATE INDEX IF NOT EXISTS price_history_product_idx ON price_history ("productId", date);
 
+-- Inventory (v11): godowns, stock batches with expiry, transfers between godowns.
+-- products."stockKg" stays the total; stock not in a stock_batches row is in the main godown.
+CREATE TABLE IF NOT EXISTS godowns (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  address TEXT,
+  "isDefault" BOOLEAN DEFAULT FALSE,
+  "createdAt" TEXT
+);
+
+CREATE TABLE IF NOT EXISTS stock_batches (
+  id TEXT PRIMARY KEY,
+  "productId" TEXT,
+  "godownId" TEXT,
+  "batchNo" TEXT DEFAULT '',
+  "expiryDate" TEXT,
+  qty NUMERIC DEFAULT 0,
+  "receivedDate" TEXT,
+  "costPrice" NUMERIC,
+  "supplierId" TEXT,
+  "purchaseId" TEXT,
+  "createdAt" TEXT
+);
+CREATE INDEX IF NOT EXISTS stock_batches_product_idx ON stock_batches ("productId", "godownId");
+CREATE INDEX IF NOT EXISTS stock_batches_expiry_idx ON stock_batches ("expiryDate");
+
+CREATE TABLE IF NOT EXISTS stock_transfers (
+  id TEXT PRIMARY KEY,
+  "productId" TEXT,
+  "fromGodownId" TEXT,
+  "toGodownId" TEXT,
+  qty NUMERIC DEFAULT 0,
+  date TEXT,
+  note TEXT,
+  batches JSONB,
+  "createdAt" TEXT,
+  "createdBy" TEXT
+);
+CREATE INDEX IF NOT EXISTS stock_transfers_date_idx ON stock_transfers (date);
+
 -- Internal tool: RLS disabled so the anon key can read/write. Keep the key private.
 ALTER TABLE customers DISABLE ROW LEVEL SECURITY;
 ALTER TABLE suppliers DISABLE ROW LEVEL SECURITY;
@@ -392,3 +433,6 @@ ALTER TABLE ledger DISABLE ROW LEVEL SECURITY;
 ALTER TABLE whatsapp_messages DISABLE ROW LEVEL SECURITY;
 ALTER TABLE bank_statement_lines DISABLE ROW LEVEL SECURITY;
 ALTER TABLE bank_reconciliations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE godowns DISABLE ROW LEVEL SECURITY;
+ALTER TABLE stock_batches DISABLE ROW LEVEL SECURITY;
+ALTER TABLE stock_transfers DISABLE ROW LEVEL SECURITY;

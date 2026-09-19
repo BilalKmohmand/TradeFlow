@@ -36,6 +36,8 @@ export interface Product {
   description?: string;
   /** Selling unit shown on bills (bag, piece, kg, ton, litre...). unitPricePerKg is the price per this unit. */
   unit?: string;
+  /** Stock is received in batches with an expiry date; bills take the earliest-expiring batch first. */
+  trackBatches?: boolean;
 }
 
 export type BookingStatus = 'active' | 'completed' | 'cancelled';
@@ -240,6 +242,10 @@ export interface InvoiceItem {
   qty?: number;
   unitPrice?: number;
   unit?: string;
+  /** Godown the stock came from (absent = main godown). */
+  godownId?: string;
+  /** Batches this line took stock from (first-expiry-first-out). */
+  batches?: BatchAllocation[];
 }
 
 export interface InvoicePaymentRecord {
@@ -788,5 +794,58 @@ export interface BankReconciliation {
   reconciled?: boolean;
   createdAt: string;
   updatedAt?: string;
+  createdBy?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Inventory: godowns (warehouses), stock batches with expiry, transfers between godowns.
+// Product.stockKg stays the TOTAL across godowns. Stock in the main godown that is not in any
+// batch row is implied: stockKg − sum of all StockBatch rows of the item.
+// ---------------------------------------------------------------------------
+
+export interface Godown {
+  id: string;
+  name: string;
+  address?: string;
+  isDefault: boolean;
+  createdAt?: string;
+}
+
+/**
+ * Stock of one item in one godown. A row with an empty batchNo is plain (untracked) stock kept
+ * in a godown other than the main one.
+ */
+export interface StockBatch {
+  id: string;
+  productId: string;
+  godownId: string;
+  batchNo: string;
+  expiryDate?: string;
+  qty: number;
+  receivedDate: string;
+  costPrice?: number;
+  supplierId?: string | null;
+  purchaseId?: string | null;
+  createdAt?: string;
+}
+
+export interface BatchAllocation {
+  batchId: string;
+  batchNo: string;
+  expiryDate?: string;
+  qty: number;
+  godownId?: string;
+}
+
+export interface StockTransfer {
+  id: string;
+  productId: string;
+  fromGodownId: string;
+  toGodownId: string;
+  qty: number;
+  date: string;
+  note?: string;
+  batches?: BatchAllocation[];
+  createdAt: string;
   createdBy?: string;
 }

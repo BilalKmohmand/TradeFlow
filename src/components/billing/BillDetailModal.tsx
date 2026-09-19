@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Printer, Trash2, Wallet, MessageCircle } from 'lucide-react';
+import { batchLines } from '../../utils/inventory';
 import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, Notice, rs } from './ui';
 import { ConfirmDialog } from '../ConfirmDialog';
@@ -66,7 +67,10 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
                 <tbody className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                   {inv.items.map((it) => (
                     <tr key={it.id}>
-                      <td className="px-3 py-2 font-semibold text-[#111827] dark:text-white">{it.productName}</td>
+                      <td className="px-3 py-2 font-semibold text-[#111827] dark:text-white">
+                        {it.productName}
+                        {batchLines(it).map((b) => <div key={b} className="text-[11px] font-normal text-[#6B7280] dark:text-[#94A3B8]">{b}</div>)}
+                      </td>
                       <td className="px-3 py-2 text-right font-mono">{lineQty(it)} {it.unit || ''}</td>
                       <td className="px-3 py-2 text-right font-mono">{rs(linePrice(it))}</td>
                       <td className="px-3 py-2 text-right font-mono font-bold">{rs(it.amount)}</td>

@@ -8,6 +8,7 @@ import { dispatchBilledTotal, EXPENSE_CATEGORIES } from '../types';
 import { buildDailySheet, lineQty, linePrice } from '../utils/billing';
 import { collectCashMovements } from '../utils/finance';
 import { bankRecPrintContent } from './billing/BankRecPrint';
+import { batchLines } from '../utils/inventory';
 
 export type PrintRequest =
   | { type: 'voucher'; ledgerId: string }
@@ -89,7 +90,10 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               <tbody>
                 {inv.items.map((it) => (
                   <tr key={it.id} className="border-b border-gray-200">
-                    <td className="py-3 px-3 font-bold">{it.productName}</td>
+                    <td className="py-3 px-3 font-bold">
+                      {it.productName}
+                      {batchLines(it).map((b) => <div key={b} className="text-[10px] font-normal text-gray-600">{b}</div>)}
+                    </td>
                     <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(lineQty(it))}{it.unit && it.unit !== 'pcs' ? ` ${it.unit}` : ''}</td>
                     <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(linePrice(it))}</td>
                     <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap">{money(it.amount)}</td>

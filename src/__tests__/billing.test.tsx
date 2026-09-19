@@ -282,6 +282,21 @@ describe('QA rules', () => {
     expect(result.current.customers.length).toBe(1);
     expect(d.invoice.customerId).toBe('c1');
   });
+  it('a refused bill with an inline new customer does not leave that customer behind', () => {
+    const { result } = setup();
+    let r: any;
+    act(() => {
+      r = result.current.createBill({ customerId: '', newCustomer: { name: 'Brand New Buyer', phone: '0300 9999999' }, items: [{ productId: 'p1', name: 'x', qty: 1, unitPrice: 100 }], date: '2099-01-01' });
+    });
+    expect(r.success).toBe(false);
+    expect(result.current.customers.some((c) => c.name === 'Brand New Buyer')).toBe(false);
+    act(() => {
+      r = result.current.createBill({ customerId: '', newCustomer: { name: 'Brand New Buyer', phone: '0300 9999999' }, items: [{ productId: 'p1', name: 'x', qty: 1, unitPrice: 100 }] });
+    });
+    expect(r.success).toBe(true);
+    expect(result.current.customers.filter((c) => c.name === 'Brand New Buyer').length).toBe(1);
+    expect(r.invoice.customerId).toBe(result.current.customers.find((c) => c.name === 'Brand New Buyer')!.id);
+  });
   it('two bills created in the same tick get different numbers', () => {
     const { result } = setup();
     act(() => {

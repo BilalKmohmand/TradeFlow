@@ -68,6 +68,8 @@ export const SystemDataTab: React.FC = () => {
     resetToSampleData,
     purgeTable,
     can,
+    stockBatches,
+    stockTransfers,
   } = useTrading();
 
   const [currentPin, setCurrentPin] = useState('');
@@ -214,6 +216,8 @@ export const SystemDataTab: React.FC = () => {
     { table: 'returns', label: 'Returns', count: returns.length, icon: <History className="w-4 h-4" /> },
     { table: 'stock_adjustments', label: 'Stock Adjustments', count: adjustments.length, icon: <Package className="w-4 h-4" /> },
     { table: 'tasks', label: 'Follow-ups', count: tasks.length, icon: <CheckCircle2 className="w-4 h-4" /> },
+    { table: 'stock_batches', label: 'Stock Batches', count: stockBatches.filter((b) => b.batchNo).length, icon: <Package className="w-4 h-4" /> },
+    { table: 'stock_transfers', label: 'Stock Moves', count: stockTransfers.length, icon: <PackagePlus className="w-4 h-4" /> },
     { table: 'ledger', label: 'Ledger Entries', count: ledger.length, icon: <BookOpen className="w-4 h-4" /> },
     { table: 'whatsapp_messages', label: 'WhatsApp Logs', count: whatsappMessages.length, icon: <MessageSquare className="w-4 h-4" /> },
   ];
