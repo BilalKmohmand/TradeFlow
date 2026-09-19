@@ -1,3 +1,4 @@
+import { ConfirmDialog } from '../ConfirmDialog';
 import React, { useMemo, useRef, useState } from 'react';
 import { Pencil, Trash2, Plus, ArrowRight, Check, X } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -38,7 +39,7 @@ export const ItemStockDetails: React.FC<{ product: Product }> = ({ product }) =>
     <div className="mt-1.5 space-y-1 text-[11px]" data-testid={`stock-details-${product.id}`}>
       {per && (
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[#6B7280] dark:text-[#94A3B8]">
-          {godowns.map((g) => (
+          {godowns.filter((g) => (per[g.id] || 0) !== 0).map((g) => (
             <span key={g.id} data-godown={g.name} className="whitespace-nowrap">{g.name}: <strong className="font-mono text-[#374151] dark:text-[#CBD5E1]">{num(per[g.id] || 0)}</strong></span>
           ))}
         </div>
@@ -108,6 +109,9 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
     setTimeout(() => { busy.current = false; }, 800);
     setError('');
     if (!product) return setError('Pick an item.');
+    if (supplierId && !(parseFloat(cost) > 0)) {
+      return setError(`Enter the cost per ${products.find((p) => p.id === productId)?.unit || 'unit'} so this is added to what you owe ${suppliers.find((x) => x.id === supplierId)?.company || 'the supplier'} — or leave the supplier empty.`);
+    }
     const r = receiveStock({
       productId: pid,
       godownId,
@@ -264,9 +268,10 @@ export const GodownsModal: React.FC<{ isOpen: boolean; onClose: () => void; onMo
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const canDelete = can('delete_records');
+  const [confirmDel, setConfirmDel] = useState<{ title: string; message: string; label: string; action: () => void } | null>(null);
 
-  const unitsIn = (gid: string) =>
-    products.reduce((a, p) => a + (stockByGodown(p, stockBatches, godowns)[gid] || 0), 0);
+  // Cans, tins and bags can't be added together, so the list counts items that have stock here.
+  const itemsIn = (gid: string) => products.filter((p) => (stockByGodown(p, stockBatches, godowns)[gid] || 0) > 0).length;
 
   const add = (e: React.FormEvent) => {
     e.preventDefault();
@@ -284,7 +289,7 @@ export const GodownsModal: React.FC<{ isOpen: boolean; onClose: () => void; onMo
             <li key={g.id} className="flex items-center gap-2 px-3 py-2.5">
               {editing?.id === g.id ? (
                 <>
-                  <input aria-label="Godown name" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className={inputCls} autoFocus />
+                  <input aria-label="Godown name" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setEditing(null); } }} className={inputCls} autoFocus />
                   <button type="button" aria-label="Save name" onClick={() => { const r = updateGodown(g.id, { name: editing.name }); setMsg({ kind: r.success ? 'ok' : 'error', text: r.message }); if (r.success) setEditing(null); }} className="p-2 rounded-xl text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/40"><Check className="w-4 h-4" /></button>
                   <button type="button" aria-label="Cancel rename" onClick={() => setEditing(null)} className="p-2 rounded-xl text-[#9CA3AF]"><X className="w-4 h-4" /></button>
                 </>
@@ -292,11 +297,11 @@ export const GodownsModal: React.FC<{ isOpen: boolean; onClose: () => void; onMo
                 <>
                   <div className="min-w-0 flex-1">
                     <div className="font-semibold text-sm text-[#111827] dark:text-white truncate">{g.name}{g.isDefault && <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-teal-700 dark:text-teal-300">main</span>}</div>
-                    <div className="text-[11px] text-[#8E9299]">{num(unitsIn(g.id))} units in stock{g.address ? ` • ${g.address}` : ''}</div>
+                    <div className="text-[11px] text-[#8E9299]">{itemsIn(g.id) === 0 ? 'Empty' : `${itemsIn(g.id)} item${itemsIn(g.id) === 1 ? '' : 's'} in stock`}{g.address ? ` • ${g.address}` : ''}</div>
                   </div>
                   <button type="button" aria-label={`Rename ${g.name}`} onClick={() => setEditing({ id: g.id, name: g.name })} className="p-2 rounded-xl text-[#9CA3AF] hover:text-[#111827] dark:hover:text-white"><Pencil className="w-4 h-4" /></button>
                   {canDelete && !g.isDefault && (
-                    <button type="button" aria-label={`Delete ${g.name}`} onClick={() => { const r = deleteGodown(g.id); setMsg({ kind: r.success ? 'ok' : 'error', text: r.message }); }} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                    <button type="button" aria-label={`Delete ${g.name}`} onClick={() => setConfirmDel({ title: `Delete ${g.name}?`, message: 'The godown is removed. Godowns that still hold stock cannot be deleted.', label: 'Delete godown', action: () => { const r = deleteGodown(g.id); setMsg({ kind: r.success ? 'ok' : 'error', text: r.message }); } })} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
                   )}
                 </>
               )}
@@ -336,6 +341,14 @@ export const GodownsModal: React.FC<{ isOpen: boolean; onClose: () => void; onMo
           <button type="button" onClick={onClose} className={secondaryBtn}>Done</button>
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={Boolean(confirmDel)}
+        title={confirmDel?.title || ''}
+        message={confirmDel?.message || ''}
+        confirmLabel={confirmDel?.label}
+        onCancel={() => setConfirmDel(null)}
+        onConfirm={() => { confirmDel?.action(); setConfirmDel(null); }}
+      />
     </Modal>
   );
 };

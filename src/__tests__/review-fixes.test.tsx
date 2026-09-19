@@ -221,3 +221,29 @@ describe('review finding 12 and low items', () => {
     expect(refs).toEqual(['JV-2', 'JV-3', 'JV-4']);
   });
 });
+
+describe('QA round on the ERP merge', () => {
+  it('a journal with one account on both sides, or a future date, is refused', () => {
+    const { result } = setup();
+    let r: any;
+    act(() => { r = result.current.addManualJournal({ date: todayISO(), memo: 'x', lines: [{ accountCode: '1000', debit: 500, credit: 0 }, { accountCode: '1000', debit: 0, credit: 500 }] }); });
+    expect(r.success).toBe(false);
+    expect(r.message).toMatch(/both the debit and the credit/);
+    act(() => { r = result.current.addManualJournal({ date: shiftDate(todayISO(), 30), memo: 'x', lines: [{ accountCode: '1000', debit: 10, credit: 0 }, { accountCode: '3000', debit: 0, credit: 10 }] }); });
+    expect(r.success).toBe(false);
+    expect(r.message).toMatch(/future/);
+  });
+  it('an operator cannot receive stock, move stock or manage godowns', () => {
+    const { result } = setup();
+    act(() => { result.current.addUser({ name: 'Zahid Op', role: 'operator', pin: '4321' }); });
+    act(() => { result.current.lockAdmin(); });
+    const id = result.current.users.find((u) => u.name === 'Zahid Op')!.id;
+    act(() => { result.current.unlockAsUser(id, '4321'); });
+    let r: any;
+    act(() => { r = result.current.addGodown('Back store'); });
+    expect(r.success).toBe(false);
+    act(() => { r = result.current.receiveStock({ productId: 'p1', qty: 5, costPrice: 10 }); });
+    expect(r.success).toBe(false);
+    expect(result.current.products[0].stockKg).toBe(0);
+  });
+});

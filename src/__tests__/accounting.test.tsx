@@ -356,7 +356,7 @@ describe('automatic posting from app actions', () => {
     act(() => { t().updateSettings({ booksLockedUntil: '2026-03-31' }); });
     act(() => { r = t().addManualJournal({ date: '2026-03-15', memo: 'Late', lines: [{ accountCode: '6070', debit: 100, credit: 0 }, { accountCode: '1000', debit: 0, credit: 100 }] }); });
     expect(r.success).toBe(false);
-    expect(r.message).toMatch(/locked/);
+    expect(r.message).toMatch(/closed up to/);
     act(() => { r = t().deleteManualJournal(t().manualJournals[0].id); });
     expect(r.success).toBe(false);
     act(() => { t().updateSettings({ booksLockedUntil: undefined }); });

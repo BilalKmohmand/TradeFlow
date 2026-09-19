@@ -50,6 +50,7 @@ import {
   Supplier,
   isCashMethod,
 } from '../types';
+import { formatDate } from './formatters';
 import { collectCashMovements, costPerKgOn } from './finance';
 
 export type AccountType = 'asset' | 'liability' | 'equity' | 'income' | 'expense';
@@ -240,6 +241,10 @@ export const validateEntry = (entry: Pick<JournalEntry, 'date' | 'lines'>, accou
     if (d > 0 && c > 0) errors.push(`Line ${i + 1}: use either debit or credit, not both.`);
     if (d === 0 && c === 0) errors.push(`Line ${i + 1}: enter a debit or a credit amount.`);
   });
+  // One account on both sides moves nothing and is almost always a slip.
+  const debited = new Set(lines.filter((l) => (Number(l.debit) || 0) > 0).map((l) => l.accountCode));
+  const both = lines.find((l) => (Number(l.credit) || 0) > 0 && debited.has(l.accountCode));
+  if (both) errors.push(`Account ${both.accountCode} is on both the debit and the credit side. Use two different accounts.`);
   const t = entryTotals(lines);
   if (t.debit <= 0) errors.push('The entry total must be more than zero.');
   if (Math.abs(t.debit - t.credit) >= EPS) errors.push(`Debits (${t.debit}) must equal credits (${t.credit}).`);
@@ -305,7 +310,7 @@ const cashCapitalRe = /capital|investment|owner (put|added|brought)/i;
 /** Refusal text when a date falls inside a closed period (books locked up to that date), else null. */
 export const booksLockedFor = (settings: Pick<AppSettings, 'booksLockedUntil'>, date: string): string | null =>
   settings.booksLockedUntil && date && date <= settings.booksLockedUntil
-    ? `The books are closed up to ${settings.booksLockedUntil}. Use a later date, or ask an admin to reopen the period in Accounts.`
+    ? `The books are closed up to ${formatDate(settings.booksLockedUntil)}. Use a later date, or ask an admin to reopen the period in Accounts.`
     : null;
 
 export const buildJournal = (src: JournalSources): JournalEntry[] => {
@@ -675,7 +680,7 @@ export const generalLedger = (entries: JournalEntry[], code: string, from: strin
       if (e.date < from) return;
       totalDebit = round2(totalDebit + d);
       totalCredit = round2(totalCredit + c);
-      lines.push({ entryId: e.id, date: e.date, ref: e.ref, memo: l.memo ? `${e.memo} · ${l.memo}` : e.memo, debit: d, credit: c, balance: running, source: e.source, sourceType: e.sourceType, billId: e.billId });
+      lines.push({ entryId: e.id, date: e.date, ref: e.ref, memo: l.memo && !e.memo.includes(l.memo) ? `${e.memo} · ${l.memo}` : e.memo, debit: d, credit: c, balance: running, source: e.source, sourceType: e.sourceType, billId: e.billId });
     });
   });
   const opening = round2(running - totalDebit + totalCredit);

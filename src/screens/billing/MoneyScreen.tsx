@@ -16,6 +16,8 @@ type Tab = 'overview' | 'expenses' | 'cashbook' | 'bank';
 export const MoneyScreen: React.FC = () => {
   const { ledger, expenses, cashEntries, customers, suppliers, settings, updateSettings, setSelectedCustomerId, setSelectedSupplierId, setActiveScreen, setPrintRequest, deleteExpense, can } = useTrading();
   const canDelete = can('delete_records');
+  // Bank reconciliation is book-keeping: staff without finance access (operators) don't see it.
+  const canSeeBank = can('view_finance');
   const ui = useBillingUI();
   const today = todayISO();
   const [tab, setTab] = useState<Tab>('overview');
@@ -52,7 +54,7 @@ export const MoneyScreen: React.FC = () => {
           <h1 className="text-2xl font-bold text-[#111827] dark:text-white">Money</h1>
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">How much is in the business, who owes you, and who you owe.</p>
         </div>
-        <div className="flex flex-wrap gap-1.5">{tabBtn('overview', 'Overview')}{tabBtn('expenses', 'Expense sheets')}{tabBtn('cashbook', 'Cash book')}{tabBtn('bank', 'Bank reconciliation')}</div>
+        <div className="flex flex-wrap gap-1.5">{tabBtn('overview', 'Overview')}{tabBtn('expenses', 'Expense sheets')}{tabBtn('cashbook', 'Cash book')}{canSeeBank && tabBtn('bank', 'Bank reconciliation')}</div>
       </div>
 
       {tab === 'overview' && (
@@ -129,7 +131,7 @@ export const MoneyScreen: React.FC = () => {
         </>
       )}
 
-      {tab === 'bank' && <BankReconciliationTab />}
+      {tab === 'bank' && canSeeBank && <BankReconciliationTab />}
 
       {tab !== 'overview' && tab !== 'bank' && (
         <div className="flex items-center gap-2">

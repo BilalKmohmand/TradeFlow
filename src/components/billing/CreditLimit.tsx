@@ -31,7 +31,7 @@ export const BillCreditPanel: React.FC<{
           {canOverride && (
             <div className="space-y-2">
               <label className="flex items-center gap-2 font-semibold text-rose-900 dark:text-rose-200 cursor-pointer">
-                <input type="checkbox" checked={allow} onChange={(e) => onAllow(e.target.checked)} className="w-4 h-4 accent-rose-600" />
+                <input type="checkbox" checked={allow} onChange={(e) => onAllow(e.target.checked)} className="w-5 h-5 shrink-0 accent-rose-600" />
                 Allow over limit
               </label>
               {allow && (

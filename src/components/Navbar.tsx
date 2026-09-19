@@ -339,7 +339,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {!isBilling && adminItem.length > 0 && (
           <button type="button" onClick={() => { updateSettings({ appMode: 'billing' }); setActiveScreen('dashboard'); }} className="lg:hidden w-full text-left px-1 pt-1.5 text-[11px] font-bold text-indigo-700 dark:text-indigo-300">← Back to simple billing</button>
         )}
-        <nav className="grid lg:hidden grid-cols-4 gap-0.5 py-1.5 border-t border-[#E5E5E1] dark:border-[#203248]">
+        <nav className={`grid lg:hidden ${navItems.length > 8 ? 'grid-cols-5' : 'grid-cols-4'} gap-0.5 py-1.5 border-t border-[#E5E5E1] dark:border-[#203248]`}>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeScreen === item.id;

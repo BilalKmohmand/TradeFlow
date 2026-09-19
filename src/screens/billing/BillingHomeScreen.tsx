@@ -106,7 +106,7 @@ export const BillingHomeScreen: React.FC = () => {
         <div className={`${cardCls} p-5 flex flex-col sm:flex-row sm:items-center gap-4`}>
           <div className="flex-1 min-w-0">
             <h2 className="font-bold text-[#111827] dark:text-white flex items-center gap-2"><Boxes className="w-4 h-4 text-indigo-600" /> Full trading suite is one tap away</h2>
-            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">Bookings, truck dispatches, purchase orders, stock reports, Profit &amp; Loss and balance sheet — on the same data. Come back with one tap.</p>
+            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">Bookings, truck dispatches, purchase orders, fleet and stock-flow reports — on the same data. Come back with one tap.</p>
           </div>
           <button type="button" onClick={() => { updateSettings({ appMode: 'trading' }); setActiveScreen('dashboard'); }} className={`${secondaryBtn} shrink-0`}>Open full suite <ChevronRight className="w-4 h-4" /></button>
         </div>

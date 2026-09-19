@@ -195,3 +195,55 @@ test.describe('Credit limits and bank reconciliation on a phone', () => {
     await noOverflow(page, 'new bill over limit');
   });
 });
+
+test.describe('Customer dialog', () => {
+  test.beforeEach(async ({ page }) => {
+    page.on('pageerror', (e) => { throw e; });
+    await page.addInitScript(seed);
+  });
+
+  test('a customer added without typing a limit has no credit limit and nothing invented', async ({ page }) => {
+    await unlock(page);
+    await page.getByRole('button', { name: 'Customers' }).first().click();
+    await page.getByRole('button', { name: 'Add customer' }).click();
+    const form = page.getByRole('dialog', { name: 'New customer' });
+    await expect(form.getByLabel('Credit limit in Rs. (optional)')).toHaveValue('');
+    await form.getByLabel('Name', { exact: true }).fill('Gul Traders');
+    await form.getByLabel('Phone', { exact: true }).fill('0312 5556677');
+    await form.getByRole('button', { name: 'Save customer' }).click();
+    await expect(form).toBeHidden();
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('tradeflow_customers_v2') || '[]').find((c: { name: string }) => c.name === 'Gul Traders'));
+    expect(stored.creditLimit).toBe(0);
+    expect(stored.email).toBe('');
+    expect(stored.address).toBe('');
+
+    // A big bill on credit is not blocked by a limit nobody set.
+    await page.getByRole('button', { name: 'New Bill' }).first().click();
+    const bill = page.getByRole('dialog', { name: 'New Bill' });
+    await bill.getByLabel('Customer', { exact: true }).selectOption({ label: 'Gul Traders • 0312 5556677' });
+    await bill.getByLabel('Item 1', { exact: true }).selectOption('p1');
+    await bill.getByLabel('Quantity 1', { exact: true }).fill('300');
+    await expect(bill.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+    await bill.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(bill).toBeHidden();
+  });
+
+  test('typing 0 keeps no limit, and a typed limit is saved', async ({ page }) => {
+    await unlock(page);
+    await page.getByRole('button', { name: 'Customers' }).first().click();
+    await page.getByRole('button', { name: 'Add customer' }).click();
+    const form = page.getByRole('dialog', { name: 'New customer' });
+    await form.getByLabel('Name', { exact: true }).fill('Zero Shop');
+    await form.getByLabel('Phone', { exact: true }).fill('0313 0000000');
+    await form.getByLabel('Credit limit in Rs. (optional)').fill('0');
+    await form.getByRole('button', { name: 'Save customer' }).click();
+    await page.getByRole('button', { name: 'Add customer' }).click();
+    await form.getByLabel('Name', { exact: true }).fill('Limit Shop');
+    await form.getByLabel('Phone', { exact: true }).fill('0313 1111111');
+    await form.getByLabel('Credit limit in Rs. (optional)').fill('75,000');
+    await form.getByRole('button', { name: 'Save customer' }).click();
+    const limits = await page.evaluate(() => Object.fromEntries(JSON.parse(localStorage.getItem('tradeflow_customers_v2') || '[]').map((c: { name: string; creditLimit: number }) => [c.name, c.creditLimit])));
+    expect(limits['Zero Shop']).toBe(0);
+    expect(limits['Limit Shop']).toBe(75000);
+  });
+});

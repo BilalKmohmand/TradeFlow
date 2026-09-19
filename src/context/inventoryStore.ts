@@ -70,6 +70,8 @@ interface Deps {
   syncToSupabase: (table: string, rows: unknown[]) => Promise<void>;
   removeRemote: (table: any, ids: string[]) => void;
   recordAdjustment?: (a: Omit<StockAdjustment, 'id' | 'createdAt' | 'createdBy'>) => void;
+  /** Permission check of the signed-in user (receiving/moving stock and managing godowns are not for everyone). */
+  can?: (permission: string) => boolean;
 }
 
 const today = () => new Date().toISOString().split('T')[0];
@@ -88,7 +90,9 @@ const load = <T,>(key: string): T[] => {
  * use it; product.stockKg stays the total (see utils/inventory.ts for the model).
  */
 export const useInventoryStore = (deps: Deps) => {
-  const { products, setProducts, suppliers, addPurchase, logAuditEvent, userName, isCloudSyncReady, syncToSupabase, removeRemote, recordAdjustment } = deps;
+  const { products, setProducts, suppliers, addPurchase, logAuditEvent, userName, isCloudSyncReady, syncToSupabase, removeRemote, recordAdjustment, can } = deps;
+  const allowed = (...perms: string[]) => !can || perms.some((x) => can(x));
+  const NO = (what: string) => ({ success: false as const, message: `You don't have permission to ${what}. Ask a manager or admin.` });
   const [storedGodowns, setGodowns] = useState<Godown[]>(() => load(INVENTORY_STORAGE_KEYS.GODOWNS));
   const [stockBatches, setStockBatches] = useState<StockBatch[]>(() => load(INVENTORY_STORAGE_KEYS.STOCK_BATCHES));
   const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>(() => load(INVENTORY_STORAGE_KEYS.STOCK_TRANSFERS));
@@ -113,6 +117,7 @@ export const useInventoryStore = (deps: Deps) => {
   const ensureMain = (prev: Godown[]) => (prev.some((g) => g.isDefault) ? prev : [{ ...MAIN_GODOWN, createdAt: today() }, ...prev]);
 
   const addGodown: InventoryApi['addGodown'] = (name, address) => {
+    if (!allowed('stock:adjust')) return NO('add godowns');
     const clean = name.trim();
     if (!clean) return { success: false, message: 'Give the godown a name.' };
     if (godowns.some((g) => g.name.trim().toLowerCase() === clean.toLowerCase())) return { success: false, message: 'A godown with this name already exists.' };
@@ -123,6 +128,7 @@ export const useInventoryStore = (deps: Deps) => {
   };
 
   const updateGodown: InventoryApi['updateGodown'] = (id, data) => {
+    if (!allowed('stock:adjust')) return NO('rename godowns');
     const target = godowns.find((g) => g.id === id);
     if (!target) return { success: false, message: 'Godown not found.' };
     const name = data.name != null ? data.name.trim() : target.name;
@@ -135,6 +141,7 @@ export const useInventoryStore = (deps: Deps) => {
   };
 
   const deleteGodown: InventoryApi['deleteGodown'] = (id) => {
+    if (!allowed('stock:adjust') || !allowed('delete_records')) return NO('delete godowns');
     const target = godowns.find((g) => g.id === id);
     if (!target) return { success: false, message: 'Godown not found.' };
     if (target.isDefault) return { success: false, message: 'The main godown cannot be deleted.' };
@@ -153,6 +160,7 @@ export const useInventoryStore = (deps: Deps) => {
   };
 
   const receiveStock: InventoryApi['receiveStock'] = (input) => {
+    if (!allowed('products:create', 'stock:adjust')) return NO('receive stock');
     const product = products.find((p) => p.id === input.productId);
     if (!product) return { success: false, message: 'Pick an item.' };
     const qty = round2(Number(input.qty));
@@ -191,6 +199,7 @@ export const useInventoryStore = (deps: Deps) => {
   };
 
   const transferStock: InventoryApi['transferStock'] = (input) => {
+    if (!allowed('products:create', 'stock:adjust')) return NO('move stock');
     const product = products.find((p) => p.id === input.productId);
     if (!product) return { success: false, message: 'Pick an item.' };
     const qty = round2(Number(input.qty));

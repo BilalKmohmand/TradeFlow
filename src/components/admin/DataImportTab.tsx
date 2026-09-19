@@ -10,8 +10,19 @@ const TEMPLATES: Record<Kind, { headers: string[]; sample: string[] }> = {
   products: { headers: ['name', 'category', 'unitPricePerKg', 'stockKg', 'minThresholdKg', 'supplierCompany', 'description'], sample: ['OPC Cement', 'Construction & Cement', '25', '480000', '100000', 'Lucky Cement', 'Grade 53'] },
 };
 
-/** Minimal CSV parser that copes with quoted fields, commas and CRLF. */
-export const parseCsv = (text: string): string[][] => {
+/**
+ * The separator a file uses: comma, semicolon (common in bank exports and European Excel) or tab,
+ * judged from the first line outside quotes.
+ */
+export const detectDelimiter = (text: string): ',' | ';' | '\t' => {
+  const firstLine = (text.split(/\r?\n/).find((l) => l.trim() !== '') || '').replace(/"[^"]*"/g, '');
+  const count = (c: string) => firstLine.split(c).length - 1;
+  const best = ([',', ';', '\t'] as const).map((c) => [c, count(c)] as const).sort((x, y) => y[1] - x[1])[0];
+  return best[1] > 0 ? best[0] : ',';
+};
+
+/** Minimal CSV parser that copes with quoted fields, CRLF, and comma / semicolon / tab separators. */
+export const parseCsv = (text: string, delimiter: ',' | ';' | '\t' = detectDelimiter(text)): string[][] => {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
@@ -26,7 +37,7 @@ export const parseCsv = (text: string): string[][] => {
         } else inQuotes = false;
       } else field += ch;
     } else if (ch === '"') inQuotes = true;
-    else if (ch === ',') {
+    else if (ch === delimiter) {
       row.push(field);
       field = '';
     } else if (ch === '\n' || ch === '\r') {

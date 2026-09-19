@@ -1,3 +1,4 @@
+import { ConfirmDialog } from '../ConfirmDialog';
 import React, { useMemo, useRef, useState } from 'react';
 import { Upload, Plus, Wand2, Printer, Save, Link2, Unlink, EyeOff, Eye, FilePlus2, CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -54,6 +55,7 @@ export const BankReconciliationTab: React.FC = () => {
   const canDelete = can('delete_records');
   /** Importing, matching and adding records changes the books: cash book permission (not operators). */
   const canEdit = can('finance:cashbook');
+  const [confirmDel, setConfirmDel] = useState<{ title: string; message: string; label: string; action: () => void } | null>(null);
   const today = todayISO();
   const fileRef = useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -208,7 +210,7 @@ export const BankReconciliationTab: React.FC = () => {
               <button type="button" onClick={() => setPending(null)} aria-label="Cancel import" className="p-2 rounded-xl text-[#6B7280] hover:bg-[#F4F3EF] dark:hover:bg-[#162436]"><X className="w-4 h-4" /></button>
             </div>
             <label className="flex items-center gap-2 text-xs font-semibold text-[#374151] dark:text-[#CBD5E1]">
-              <input type="checkbox" checked={pending.hasHeader} onChange={(e) => setPending({ ...pending, hasHeader: e.target.checked })} className="w-4 h-4 accent-teal-600" /> First row is headings
+              <input type="checkbox" checked={pending.hasHeader} onChange={(e) => setPending({ ...pending, hasHeader: e.target.checked })} className="w-5 h-5 shrink-0 accent-teal-600" /> First row is headings
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {FIELDS.map((f) => (
@@ -273,13 +275,13 @@ export const BankReconciliationTab: React.FC = () => {
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-bold"><CheckCircle2 className="w-3.5 h-3.5" /> Matched</span>
                         {l.matchConfidence && <span className="text-[#6B7280] dark:text-[#94A3B8]">{CONFIDENCE_LABEL[l.matchConfidence]}</span>}
                         {lost ? <span className="text-rose-700 dark:text-rose-300 font-semibold">The matched record was deleted.</span> : <span className="text-[#6B7280] dark:text-[#94A3B8] min-w-0 break-words">→ {matched.map(moveLabel).join('; ')}</span>}
-                        {canEdit && <button type="button" onClick={() => unmatchBankLine(l.id)} className="inline-flex items-center gap-1 font-bold text-[#6B7280] hover:text-[#111827] dark:hover:text-white"><Unlink className="w-3.5 h-3.5" /> Unmatch</button>}
+                        {canEdit && <button type="button" onClick={() => unmatchBankLine(l.id)} className="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl font-bold text-[#6B7280] hover:text-[#111827] dark:hover:text-white"><Unlink className="w-3.5 h-3.5" /> Unmatch</button>}
                       </div>
                     )}
                     {l.status === 'ignored' && (
                       <div className="flex flex-wrap items-center gap-2 text-xs sm:pl-[4.75rem]">
                         <span className="px-2 py-0.5 rounded-full bg-[#F4F3EF] dark:bg-[#162436] text-[#6B7280] font-bold">Ignored</span>
-                        {canEdit && <button type="button" onClick={() => setBankLineIgnored(l.id, false)} className="inline-flex items-center gap-1 font-bold text-[#6B7280] hover:text-[#111827] dark:hover:text-white"><Eye className="w-3.5 h-3.5" /> Undo</button>}
+                        {canEdit && <button type="button" onClick={() => setBankLineIgnored(l.id, false)} className="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl font-bold text-[#6B7280] hover:text-[#111827] dark:hover:text-white"><Eye className="w-3.5 h-3.5" /> Undo</button>}
                       </div>
                     )}
                     {l.status === 'unmatched' && (
@@ -288,7 +290,7 @@ export const BankReconciliationTab: React.FC = () => {
                         {canEdit && <button type="button" onClick={() => startCreate(l)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-[#E5E5E1] dark:border-[#203248] font-bold text-teal-700 dark:text-teal-300"><FilePlus2 className="w-3.5 h-3.5" /> {l.amount < 0 ? 'Add as expense' : 'Add as money received'}</button>}
                         {canEdit && <button type="button" onClick={() => startMatch(l)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-[#E5E5E1] dark:border-[#203248] font-bold text-[#374151] dark:text-[#CBD5E1]"><Link2 className="w-3.5 h-3.5" /> Match…</button>}
                         {canEdit && <button type="button" onClick={() => setBankLineIgnored(l.id, true)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-bold text-[#6B7280]"><EyeOff className="w-3.5 h-3.5" /> Ignore</button>}
-                        {canDelete && <button type="button" onClick={() => deleteBankStatementLine(l.id)} aria-label={`Delete statement line ${l.description}`} className="px-2 py-1.5 text-[#9CA3AF] hover:text-rose-600">✕</button>}
+                        {canDelete && <button type="button" onClick={() => setConfirmDel({ title: 'Delete this statement line?', message: `${formatDate(l.date)} · ${l.description} · ${signed(l.amount)}`, label: 'Delete line', action: () => deleteBankStatementLine(l.id) })} aria-label={`Delete statement line ${l.description}`} className="px-3 py-2 text-[#9CA3AF] hover:text-rose-600">✕</button>}
                       </div>
                     )}
                     {creatingId === l.id && l.status === 'unmatched' && (
@@ -386,13 +388,13 @@ export const BankReconciliationTab: React.FC = () => {
           {outstanding.length === 0 ? <p className="text-sm text-[#8E9299]">Nothing outstanding — every bank entry up to this date is on the statement.</p> : (
             <div className="overflow-x-auto rounded-2xl border border-[#E5E5E1] dark:border-[#203248]">
               <table className="w-full text-sm">
-                <thead><tr className="text-[11px] uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] text-left"><th className="px-3 py-2">Cleared</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Entry</th><th className="px-3 py-2 text-right">Amount</th></tr></thead>
+                <thead><tr className="text-[11px] uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] text-left"><th className="px-3 py-2">Cleared</th><th className="px-3 py-2 hidden sm:table-cell">Date</th><th className="px-3 py-2">Entry</th><th className="px-3 py-2 text-right">Amount</th></tr></thead>
                 <tbody className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                   {outstanding.map((m) => (
                     <tr key={m.id}>
-                      <td className="px-3 py-2"><input type="checkbox" checked={false} onChange={() => setCleared([m.id], true)} aria-label={`Mark ${m.description} as cleared`} className="w-4 h-4 accent-teal-600" /></td>
-                      <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{formatDate(m.date)}</td>
-                      <td className="px-3 py-2 min-w-[8rem]">{m.counterparty ? `${m.counterparty} — ` : ''}{m.description} <span className="text-[11px] text-[#8E9299]">• {m.method}</span></td>
+                      <td className="px-3 py-2"><input type="checkbox" checked={false} onChange={() => setCleared([m.id], true)} aria-label={`Mark ${m.description} as cleared`} className="w-5 h-5 shrink-0 accent-teal-600" /></td>
+                      <td className="px-3 py-2 font-mono text-xs whitespace-nowrap hidden sm:table-cell">{formatDate(m.date)}</td>
+                      <td className="px-3 py-2 min-w-[8rem]"><span className="sm:hidden block font-mono text-[11px] text-[#8E9299]">{formatDate(m.date)}</span>{m.counterparty ? `${m.counterparty} — ` : ''}{m.description} <span className="text-[11px] text-[#8E9299]">• {m.method}</span></td>
                       <td className={`px-3 py-2 text-right font-mono font-bold whitespace-nowrap ${m.direction === 'in' ? 'text-teal-700 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}>{m.direction === 'in' ? '+' : '−'} {rs(m.amount)}</td>
                     </tr>
                   ))}
@@ -415,6 +417,14 @@ export const BankReconciliationTab: React.FC = () => {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={Boolean(confirmDel)}
+        title={confirmDel?.title || ''}
+        message={confirmDel?.message || ''}
+        confirmLabel={confirmDel?.label}
+        onCancel={() => setConfirmDel(null)}
+        onConfirm={() => { confirmDel?.action(); setConfirmDel(null); }}
+      />
     </div>
   );
 };

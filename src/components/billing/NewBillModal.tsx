@@ -62,7 +62,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
   // Where each line's stock would come from (batch items, or a godown other than the main one).
   // Lines are planned together, in order, so two lines of the same item share the same stock, exactly
   // as saving the bill will. Expiry is judged against today, so a back-dated bill can't sell expired stock.
-  const stockNote = (l: (typeof lines)[number], idx: number): { warn: boolean; text: string } | null => {
+  const stockNote = (l: (typeof lines)[number], idx: number): { warn: boolean; block?: boolean; text: string } | null => {
     if (!l.product || l.qty <= 0) return null;
     const unit = l.product.unit || 'pcs';
     if (!l.product.trackBatches && godowns.length < 2) {
@@ -70,7 +70,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
     }
     const upTo = lines.slice(0, idx + 1).filter((x) => x.product && x.qty > 0).map((x) => ({ productId: x.product!.id, qty: x.qty }));
     const plan = planBillStock(products, stockBatches, godowns, upTo, godownId, todayISO());
-    if (!plan.ok) return { warn: true, text: plan.message || 'Not enough stock.' };
+    if (!plan.ok) return { warn: true, block: true, text: plan.message || 'Not enough stock.' };
     const from = batchLines({ ...plan.lines[plan.lines.length - 1] });
     if (from.length) return { warn: false, text: `From ${from.join(', ')}` };
     if (godowns.length > 1) {
@@ -95,11 +95,15 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
   const credit = creditCheck(newCustomer ? typedMatch || null : customers.find((c) => c.id === customer), balance);
   const canOverride = can('override_credit');
   const creditBlocked = credit.over && !(canOverride && allowOver && overReason.trim());
+  // Stock the bill can't be made from (batches, expired stock, another godown): Save waits until it is fixed.
+  const stockBlocked = lines.some((l, idx) => stockNote(l, idx)?.block);
+  const saveBlocked = creditBlocked || stockBlocked;
+  const blockedWhy = stockBlocked ? 'Not enough stock for this bill' : creditBlocked ? 'Over the credit limit' : undefined;
+  // Any change to the bill clears an old error message.
+  React.useEffect(() => { setError(''); }, [customer, newCustomer, rows, discount, paidNow, method, godownId, allowOver, overReason]);
 
   const submit = (print: boolean) => {
     if (busy.current) return; // a double tap must not make two bills
-    busy.current = true;
-    setTimeout(() => { busy.current = false; }, 800);
     setError('');
     if (newCustomer && !newCustomer.name.trim()) return setError('Enter the new customer name.');
     if (!newCustomer && !customer) return setError('Pick a customer (or add a new one).');
@@ -109,6 +113,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
     if (items.length === 0) return setError('Add at least one item with a quantity.');
     if (credit.over && !(canOverride && allowOver)) return setError(canOverride ? 'This bill is over the credit limit. Tick "Allow over limit" and give a reason, or take more payment now.' : 'This bill is over the customer\'s credit limit. Take more payment now, or ask a manager to allow it.');
     if (credit.over && !overReason.trim()) return setError('Write a short reason for allowing this bill over the credit limit.');
+    busy.current = true; // held until the dialog closes; released at once if the bill is refused
     const result = createBill({
       customerId: newCustomer ? '' : customer,
       newCustomer: newCustomer || undefined,
@@ -121,7 +126,10 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
       ...(credit.over ? { allowOverLimit: allowOver, overrideReason: overReason } : {}),
       godownId: godowns.length > 1 ? godownId : undefined,
     });
-    if (!result.success) return setError(result.message);
+    if (!result.success) {
+      busy.current = false;
+      return setError(result.message);
+    }
     onClose();
     if (print && result.invoice) setPrintRequest({ type: 'bill', invoiceId: result.invoice.id });
   };
@@ -135,8 +143,8 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
         {total > 0 && balance === 0 && <span className="ml-2 text-xs font-bold text-teal-700 dark:text-teal-300">Fully paid</span>}
       </div>
       <div className="flex gap-2">
-        <button type="button" onClick={() => submit(false)} disabled={creditBlocked} title={creditBlocked ? 'Over the credit limit' : undefined} className={secondaryBtn}><Save className="w-4 h-4" /> Save</button>
-        <button type="button" onClick={() => submit(true)} disabled={creditBlocked} title={creditBlocked ? 'Over the credit limit' : undefined} className={primaryBtn}><Printer className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Save &amp; Print</button>
+        <button type="button" onClick={() => submit(false)} disabled={saveBlocked} title={blockedWhy} className={secondaryBtn}><Save className="w-4 h-4" /> Save</button>
+        <button type="button" onClick={() => submit(true)} disabled={saveBlocked} title={blockedWhy} className={primaryBtn}><Printer className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Save &amp; Print</button>
       </div>
     </div>
   );

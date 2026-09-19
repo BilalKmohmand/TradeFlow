@@ -3787,9 +3787,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const check = validateEntry({ date: input.date, lines }, mergeAccounts(customAccounts));
     if (!check.ok) return { success: false, message: check.errors[0] };
     if (!input.memo.trim()) return { success: false, message: 'Write what this entry is for (narration).' };
-    if (settings.booksLockedUntil && input.date <= settings.booksLockedUntil) {
-      return { success: false, message: `The books are locked up to ${settings.booksLockedUntil}. Pick a later date.` };
-    }
+    if (input.date > todayISO()) return { success: false, message: 'The date cannot be in the future.' };
+    const closed = booksLockedFor(settings, input.date);
+    if (closed) return { success: false, message: closed };
     const entry: JournalEntry = {
       id: uid('je'),
       date: input.date,
@@ -3809,9 +3809,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const target = manualJournals.find((j) => j.id === id);
     if (!target) return { success: false, message: 'Journal entry not found.' };
     if (!can('finance:view_pnl') || !can('delete_records')) return { success: false, message: 'Only a manager or admin can delete journal entries.' };
-    if (settings.booksLockedUntil && target.date <= settings.booksLockedUntil) {
-      return { success: false, message: `The books are locked up to ${settings.booksLockedUntil}; this entry cannot be removed.` };
-    }
+    const closedDel = booksLockedFor(settings, target.date);
+    if (closedDel) return { success: false, message: `This entry is in a closed period. ${closedDel}` };
     setManualJournals((prev) => prev.filter((j) => j.id !== id));
     removeRemote('journal_entries', [id]);
     logAuditEvent('Journal Entry Deleted', `${target.ref} on ${target.date}: ${target.memo}`, 'danger', 'data');
@@ -4008,6 +4007,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     products, setProducts, suppliers, addPurchase, logAuditEvent, userName: currentUser?.name, isCloudSyncReady, syncToSupabase, removeRemote,
     // Stock received with no supplier bill is kept as a stock record (not a silent stock change).
     recordAdjustment: (a) => setAdjustments((prev) => [{ ...a, id: uid('adj'), createdAt: todayISO(), createdBy: currentUser?.name }, ...prev]),
+    can: (p) => can(p as Permission),
   });
 
   return (

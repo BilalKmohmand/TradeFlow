@@ -4,6 +4,7 @@ import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
 import { Notice, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, rs } from '../../components/billing/ui';
 import { JournalEntryModal } from '../../components/accounting/JournalEntryModal';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useAccounting } from '../../hooks/useAccounting';
 import {
   ACCOUNT_TYPES,
@@ -16,6 +17,7 @@ import {
   generalLedger,
   profitAndLoss,
   trialBalance,
+  booksLockedFor,
 } from '../../utils/accounting';
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
@@ -44,6 +46,7 @@ export const AccountsScreen: React.FC = () => {
   // Viewing the books needs finance access; posting or changing them is for managers and admins.
   const canPost = can('finance:view_pnl');
   const canRemove = canPost && can('delete_records');
+  const [confirmDel, setConfirmDel] = useState<{ title: string; message: string; label: string; action: () => void } | null>(null);
   const { accounts, journal } = useAccounting(allowed);
   const today = todayISO();
   const [tab, setTab] = useState<Tab>('tb');
@@ -258,8 +261,8 @@ export const AccountsScreen: React.FC = () => {
                 )}
                 <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${e.source === 'manual' ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300' : 'bg-[#F4F3EF] dark:bg-[#162436] text-[#6B7280]'}`}>{e.source === 'manual' ? 'manual' : 'auto'}</span>
                 <span className="text-sm font-semibold text-[#111827] dark:text-white min-w-0 flex-1 truncate">{e.memo}</span>
-                {e.source === 'manual' && canRemove && (
-                  <button type="button" aria-label={`Delete journal entry ${e.ref}`} onClick={() => { if (window.confirm(`Delete journal entry ${e.ref}?`)) flash(deleteManualJournal(e.id)); }} className="p-1.5 text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                {e.source === 'manual' && canRemove && !booksLockedFor(settings, e.date) && (
+                  <button type="button" aria-label={`Delete journal entry ${e.ref}`} onClick={() => setConfirmDel({ title: `Delete journal entry ${e.ref}?`, message: `${e.memo} — this entry will be removed from the books.`, label: 'Delete entry', action: () => flash(deleteManualJournal(e.id)) })} className="p-1.5 text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
                 )}
               </div>
               <div className="overflow-x-auto">
@@ -300,7 +303,7 @@ export const AccountsScreen: React.FC = () => {
                       <td className={numCls}>{drCr(balances.get(a.code)?.net ?? 0)}</td>
                       <td className="px-2 text-right">
                         {!a.system && canRemove && (
-                          <button type="button" aria-label={`Delete account ${a.code}`} onClick={() => flash(deleteAccount(a.code))} className="p-1.5 text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                          <button type="button" aria-label={`Delete account ${a.code}`} onClick={() => setConfirmDel({ title: `Delete account ${a.code}?`, message: `${a.name} will be removed from the chart of accounts.`, label: 'Delete account', action: () => flash(deleteAccount(a.code)) })} className="p-1.5 text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
                         )}
                       </td>
                     </tr>
@@ -331,7 +334,7 @@ export const AccountsScreen: React.FC = () => {
                 <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">After the accountant has finished a period, lock it so nobody can add or delete anything dated on or before this date — bills, payments, expenses, transfers or journals.</p>
               </div>
               <div className="w-44"><label className={labelCls} htmlFor="lock-date">Locked up to</label><input id="lock-date" type="date" value={lockDate} onChange={(e) => setLockDate(e.target.value)} className={inputCls} /></div>
-              <button type="button" disabled={!lockDate} onClick={() => { updateSettings({ booksLockedUntil: lockDate }); setNotice({ kind: 'ok', text: `Books locked up to ${lockDate}.` }); }} className={secondaryBtn}><Lock className="w-4 h-4" /> Lock</button>
+              <button type="button" disabled={!lockDate} onClick={() => { updateSettings({ booksLockedUntil: lockDate }); setNotice({ kind: 'ok', text: `Books closed up to ${formatDate(lockDate)}.` }); }} className={secondaryBtn}><Lock className="w-4 h-4" /> Lock</button>
               {settings.booksLockedUntil && <button type="button" onClick={() => { updateSettings({ booksLockedUntil: undefined }); setLockDate(''); setNotice({ kind: 'ok', text: 'Books unlocked.' }); }} className={dangerBtn}><Unlock className="w-4 h-4" /> Unlock</button>}
             </div>
           )}
@@ -387,7 +390,15 @@ export const AccountsScreen: React.FC = () => {
         </div>
       )}
 
-      <JournalEntryModal key={newJournal} isOpen={newJournal > 0} onClose={() => setNewJournal(0)} accounts={accounts} />
+      <JournalEntryModal key={newJournal} isOpen={newJournal > 0} onClose={() => setNewJournal(0)} onSaved={(m) => flash({ success: true, message: m })} accounts={accounts} />
+      <ConfirmDialog
+        isOpen={Boolean(confirmDel)}
+        title={confirmDel?.title || ''}
+        message={confirmDel?.message || ''}
+        confirmLabel={confirmDel?.label}
+        onCancel={() => setConfirmDel(null)}
+        onConfirm={() => { confirmDel?.action(); setConfirmDel(null); }}
+      />
     </div>
   );
 };

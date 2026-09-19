@@ -3,6 +3,8 @@ import { Plus, Search, Pencil, Trash2, AlertTriangle, PackagePlus, Warehouse, Ar
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
 import { cardCls, inputCls, primaryBtn, secondaryBtn, rs } from '../../components/billing/ui';
+import { isExpired } from '../../utils/inventory';
+import { todayISO } from '../../utils/stockFlow';
 import { ItemStockDetails, ReceiveStockModal, GodownsModal, TransferStockModal } from '../../components/billing/InventoryUI';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Product } from '../../types';
@@ -18,6 +20,8 @@ export const ItemsScreen: React.FC = () => {
   const [stockUI, setStockUI] = useState<{ kind: 'receive' | 'godowns' | 'move' | null; productId?: string | null; n: number }>({ kind: null, n: 0 });
   const openStock = (kind: 'receive' | 'godowns' | 'move', productId?: string | null) => setStockUI((s) => ({ kind, productId, n: s.n + 1 }));
   const closeStock = () => setStockUI((s) => ({ ...s, kind: null }));
+  const canStock = can('products:create') || can('stock:adjust');
+  const canGodowns = can('stock:adjust');
   const rows = useMemo(() => products.filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => a.name.localeCompare(b.name)), [products, query]);
   const soldCount = (id: string) => invoices.reduce((a, i) => a + i.items.filter((it) => it.productId === id).reduce((x, it) => x + (it.qty ?? it.kg), 0), 0);
   const canDelete = can('delete_records');
@@ -30,9 +34,9 @@ export const ItemsScreen: React.FC = () => {
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{products.length} item{products.length === 1 ? '' : 's'} with fixed prices. Prices can still be changed on a bill line.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => openStock('receive')} className={secondaryBtn}><PackagePlus className="w-4 h-4 text-teal-700" /> Receive stock</button>
-          <button type="button" onClick={() => openStock('godowns')} className={secondaryBtn}><Warehouse className="w-4 h-4 text-indigo-600" /> Godowns{godowns.length > 1 ? ` (${godowns.length})` : ''}</button>
-          {godowns.length > 1 && <button type="button" onClick={() => openStock('move')} className={secondaryBtn}><ArrowRightLeft className="w-4 h-4 text-amber-600" /> Move stock</button>}
+          {canStock && <button type="button" onClick={() => openStock('receive')} className={secondaryBtn}><PackagePlus className="w-4 h-4 text-teal-700" /> Receive stock</button>}
+          {canGodowns && <button type="button" onClick={() => openStock('godowns')} className={secondaryBtn}><Warehouse className="w-4 h-4 text-indigo-600" /> Godowns{godowns.length > 1 ? ` (${godowns.length})` : ''}</button>}
+          {godowns.length > 1 && canStock && <button type="button" onClick={() => openStock('move')} className={secondaryBtn}><ArrowRightLeft className="w-4 h-4 text-amber-600" /> Move stock</button>}
           <button type="button" onClick={() => ui.newItem()} className={primaryBtn}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> New item</button>
         </div>
       </div>
@@ -63,10 +67,14 @@ export const ItemsScreen: React.FC = () => {
                         <div className="hidden sm:block"><ItemStockDetails product={p} /></div>
                       </td>
                       <td className="px-4 py-3 text-right font-mono font-bold text-[#111827] dark:text-white">{rs(p.unitPricePerKg)}</td>
-                      <td className={`px-4 py-3 text-right font-mono ${low ? 'text-rose-700 dark:text-rose-300 font-bold' : 'text-[#374151] dark:text-[#CBD5E1]'}`}>{low && <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />}{p.stockKg.toLocaleString()} {p.unit || 'pcs'}</td>
+                      <td className={`px-4 py-3 text-right font-mono ${low ? 'text-rose-700 dark:text-rose-300 font-bold' : 'text-[#374151] dark:text-[#CBD5E1]'}`}>{low && <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />}{p.stockKg.toLocaleString()} {p.unit || 'pcs'}{(() => {
+                        // Expired batches are still counted in stock but can't be sold: say so next to the figure.
+                        const expired = stockBatches.filter((b) => b.productId === p.id && b.qty > 0 && isExpired(b, todayISO())).reduce((a, b) => a + b.qty, 0);
+                        return expired > 0 ? <span className="block text-[11px] font-sans font-semibold text-rose-700 dark:text-rose-300">{expired.toLocaleString()} expired, can't be sold</span> : null;
+                      })()}</td>
                       <td className="px-4 py-3 text-right font-mono text-[#6B7280] dark:text-[#94A3B8] hidden sm:table-cell">{soldCount(p.id).toLocaleString()}</td>
                       <td className="px-2 py-3 text-right whitespace-nowrap">
-                        <button type="button" onClick={() => openStock('receive', p.id)} aria-label={`Receive stock for ${p.name}`} title="Receive stock" className="p-2 rounded-xl text-[#9CA3AF] hover:text-teal-700"><PackagePlus className="w-4 h-4" /></button>
+                        {canStock && <button type="button" onClick={() => openStock('receive', p.id)} aria-label={`Receive stock for ${p.name}`} title="Receive stock" className="p-2 rounded-xl text-[#9CA3AF] hover:text-teal-700"><PackagePlus className="w-4 h-4" /></button>}
                         <button type="button" onClick={() => ui.editItem(p.id)} aria-label={`Edit ${p.name}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-[#111827] dark:hover:text-white"><Pencil className="w-4 h-4" /></button>
                         {canDelete && <button type="button" onClick={() => setPending(p)} aria-label={`Delete ${p.name}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}
                       </td>

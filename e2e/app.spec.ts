@@ -68,13 +68,12 @@ test.describe.serial('Sarmaya end-to-end', () => {
     // Customer
     await page.getByRole('button', { name: 'Customers' }).first().click();
     await page.getByRole('button', { name: 'Add Customer' }).click();
-    const custForm = page.locator('form').last();
-    const ci = custForm.locator('input');
-    await ci.nth(0).fill('Ali Raza');
-    await ci.nth(1).fill('Raza Traders');
-    await ci.nth(2).fill('+92 300 2222222');
-    await ci.nth(3).fill('5000000');
-    await custForm.getByRole('button', { name: /Create Account/ }).click();
+    const custForm = page.getByRole('dialog', { name: 'New customer' });
+    await custForm.getByLabel('Name', { exact: true }).fill('Ali Raza');
+    await custForm.getByLabel('Shop / business name (optional)').fill('Raza Traders');
+    await custForm.getByLabel('Phone', { exact: true }).fill('+92 300 2222222');
+    await custForm.getByLabel('Credit limit in Rs. (optional)').fill('5000000');
+    await custForm.getByRole('button', { name: 'Save customer' }).click();
     await expect(page.getByText('Raza Traders')).toBeVisible();
 
     // Fleet vehicle

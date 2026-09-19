@@ -18,7 +18,7 @@ const num = (v: string) => {
 };
 
 /** Manual journal entry: any number of lines, saves only when debits equal credits. */
-export const JournalEntryModal: React.FC<{ isOpen: boolean; onClose: () => void; accounts: Account[] }> = ({ isOpen, onClose, accounts }) => {
+export const JournalEntryModal: React.FC<{ isOpen: boolean; onClose: () => void; accounts: Account[]; onSaved?: (message: string) => void }> = ({ isOpen, onClose, accounts, onSaved }) => {
   const { addManualJournal, settings } = useTrading();
   const [date, setDate] = useState(todayISO());
   const [ref, setRef] = useState('');
@@ -48,6 +48,7 @@ export const JournalEntryModal: React.FC<{ isOpen: boolean; onClose: () => void;
       setError(r.message);
       return;
     }
+    onSaved?.(r.message);
     onClose();
   };
 

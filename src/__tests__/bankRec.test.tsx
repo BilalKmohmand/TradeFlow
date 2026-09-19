@@ -268,3 +268,15 @@ describe('review fixes: cut-off at the statement date, deleted records', () => {
     expect(s.unrecorded).toEqual([]);
   });
 });
+
+describe('statement separators', () => {
+  it('reads semicolon and tab separated bank exports as well as commas', () => {
+    const semi = parseCsv('Txn Date;Narration;Withdrawal;Deposit;Balance\n01-03-2026;ATM;2,000;;98000\n02-03-2026;IBFT Ali;;5,000;103000\n');
+    expect(semi[0]).toEqual(['Txn Date', 'Narration', 'Withdrawal', 'Deposit', 'Balance']);
+    expect(semi[1]).toEqual(['01-03-2026', 'ATM', '2,000', '', '98000']);
+    const tab = parseCsv('Date\tDescription\tAmount\n05/03/2026\tDeposit\t30000\n');
+    expect(tab[1]).toEqual(['05/03/2026', 'Deposit', '30000']);
+    const comma = parseCsv('Date,Description,Amount\n05/03/2026,"Rent; March",-500\n');
+    expect(comma[1]).toEqual(['05/03/2026', 'Rent; March', '-500']);
+  });
+});

@@ -88,7 +88,7 @@ export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
             <input id="item-min" type="number" inputMode="decimal" min="0" step="any" value={minStock} onChange={(e) => setMinStock(e.target.value)} className={`${inputCls} font-mono`} placeholder="0 = never" />
           </div>
           <label className="col-span-2 flex items-start gap-3 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] px-3.5 py-3 cursor-pointer">
-            <input type="checkbox" checked={trackBatches} onChange={(e) => setTrackBatches(e.target.checked)} className="mt-0.5 w-4 h-4 accent-teal-700" />
+            <input type="checkbox" checked={trackBatches} onChange={(e) => setTrackBatches(e.target.checked)} className="mt-0.5 w-5 h-5 shrink-0 accent-teal-700" />
             <span>
               <span className="block text-sm font-semibold text-[#111827] dark:text-white">Track batch &amp; expiry</span>
               <span className="block text-[11px] text-[#6B7280] dark:text-[#94A3B8]">Receive stock with a batch number and expiry date. Bills use the batch that expires first and never sell expired stock.</span>
