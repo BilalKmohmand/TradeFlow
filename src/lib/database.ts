@@ -20,6 +20,9 @@ import {
   Invoice,
   LedgerEntry,
   WhatsAppMessage,
+  Godown,
+  StockBatch,
+  StockTransfer,
 } from '../types';
 
 export interface AppData {
@@ -44,6 +47,10 @@ export interface AppData {
   invoices: Invoice[] | null;
   ledger: LedgerEntry[];
   whatsappMessages: WhatsAppMessage[];
+  /** Inventory (migration v11). null when the table does not exist yet. */
+  godowns: Godown[] | null;
+  stockBatches: StockBatch[] | null;
+  stockTransfers: StockTransfer[] | null;
 }
 
 export type TableName =
@@ -66,7 +73,10 @@ export type TableName =
   | 'tasks'
   | 'invoices'
   | 'ledger'
-  | 'whatsapp_messages';
+  | 'whatsapp_messages'
+  | 'godowns'
+  | 'stock_batches'
+  | 'stock_transfers';
 
 export const ALL_TABLES: TableName[] = [
   'customers',
@@ -89,6 +99,9 @@ export const ALL_TABLES: TableName[] = [
   'invoices',
   'ledger',
   'whatsapp_messages',
+  'godowns',
+  'stock_batches',
+  'stock_transfers',
 ];
 
 // ---------------------------------------------------------------------------
@@ -161,7 +174,7 @@ const stripLegacy = <T,>(rows: T[]): T[] =>
   });
 
 /** Tables that may be missing on a project that has not run the migration yet. */
-const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices'];
+const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'godowns', 'stock_batches', 'stock_transfers'];
 
 /** Read a whole table in pages (PostgREST caps a single select at 1000 rows). */
 const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { message: string } | null }> => {
@@ -177,7 +190,7 @@ const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { m
 };
 
 export const loadAllData = async (): Promise<AppData> => {
-  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, cashEntries, settings, quotations, purchaseOrders, returns, adjustments, tasks, invoices, ledger, whatsappMessages] =
+  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, cashEntries, settings, quotations, purchaseOrders, returns, adjustments, tasks, invoices, ledger, whatsappMessages, godowns, stockBatches, stockTransfers] =
     await Promise.all([
       fetchAll('customers'),
       fetchAll('suppliers'),
@@ -199,6 +212,9 @@ export const loadAllData = async (): Promise<AppData> => {
       fetchAll('invoices'),
       fetchAll('ledger'),
       fetchAll('whatsapp_messages'),
+      fetchAll('godowns'),
+      fetchAll('stock_batches'),
+      fetchAll('stock_transfers'),
     ]);
 
   const maybeThrow = (result: { error?: { message: string } | null }, label: TableName) => {
@@ -231,6 +247,9 @@ export const loadAllData = async (): Promise<AppData> => {
   maybeThrow(invoices, 'invoices');
   maybeThrow(ledger, 'ledger');
   maybeThrow(whatsappMessages, 'whatsapp_messages');
+  maybeThrow(godowns, 'godowns');
+  maybeThrow(stockBatches, 'stock_batches');
+  maybeThrow(stockTransfers, 'stock_transfers');
 
   return {
     customers: (customers.data || []) as Customer[],
@@ -253,6 +272,9 @@ export const loadAllData = async (): Promise<AppData> => {
     invoices: invoices.error ? null : ((invoices.data || []) as Invoice[]),
     ledger: stripLegacy((ledger.data || []).map(normalizeLedger)),
     whatsappMessages: (whatsappMessages.data || []) as WhatsAppMessage[],
+    godowns: godowns.error ? null : ((godowns.data || []) as Godown[]),
+    stockBatches: stockBatches.error ? null : ((stockBatches.data || []).map((r: any) => ({ ...r, qty: num(r.qty) })) as StockBatch[]),
+    stockTransfers: stockTransfers.error ? null : ((stockTransfers.data || []) as StockTransfer[]),
   };
 };
 

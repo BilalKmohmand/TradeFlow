@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useTrading } from '../../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice } from './ui';
+import { mainLooseQty } from '../../utils/inventory';
 
 export const UNITS = ['pcs', 'kg', 'bag', 'box', 'can', 'tin', 'litre', 'dozen', 'carton', 'ton'];
 
@@ -12,7 +13,7 @@ interface Props {
 
 /** Add or edit an item: name, unit, fixed selling price, stock on hand, low-stock alert level. */
 export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
-  const { products, addProduct, updateProduct, can } = useTrading();
+  const { products, addProduct, updateProduct, can, stockBatches } = useTrading();
   const editing = editId ? products.find((p) => p.id === editId) : undefined;
   const [name, setName] = useState(editing?.name || '');
   const [unit, setUnit] = useState(editing?.unit || 'pcs');
@@ -20,6 +21,9 @@ export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
   const [cost, setCost] = useState(editing?.costPricePerKg != null ? String(editing.costPricePerKg) : '');
   const [stock, setStock] = useState(editing ? String(editing.stockKg) : '');
   const [minStock, setMinStock] = useState(editing ? String(editing.minThresholdKg) : '');
+  const [trackBatches, setTrackBatches] = useState(Boolean(editing?.trackBatches));
+  // Stock held in batches or other godowns (the stock field is the total across all of them).
+  const heldElsewhere = editing ? Math.round((editing.stockKg - mainLooseQty(editing, stockBatches)) * 100) / 100 : 0;
   const [error, setError] = useState('');
   const busy = useRef(false);
 
@@ -39,6 +43,8 @@ export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
       costPricePerKg: cost.trim() ? parseFloat(cost) || 0 : undefined,
       stockKg: parseFloat(stock) || 0,
       minThresholdKg: parseFloat(minStock) || 0,
+      // Only write the flag when it is (or was) on, so shops that never use batches keep their data shape.
+      ...(trackBatches || editing?.trackBatches != null ? { trackBatches } : {}),
     };
     if (editing) updateProduct(editing.id, data);
     else if (products.some((x) => x.name.toLowerCase() === data.name.toLowerCase())) return setError('An item with this name already exists.');
@@ -70,11 +76,19 @@ export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
           <div>
             <label className={labelCls} htmlFor="item-stock">Stock on hand</label>
             <input id="item-stock" type="number" inputMode="decimal" min="0" step="any" value={stock} onChange={(e) => setStock(e.target.value)} className={`${inputCls} font-mono`} placeholder="0" />
+            {heldElsewhere > 0 && <p className="text-[11px] text-[#8E9299] mt-1">Total of all godowns; {heldElsewhere} is in batches or other godowns. Use Receive stock to add a batch.</p>}
           </div>
           <div className="col-span-2">
             <label className={labelCls} htmlFor="item-min">Warn me when stock drops below</label>
             <input id="item-min" type="number" inputMode="decimal" min="0" step="any" value={minStock} onChange={(e) => setMinStock(e.target.value)} className={`${inputCls} font-mono`} placeholder="0 = never" />
           </div>
+          <label className="col-span-2 flex items-start gap-3 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] px-3.5 py-3 cursor-pointer">
+            <input type="checkbox" checked={trackBatches} onChange={(e) => setTrackBatches(e.target.checked)} className="mt-0.5 w-4 h-4 accent-teal-700" />
+            <span>
+              <span className="block text-sm font-semibold text-[#111827] dark:text-white">Track batch &amp; expiry</span>
+              <span className="block text-[11px] text-[#6B7280] dark:text-[#94A3B8]">Receive stock with a batch number and expiry date. Bills use the batch that expires first and never sell expired stock.</span>
+            </span>
+          </label>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className={secondaryBtn}>Cancel</button>

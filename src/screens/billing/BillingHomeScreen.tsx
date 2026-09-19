@@ -7,10 +7,12 @@ import { collectCashMovements, accountBalancesOn, positionSummary } from '../../
 import { daySummary, billsOnly } from '../../utils/billing';
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
+import { ExpiryAttention } from '../../components/billing/InventoryUI';
+import { expiryAlerts } from '../../utils/inventory';
 
 /** The first screen every morning: today's numbers, the four buttons you press all day, recent bills. */
 export const BillingHomeScreen: React.FC = () => {
-  const { invoices, ledger, expenses, cashEntries, customers, suppliers, products, settings, setActiveScreen, currentUser, can, updateSettings } = useTrading();
+  const { invoices, ledger, expenses, cashEntries, customers, suppliers, products, settings, setActiveScreen, currentUser, can, updateSettings, stockBatches } = useTrading();
   const isAdmin = can('admin_screen') || can('system:admin_screen');
   const ui = useBillingUI();
   const today = todayISO();
@@ -21,6 +23,7 @@ export const BillingHomeScreen: React.FC = () => {
   const recent = useMemo(() => billsOnly(invoices).sort((a, b) => (a.issueDate < b.issueDate ? 1 : a.issueDate > b.issueDate ? -1 : b.createdAt.localeCompare(a.createdAt))).slice(0, 8), [invoices]);
   const lowStock = products.filter((p) => p.minThresholdKg > 0 && p.stockKg <= p.minThresholdKg);
   const unpaid = billsOnly(invoices).filter((i) => i.balanceDue > 0);
+  const expiring = useMemo(() => expiryAlerts(stockBatches, products, today).length, [stockBatches, products, today]);
 
   return (
     <div className="space-y-6">
@@ -83,10 +86,11 @@ export const BillingHomeScreen: React.FC = () => {
             <div className="flex justify-between text-sm"><span className="text-[#6B7280] dark:text-[#94A3B8]">You owe others</span><span className="font-mono font-bold text-rose-700 dark:text-rose-300">{rs(position.payables)}</span></div>
             <button type="button" onClick={() => setActiveScreen('money')} className="text-xs font-bold text-teal-700 dark:text-teal-300 inline-flex items-center gap-1">Money screen <ChevronRight className="w-3.5 h-3.5" /></button>
           </div>
-          {(unpaid.length > 0 || lowStock.length > 0) && (
+          {(unpaid.length > 0 || lowStock.length > 0 || expiring > 0) && (
             <div className={`${cardCls} p-5 space-y-2`}>
               <h2 className="font-bold text-[#111827] dark:text-white flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-amber-600" /> Needs attention</h2>
               {unpaid.length > 0 && <button type="button" onClick={() => setActiveScreen('bills')} className="block w-full text-left text-sm text-[#374151] dark:text-[#CBD5E1] hover:text-[#111827] dark:hover:text-white">{unpaid.length} unpaid bill{unpaid.length === 1 ? '' : 's'} worth <strong className="font-mono">{rs(unpaid.reduce((a, i) => a + i.balanceDue, 0))}</strong></button>}
+              <ExpiryAttention onOpen={() => setActiveScreen('products')} />
               {lowStock.slice(0, 4).map((p) => (
                 <button key={p.id} type="button" onClick={() => setActiveScreen('products')} className="block w-full text-left text-sm text-[#374151] dark:text-[#CBD5E1] hover:text-[#111827] dark:hover:text-white">Low stock: <strong>{p.name}</strong> ({p.stockKg} {p.unit || 'pcs'} left)</button>
               ))}

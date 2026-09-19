@@ -16,6 +16,17 @@ The full bulk-trading ERP is still there and shares the same data — day to day
 | **Items & Prices** | The price list: name, sold-per unit, fixed price, cost price, stock and low-stock level. |
 | **Customers / Suppliers / Admin** | Unchanged from the trading suite: accounts, ledgers, statements, users, roles, backups. |
 
+### Batches, expiry dates and godowns
+
+For shops that need it (edible oil and ghee in cans and tins expire), and invisible for those that don't — a shop with one godown and no batch items sees the same screens as before.
+
+- **Track batch & expiry** — a switch on each item. Stock for that item is then received as batches (batch no., expiry date) with **Items → Receive stock** (header button, or the box icon on an item row). A receipt can also carry a cost price and a supplier; with both, it is booked as a purchase owed to that supplier, so the supplier balance and the Money screen stay right.
+- **Bills sell first-expiry-first-out.** The New Bill form shows which batch each line will use; expired batches are never sold, and if only expired stock is left the bill is refused with a clear message. The batches are saved on the bill line, printed under the item (*Batch X · Exp dd-mm-yyyy*), and a deleted bill puts the quantity back into exactly those batches.
+- **Godowns** — **Items → Godowns** to add, rename or delete godowns (a godown with stock in it can't be deleted; the main godown always exists) and **Move stock** between them (qty, date, note; logged). With two or more godowns the Items screen shows stock per godown, receipts ask *Into godown* and New Bill asks *From godown*.
+- **Home → Needs attention** lists expired batches (red) and batches expiring within 30 days (amber).
+
+How the numbers stay consistent: an item's `stockKg` is always the **total** across godowns, so every report and the trading suite keep working. Batches and stock in other godowns are rows in `stock_batches`; whatever is not in a row is plain stock in the main godown. Existing items therefore start with all their stock in the main godown and no batches — nothing to convert. If something outside the billing screens lowers the total (a trading dispatch, an edited stock count), the difference comes out of the batches earliest-expiry first.
+
 Printed bills follow the classic layout — INVOICE, number, date, Bill From / Bill To, Description · Qty · Price · Amount, Subtotal, Total in Rs., paid and balance. A full function-by-function guide is in [`docs/GUIDE.md`](docs/GUIDE.md).
 
 ## Installing it as a mobile app (PWA)
@@ -108,6 +119,8 @@ npm run test:e2e  # real-browser end-to-end flow in the installed Google Chrome 
 npm run check     # build + type-check + unit tests + e2e (what CI should run)
 ```
 
+`e2e/inventory.spec.ts` turns on batch tracking, receives two batches with different expiry dates (one on credit from a supplier), checks the expiring-soon alert on Home, makes a bill that uses the earlier-expiring batch and prints it, adds a second godown, moves stock there and bills from it — on desktop and a 390px phone. Run e2e on your own port with `E2E_PORT=4192 npx playwright test` when several checkouts share a machine.
+
 The billing suite (`e2e/billing.spec.ts`) makes the client's sample invoice, a credit bill with an inline new customer and an edited price, takes part payments, adds an expense from the daily sheet, prints the bill and the daily sheet, moves cash to the bank, checks the money position, adds an item, switches app mode and reloads — on desktop and on a 390px phone. The trading suite (`e2e/app.spec.ts`) unlocks the app, factory-resets, creates a user, supplier, product, customer and vehicle, books, dispatches with a fleet vehicle, receives stock, records an expense, checks the dashboard, P&L, aging, stock flow, invoice preview, price history and monthly sales, then signs in as an operator to verify hidden admin/delete controls, and checks the mobile layout. Screenshots land in `e2e/screenshots/`.
 
 Unit and integration tests live in `src/__tests__/` and cover the finance maths (cost basis, P&L, aging, credit exposure), stock-flow grouping, price-history comparisons, alerts, and an integration suite that drives the real `TradingProvider` through bookings, dispatches, purchases, payments, cascading deletes with reversals, booking edits/cancellation, roles and permissions, plus App-level tests for navigation, the print preview and Escape handling.
@@ -126,6 +139,7 @@ Run the SQL files in `supabase/` in this order on an existing project:
 6. `migrate_v7_master_pin_sync.sql` (once) — master PIN and user account columns synced through cloud settings.
 7. `migrate_v8_simple_billing.sql` (once) — invoices/bills table, product unit, app mode and opening bank balance in settings.
 8. `migrate_v9_billing_integrity.sql` (once) — cost price on items, ledger source/method columns, paired cash↔bank transfers.
+9. `migrate_v11_inventory.sql` (once) — godowns, stock batches with expiry, stock transfers, and the item's `trackBatches` flag. Existing data needs no conversion. Run it before turning on batch tracking on a cloud-synced shop (the products sync needs the new column).
 
 New projects can run `schema.sql` instead, which already contains everything.
 

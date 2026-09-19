@@ -30,6 +30,15 @@ Input: `customerId` (or `newCustomer: {name, phone}` to create one on the spot),
 7. **Ledger**: a `bill_issued` debit for the total and, if anything was paid, a `payment_received` credit whose description is `Payment received: <method> - Bill INV-n` — the cash book reads the method out of that text.
 8. Audit-log entry. Returns `{success, message, invoice}` so the dialog can print it.
 
+### Batches, expiry and godowns (`src/context/inventoryStore.ts`, `src/utils/inventory.ts`)
+Model: `product.stockKg` is the total across godowns. `StockBatch` rows hold stock in a batch (`batchNo`, optional `expiryDate`) or plain stock in a godown other than the main one (`batchNo: ''`). Main-godown plain stock is implied: `stockKg − Σ rows`. A reconcile step keeps rows within the total when an older action (trading dispatch, stock count, edited stock) lowers it — main godown first, earliest expiry first — and drops rows of deleted items.
+- `createBill` with `godownId` (optional) plans stock with `planBillStock`: plain items from the main godown behave exactly as before (can go negative). Batch items take not-expired batches earliest expiry first, then plain stock; not enough usable stock (or only expired stock) refuses the bill with a message. Other godowns can't be oversold. Each line records `godownId` (when not the main godown) and `batches: [{batchId, batchNo, expiryDate, qty}]`.
+- `deleteBill` returns the quantity to exactly those batches (recreated if they were removed) and to the line's godown.
+- `receiveStock({productId, godownId?, qty, batchNo?, expiryDate?, costPrice?, supplierId?, date?})` — raises `stockKg`, adds a batch (batch items; number auto-filled when empty) or plain stock in the chosen godown. With a supplier **and** cost it goes through `addPurchase`, so the supplier payable and ledger update like a trading goods receipt.
+- `transferStock({productId, fromGodownId, toGodownId, qty, date?, note?})` — moves good stock first (batches keep number and expiry), then plain, then expired; refuses more than the godown holds; logs a `StockTransfer`. Total stock never changes.
+- `addGodown(name, address?)`, `updateGodown(id, {name, address})`, `deleteGodown(id)` — the main godown is implied until first edited, can be renamed, never deleted; a godown with stock can't be deleted.
+- Stored in localStorage (`tradeflow_godowns_v1`, `tradeflow_stock_batches_v1`, `tradeflow_stock_transfers_v1`) and the Supabase tables `godowns`, `stock_batches`, `stock_transfers` (`supabase/migrate_v11_inventory.sql`); included in backups, purge and factory reset.
+
 ### `payBill(invoiceId, amount, method, notes?, date?)`
 Refuses zero or more than the remaining balance. Adds a payment record to the bill, updates `paidAmount` / `balanceDue` / status (`partial` → `paid`), reduces the customer's `totalDue`, writes a `payment_received` ledger line with the method (so it lands in cash or bank), logs it.
 
@@ -105,7 +114,7 @@ Date picker with previous/next day. Tiles: opening cash, cash in, cash out, clos
 
 
 ### Items & Prices (`ItemsScreen`)
-Table of items with price, stock (red with a warning when at or below the low-stock level) and all-time sold quantity. Edit and delete per row; New item.
+Table of items with price, stock (red with a warning when at or below the low-stock level) and all-time sold quantity. Edit and delete per row; New item. **Receive stock** (header and per row), **Godowns** (add / rename / delete, recent moves) and **Move stock** (with two or more godowns). Under each item: stock per godown (two or more godowns) and its live batches with expiry badges — red when expired, amber within 30 days. The item dialog has the **Track batch & expiry** switch.
 ![Items & Prices](screenshots/13-items.jpg)
 
 
@@ -187,5 +196,7 @@ Admin → System & Backups → App mode → *Full trading suite* switches the na
 ## 10. Tests
 
 - `src/__tests__/billing.test.tsx` — bill maths against the client's sample invoice (300 × 2,065 + 300 × 1,037.5 + 40 × 6,535 = 1,192,150), stock and customer effects, discount and cash-book routing by method, sequential numbering, part payments and refusal of over-payment, delete reversal, cash↔bank transfer, the daily sheet's opening/closing/grouping, the money position, and bill filtering.
+- `src/__tests__/inventory.test.tsx` — FEFO allocation across batches (and across two lines of one bill), expired batches skipped and a clear refusal when only expired stock is left, bill delete restoring the exact batches, transfers keeping the total, bills from a second godown, `stockKg` always equal to the sum over godowns, plain items unchanged, godown delete rules, backup round trip, expiry helpers.
+- `e2e/inventory.spec.ts` — batch tracking on, two batches received, expiring-soon alert on Home, the earlier-expiring batch used and printed on the bill, a second godown, a stock move and a bill from it; desktop and a 390px phone with no sideways scroll.
 - `e2e/billing.spec.ts` — the full desktop flow and a 390px phone flow in real Chrome, with screenshots in `e2e/screenshots/billing-*.png`.
 - `npm run check` builds, type-checks, runs unit tests and all Playwright specs.

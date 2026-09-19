@@ -76,6 +76,7 @@ import {
   normalizeLedger,
 } from '../lib/database';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { useInventoryStore, InventoryApi, INVENTORY_STORAGE_KEYS } from './inventoryStore';
 import {
   initialCustomers,
   initialSuppliers,
@@ -86,7 +87,7 @@ import {
   initialWhatsAppMessages,
 } from '../data/initialData';
 
-interface TradingContextType {
+interface TradingContextType extends InventoryApi {
   customers: Customer[];
   suppliers: Supplier[];
   products: Product[];
@@ -399,6 +400,8 @@ export interface CreateBillInput {
   paymentMethod?: string;
   notes?: string;
   date?: string;
+  /** Godown the stock is taken from (default: the main godown). */
+  godownId?: string;
 }
 
 /** Payment methods offered on bills. Anything starting with "Cash" counts as cash in hand. */
@@ -609,6 +612,7 @@ const STORAGE_KEYS = {
   SESSION_USER: 'sarmaya_current_user_v1',
   INVOICES: 'tradeflow_invoices_v1',
   AGREED_RATES: 'tradeflow_agreed_rates_v1',
+  ...INVENTORY_STORAGE_KEYS,
 };
 
 /**
@@ -767,6 +771,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setWhatsappMessages(data.whatsappMessages);
         // Bills: only when the cloud table exists (migration v8); otherwise keep local copies.
         if (data.invoices) setInvoices(data.invoices);
+        // Godowns / batches / transfers: only when the cloud tables exist (migration v11).
+        inventory.hydrate({ godowns: data.godowns, stockBatches: data.stockBatches, stockTransfers: data.stockTransfers }, { keepLocalIfEmpty: true });
         setIsCloudSyncReady(true);
       })
       .catch((err) => {
@@ -1512,6 +1518,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ledger: () => setLedger([]),
       whatsapp_messages: () => setWhatsappMessages([]),
       invoices: () => setInvoices([]),
+      ...inventory.purgeSetters,
     };
     setters[table]();
     if (isCloudSyncReady) void clearTable(table);
@@ -3033,6 +3040,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const items = (input.items || []).filter((it) => it.productId && it.qty > 0);
     if (items.length === 0) return { success: false, message: 'Add at least one item with a quantity.' };
     if (items.some((it) => !(it.unitPrice >= 0))) return { success: false, message: 'A price cannot be negative.' };
+    // Where the stock comes from (godown, batches first-expiry-first-out). Plain items are unchanged.
+    const stockPlan = inventory.planBill(items, input.godownId, input.date || todayISO());
+    if (!stockPlan.ok) return { success: false, message: stockPlan.message || 'Not enough stock.' };
     let customer = customers.find((c) => c.id === input.customerId);
     if (!customer && input.newCustomer?.name.trim()) {
       const name = input.newCustomer.name.trim();
@@ -3055,9 +3065,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const balanceDue = round2(totalAmount - paidAmount);
     const method = input.paymentMethod || 'Cash';
     const invoiceNumber = nextBillNumber(invoicesRef.current);
-    const invoiceItems: InvoiceItem[] = items.map((it) => {
+    const invoiceItems: InvoiceItem[] = items.map((it, idx) => {
       const product = products.find((p) => p.id === it.productId);
       return {
+        ...stockPlan.lines[idx],
         id: uid('bi'),
         productId: it.productId,
         productName: it.name || product?.name || 'Item',
@@ -3110,6 +3121,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return sold > 0 ? { ...p, stockKg: round2(p.stockKg - sold) } : p;
       })
     );
+    inventory.applyBill(stockPlan);
 
     // Customer account: bill goes on, cash paid now comes off.
     const dueAfterBill = round2((customer.totalDue || 0) + totalAmount);
@@ -3203,6 +3215,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return qty > 0 ? { ...p, stockKg: round2(p.stockKg + qty) } : p;
       })
     );
+    inventory.restoreBill(inv);
     setCustomers((prev) => prev.map((c) => (c.id === inv.customerId ? { ...c, totalDue: Math.max(0, round2(c.totalDue - inv.balanceDue)) } : c)));
     const ledgerIds = ledger.filter((l) => l.entityType === 'customer' && (l.sourceId ? l.sourceId === inv.id : l.referenceId === inv.invoiceNumber && l.entityId === inv.customerId)).map((l) => l.id);
     setLedger((prev) => prev.filter((l) => !ledgerIds.includes(l.id)));
@@ -3651,6 +3664,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ledger,
       whatsappMessages,
       invoices,
+      ...inventory.backupData(),
       auditLogs,
     };
     const jsonString = JSON.stringify(backupData, null, 2);
@@ -3710,6 +3724,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (Array.isArray(data.ledger)) setLedger(data.ledger.map(normalizeLedger));
       if (Array.isArray(data.whatsappMessages)) setWhatsappMessages(data.whatsappMessages);
       if (Array.isArray(data.invoices)) setInvoices(data.invoices);
+      inventory.hydrate({ godowns: data.godowns ?? [], stockBatches: data.stockBatches ?? [], stockTransfers: data.stockTransfers ?? [] });
       if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
       logAuditEvent('Backup Restored', 'Full system database restored from JSON backup.', 'warning');
       };
@@ -3741,6 +3756,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLedger([]);
     setWhatsappMessages([]);
     setInvoices([]);
+    inventory.reset();
     localStorage.removeItem(STORAGE_KEYS.INVOICES);
     [STORAGE_KEYS.QUOTES, STORAGE_KEYS.POS, STORAGE_KEYS.RETURNS, STORAGE_KEYS.ADJUSTMENTS, STORAGE_KEYS.TASKS].forEach((k) => localStorage.removeItem(k));
     localStorage.removeItem(STORAGE_KEYS.CASH);
@@ -3758,9 +3774,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     logAuditEvent('Factory Data Purged', 'Administrator performed complete system wipe.', 'danger');
   };
 
+  const inventory = useInventoryStore({ products, setProducts, suppliers, addPurchase, logAuditEvent, userName: currentUser?.name, isCloudSyncReady, syncToSupabase, removeRemote });
+
   return (
     <TradingContext.Provider
       value={{
+        ...inventory.api,
         customers,
         suppliers,
         products,

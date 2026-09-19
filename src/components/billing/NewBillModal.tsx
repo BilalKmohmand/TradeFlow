@@ -3,6 +3,7 @@ import { Plus, Trash2, Printer, Save, UserPlus } from 'lucide-react';
 import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice, rs } from './ui';
 import { todayISO } from '../../utils/stockFlow';
+import { planBillStock, batchLines, stockByGodown } from '../../utils/inventory';
 
 interface Row {
   key: string;
@@ -25,7 +26,8 @@ interface Props {
  * but can be changed per line), enter what was paid now, save or save-and-print.
  */
 export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) => {
-  const { customers, products, settings, createBill, setPrintRequest } = useTrading();
+  const { customers, products, settings, createBill, setPrintRequest, godowns, stockBatches } = useTrading();
+  const [godownId, setGodownId] = useState(godowns[0]?.id || '');
   const [customer, setCustomer] = useState(customerId || '');
   const [newCustomer, setNewCustomer] = useState<{ name: string; phone: string } | null>(null);
   const [date, setDate] = useState(todayISO());
@@ -53,6 +55,23 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
     const p = products.find((x) => x.id === r.productId);
     return { ...r, qty, price, amount: qty * price, product: p };
   });
+  // Where each line's stock would come from (batch items, or a godown other than the main one).
+  const stockNote = (l: (typeof lines)[number]): { warn: boolean; text: string } | null => {
+    if (!l.product || l.qty <= 0) return null;
+    const unit = l.product.unit || 'pcs';
+    if (!l.product.trackBatches && godowns.length < 2) {
+      return l.qty > l.product.stockKg ? { warn: true, text: `Only ${l.product.stockKg} ${unit} of ${l.product.name} in stock — the bill will still save.` } : null;
+    }
+    const plan = planBillStock(products, stockBatches, godowns, [{ productId: l.product.id, qty: l.qty }], godownId, date);
+    if (!plan.ok) return { warn: true, text: plan.message || 'Not enough stock.' };
+    const from = batchLines({ ...plan.lines[0] });
+    if (from.length) return { warn: false, text: `From ${from.join(', ')}` };
+    if (godowns.length > 1) {
+      const have = stockByGodown(l.product, stockBatches, godowns)[godownId] ?? 0;
+      if (l.qty > have) return { warn: true, text: `Only ${have} ${unit} of ${l.product.name} in this godown — the bill will still save.` };
+    }
+    return null;
+  };
   const subtotal = lines.reduce((a, l) => a + l.amount, 0);
   const disc = Math.min(Math.max(0, parseFloat(discount) || 0), subtotal);
   const taxRate = settings.taxRatePct ?? 0;
@@ -83,6 +102,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
       paymentMethod: method,
       notes,
       date,
+      godownId: godowns.length > 1 ? godownId : undefined,
     });
     if (!result.success) return setError(result.message);
     onClose();
@@ -134,6 +154,14 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
             <label className={labelCls} htmlFor="bill-date">Date</label>
             <input id="bill-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
           </div>
+          {godowns.length > 1 && (
+            <div className="sm:col-span-3">
+              <label className={labelCls} htmlFor="bill-godown">From godown</label>
+              <select id="bill-godown" value={godownId} onChange={(e) => setGodownId(e.target.value)} className={inputCls}>
+                {godowns.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            </div>
+          )}
         </div>
 
         <div>
@@ -164,9 +192,10 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
                   <input aria-label={`Price ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.price} onChange={(e) => setRow(l.key, { price: e.target.value })} className={`${inputCls} font-mono`} placeholder="Price" />
                 </div>
                 <div className="col-span-3 sm:col-span-2 text-right font-mono font-bold text-sm text-[#111827] dark:text-white"><span className="sm:hidden block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1 font-sans">Amount</span>{rs(l.amount)}</div>
-                {l.product && l.qty > l.product.stockKg && (
-                  <div className="col-span-12 text-[11px] font-semibold text-amber-700 dark:text-amber-300">Only {l.product.stockKg} {l.product.unit || 'pcs'} of {l.product.name} in stock — the bill will still save.</div>
-                )}
+                {(() => {
+                  const note = stockNote(l);
+                  return note ? <div data-testid={`stock-note-${idx + 1}`} className={`col-span-12 text-[11px] font-semibold ${note.warn ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{note.text}</div> : null;
+                })()}
                 <div className="col-span-1 flex justify-end">
                   <button type="button" onClick={() => removeRow(l.key)} aria-label={`Remove item ${idx + 1}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-30" disabled={rows.length === 1}><Trash2 className="w-4 h-4" /></button>
                 </div>
