@@ -150,7 +150,16 @@ In VS Code, install the recommended **Vitest** extension (`.vscode/extensions.js
 
 ## Database migrations
 
-Run the SQL files in `supabase/` in this order on an existing project:
+**Just run [`supabase/setup.sql`](supabase/setup.sql).** Supabase → SQL Editor → New query → paste the whole file → Run. It works on a brand-new project and on one that is part way through: it creates whatever is missing, adds whatever column is missing, and does nothing the second time. It never deletes a table, drops a column or changes a value.
+
+That is the whole setup. The one exception is `migrate_tons_to_kg.sql`, which converts a pre-2026 tons-based database and must be run once, by hand, *before* `setup.sql`; projects created from `setup.sql` or `schema.sql` never need it.
+
+Verified against a real PostgreSQL 16: on an empty database it creates all 27 tables; on a database missing the billing tables it brings it from 19 to 27 with every column the app writes; running it twice reports no errors.
+
+<details>
+<summary>The individual files it is built from, for reference</summary>
+
+Run these in this order only if you want to apply them one at a time — `setup.sql` already contains all of them:
 
 1. `migrate_tons_to_kg.sql` (once) — tons → kg, purchases and price_history tables.
 2. `migrate_v3_enterprise.sql` (once) — expenses, trucks, users tables; booking cancellation and dispatch→truck columns.
@@ -164,7 +173,9 @@ Run the SQL files in `supabase/` in this order on an existing project:
 10. `migrate_v11_inventory.sql` (once) — godowns, stock batches with expiry, stock transfers, and the item's `trackBatches` flag. Existing data needs no conversion. Run it before turning on batch tracking on a cloud-synced shop (the products sync needs the new column).
 11. `migrate_v12_credit_bankrec.sql` (once) — `invoices.creditOverride`, `bank_statement_lines` and `bank_reconciliations` tables (RLS disabled). Both tables are optional: without them bank reconciliation stays on the device.
 
-New projects can run `schema.sql` instead, which already contains everything.
+`schema.sql` alone creates every table for a brand-new project, but it cannot add a missing column to a table you already have — that is why `setup.sql` runs both halves.
+
+</details>
 
 ## Signing in
 
