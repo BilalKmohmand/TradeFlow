@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { signIn } from './helpers/login';
+import { goTo } from './helpers/nav';
 
 /** Billing shop selling oil cans and tins: one plain item (tins) and one that will track batches (cans). */
 const seedInventory = () => {
@@ -34,8 +35,8 @@ const noOverflow = async (page: Page, label: string) => {
   expect(overflow, `${label}: page must not scroll sideways`).toBeLessThanOrEqual(0);
 };
 
-const goItems = (page: Page) => page.getByRole('button', { name: /^Items( & Prices)?$/ }).first().click();
-const goHome = (page: Page) => page.getByRole('button', { name: 'Home', exact: true }).first().click();
+const goItems = (page: Page) => goTo(page, 'Items & Prices');
+const goHome = (page: Page) => goTo(page, 'Home');
 
 async function batchesGodownsAndBills(page: Page) {
   const early = iso(20);
@@ -79,7 +80,7 @@ async function batchesGodownsAndBills(page: Page) {
   await expect(cans).toContainText('EARLY-3');
   await expect(cans).toContainText('LATE-7');
   await expect(cans.locator('[data-expiry="soon"]')).toContainText(dmy(early));
-  await expect(page.getByRole('cell', { name: '80 can', exact: true })).toBeVisible();
+  await expect(page.getByTestId('item-stock-p1')).toHaveText('80 can');
   await noOverflow(page, 'items with batches');
 
   // 3. Home warns about the batch expiring within 30 days.
@@ -107,7 +108,7 @@ async function batchesGodownsAndBills(page: Page) {
   await expect(printed).toHaveCount(0);
 
   await goItems(page);
-  await expect(page.getByRole('cell', { name: '40 can', exact: true })).toBeVisible();
+  await expect(page.getByTestId('item-stock-p1')).toHaveText('40 can');
   await expect(cans).not.toContainText('EARLY-3'); // used up
   await expect(cans).toContainText('LATE-7');
 
@@ -130,7 +131,7 @@ async function batchesGodownsAndBills(page: Page) {
   const tins = page.locator('[data-testid="stock-details-p2"]:visible');
   await expect(tins).toContainText('Main godown: 35');
   await expect(tins).toContainText('Batkhela godown: 10');
-  await expect(page.getByRole('cell', { name: '45 tin', exact: true })).toBeVisible(); // total unchanged
+  await expect(page.getByTestId('item-stock-p2')).toHaveText('45 tin'); // total unchanged
   await noOverflow(page, 'items with two godowns');
 
   // 6. Bill from the second godown.
@@ -148,7 +149,7 @@ async function batchesGodownsAndBills(page: Page) {
   await goItems(page);
   await expect(tins).toContainText('Batkhela godown: 6');
   await expect(tins).toContainText('Main godown: 35');
-  await expect(page.getByRole('cell', { name: '41 tin', exact: true })).toBeVisible();
+  await expect(page.getByTestId('item-stock-p2')).toHaveText('41 tin');
 
   // Survives a reload (local-first).
   await page.reload(); // still signed in ("Keep me signed in")
@@ -189,7 +190,7 @@ test.describe('Receive a supplier delivery with several items', () => {
 
   test('supplier "Receive stock" takes more than one item and adds both to what you owe', async ({ page }) => {
     await unlock(page);
-    await page.getByRole('button', { name: 'Suppliers', exact: true }).first().click();
+    await goTo(page, 'Suppliers');
     await page.getByRole('button', { name: 'Receive stock from Dalda Foods' }).click();
 
     const rcv = page.getByRole('dialog', { name: 'Receive stock' });

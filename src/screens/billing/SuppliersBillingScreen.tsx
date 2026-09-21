@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Phone, PackagePlus, HandCoins, Printer, Pencil, Trash2, Undo2, Clock } from 'lucide-react';
+import { Plus, Search, Phone, PackagePlus, HandCoins, Printer, Pencil, Trash2, Undo2, Clock, Layers } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useStockUI } from '../../components/billing/StockUI';
 import { PurchaseRegisterView } from '../../components/billing/BillingReports';
-import { Modal, Notice, cardCls, inputCls, primaryBtn, secondaryBtn, dangerBtn, rs } from '../../components/billing/ui';
+import { Modal, Notice, cardCls, inputCls, primaryBtn, secondaryBtn, dangerBtn, rs, moneyCls, PageHeader, EmptyState, RowAction, pillCls } from '../../components/billing/ui';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { formatDate } from '../../utils/formatters';
 import { todayISO } from '../../utils/stockFlow';
@@ -46,23 +46,17 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
   };
 
   const tabBtn = (id: Tab, label: string) => (
-    <button type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`px-4 py-2 rounded-2xl text-xs font-bold border whitespace-nowrap ${tab === id ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] border-transparent' : 'bg-white dark:bg-[#101A26] border-[#E5E5E1] dark:border-[#203248] text-[#6B7280] dark:text-[#94A3B8]'}`}>{label}</button>
+    <button type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`${pillCls(tab === id, 'teal')} px-4 text-sm`}>{label}</button>
   );
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-[#111827] dark:text-white">Suppliers</h1>
-          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{suppliers.length} supplier{suppliers.length === 1 ? '' : 's'}{owed > 0 ? ` • you owe ${rs(owed)}` : ''}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {canStock && <button type="button" onClick={() => stock.purchaseReturn()} className={secondaryBtn}><Undo2 className="w-4 h-4 text-rose-600" /> Return goods</button>}
-          <button type="button" onClick={() => stock.aging('suppliers')} className={secondaryBtn}><Clock className="w-4 h-4 text-amber-600" /> How long owed</button>
-          <button type="button" onClick={onAdd} className={primaryBtn}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add supplier</button>
-        </div>
-      </div>
-      <div role="tablist" aria-label="Suppliers views" className="flex flex-wrap gap-1.5">
+      <PageHeader title="Suppliers" subtitle={<>{suppliers.length} supplier{suppliers.length === 1 ? '' : 's'}{owed > 0 ? <> • you owe <span className={moneyCls}>{rs(owed)}</span></> : ''}</>}>
+        {canStock && <button type="button" onClick={() => stock.purchaseReturn()} className={secondaryBtn}><Undo2 className="w-4 h-4 text-rose-600 dark:text-rose-400" /> Return goods</button>}
+        <button type="button" onClick={() => stock.aging('suppliers')} className={secondaryBtn}><Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" /> How long owed</button>
+        <button type="button" onClick={onAdd} className={`${primaryBtn} max-sm:flex-1`}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add supplier</button>
+      </PageHeader>
+      <div role="tablist" aria-label="Suppliers views" className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">
         {tabBtn('suppliers', 'Suppliers')}
         {tabBtn('received', 'Stock received')}
         {tabBtn('returns', `Returns${debitNotes.length ? ` (${debitNotes.length})` : ''}`)}
@@ -77,21 +71,32 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
           </div>
           <div className={`${cardCls} overflow-hidden`}>
             {rows.length === 0 ? (
-              <div className="p-10 text-center text-sm text-[#6B7280] dark:text-[#94A3B8]">No suppliers yet. Add the companies you buy stock from.</div>
+              <EmptyState
+                icon={<Layers className="w-5 h-5" />}
+                text={query ? 'No supplier matches that search.' : 'No suppliers yet. Add the companies you buy stock from.'}
+                action={!query && <button type="button" onClick={onAdd} className={secondaryBtn}><Plus className="w-4 h-4" /> Add supplier</button>}
+              />
             ) : (
               <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                 {rows.map((s) => (
-                  <li key={s.id} className="flex items-center gap-2 px-3 sm:px-5 py-3 hover:bg-[#FAF9F6] dark:hover:bg-[#162436]">
-                    <button type="button" onClick={() => setOpenId(s.id)} className="flex-1 min-w-0 text-left">
-                      <div className="font-semibold text-sm text-[#111827] dark:text-white truncate">{s.code && <span className="font-mono text-[11px] font-bold text-teal-700 dark:text-teal-300 mr-1.5">{s.code}</span>}{s.company || s.name}</div>
-                      <div className="text-[11px] text-[#8E9299] flex items-center gap-1 truncate"><Phone className="w-3 h-3" /> {s.phone || 'no phone'}{s.company && s.name !== s.company ? ` • ${s.name}` : ''}</div>
+                  <li key={s.id} className="flex flex-wrap md:flex-nowrap items-center gap-x-3 gap-y-1 px-4 md:px-5 py-2.5 hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors">
+                    <button type="button" onClick={() => setOpenId(s.id)} className="flex-1 min-w-0 text-left py-1 group">
+                      <span className="flex items-center gap-1.5 min-w-0 font-semibold text-sm text-[#111827] dark:text-white">{s.code && <span className="shrink-0 text-[11px] font-bold text-teal-700 dark:text-teal-300">{s.code}</span>}<span className="truncate group-hover:underline">{s.company || s.name}</span></span>
+                      <span className="text-[11px] text-[#6B7280] dark:text-[#8E9299] flex items-center gap-1 truncate"><Phone className="w-3 h-3 shrink-0" /> {s.phone || 'no phone'}{s.company && s.name !== s.company ? ` • ${s.name}` : ''}</span>
                     </button>
-                    <div className="text-right shrink-0">
-                      <div className={`font-mono font-bold text-sm ${s.totalOwed > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#111827] dark:text-white'}`}>{s.totalOwed > 0 ? rs(s.totalOwed) : s.totalOwed < 0 ? rs(-s.totalOwed) : 'Clear'}</div>
-                      {s.totalOwed > 0 && <div className="text-[11px] text-[#8E9299]">you owe</div>}
-                      {s.totalOwed < 0 && <div className="text-[11px] text-teal-700 dark:text-teal-300">they owe you</div>}
+                    <div className="text-right shrink-0 md:w-36">
+                      {s.totalOwed > 0 ? (
+                        <><div className={`${moneyCls} font-bold text-sm text-rose-700 dark:text-rose-300`}>{rs(s.totalOwed)}</div><div className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">you owe</div></>
+                      ) : s.totalOwed < 0 ? (
+                        <><div className={`${moneyCls} font-bold text-sm text-teal-700 dark:text-teal-300`}>{rs(-s.totalOwed)}</div><div className="text-[11px] text-teal-700 dark:text-teal-300">they owe you</div></>
+                      ) : (
+                        <div className="text-xs font-medium text-[#9CA3AF] dark:text-[#64748B]">Nothing due</div>
+                      )}
                     </div>
-                    {canStock && <button type="button" onClick={() => stock.receiveStock({ supplierId: s.id })} aria-label={`Receive stock from ${s.company || s.name}`} className="p-2.5 rounded-xl text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/40"><PackagePlus className="w-4 h-4" /></button>}
+                    <div className="w-full md:w-auto flex justify-end gap-1 max-md:-mr-2">
+                      {s.totalOwed > 0 && <RowAction label={`Pay ${s.company || s.name}`} text="Pay" alwaysText icon={<HandCoins className="w-4 h-4" />} onClick={() => onPay(s.id)} />}
+                      {canStock && <RowAction label={`Receive stock from ${s.company || s.name}`} text="Receive stock" alwaysText tone="teal" icon={<PackagePlus className="w-4 h-4" />} onClick={() => stock.receiveStock({ supplierId: s.id })} />}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -105,18 +110,18 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
       {tab === 'returns' && (
         <div className={`${cardCls} overflow-hidden`}>
           {debitNotes.length === 0 ? (
-            <div className="p-10 text-center text-sm text-[#6B7280] dark:text-[#94A3B8]">No goods sent back yet. Use <strong>Return goods</strong> when you send stock back to a supplier.</div>
+            <EmptyState icon={<Undo2 className="w-5 h-5" />} text={<>No goods sent back yet. Use <strong>Return goods</strong> when you send stock back to a supplier.</>} />
           ) : (
             <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]" aria-label="Debit notes">
               {debitNotes.map((r) => (
-                <li key={r.id} className="flex items-center gap-2 px-3 sm:px-5 py-3">
+                <li key={r.id} className="flex items-center gap-2 px-4 sm:px-5 py-2.5 hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors">
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm text-[#111827] dark:text-white truncate"><span className="font-mono text-xs text-[#8E9299] mr-2">{r.returnNumber}</span>{supName(r.supplierId)}</div>
+                    <div className="font-semibold text-sm text-[#111827] dark:text-white truncate"><span className="tabular-nums text-xs text-[#8E9299] mr-2">{r.returnNumber}</span>{supName(r.supplierId)}</div>
                     <div className="text-[11px] text-[#8E9299] truncate">{formatDate(r.date)} • {num(r.kg)} {r.unit || unitOf(r.productId)} {productName(r.productId)} • {r.reason}</div>
                   </div>
-                  <span className="font-mono font-bold text-sm shrink-0">{rs(r.amount)}</span>
-                  <button type="button" onClick={() => setPrintRequest({ type: 'debit_note', returnId: r.id })} aria-label={`Print debit note ${r.returnNumber}`} className="p-2 text-[#9CA3AF] hover:text-[#111827] dark:hover:text-white"><Printer className="w-4 h-4" /></button>
-                  {canDelete && !booksLockedFor(settings, r.date) && <button type="button" onClick={() => setPendingReturn(r.id)} aria-label={`Delete debit note ${r.returnNumber}`} className="p-2 text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}
+                  <span className={`${moneyCls} font-bold text-sm shrink-0 text-[#111827] dark:text-white`}>{rs(r.amount)}</span>
+                  <RowAction label={`Print debit note ${r.returnNumber}`} text="Print" icon={<Printer className="w-4 h-4" />} onClick={() => setPrintRequest({ type: 'debit_note', returnId: r.id })} />
+                  {canDelete && !booksLockedFor(settings, r.date) && <RowAction label={`Delete debit note ${r.returnNumber}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => setPendingReturn(r.id)} />}
                 </li>
               ))}
             </ul>
@@ -126,24 +131,24 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
 
       <Modal isOpen={Boolean(open)} onClose={() => setOpenId(null)} title={open ? open.company || open.name : 'Supplier'} subtitle={open ? `${open.phone || 'no phone'}${open.address ? ` • ${open.address}` : ''}` : undefined} wide
         footer={open && (
-          <div className="flex flex-wrap gap-2 justify-between">
-            <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
               {canStock && <button type="button" onClick={() => { const id = open.id; setOpenId(null); stock.receiveStock({ supplierId: id }); }} className={primaryBtn}><PackagePlus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Receive stock</button>}
-              <button type="button" onClick={() => { const id = open.id; setOpenId(null); onPay(id); }} className={secondaryBtn}><HandCoins className="w-4 h-4 text-teal-700" /> Pay</button>
-              {canStock && <button type="button" onClick={() => { const id = open.id; setOpenId(null); stock.purchaseReturn({ supplierId: id }); }} className={secondaryBtn}><Undo2 className="w-4 h-4 text-rose-600" /> Return goods</button>}
-              <button type="button" onClick={() => setPrintRequest({ type: 'supplier_statement', supplierId: open.id, from: `${today.slice(0, 4)}-01-01`, to: today })} className={secondaryBtn}><Printer className="w-4 h-4" /> Statement</button>
-              <button type="button" onClick={() => { const id = open.id; setOpenId(null); setEditRequest({ type: 'supplier', id }); }} className={secondaryBtn}><Pencil className="w-4 h-4" /> Edit</button>
-            </div>
-            {canDelete && <button type="button" onClick={() => setPendingDelete(open)} className={dangerBtn}><Trash2 className="w-4 h-4" /> Delete</button>}
+              <button type="button" onClick={() => { const id = open.id; setOpenId(null); onPay(id); }} className={`${secondaryBtn} ${canStock ? "" : "col-span-2"}`}><HandCoins className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Pay</button>
+              <div className={`col-span-2 grid ${(canDelete ? 1 : 0) + (canStock ? 1 : 0) === 2 ? 'grid-cols-4' : (canDelete || canStock) ? 'grid-cols-3' : 'grid-cols-2'} gap-2 sm:contents`}>
+                {canStock && <button type="button" onClick={() => { const id = open.id; setOpenId(null); stock.purchaseReturn({ supplierId: id }); }} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Undo2 className="w-4 h-4 text-rose-600" /> Return goods</button>}
+                <button type="button" onClick={() => setPrintRequest({ type: 'supplier_statement', supplierId: open.id, from: `${today.slice(0, 4)}-01-01`, to: today })} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Printer className="w-4 h-4" /> Statement</button>
+                <button type="button" onClick={() => { const id = open.id; setOpenId(null); setEditRequest({ type: 'supplier', id }); }} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Pencil className="w-4 h-4" /> Edit</button>
+                {canDelete && <button type="button" onClick={() => setPendingDelete(open)} className={`${dangerBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs sm:ml-auto`}><Trash2 className="w-4 h-4" /> Delete</button>}
+              </div>
           </div>
         )}
       >
         {open && (
           <div className="space-y-5">
             <div className="grid grid-cols-3 gap-2 text-sm">
-              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">{open.totalOwed < 0 ? 'They owe you' : 'You owe'}</div><div className={`font-mono font-extrabold ${open.totalOwed > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#111827] dark:text-white'}`}>{rs(Math.abs(open.totalOwed))}</div></div>
-              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Receipts</div><div className="font-mono font-extrabold text-[#111827] dark:text-white">{openPurchases.length}</div></div>
-              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Bought so far</div><div className="font-mono font-extrabold text-[#111827] dark:text-white">{rs(openPurchases.reduce((a, p) => a + p.amount, 0))}</div></div>
+              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">{open.totalOwed < 0 ? 'They owe you' : 'You owe'}</div><div className={`tabular-nums font-extrabold ${open.totalOwed > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#111827] dark:text-white'}`}>{rs(Math.abs(open.totalOwed))}</div></div>
+              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Receipts</div><div className="tabular-nums font-extrabold text-[#111827] dark:text-white">{openPurchases.length}</div></div>
+              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Bought so far</div><div className="tabular-nums font-extrabold text-[#111827] dark:text-white">{rs(openPurchases.reduce((a, p) => a + p.amount, 0))}</div></div>
             </div>
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Stock received</h3>
@@ -151,8 +156,8 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248]">
                   {openPurchases.slice(0, 20).map((p) => (
                     <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
-                      <span className="min-w-0"><span className="font-mono text-xs text-[#8E9299] mr-2">{p.receiptNumber}</span>{formatDate(p.date)}<span className="block text-[11px] text-[#8E9299] truncate">{num(p.kg)} {unitOf(p.productId)} {productName(p.productId)} @ {rs(p.pricePerKg)}</span></span>
-                      <span className="font-mono font-bold shrink-0">{rs(p.amount)}</span>
+                      <span className="min-w-0"><span className="tabular-nums text-xs text-[#8E9299] mr-2">{p.receiptNumber}</span>{formatDate(p.date)}<span className="block text-[11px] text-[#8E9299] truncate">{num(p.kg)} {unitOf(p.productId)} {productName(p.productId)} @ {rs(p.pricePerKg)}</span></span>
+                      <span className="tabular-nums font-bold shrink-0">{rs(p.amount)}</span>
                     </li>
                   ))}
                 </ul>
@@ -164,8 +169,8 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-sm">
                   {openReturns.map((r) => (
                     <li key={r.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                      <span className="min-w-0"><span className="font-mono text-xs text-[#8E9299] mr-2">{r.returnNumber}</span>{formatDate(r.date)}<span className="block text-[11px] text-[#8E9299] truncate">{num(r.kg)} {r.unit || unitOf(r.productId)} {productName(r.productId)} • {r.reason}</span></span>
-                      <span className="font-mono font-bold text-rose-700 dark:text-rose-300 shrink-0">− {rs(r.amount)}</span>
+                      <span className="min-w-0"><span className="tabular-nums text-xs text-[#8E9299] mr-2">{r.returnNumber}</span>{formatDate(r.date)}<span className="block text-[11px] text-[#8E9299] truncate">{num(r.kg)} {r.unit || unitOf(r.productId)} {productName(r.productId)} • {r.reason}</span></span>
+                      <span className="tabular-nums font-bold text-rose-700 dark:text-rose-300 shrink-0">− {rs(r.amount)}</span>
                     </li>
                   ))}
                 </ul>
@@ -176,7 +181,7 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Payments made</h3>
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-sm">
                   {openPayments.slice(0, 12).map((l) => (
-                    <li key={l.id} className="flex justify-between gap-3 px-3 py-2"><span className="min-w-0 truncate">{formatDate(l.date)} • {l.description}</span><span className="font-mono font-bold shrink-0">{rs(l.credit)}</span></li>
+                    <li key={l.id} className="flex justify-between gap-3 px-3 py-2"><span className="min-w-0 truncate">{formatDate(l.date)} • {l.description}</span><span className="tabular-nums font-bold shrink-0">{rs(l.credit)}</span></li>
                   ))}
                 </ul>
               </div>

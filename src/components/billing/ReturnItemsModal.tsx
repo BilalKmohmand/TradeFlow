@@ -64,7 +64,7 @@ export const ReturnItemsModal: React.FC<Props> = ({ invoiceId, onClose, onDone }
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="flex-1 text-sm">
             <span className="text-[#6B7280] dark:text-[#94A3B8]">Return value </span>
-            <span className="font-mono font-extrabold text-lg text-[#111827] dark:text-white" data-testid="return-total">{rs(total)}</span>
+            <span className="tabular-nums font-extrabold text-lg text-[#111827] dark:text-white" data-testid="return-total">{rs(total)}</span>
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className={secondaryBtn}>Cancel</button>
@@ -99,7 +99,7 @@ export const ReturnItemsModal: React.FC<Props> = ({ invoiceId, onClose, onDone }
                       disabled={can <= 0}
                       value={qty[it.id] || ''}
                       onChange={(e) => setQty((q) => ({ ...q, [it.id]: e.target.value }))}
-                      className={`${inputCls} font-mono`}
+                      className={`${inputCls} tabular-nums`}
                       placeholder={can > 0 ? `max ${can}` : 'none left'}
                     />
                   </div>
@@ -142,10 +142,10 @@ export const ReturnItemsModal: React.FC<Props> = ({ invoiceId, onClose, onDone }
 
           {total > 0 && (
             <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] p-4 space-y-1.5 text-sm">
-              {plan?.ok && plan.tax > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>Includes tax</span><span className="font-mono">{rs(plan.tax)}</span></div>}
-              {mode === 'refund' && refundable > 0 && <div className="flex justify-between font-bold text-rose-700 dark:text-rose-300"><span>Give back ({method})</span><span className="font-mono">{rs(Math.min(refundable, total))}</span></div>}
-              {offOwed > 0 && <div className="flex justify-between font-bold text-teal-700 dark:text-teal-300"><span>Off what they owe</span><span className="font-mono">{rs(offOwed)}</span></div>}
-              <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8] border-t border-[#E5E5E1] dark:border-[#203248] pt-1.5"><span>Bill after return</span><span className="font-mono">{rs(Math.max(0, billNetTotal(inv) - total))}</span></div>
+              {plan?.ok && plan.tax > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>Includes tax</span><span className="tabular-nums">{rs(plan.tax)}</span></div>}
+              {mode === 'refund' && refundable > 0 && <div className="flex justify-between font-bold text-rose-700 dark:text-rose-300"><span>Give back ({method})</span><span className="tabular-nums">{rs(Math.min(refundable, total))}</span></div>}
+              {offOwed > 0 && <div className="flex justify-between font-bold text-teal-700 dark:text-teal-300"><span>Off what they owe</span><span className="tabular-nums">{rs(offOwed)}</span></div>}
+              <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8] border-t border-[#E5E5E1] dark:border-[#203248] pt-1.5"><span>Bill after return</span><span className="tabular-nums">{rs(Math.max(0, billNetTotal(inv) - total))}</span></div>
             </div>
           )}
 

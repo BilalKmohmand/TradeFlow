@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { login, seedUsers, OWNER, TEST_PASSWORD } from './helpers/login';
+import { goTo } from './helpers/nav';
 
 const SHOTS = process.env.SHOT_DIR || 'e2e/screenshots/auth';
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
@@ -118,7 +119,7 @@ test.describe('Sign-up, sign-in and passwords', () => {
   test('the owner adds a staff member, who signs in with the temporary password and sets their own', async ({ page }) => {
     await seedUsers(page);
     await login(page);
-    await page.getByRole('button', { name: 'Admin' }).first().click();
+    await goTo(page, 'Admin');
     await expect(page.getByRole('heading', { name: /Admin(istrator)? Control Center/ })).toBeVisible();
     // Usernames are listed.
     await expect(page.getByTestId('user-row-zahid')).toContainText('@zahid');

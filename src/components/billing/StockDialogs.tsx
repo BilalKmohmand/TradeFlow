@@ -121,12 +121,12 @@ export const AdjustStockModal: React.FC<{ isOpen: boolean; onClose: () => void; 
           {isCount ? (
             <div>
               <label className={labelCls} htmlFor="adj-counted">Counted ({unit})</label>
-              <input id="adj-counted" type="number" inputMode="decimal" min="0" step="any" value={counted} onChange={(e) => setCounted(e.target.value)} className={`${inputCls} font-mono`} placeholder={num(here)} />
+              <input id="adj-counted" type="number" inputMode="decimal" min="0" step="any" value={counted} onChange={(e) => setCounted(e.target.value)} className={`${inputCls} tabular-nums`} placeholder={num(here)} />
             </div>
           ) : (
             <div>
               <label className={labelCls} htmlFor="adj-qty">{direction === 'out' ? 'Quantity lost' : 'Quantity added'} ({unit})</label>
-              <input id="adj-qty" type="number" inputMode="decimal" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} className={`${inputCls} font-mono`} placeholder="0" />
+              <input id="adj-qty" type="number" inputMode="decimal" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
             </div>
           )}
           <div>
@@ -140,9 +140,9 @@ export const AdjustStockModal: React.FC<{ isOpen: boolean; onClose: () => void; 
         </div>
         {product && (
           <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] px-4 py-3 text-sm space-y-0.5" data-testid="adjust-preview">
-            <div className="flex justify-between"><span className="text-[#6B7280] dark:text-[#94A3B8]">{batch ? `In batch ${batch.batchNo}` : godowns.length > 1 ? 'In this godown' : 'In stock'} now</span><span className="font-mono font-bold">{num(here)} {unit}</span></div>
-            <div className="flex justify-between"><span className="text-[#6B7280] dark:text-[#94A3B8]">Change</span><span className={`font-mono font-bold ${delta < 0 ? 'text-rose-700 dark:text-rose-300' : delta > 0 ? 'text-teal-700 dark:text-teal-300' : ''}`}>{delta > 0 ? '+' : ''}{num(delta)} {unit}</span></div>
-            <div className="flex justify-between"><span className="text-[#6B7280] dark:text-[#94A3B8]">After</span><span className="font-mono font-bold">{num(Math.round((here + delta) * 100) / 100)} {unit}</span></div>
+            <div className="flex justify-between"><span className="text-[#6B7280] dark:text-[#94A3B8]">{batch ? `In batch ${batch.batchNo}` : godowns.length > 1 ? 'In this godown' : 'In stock'} now</span><span className="tabular-nums font-bold">{num(here)} {unit}</span></div>
+            <div className="flex justify-between"><span className="text-[#6B7280] dark:text-[#94A3B8]">Change</span><span className={`tabular-nums font-bold ${delta < 0 ? 'text-rose-700 dark:text-rose-300' : delta > 0 ? 'text-teal-700 dark:text-teal-300' : ''}`}>{delta > 0 ? '+' : ''}{num(delta)} {unit}</span></div>
+            <div className="flex justify-between"><span className="text-[#6B7280] dark:text-[#94A3B8]">After</span><span className="tabular-nums font-bold">{num(Math.round((here + delta) * 100) / 100)} {unit}</span></div>
             {cost > 0 && Math.abs(delta) > 0 && (
               <div className="text-[11px] text-[#8E9299] pt-1">{delta < 0 ? `A loss of about ${rs(Math.round(-delta * cost))} at cost goes to “Stock losses”.` : reason === 'free' ? `About ${rs(Math.round(delta * cost))} at cost is added to stock as other income.` : `About ${rs(Math.round(delta * cost))} at cost is added back to stock.`}</div>
             )}
@@ -253,11 +253,11 @@ export const PurchaseReturnModal: React.FC<{ isOpen: boolean; onClose: () => voi
           )}
           <div>
             <label className={labelCls} htmlFor="pr-qty">Quantity ({unit})</label>
-            <input id="pr-qty" type="number" inputMode="decimal" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} className={`${inputCls} font-mono`} placeholder={product ? `max ${num(here)}` : '0'} />
+            <input id="pr-qty" type="number" inputMode="decimal" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} className={`${inputCls} tabular-nums`} placeholder={product ? `max ${num(here)}` : '0'} />
           </div>
           <div>
             <label className={labelCls} htmlFor="pr-rate">Rate per {unit}</label>
-            <input id="pr-rate" type="number" inputMode="decimal" min="0" step="any" value={rate} onChange={(e) => setRate(e.target.value)} className={`${inputCls} font-mono`} placeholder="Rs." />
+            <input id="pr-rate" type="number" inputMode="decimal" min="0" step="any" value={rate} onChange={(e) => setRate(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="Rs." />
           </div>
           <div className="col-span-2">
             <label className={labelCls} htmlFor="pr-reason">Reason</label>
@@ -270,7 +270,7 @@ export const PurchaseReturnModal: React.FC<{ isOpen: boolean; onClose: () => voi
         </div>
         {amount > 0 && (
           <p className="text-sm text-[#374151] dark:text-[#CBD5E1]" data-testid="return-amount">
-            <strong className="font-mono">{rs(Math.round(amount * 100) / 100)}</strong> will be taken off what you owe {supplier ? supplier.company || supplier.name : 'the supplier'}.
+            <strong className="tabular-nums">{rs(Math.round(amount * 100) / 100)}</strong> will be taken off what you owe {supplier ? supplier.company || supplier.name : 'the supplier'}.
           </p>
         )}
         <div className="flex justify-end gap-2 pt-1">
@@ -334,7 +334,7 @@ export const ItemHistoryModal: React.FC<{
           {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
           {per && (
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#6B7280] dark:text-[#94A3B8]">
-              {godowns.map((g) => <span key={g.id}>{g.name}: <strong className="font-mono text-[#374151] dark:text-[#CBD5E1]">{num(per[g.id] || 0)}</strong></span>)}
+              {godowns.map((g) => <span key={g.id}>{g.name}: <strong className="tabular-nums text-[#374151] dark:text-[#CBD5E1]">{num(per[g.id] || 0)}</strong></span>)}
             </div>
           )}
           <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Show">
@@ -357,8 +357,8 @@ export const ItemHistoryModal: React.FC<{
                       </span>
                     </span>
                     <span className="text-right shrink-0">
-                      <span className={`block font-mono font-bold text-sm ${r.change > 0 ? 'text-teal-700 dark:text-teal-300' : r.change < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#8E9299]'}`}>{r.kind === 'opening' || r.kind === 'transferred' ? '—' : `${r.change > 0 ? '+' : '−'}${num(Math.abs(r.change))}`}</span>
-                      <span className="block text-[11px] font-mono text-[#6B7280] dark:text-[#94A3B8]">bal {num(r.balance)}</span>
+                      <span className={`block tabular-nums font-bold text-sm ${r.change > 0 ? 'text-teal-700 dark:text-teal-300' : r.change < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#8E9299]'}`}>{r.kind === 'opening' || r.kind === 'transferred' ? '—' : `${r.change > 0 ? '+' : '−'}${num(Math.abs(r.change))}`}</span>
+                      <span className="block text-[11px] tabular-nums text-[#6B7280] dark:text-[#94A3B8]">bal {num(r.balance)}</span>
                     </span>
                   </>
                 );

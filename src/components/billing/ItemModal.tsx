@@ -72,20 +72,20 @@ export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
           </div>
           <div>
             <label className={labelCls} htmlFor="item-price">Selling price (Rs.)</label>
-            <input id="item-price" type="number" inputMode="decimal" min="0" step="any" value={price} onChange={(e) => setPrice(e.target.value)} className={`${inputCls} font-mono`} placeholder="0" disabled={Boolean(editing) && !can('edit_prices')} />
+            <input id="item-price" type="number" inputMode="decimal" min="0" step="any" value={price} onChange={(e) => setPrice(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" disabled={Boolean(editing) && !can('edit_prices')} />
           </div>
           <div>
             <label className={labelCls} htmlFor="item-cost">Cost price (optional)</label>
-            <input id="item-cost" type="number" inputMode="decimal" min="0" step="any" value={cost} onChange={(e) => setCost(e.target.value)} className={`${inputCls} font-mono`} placeholder="for profit reports" />
+            <input id="item-cost" type="number" inputMode="decimal" min="0" step="any" value={cost} onChange={(e) => setCost(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="for profit reports" />
           </div>
           <div>
             <label className={labelCls} htmlFor="item-stock">Stock on hand</label>
-            <input id="item-stock" type="number" inputMode="decimal" min="0" step="any" value={stock} onChange={(e) => setStock(e.target.value)} className={`${inputCls} font-mono`} placeholder="0" />
+            <input id="item-stock" type="number" inputMode="decimal" min="0" step="any" value={stock} onChange={(e) => setStock(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
             {heldElsewhere > 0 && <p className="text-[11px] text-[#8E9299] mt-1">Total of all godowns; {heldElsewhere} is in batches or other godowns. Use Receive stock to add a batch.</p>}
           </div>
           <div className="col-span-2">
             <label className={labelCls} htmlFor="item-min">Warn me when stock drops below</label>
-            <input id="item-min" type="number" inputMode="decimal" min="0" step="any" value={minStock} onChange={(e) => setMinStock(e.target.value)} className={`${inputCls} font-mono`} placeholder="0 = never" />
+            <input id="item-min" type="number" inputMode="decimal" min="0" step="any" value={minStock} onChange={(e) => setMinStock(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0 = never" />
           </div>
           <label className="col-span-2 flex items-start gap-3 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] px-3.5 py-3 cursor-pointer">
             <input type="checkbox" checked={trackBatches} onChange={(e) => setTrackBatches(e.target.checked)} className="mt-0.5 w-5 h-5 shrink-0 accent-teal-700" />

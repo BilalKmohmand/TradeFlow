@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import fs from 'fs';
 import { signIn } from './helpers/login';
+import { goTo } from './helpers/nav';
 
 /**
  * Real print output: renders the bill, daily sheet and statement through Chrome's print engine
@@ -74,14 +75,14 @@ test('printed bill, daily sheet and statement come out as real documents', async
   await exp.getByLabel('Amount (Rs.)', { exact: true }).fill('1200');
   await exp.getByLabel('Category', { exact: true }).selectOption('food');
   await exp.getByRole('button', { name: 'Save expense' }).click();
-  await page.getByRole('button', { name: 'Daily Sheet' }).first().click();
+  await goTo(page, 'Daily Sheet');
   await page.getByRole('button', { name: 'Print' }).click();
   await expect(root).toContainText('DAILY SHEET');
   await expect(root).toContainText('Lunch for staff');
   await printPdf(page, 'Printed-Daily-Sheet.pdf');
   await page.keyboard.press('Escape');
 
-  await page.getByRole('button', { name: 'Customers' }).first().click();
+  await goTo(page, 'Customers');
   await page.getByRole('button', { name: /ZAMAN AND CO BTK/ }).first().click();
   await page.getByRole('button', { name: 'Statement', exact: true }).click();
   await expect(root).toContainText('STATEMENT');

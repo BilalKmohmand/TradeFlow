@@ -240,7 +240,7 @@ export const BankReconciliationTab: React.FC = () => {
             <div className="col-span-1 sm:col-span-1"><label className={labelCls} htmlFor="bl-date">Date</label><input id="bl-date" type="date" value={manual.date} onChange={(e) => setManual({ ...manual, date: e.target.value })} className={inputCls} /></div>
             <div className="col-span-1 sm:col-span-1"><label className={labelCls} htmlFor="bl-dir">Money</label><select id="bl-dir" value={manual.direction} onChange={(e) => setManual({ ...manual, direction: e.target.value as 'in' | 'out' })} className={inputCls}><option value="in">In</option><option value="out">Out</option></select></div>
             <div className="col-span-2 sm:col-span-2"><label className={labelCls} htmlFor="bl-desc">Description</label><input id="bl-desc" value={manual.description} onChange={(e) => setManual({ ...manual, description: e.target.value })} className={inputCls} placeholder="as on the statement" /></div>
-            <div className="col-span-1 sm:col-span-1"><label className={labelCls} htmlFor="bl-amt">Amount</label><input id="bl-amt" inputMode="decimal" value={manual.amount} onChange={(e) => setManual({ ...manual, amount: e.target.value })} className={`${inputCls} font-mono`} placeholder="0" /></div>
+            <div className="col-span-1 sm:col-span-1"><label className={labelCls} htmlFor="bl-amt">Amount</label><input id="bl-amt" inputMode="decimal" value={manual.amount} onChange={(e) => setManual({ ...manual, amount: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="0" /></div>
             <div className="col-span-1 sm:col-span-1 flex items-end"><button type="submit" className={`${primaryBtn} w-full px-3`}>Add line</button></div>
           </form>
         )}
@@ -266,9 +266,9 @@ export const BankReconciliationTab: React.FC = () => {
                 return (
                   <li key={l.id} className="px-4 sm:px-5 py-3 space-y-2" data-testid="bank-line">
                     <div className="flex items-start gap-2">
-                      <span className="font-mono text-xs text-[#8E9299] w-[4.5rem] shrink-0 pt-0.5">{formatDate(l.date)}</span>
+                      <span className="tabular-nums text-xs text-[#8E9299] w-[4.5rem] shrink-0 pt-0.5">{formatDate(l.date)}</span>
                       <span className="flex-1 min-w-0 text-sm text-[#374151] dark:text-[#CBD5E1] break-words">{l.description}{l.reference ? <span className="text-[11px] text-[#8E9299]"> • {l.reference}</span> : null}</span>
-                      <span className={`font-mono font-bold text-sm whitespace-nowrap ${l.amount > 0 ? 'text-teal-700 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}>{signed(l.amount)}</span>
+                      <span className={`tabular-nums font-bold text-sm whitespace-nowrap ${l.amount > 0 ? 'text-teal-700 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}>{signed(l.amount)}</span>
                     </div>
                     {l.status === 'matched' && (
                       <div className="flex flex-wrap items-center gap-2 text-xs pl-0 sm:pl-[4.75rem]">
@@ -357,7 +357,7 @@ export const BankReconciliationTab: React.FC = () => {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div><label className={labelCls} htmlFor="rec-date">Statement end date</label><input id="rec-date" type="date" value={statementDate} onChange={(e) => setDateInput(e.target.value)} className={inputCls} /></div>
-          <div><label className={labelCls} htmlFor="rec-closing">Closing balance on statement</label><input id="rec-closing" inputMode="decimal" value={closingText} onChange={(e) => setClosingInput({ ...closingInput, [statementDate]: e.target.value })} className={`${inputCls} font-mono`} placeholder="e.g. 139750" /></div>
+          <div><label className={labelCls} htmlFor="rec-closing">Closing balance on statement</label><input id="rec-closing" inputMode="decimal" value={closingText} onChange={(e) => setClosingInput({ ...closingInput, [statementDate]: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="e.g. 139750" /></div>
           <div className="flex items-end gap-2">
             <button type="button" onClick={saveRec} className={`${secondaryBtn} flex-1`}><Save className="w-4 h-4" /> Save</button>
             <button type="button" onClick={() => setPrintRequest({ type: 'bank_reconciliation', statementDate, closingBalance: closing ?? 0 })} className={`${secondaryBtn} flex-1`}><Printer className="w-4 h-4" /> Print</button>
@@ -393,9 +393,9 @@ export const BankReconciliationTab: React.FC = () => {
                   {outstanding.map((m) => (
                     <tr key={m.id}>
                       <td className="px-3 py-2"><input type="checkbox" checked={false} onChange={() => setCleared([m.id], true)} aria-label={`Mark ${m.description} as cleared`} className="w-5 h-5 shrink-0 accent-teal-600" /></td>
-                      <td className="px-3 py-2 font-mono text-xs whitespace-nowrap hidden sm:table-cell">{formatDate(m.date)}</td>
-                      <td className="px-3 py-2 min-w-[8rem]"><span className="sm:hidden block font-mono text-[11px] text-[#8E9299]">{formatDate(m.date)}</span>{m.counterparty ? `${m.counterparty} — ` : ''}{m.description} <span className="text-[11px] text-[#8E9299]">• {m.method}</span></td>
-                      <td className={`px-3 py-2 text-right font-mono font-bold whitespace-nowrap ${m.direction === 'in' ? 'text-teal-700 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}>{m.direction === 'in' ? '+' : '−'} {rs(m.amount)}</td>
+                      <td className="px-3 py-2 tabular-nums text-xs whitespace-nowrap hidden sm:table-cell">{formatDate(m.date)}</td>
+                      <td className="px-3 py-2 min-w-[8rem]"><span className="sm:hidden block tabular-nums text-[11px] text-[#8E9299]">{formatDate(m.date)}</span>{m.counterparty ? `${m.counterparty} — ` : ''}{m.description} <span className="text-[11px] text-[#8E9299]">• {m.method}</span></td>
+                      <td className={`px-3 py-2 text-right tabular-nums font-bold whitespace-nowrap ${m.direction === 'in' ? 'text-teal-700 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}>{m.direction === 'in' ? '+' : '−'} {rs(m.amount)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -432,6 +432,6 @@ export const BankReconciliationTab: React.FC = () => {
 const Row: React.FC<{ label: string; value: string; strong?: boolean }> = ({ label, value, strong }) => (
   <div className={`flex items-start justify-between gap-3 px-3 sm:px-4 py-2 ${strong ? 'font-bold text-[#111827] dark:text-white' : 'text-[#374151] dark:text-[#CBD5E1]'}`}>
     <span className="min-w-0">{label}</span>
-    <span className="font-mono whitespace-nowrap">{value}</span>
+    <span className="tabular-nums whitespace-nowrap">{value}</span>
   </div>
 );

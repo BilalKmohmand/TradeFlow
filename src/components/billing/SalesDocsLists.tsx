@@ -39,7 +39,7 @@ export const ReturnsList: React.FC = () => {
                     <div className="text-[11px] text-[#8E9299] truncate">{r.returnNumber} • {formatDate(r.date)}{inv ? ` • bill ${inv.invoiceNumber}` : ''} • {(r.items || []).map((l) => `${l.productName} × ${l.qty}`).join(', ')}</div>
                   </button>
                   <div className="text-right shrink-0">
-                    <div className="font-mono font-bold text-sm text-amber-700 dark:text-amber-300">− {rs(r.amount)}</div>
+                    <div className="tabular-nums font-bold text-sm text-amber-700 dark:text-amber-300">− {rs(r.amount)}</div>
                     <div className="text-[11px] text-[#8E9299]">{(r.refundAmount || 0) > 0 ? `${rs(r.refundAmount || 0)} given back` : 'off account'}</div>
                   </div>
                   <button type="button" onClick={() => setPrintRequest({ type: 'note', returnId: r.id })} aria-label={`Print credit note ${r.returnNumber}`} className={iconBtn}><Printer className="w-4 h-4" /></button>
@@ -114,7 +114,7 @@ export const QuotationsList: React.FC = () => {
                       <div className="font-semibold text-sm text-[#111827] dark:text-white truncate">{who} <span className={`ml-1 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full ${STATUS[st].cls}`}>{STATUS[st].label}</span></div>
                       <div className="text-[11px] text-[#8E9299] truncate">{q.quoteNumber} • good until {formatDate(q.validUntil)} • {quotationLines(q).map((l) => `${l.productName} × ${l.qty}`).join(', ')}</div>
                     </div>
-                    <div className="font-mono font-bold text-sm text-[#111827] dark:text-white shrink-0">{rs(q.amount)}</div>
+                    <div className="tabular-nums font-bold text-sm text-[#111827] dark:text-white shrink-0">{rs(q.amount)}</div>
                   </div>
                   <div className="flex flex-wrap items-center gap-1 mt-1.5">
                     {st !== 'converted' ? (

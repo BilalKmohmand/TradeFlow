@@ -36,7 +36,7 @@ export const ExpenseModal: React.FC<{ isOpen: boolean; onClose: () => void; date
           </div>
           <div>
             <label className={labelCls} htmlFor="exp-amount">Amount (Rs.)</label>
-            <input id="exp-amount" type="number" inputMode="decimal" min="0" step="any" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={`${inputCls} font-mono`} placeholder="0" />
+            <input id="exp-amount" type="number" inputMode="decimal" min="0" step="any" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="0" />
           </div>
           <div>
             <label className={labelCls} htmlFor="exp-cat">Category</label>
@@ -89,7 +89,7 @@ export const TransferModal: React.FC<{ isOpen: boolean; onClose: () => void }> =
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls} htmlFor="tr-amount">Amount (Rs.)</label>
-            <input id="tr-amount" autoFocus type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} font-mono`} placeholder="0" />
+            <input id="tr-amount" autoFocus type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
           </div>
           <div>
             <label className={labelCls} htmlFor="tr-date">Date</label>
@@ -152,7 +152,7 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
           <div>
             <label className={labelCls} htmlFor="rc-amount">Amount (Rs.)</label>
             <div className="flex gap-1">
-              <input id="rc-amount" type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} font-mono`} placeholder="0" />
+              <input id="rc-amount" type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
               {c && c.totalDue > 0 && <button type="button" onClick={() => setAmount(String(c.totalDue))} className="shrink-0 px-2 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-[11px] font-bold text-teal-700 dark:text-teal-300">Full</button>}
             </div>
           </div>

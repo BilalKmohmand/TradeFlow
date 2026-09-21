@@ -18,7 +18,7 @@ export const ChequeFieldsInput: React.FC<{ value: ChequeFields; onChange: (v: Ch
   <div className="col-span-full grid grid-cols-2 sm:grid-cols-3 gap-3 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 p-3">
     <div>
       <label className={labelCls} htmlFor={`${idPrefix}-no`}>Cheque no.</label>
-      <input id={`${idPrefix}-no`} value={value.chequeNumber} onChange={(e) => onChange({ ...value, chequeNumber: e.target.value })} className={`${inputCls} font-mono`} placeholder="e.g. 10045521" inputMode="numeric" />
+      <input id={`${idPrefix}-no`} value={value.chequeNumber} onChange={(e) => onChange({ ...value, chequeNumber: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="e.g. 10045521" inputMode="numeric" />
     </div>
     <div>
       <label className={labelCls} htmlFor={`${idPrefix}-bank`}>Bank</label>
@@ -69,7 +69,7 @@ export const ChequeFormModal: React.FC<{ isOpen: boolean; onClose: () => void; d
           </div>
           <div>
             <label className={labelCls} htmlFor="chq-amount">Amount (Rs.)</label>
-            <input id="chq-amount" type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} font-mono`} placeholder="0" />
+            <input id="chq-amount" type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
           </div>
           <div>
             <label className={labelCls} htmlFor="chq-entry">{received ? 'Received on' : 'Given on'}</label>
@@ -158,7 +158,7 @@ export const ChequeActionModal: React.FC<{ cheque: Cheque | null; action: Cheque
               <>
                 <div>
                   <label className={labelCls} htmlFor="chq-act-charge">Bank charge (Rs.)</label>
-                  <input id="chq-act-charge" type="number" inputMode="decimal" min="0" step="any" value={charge} onChange={(e) => setCharge(e.target.value)} className={`${inputCls} font-mono`} placeholder="0" />
+                  <input id="chq-act-charge" type="number" inputMode="decimal" min="0" step="any" value={charge} onChange={(e) => setCharge(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
                 </div>
                 <div>
                   <span className={labelCls}>Charge paid by</span>

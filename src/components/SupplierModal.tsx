@@ -74,7 +74,7 @@ const SupplierForm: React.FC<{
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className={labelCls} htmlFor="sup-code">Supplier ID (optional)</label>
-          <input id="sup-code" value={code} onChange={(e) => setCode(e.target.value)} className={`${inputCls} font-mono`} placeholder="Your own code, e.g. S-104" autoCapitalize="characters" />
+          <input id="sup-code" value={code} onChange={(e) => setCode(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="Your own code, e.g. S-104" autoCapitalize="characters" />
         </div>
         <div>
           <label className={labelCls} htmlFor="sup-name">Name</label>
@@ -86,7 +86,7 @@ const SupplierForm: React.FC<{
         </div>
         <div>
           <label className={labelCls} htmlFor="sup-phone">Phone</label>
-          <input id="sup-phone" type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className={`${inputCls} font-mono`} placeholder="0300 1234567" />
+          <input id="sup-phone" type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0300 1234567" />
         </div>
         <div>
           <label className={labelCls} htmlFor="sup-category">What they supply (optional)</label>

@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { signIn } from './helpers/login';
+import { goTo } from './helpers/nav';
 
 /**
  * Credit limits on bills + bank reconciliation.
@@ -51,7 +52,7 @@ const noOverflow = async (page: Page, label: string) => {
 };
 
 async function reconcile(page: Page, opts: { mobile?: boolean } = {}) {
-  await page.getByRole('button', { name: 'Money', exact: true }).first().click();
+  await goTo(page, 'Money');
   await expect(page.getByRole('heading', { name: 'Money' })).toBeVisible();
   await page.getByRole('button', { name: 'Bank reconciliation' }).click();
   const tab = page.getByTestId('bank-rec');
@@ -202,7 +203,7 @@ test.describe('Customer dialog', () => {
 
   test('customer ID is saved, shown, searchable, on the bill picker, and must be unique', async ({ page }) => {
     await unlock(page);
-    await page.getByRole('button', { name: 'Customers' }).first().click();
+    await goTo(page, 'Customers');
     await page.getByRole('button', { name: 'Add customer' }).click();
     let form = page.getByRole('dialog', { name: 'New customer' });
     await form.getByLabel('Customer ID (optional)').fill('C-215');
@@ -233,7 +234,7 @@ test.describe('Customer dialog', () => {
 
   test('a customer added without typing a limit has no credit limit and nothing invented', async ({ page }) => {
     await unlock(page);
-    await page.getByRole('button', { name: 'Customers' }).first().click();
+    await goTo(page, 'Customers');
     await page.getByRole('button', { name: 'Add customer' }).click();
     const form = page.getByRole('dialog', { name: 'New customer' });
     await expect(form.getByLabel('Credit limit in Rs. (optional)')).toHaveValue('');
@@ -259,7 +260,7 @@ test.describe('Customer dialog', () => {
 
   test('typing 0 keeps no limit, and a typed limit is saved', async ({ page }) => {
     await unlock(page);
-    await page.getByRole('button', { name: 'Customers' }).first().click();
+    await goTo(page, 'Customers');
     await page.getByRole('button', { name: 'Add customer' }).click();
     const form = page.getByRole('dialog', { name: 'New customer' });
     await form.getByLabel('Name', { exact: true }).fill('Zero Shop');

@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { signIn } from './helpers/login';
+import { goTo } from './helpers/nav';
 
 const SHOTS = process.env.SHOT_DIR || 'e2e/screenshots';
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
@@ -96,7 +97,7 @@ test.describe('Simple billing', () => {
     await expect(dialog).toBeHidden();
 
     // --- Bills list: both there; open the credit one and take a part payment.
-    await page.getByRole('button', { name: 'Bills' }).first().click();
+    await goTo(page, 'Bills');
     await expect(page.getByRole('heading', { name: 'Bills' })).toBeVisible();
     await expect(page.getByText('INV-2').first()).toBeVisible();
     await expect(page.getByText('Rs. 12,500 due').first()).toBeVisible();
@@ -122,7 +123,7 @@ test.describe('Simple billing', () => {
     await expect(page.getByText('INV-1')).toHaveCount(0);
 
     // --- Daily sheet: bills, receipts, add an expense, print.
-    await page.getByRole('button', { name: 'Daily Sheet' }).first().click();
+    await goTo(page, 'Daily Sheet');
     await expect(page.getByRole('heading', { name: 'Daily Sheet' })).toBeVisible();
     await expect(page.getByText('Bills (2)')).toBeVisible();
     await page.getByRole('button', { name: '+ Food & refreshments' }).click();
@@ -141,7 +142,7 @@ test.describe('Simple billing', () => {
     await page.keyboard.press('Escape');
 
     // --- Money: position, transfer cash to bank.
-    await page.getByRole('button', { name: 'Money' }).first().click();
+    await goTo(page, 'Money');
     await expect(page.getByRole('heading', { name: 'Money' })).toBeVisible();
     await expect(page.getByText('Rs. 10,000').first()).toBeVisible(); // Gul Khan owes
     await expect(page.getByText('Rs. 45,000').first()).toBeVisible(); // supplier owed
@@ -162,7 +163,7 @@ test.describe('Simple billing', () => {
     await shot(page, 'billing-money');
 
     // --- Items: low stock warning after selling tins, add a new item.
-    await page.getByRole('button', { name: 'Items & Prices' }).first().click();
+    await goTo(page, 'Items & Prices');
     await expect(page.getByRole('heading', { name: 'Items' })).toBeVisible();
     await expect(page.getByText('3 tin')).toBeVisible(); // 45 − 40 − 2
     await page.getByRole('button', { name: 'New item' }).click();
@@ -175,7 +176,7 @@ test.describe('Simple billing', () => {
     await shot(page, 'billing-items');
 
     // --- Admin: switching to the trading suite and back changes the navigation.
-    await page.getByRole('button', { name: 'Admin' }).first().click();
+    await goTo(page, 'Admin');
     await page.getByRole('button', { name: /System & Backups/ }).click();
     await page.getByLabel('App mode', { exact: true }).selectOption('trading');
     await page.getByRole('button', { name: 'Save profile' }).click();
@@ -187,7 +188,7 @@ test.describe('Simple billing', () => {
     // Data survives a reload (local-first).
     await page.reload(); // still signed in ("Keep me signed in")
     await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Bills' }).first().click();
+    await goTo(page, 'Bills');
     await expect(page.getByText('INV-2').first()).toBeVisible();
   });
 });
@@ -217,11 +218,11 @@ test.describe('Simple billing on a phone', () => {
     await expect(dialog).toBeHidden();
     await expect(page.getByText('Rs. 8,260').first()).toBeVisible();
 
-    for (const nav of ['Bills', 'Daily Sheet', 'Money', 'Customers', 'Items']) {
-      await page.getByRole('button', { name: nav, exact: true }).first().click();
+    for (const nav of ['Bills', 'Daily Sheet', 'Money', 'Customers', 'Items & Prices']) {
+      await goTo(page, nav);
       await noOverflow(page, nav);
     }
-    await page.getByRole('button', { name: 'Bills', exact: true }).first().click();
+    await goTo(page, 'Bills');
     await page.getByRole('button', { name: /Haji Karim/ }).first().click();
     const detail = page.getByRole('dialog', { name: 'Bill INV-1' });
     await expect(detail).toBeVisible();
@@ -232,10 +233,10 @@ test.describe('Simple billing on a phone', () => {
     await expect(detail.getByText('Bill fully paid.')).toBeVisible();
     await page.keyboard.press('Escape');
 
-    await page.getByRole('button', { name: 'Daily Sheet', exact: true }).first().click();
+    await goTo(page, 'Daily Sheet');
     await expect(page.getByText('Bills (1)')).toBeVisible();
     await shot(page, 'billing-mobile-daily');
-    await page.getByRole('button', { name: 'Money', exact: true }).first().click();
+    await goTo(page, 'Money');
     await expect(page.getByText('Rs. 28,260').first()).toBeVisible(); // cash 20,000 + 8,260
     await shot(page, 'billing-mobile-money');
   });

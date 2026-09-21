@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { signIn } from './helpers/login';
+import { goTo } from './helpers/nav';
 
 const SHOTS = process.env.SHOT_DIR || 'e2e/screenshots';
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
@@ -50,7 +51,7 @@ test.describe('Sales documents (billing mode)', () => {
     await unlock(page);
 
     // --- Customer rates: set one more from the customer screen.
-    await page.getByRole('button', { name: 'Customers', exact: true }).first().click();
+    await goTo(page, 'Customers');
     await page.getByRole('button', { name: /Zaman and Co BTK/ }).first().click();
     const cust = page.getByRole('dialog', { name: 'Zaman and Co BTK' });
     await expect(cust.getByText('Special rates for this customer')).toBeVisible();
@@ -89,7 +90,7 @@ test.describe('Sales documents (billing mode)', () => {
     await page.keyboard.press('Escape');
 
     // --- Return 3 cans; money goes back in cash; the credit note prints.
-    await page.getByRole('button', { name: 'Bills', exact: true }).first().click();
+    await goTo(page, 'Bills');
     await page.getByRole('button', { name: /Zaman and Co BTK/ }).first().click();
     const detail = page.getByRole('dialog', { name: 'Bill INV-1' });
     await detail.getByRole('button', { name: 'Return items' }).click();
@@ -179,7 +180,7 @@ test.describe('Sales documents on a phone', () => {
     await bill.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(bill).toBeHidden();
 
-    await page.getByRole('button', { name: 'Bills', exact: true }).first().click();
+    await goTo(page, 'Bills');
     await page.getByRole('button', { name: /Zaman and Co BTK/ }).first().click();
     const detail = page.getByRole('dialog', { name: 'Bill INV-1' });
     await detail.getByRole('button', { name: 'Return items' }).click();
@@ -201,7 +202,7 @@ test.describe('Sales documents on a phone', () => {
     await noOverflow(page, 'new quotation');
     await page.keyboard.press('Escape');
 
-    await page.getByRole('button', { name: 'Customers', exact: true }).first().click();
+    await goTo(page, 'Customers');
     await page.getByRole('button', { name: /Zaman and Co BTK/ }).first().click();
     await expect(page.getByTestId('customer-rates')).toBeVisible();
     await noOverflow(page, 'customer rates');

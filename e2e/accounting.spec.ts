@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { signIn } from './helpers/login';
+import { goTo } from './helpers/nav';
 
 const SHOTS = process.env.SHOT_DIR || 'e2e/screenshots';
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
@@ -90,7 +91,7 @@ test.describe('Accounts (double-entry)', () => {
     await makeBill(page, 'c1', '10', '5000'); // 20,650: 5,000 cash + 15,650 on credit
     await makeBill(page, 'c2', '2', '0');
 
-    await page.getByRole('button', { name: 'Accounts', exact: true }).first().click();
+    await goTo(page, 'Accounts');
     await expect(page.getByRole('heading', { name: 'Accounts' })).toBeVisible();
 
     // Trial balance
@@ -171,7 +172,7 @@ test.describe('Accounts (double-entry)', () => {
     // Books survive a reload
     await page.reload(); // still signed in ("Keep me signed in")
     await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Accounts', exact: true }).first().click();
+    await goTo(page, 'Accounts');
     await openTab(page, 'Journal');
     await page.getByLabel('Show', { exact: true }).selectOption('manual');
     await expect(page.getByTestId('journal-entry')).toHaveCount(1);
@@ -188,7 +189,7 @@ test.describe('Accounts on a phone', () => {
   test('every tab fits at 390px, journal entry and print work', async ({ page }) => {
     await unlock(page);
     await makeBill(page, 'c1', '4', '5000');
-    await page.getByRole('button', { name: 'Accounts', exact: true }).first().click();
+    await goTo(page, 'Accounts');
     await expect(page.getByRole('heading', { name: 'Accounts' })).toBeVisible();
     await expect(page.getByText('Balanced ✓').first()).toBeVisible();
     await noOverflow(page, 'trial balance');

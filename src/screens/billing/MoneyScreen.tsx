@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Banknote, Landmark, ArrowLeftRight, HandCoins, Receipt, Settings2, ChevronRight, Printer } from 'lucide-react';
+import { Banknote, Landmark, ArrowLeftRight, HandCoins, Receipt, Settings2, ChevronRight, Printer, Trash2, Coins } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
 import { useStockUI } from '../../components/billing/StockUI';
-import { Tile, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, rs } from '../../components/billing/ui';
+import { Tile, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, rs, PageHeader, EmptyState, RowAction, pillCls } from '../../components/billing/ui';
 import { collectCashMovements, accountBalancesOn, positionSummary } from '../../utils/finance';
 import { groupExpenses } from '../../utils/billing';
 import { todayISO } from '../../utils/stockFlow';
@@ -54,18 +54,15 @@ export const MoneyScreen: React.FC = () => {
   };
 
   const tabBtn = (id: Tab, label: string) => (
-    <button type="button" onClick={() => setTab(id)} className={`px-4 py-2 rounded-2xl text-xs font-bold border ${tab === id ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] border-transparent' : 'bg-white dark:bg-[#101A26] border-[#E5E5E1] dark:border-[#203248] text-[#6B7280] dark:text-[#94A3B8]'}`}>{label}</button>
+    <button type="button" aria-pressed={tab === id} onClick={() => setTab(id)} className={pillCls(tab === id)}>{label}</button>
   );
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-[#111827] dark:text-white">Money</h1>
-          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">How much is in the business, who owes you, and who you owe.</p>
-        </div>
-        <div className="flex flex-wrap gap-1.5">{tabBtn('overview', 'Overview')}{tabBtn('expenses', 'Expense sheets')}{tabBtn('cashbook', 'Cash book')}{tabBtn('cheques', 'Cheques')}{canSeeBank && tabBtn('bank', 'Bank reconciliation')}</div>
-      </div>
+      <PageHeader title="Money" subtitle="How much is in the business, who owes you, and who you owe.">
+        <button type="button" onClick={() => ui.receive()} className={`${primaryBtn} max-sm:flex-1`}><HandCoins className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Receive payment</button>
+      </PageHeader>
+      <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]" aria-label="Money views">{tabBtn('overview', 'Overview')}{tabBtn('expenses', 'Expense sheets')}{tabBtn('cashbook', 'Cash book')}{tabBtn('cheques', 'Cheques')}{canSeeBank && tabBtn('bank', 'Bank reconciliation')}</div>
 
       {tab === 'overview' && (
         <>
@@ -78,59 +75,58 @@ export const MoneyScreen: React.FC = () => {
           <div className={`${cardCls} p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
             <div>
               <div className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Money in the business</div>
-              <div className={`text-3xl font-extrabold font-mono ${netWithCheques >= 0 ? 'text-[#111827] dark:text-white' : 'text-rose-700'}`}>{rs(netWithCheques)}</div>
-              <div className="text-xs text-[#8E9299]">cash {rs(balances.cash)} + bank {rs(balances.bank)} + owed to you {rs(position.receivables)} − you owe {rs(position.payables)}{pdc.receivable > 0 ? ` + cheques in hand ${rs(pdc.receivable)}` : ''}{pdc.payable > 0 ? ` − cheques not yet cleared ${rs(pdc.payable)}` : ''}</div>
+              <div className={`text-2xl sm:text-3xl font-extrabold tabular-nums ${netWithCheques >= 0 ? 'text-[#111827] dark:text-white' : 'text-rose-700 dark:text-rose-300'}`}>{rs(netWithCheques)}</div>
+              <div className="text-xs text-[#6B7280] dark:text-[#8E9299] mt-0.5">cash {rs(balances.cash)} + bank {rs(balances.bank)} + owed to you {rs(position.receivables)} − you owe {rs(position.payables)}{pdc.receivable > 0 ? ` + cheques in hand ${rs(pdc.receivable)}` : ''}{pdc.payable > 0 ? ` − cheques not yet cleared ${rs(pdc.payable)}` : ''}</div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => ui.transfer()} className={secondaryBtn}><ArrowLeftRight className="w-4 h-4 text-indigo-600" /> Cash ↔ Bank</button>
-              <button type="button" onClick={() => ui.receive()} className={secondaryBtn}><HandCoins className="w-4 h-4 text-teal-700" /> Receive</button>
+              <button type="button" onClick={() => ui.transfer()} className={secondaryBtn}><ArrowLeftRight className="w-4 h-4 text-indigo-600 dark:text-indigo-300" /> Cash ↔ Bank</button>
               <button type="button" onClick={() => { setOpening({ cash: String(settings.cashOpeningBalance || 0), bank: String(settings.openingBankBalance || 0), date: settings.cashOpeningDate }); setShowOpening((v) => !v); }} className={secondaryBtn}><Settings2 className="w-4 h-4" /> Opening balances</button>
             </div>
           </div>
           {showOpening && (
             <form onSubmit={saveOpening} className={`${cardCls} p-5 grid grid-cols-1 sm:grid-cols-4 gap-3`}>
-              <div><label className={labelCls} htmlFor="op-cash">Cash on opening day</label><input id="op-cash" type="number" step="any" value={opening.cash} onChange={(e) => setOpening({ ...opening, cash: e.target.value })} className={`${inputCls} font-mono`} /></div>
-              <div><label className={labelCls} htmlFor="op-bank">Bank on opening day</label><input id="op-bank" type="number" step="any" value={opening.bank} onChange={(e) => setOpening({ ...opening, bank: e.target.value })} className={`${inputCls} font-mono`} /></div>
+              <div><label className={labelCls} htmlFor="op-cash">Cash on opening day</label><input id="op-cash" type="number" inputMode="decimal" step="any" value={opening.cash} onChange={(e) => setOpening({ ...opening, cash: e.target.value })} className={`${inputCls} tabular-nums`} /></div>
+              <div><label className={labelCls} htmlFor="op-bank">Bank on opening day</label><input id="op-bank" type="number" inputMode="decimal" step="any" value={opening.bank} onChange={(e) => setOpening({ ...opening, bank: e.target.value })} className={`${inputCls} tabular-nums`} /></div>
               <div><label className={labelCls} htmlFor="op-date">Counting from</label><input id="op-date" type="date" value={opening.date} onChange={(e) => setOpening({ ...opening, date: e.target.value })} className={inputCls} /></div>
               <div className="flex items-end"><button type="submit" className={`${primaryBtn} w-full`}>Save</button></div>
             </form>
           )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className={`${cardCls} overflow-hidden`}>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">Customers owe you</h2><span className="flex items-center gap-2"><button type="button" onClick={() => stockUI.aging('customers')} className="text-xs font-bold text-teal-700 dark:text-teal-300 px-2 py-1 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40">How long?</button><span className="font-mono font-bold text-sm text-teal-700 dark:text-teal-300">{rs(position.receivables)}</span></span></div>
-              {debtors.length === 0 ? <div className="px-5 py-5 text-sm text-[#8E9299]">Nobody owes you anything.</div> : (
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 sm:px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">Customers owe you</h2><span className="flex items-center gap-2 ml-auto"><button type="button" onClick={() => stockUI.aging('customers')} className="text-xs font-bold text-teal-700 dark:text-teal-300 min-h-9 px-2 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40">How long?</button><span className="tabular-nums whitespace-nowrap font-bold text-sm text-teal-700 dark:text-teal-300">{rs(position.receivables)}</span></span></div>
+              {debtors.length === 0 ? <div className="px-5 py-5 text-sm text-[#6B7280] dark:text-[#94A3B8]">Nobody owes you anything.</div> : (
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                   {debtors.map((c) => (
-                    <li key={c.id} className="flex items-center gap-2 px-5 py-2.5">
-                      <button type="button" onClick={() => setSelectedCustomerId(c.id)} className="flex-1 min-w-0 text-left"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{c.name}</span><span className="text-[11px] text-[#8E9299]">{c.phone}</span></button>
-                      <span className="font-mono font-bold text-sm">{rs(c.totalDue)}</span>
-                      <button type="button" onClick={() => ui.receive(c.id)} className="text-xs font-bold text-teal-700 dark:text-teal-300 px-3 py-2 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40">Receive</button>
-                      <button type="button" onClick={() => setPrintRequest({ type: 'statement', customerId: c.id, from: `${today.slice(0, 4)}-01-01`, to: today })} aria-label={`Print statement for ${c.name}`} className="p-2 text-[#9CA3AF] hover:text-[#111827] dark:hover:text-white"><Printer className="w-4 h-4" /></button>
+                    <li key={c.id} className="flex flex-wrap sm:flex-nowrap items-center gap-x-2 pl-4 sm:pl-5 pr-2 py-2 hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors">
+                      <button type="button" onClick={() => setSelectedCustomerId(c.id)} className="flex-1 min-w-0 text-left py-1"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{c.name}</span><span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">{c.phone}</span></button>
+                      <span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(c.totalDue)}</span>
+                      <span className="max-sm:w-full flex justify-end gap-1"><RowAction label={`Receive payment from ${c.name}`} text="Receive" alwaysText tone="teal" icon={<HandCoins className="w-4 h-4" />} onClick={() => ui.receive(c.id)} />
+                      <RowAction label={`Print statement for ${c.name}`} icon={<Printer className="w-4 h-4" />} onClick={() => setPrintRequest({ type: 'statement', customerId: c.id, from: `${today.slice(0, 4)}-01-01`, to: today })} /></span>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
             <div className={`${cardCls} overflow-hidden`}>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">You owe</h2><span className="flex items-center gap-2"><button type="button" onClick={() => stockUI.aging('suppliers')} className="text-xs font-bold text-teal-700 dark:text-teal-300 px-2 py-1 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40">How long?</button><span className="font-mono font-bold text-sm text-rose-700 dark:text-rose-300">{rs(position.payables)}</span></span></div>
-              {creditors.length + unpaidExpenses.length + advances.length === 0 ? <div className="px-5 py-5 text-sm text-[#8E9299]">You owe nothing right now.</div> : (
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 sm:px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">You owe</h2><span className="flex items-center gap-2 ml-auto"><button type="button" onClick={() => stockUI.aging('suppliers')} className="text-xs font-bold text-teal-700 dark:text-teal-300 min-h-9 px-2 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40">How long?</button><span className="tabular-nums whitespace-nowrap font-bold text-sm text-rose-700 dark:text-rose-300">{rs(position.payables)}</span></span></div>
+              {creditors.length + unpaidExpenses.length + advances.length === 0 ? <div className="px-5 py-5 text-sm text-[#6B7280] dark:text-[#94A3B8]">You owe nothing right now.</div> : (
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                   {creditors.map((s) => (
-                    <li key={s.id} className="flex items-center gap-2 px-5 py-2.5">
-                      <button type="button" onClick={() => setSelectedSupplierId(s.id)} className="flex-1 min-w-0 text-left"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{s.company || s.name}</span><span className="text-[11px] text-[#8E9299]">supplier • {s.phone}</span></button>
-                      <span className="font-mono font-bold text-sm">{rs(s.totalOwed)}</span>
+                    <li key={s.id} className="flex items-center gap-2 px-4 sm:px-5 py-2.5 hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors">
+                      <button type="button" onClick={() => setSelectedSupplierId(s.id)} className="flex-1 min-w-0 text-left"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{s.company || s.name}</span><span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">supplier • {s.phone}</span></button>
+                      <span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(s.totalOwed)}</span>
                     </li>
                   ))}
                   {advances.map((c) => (
-                    <li key={c.id} className="flex items-center gap-2 px-5 py-2.5">
-                      <button type="button" onClick={() => setSelectedCustomerId(c.id)} className="flex-1 min-w-0 text-left"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{c.name}</span><span className="text-[11px] text-[#8E9299]">customer paid in advance</span></button>
-                      <span className="font-mono font-bold text-sm">{rs(-c.totalDue)}</span>
+                    <li key={c.id} className="flex flex-wrap sm:flex-nowrap items-center gap-x-2 pl-4 sm:pl-5 pr-2 py-2 hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors">
+                      <button type="button" onClick={() => setSelectedCustomerId(c.id)} className="flex-1 min-w-0 text-left py-1"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{c.name}</span><span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">customer paid in advance</span></button>
+                      <span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(-c.totalDue)}</span>
                     </li>
                   ))}
                   {unpaidExpenses.map((e) => (
                     <li key={e.id} className="flex items-center gap-2 px-5 py-2.5">
-                      <span className="flex-1 min-w-0"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{e.description}</span><span className="text-[11px] text-[#8E9299]">unpaid expense • {formatDate(e.date)}</span></span>
-                      <span className="font-mono font-bold text-sm">{rs(e.amount)}</span>
+                      <span className="flex-1 min-w-0"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{e.description}</span><span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">unpaid expense • {formatDate(e.date)}</span></span>
+                      <span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(e.amount)}</span>
                     </li>
                   ))}
                 </ul>
@@ -146,7 +142,7 @@ export const MoneyScreen: React.FC = () => {
       {tab === 'cheques' && <ChequesTab />}
 
       {(tab === 'expenses' || tab === 'cashbook') && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <label className="text-xs font-bold text-[#6B7280] dark:text-[#94A3B8]" htmlFor="money-month">Month</label>
           <input id="money-month" type="month" value={month} max={today.slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} className={`${inputCls} w-auto`} />
           {tab === 'expenses' && <button type="button" onClick={() => ui.addExpense()} className={`${primaryBtn} ml-auto`}><Receipt className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add expense</button>}
@@ -155,13 +151,13 @@ export const MoneyScreen: React.FC = () => {
 
       {tab === 'expenses' && (
         <div className="space-y-4">
-          <div className={`${cardCls} p-5 flex items-center justify-between`}><span className="font-bold text-[#111827] dark:text-white">Total expenses this month</span><span className="font-mono font-extrabold text-xl text-rose-700 dark:text-rose-300">{rs(monthTotal)}</span></div>
-          {monthExpenses.length === 0 ? <div className={`${cardCls} p-8 text-center text-sm text-[#8E9299]`}>No expenses recorded this month.</div> : monthExpenses.map((g) => (
+          <div className={`${cardCls} p-4 sm:p-5 flex items-center justify-between gap-3`}><span className="font-bold text-[#111827] dark:text-white">Total expenses this month</span><span className="tabular-nums whitespace-nowrap font-extrabold text-xl text-rose-700 dark:text-rose-300">{rs(monthTotal)}</span></div>
+          {monthExpenses.length === 0 ? <div className={cardCls}><EmptyState compact icon={<Receipt className="w-5 h-5" />} text="No expenses recorded this month." action={<button type="button" onClick={() => ui.addExpense()} className={secondaryBtn}><Receipt className="w-4 h-4" /> Add expense</button>} /></div> : monthExpenses.map((g) => (
             <div key={g.category} className={`${cardCls} overflow-hidden`}>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">{g.label} sheet</h2><span className="font-mono font-bold text-sm">{rs(g.total)}</span></div>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">{g.label} sheet</h2><span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(g.total)}</span></div>
               <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                 {g.rows.sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (
-                  <li key={e.id} className="flex items-center gap-2 px-5 py-2.5 text-sm"><span className="font-mono text-xs text-[#8E9299] w-20 shrink-0">{formatDate(e.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#8E9299]"> • {e.paidVia || 'Cash'}{e.createdBy ? ` • ${e.createdBy}` : ''}</span></span><span className="font-mono font-bold">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && !isChequeRecord(e.id) && <button type="button" onClick={() => deleteExpense(e.id)} aria-label={`Delete expense ${e.description}`} className="text-[#9CA3AF] hover:text-rose-600 text-sm px-2 py-1">✕</button>}</li>
+                  <li key={e.id} className="flex items-center gap-2 pl-4 sm:pl-5 pr-2 py-2 min-h-12 text-sm hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"><span className="text-xs text-[#6B7280] dark:text-[#8E9299] w-20 shrink-0 tabular-nums">{formatDate(e.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]"> • {e.paidVia || 'Cash'}{e.createdBy ? ` • ${e.createdBy}` : ''}</span></span><span className="tabular-nums whitespace-nowrap font-bold">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && !isChequeRecord(e.id) && <RowAction label={`Delete expense ${e.description}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => deleteExpense(e.id)} />}</li>
                 ))}
               </ul>
             </div>
@@ -172,14 +168,14 @@ export const MoneyScreen: React.FC = () => {
       {tab === 'cashbook' && (
         <div className={`${cardCls} overflow-hidden`}>
           <div className="grid grid-cols-3 text-center divide-x divide-[#E5E5E1] dark:divide-[#203248] border-b border-[#E5E5E1] dark:border-[#203248]">
-            <div className="p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">In</div><div className="font-mono font-bold text-teal-700 dark:text-teal-300">{rs(monthMoves.filter((m) => m.direction === 'in').reduce((a, m) => a + m.amount, 0))}</div></div>
-            <div className="p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Out</div><div className="font-mono font-bold text-rose-700 dark:text-rose-300">{rs(monthMoves.filter((m) => m.direction === 'out').reduce((a, m) => a + m.amount, 0))}</div></div>
-            <div className="p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Entries</div><div className="font-mono font-bold">{monthMoves.length}</div></div>
+            <div className="p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">In</div><div className="tabular-nums whitespace-nowrap font-bold text-teal-700 dark:text-teal-300">{rs(monthMoves.filter((m) => m.direction === 'in').reduce((a, m) => a + m.amount, 0))}</div></div>
+            <div className="p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Out</div><div className="tabular-nums whitespace-nowrap font-bold text-rose-700 dark:text-rose-300">{rs(monthMoves.filter((m) => m.direction === 'out').reduce((a, m) => a + m.amount, 0))}</div></div>
+            <div className="p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Entries</div><div className="tabular-nums whitespace-nowrap font-bold">{monthMoves.length}</div></div>
           </div>
-          {monthMoves.length === 0 ? <div className="px-5 py-8 text-center text-sm text-[#8E9299]">No money moved this month.</div> : (
+          {monthMoves.length === 0 ? <EmptyState compact icon={<Coins className="w-5 h-5" />} text="No money moved this month." /> : (
             <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
               {monthMoves.map((m) => (
-                <li key={m.id} className="flex items-center gap-2 px-5 py-2.5 text-sm"><span className="font-mono text-xs text-[#8E9299] w-20 shrink-0">{formatDate(m.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{m.counterparty ? `${m.counterparty} • ` : ''}{m.description}<span className="text-[11px] text-[#8E9299]"> • {m.method || 'Cash'}</span></span><span className={`font-mono font-bold ${m.direction === 'in' ? 'text-teal-700 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}>{m.direction === 'in' ? '+' : '−'} {rs(m.amount)}</span></li>
+                <li key={m.id} className="flex items-center gap-2 px-4 sm:px-5 py-2.5 text-sm hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"><span className="text-xs text-[#6B7280] dark:text-[#8E9299] w-20 shrink-0 tabular-nums">{formatDate(m.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{m.counterparty ? `${m.counterparty} • ` : ''}{m.description}<span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]"> • {m.method || 'Cash'}</span></span><span className={`tabular-nums whitespace-nowrap font-bold ${m.direction === 'in' ? 'text-teal-700 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}>{m.direction === 'in' ? '+' : '−'} {rs(m.amount)}</span></li>
               ))}
             </ul>
           )}

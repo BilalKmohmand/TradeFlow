@@ -75,7 +75,7 @@ const CustomerForm: React.FC<{
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className={labelCls} htmlFor="cust-code">Customer ID (optional)</label>
-          <input id="cust-code" value={code} onChange={(e) => setCode(e.target.value)} className={`${inputCls} font-mono`} placeholder="Your own code, e.g. C-215" autoCapitalize="characters" />
+          <input id="cust-code" value={code} onChange={(e) => setCode(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="Your own code, e.g. C-215" autoCapitalize="characters" />
         </div>
         <div>
           <label className={labelCls} htmlFor="cust-name">Name</label>
@@ -87,11 +87,11 @@ const CustomerForm: React.FC<{
         </div>
         <div>
           <label className={labelCls} htmlFor="cust-phone">Phone</label>
-          <input id="cust-phone" type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className={`${inputCls} font-mono`} placeholder="0300 1234567" />
+          <input id="cust-phone" type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0300 1234567" />
         </div>
         <div>
           <label className={labelCls} htmlFor="cust-limit">Credit limit in Rs. (optional)</label>
-          <input id="cust-limit" type="text" inputMode="decimal" value={creditLimit} onChange={(e) => setCreditLimit(e.target.value)} className={`${inputCls} font-mono`} placeholder="Empty = no limit" />
+          <input id="cust-limit" type="text" inputMode="decimal" value={creditLimit} onChange={(e) => setCreditLimit(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="Empty = no limit" />
           <p className="text-[11px] text-[#8E9299] mt-1">Bills that would take them over this are stopped unless a manager allows it.</p>
         </div>
         <div>

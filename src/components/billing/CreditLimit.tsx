@@ -20,7 +20,7 @@ export const BillCreditPanel: React.FC<{
   return (
     <div data-testid="bill-credit" className={`rounded-2xl border px-3.5 py-2.5 text-xs space-y-2 ${check.over ? 'border-rose-300 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40' : 'border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436]'}`}>
       <div className="font-semibold text-[#374151] dark:text-[#CBD5E1]">
-        Credit limit <span className="font-mono">{rs(check.limit)}</span> · owes <span className="font-mono">{rs(check.owes)}</span> · available <span className="font-mono">{rs(check.available)}</span>
+        Credit limit <span className="tabular-nums">{rs(check.limit)}</span> · owes <span className="tabular-nums">{rs(check.owes)}</span> · available <span className="tabular-nums">{rs(check.available)}</span>
       </div>
       {check.over && (
         <>
@@ -57,7 +57,7 @@ export const CreditUsageBar: React.FC<{ customer: Customer }> = ({ customer }) =
   return (
     <div data-testid="credit-usage" className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3 space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-        <span className="font-bold text-[#374151] dark:text-[#CBD5E1]">Credit limit <span className="font-mono">{rs(u.limit)}</span></span>
+        <span className="font-bold text-[#374151] dark:text-[#CBD5E1]">Credit limit <span className="tabular-nums">{rs(u.limit)}</span></span>
         <span className={`px-2 py-0.5 rounded-full font-bold ${u.over ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300' : u.pct >= 80 ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300'}`}>
           {u.over ? `Over limit by ${rs(Math.round((u.owes - u.limit) * 100) / 100)}` : `${u.pct}% of limit used`}
         </span>

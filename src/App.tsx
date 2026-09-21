@@ -20,6 +20,7 @@ import { PurchaseModal } from './components/PurchaseModal';
 import { PrintDocument, PrintRequest } from './components/PrintDocument';
 import { OpsScreen } from './screens/OpsScreen';
 import { Sidebar } from './components/Sidebar';
+import { BottomNav } from './components/BottomNav';
 
 // Screens
 import { DashboardScreen } from './screens/DashboardScreen';
@@ -149,7 +150,7 @@ function MainApp() {
       <div className="flex-1 flex min-w-0 w-full print:hidden">
       <Sidebar onReceiveStock={() => handleOpenPurchase()} />
       {/* Main Content View with Smooth Transitions */}
-      <main className="flex-1 max-w-7xl min-w-0 w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-6 pb-12">
+      <main className={`flex-1 max-w-7xl min-w-0 w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-5 sm:pt-6 ${isBilling ? 'pb-bottom-bar' : 'pb-12'}`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeScreen}
@@ -218,6 +219,9 @@ function MainApp() {
         </AnimatePresence>
       </main>
       </div>
+
+      {/* Phones & tablets in simple billing: bottom tab bar + "More" sheet (the sidebar takes over on desktop). */}
+      {isBilling && <BottomNav />}
 
       {/* Global Command Bar (CMD+K) */}
       <CommandBar

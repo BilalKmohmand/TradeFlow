@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { signIn } from './helpers/login';
+import { goTo } from './helpers/nav';
 
 /**
  * Post-dated cheque register. Haji Karim owes Rs. 100,000; Dalda Foods is owed Rs. 50,000.
@@ -129,7 +130,7 @@ async function chequeFlow(page: Page, opts: { mobile?: boolean } = {}) {
   await expect(page.getByText('Rs. 75,500').first()).toBeVisible();
 
   // 9. Daily sheet lists today's cheques.
-  await page.getByRole('button', { name: 'Home' }).first().click();
+  await goTo(page, 'Home');
   await page.getByRole('button', { name: 'Daily sheet' }).first().click();
   const daily = page.getByTestId('daily-cheques');
   await expect(daily).toContainText('Cheque received from Haji Karim');

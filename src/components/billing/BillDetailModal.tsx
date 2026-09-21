@@ -91,20 +91,20 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
                         {batchLines(it).map((b) => <div key={b} className="text-[11px] font-normal text-[#6B7280] dark:text-[#94A3B8]">{b}</div>)}
                         {it.customerRate && <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Customer rate</div>}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono">{lineQty(it)} {it.unit || ''}</td>
-                      {anyBack && <td className="px-3 py-2 text-right font-mono text-amber-700 dark:text-amber-300" data-testid="returned-qty">{backQty.get(it.id) ? backQty.get(it.id) : '—'}</td>}
-                      <td className="px-3 py-2 text-right font-mono">{rs(linePrice(it))}{(it.discountAmount || 0) > 0 && <div className="text-[11px] font-sans text-[#6B7280] dark:text-[#94A3B8]">less {lineDiscountLabel(it)}</div>}</td>
-                      <td className="px-3 py-2 text-right font-mono font-bold">{rs(it.amount)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{lineQty(it)} {it.unit || ''}</td>
+                      {anyBack && <td className="px-3 py-2 text-right tabular-nums text-amber-700 dark:text-amber-300" data-testid="returned-qty">{backQty.get(it.id) ? backQty.get(it.id) : '—'}</td>}
+                      <td className="px-3 py-2 text-right tabular-nums">{rs(linePrice(it))}{(it.discountAmount || 0) > 0 && <div className="text-[11px] font-sans text-[#6B7280] dark:text-[#94A3B8]">less {lineDiscountLabel(it)}</div>}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-bold">{rs(it.amount)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">{(inv.returnedAmount || 0) > 0 ? 'Net total' : 'Total'}</div><div className="font-mono font-extrabold text-[#111827] dark:text-white" data-testid="bill-net-total">{rs(billNetTotal(inv))}</div>{(inv.returnedAmount || 0) > 0 && <div className="text-[11px] text-amber-700 dark:text-amber-300">{rs(inv.totalAmount)} less {rs(inv.returnedAmount || 0)} returned</div>}{(inv.discount || 0) > 0 && <div className="text-[11px] text-[#8E9299]">after {rs(inv.discount || 0)} discount</div>}</div>
-              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Paid</div><div className="font-mono font-extrabold text-teal-700 dark:text-teal-300">{rs(inv.paidAmount - (inv.refundedAmount || 0))}</div>{(inv.refundedAmount || 0) > 0 && <div className="text-[11px] text-[#8E9299]">after {rs(inv.refundedAmount || 0)} given back</div>}</div>
-              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Balance</div><div className={`font-mono font-extrabold ${inv.balanceDue > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-[#111827] dark:text-white'}`}>{rs(inv.balanceDue)}</div></div>
-              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Customer owes (all bills)</div><div className="font-mono font-extrabold text-[#111827] dark:text-white">{rs(customer?.totalDue || 0)}</div></div>
+              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">{(inv.returnedAmount || 0) > 0 ? 'Net total' : 'Total'}</div><div className="tabular-nums font-extrabold text-[#111827] dark:text-white" data-testid="bill-net-total">{rs(billNetTotal(inv))}</div>{(inv.returnedAmount || 0) > 0 && <div className="text-[11px] text-amber-700 dark:text-amber-300">{rs(inv.totalAmount)} less {rs(inv.returnedAmount || 0)} returned</div>}{(inv.discount || 0) > 0 && <div className="text-[11px] text-[#8E9299]">after {rs(inv.discount || 0)} discount</div>}</div>
+              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Paid</div><div className="tabular-nums font-extrabold text-teal-700 dark:text-teal-300">{rs(inv.paidAmount - (inv.refundedAmount || 0))}</div>{(inv.refundedAmount || 0) > 0 && <div className="text-[11px] text-[#8E9299]">after {rs(inv.refundedAmount || 0)} given back</div>}</div>
+              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Balance</div><div className={`tabular-nums font-extrabold ${inv.balanceDue > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-[#111827] dark:text-white'}`}>{rs(inv.balanceDue)}</div></div>
+              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Customer owes (all bills)</div><div className="tabular-nums font-extrabold text-[#111827] dark:text-white">{rs(customer?.totalDue || 0)}</div></div>
             </div>
             {inv.notes && <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Note: {inv.notes}</p>}
 
@@ -133,10 +133,10 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
                   {billReturns.map((r) => (
                     <li key={r.id} className="flex items-center gap-2 px-3 py-2">
                       <span className="min-w-0 flex-1">
-                        <span className="font-mono text-xs text-[#8E9299] mr-2">{r.returnNumber}</span>{formatDate(r.date)}
+                        <span className="tabular-nums text-xs text-[#8E9299] mr-2">{r.returnNumber}</span>{formatDate(r.date)}
                         <span className="block text-[11px] text-[#8E9299] truncate">{(r.items || []).map((l) => `${l.productName} × ${l.qty}`).join(', ')}{(r.refundAmount || 0) > 0 ? ` • ${rs(r.refundAmount || 0)} given back` : ''}</span>
                       </span>
-                      <span className="font-mono font-bold text-amber-700 dark:text-amber-300">− {rs(r.amount)}</span>
+                      <span className="tabular-nums font-bold text-amber-700 dark:text-amber-300">− {rs(r.amount)}</span>
                       <button type="button" onClick={() => setPrintRequest({ type: 'note', returnId: r.id })} aria-label={`Print credit note ${r.returnNumber}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-[#111827] dark:hover:text-white"><Printer className="w-4 h-4" /></button>
                       {canDelete && <button type="button" onClick={() => setPendingReturn(r)} aria-label={`Delete return ${r.returnNumber}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}
                     </li>
@@ -151,7 +151,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Payments</h3>
                 <ul className="text-sm divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248]">
                   {(inv.payments || []).map((p) => (
-                    <li key={p.id} className="flex justify-between px-3 py-2"><span>{formatDate(p.date)} • {p.notes || p.method}</span><span className="font-mono font-bold">{rs(p.amount)}</span></li>
+                    <li key={p.id} className="flex justify-between px-3 py-2"><span>{formatDate(p.date)} • {p.notes || p.method}</span><span className="tabular-nums font-bold">{rs(p.amount)}</span></li>
                   ))}
                 </ul>
               </div>
@@ -165,7 +165,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
                   <div className="col-span-2 sm:col-span-1">
                     <label className={labelCls} htmlFor="pay-amount">Amount</label>
                     <div className="flex gap-1">
-                      <input id="pay-amount" type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} font-mono`} placeholder="0" />
+                      <input id="pay-amount" type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
                       <button type="button" onClick={() => setAmount(String(inv.balanceDue))} className="shrink-0 px-3 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-[11px] font-bold text-teal-700 dark:text-teal-300">Full</button>
                     </div>
                   </div>

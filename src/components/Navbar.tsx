@@ -123,69 +123,67 @@ export const Navbar: React.FC<NavbarProps> = ({
   ];
 
   const navItems = allNavItems.filter((item) => isScreenVisible(item.id));
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
 
   return (
-    <header className="print:hidden sticky top-0 z-30 bg-white/90 dark:bg-[#101A26]/90 backdrop-blur-md border-b border-[#E5E5E1] dark:border-[#203248] text-[#111827] dark:text-[#F1F5F9] shadow-xs transition-colors">
-      <div className="max-w-7xl min-w-0 w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
-        <div className="flex items-center justify-between min-h-16 min-w-0 py-3 gap-3 sm:gap-4">
-          {/* Logo & Brand */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="w-10 h-10 rounded-2xl bg-[#111827] dark:bg-[#162436] flex items-center justify-center text-white shadow-xs border border-transparent dark:border-[#203248]">
+    <header className="print:hidden sticky top-0 z-30 bg-white/90 dark:bg-[#101A26]/90 backdrop-blur-md border-b border-[#E5E5E1] dark:border-[#203248] text-[#111827] dark:text-[#F1F5F9] shadow-xs transition-colors pt-[env(safe-area-inset-top)]">
+      <div className="min-w-0 w-full mx-auto px-4 sm:px-6">
+        <div className="flex items-center justify-between min-h-14 sm:min-h-16 min-w-0 py-2 sm:py-3 gap-2 sm:gap-4">
+          {/* Logo & Brand: the shop name wraps to two lines on phones instead of being cut off. */}
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 lg:flex-none">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#111827] dark:bg-[#162436] flex items-center justify-center text-white shadow-xs border border-transparent dark:border-[#203248] shrink-0">
               <Truck className="w-5 h-5 text-teal-400" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-serif italic font-bold text-lg sm:text-xl tracking-tight text-[#111827] dark:text-white truncate max-w-[28vw] sm:max-w-none">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <h1 className="font-serif italic font-bold text-[17px] leading-[1.15] sm:text-xl tracking-tight text-[#111827] dark:text-white line-clamp-2 sm:line-clamp-1 break-words">
                   {settings.companyName || 'Sarmaya'}
                 </h1>
-                <span className="hidden sm:inline-flex text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 bg-[#FAF9F6] dark:bg-[#162436] text-teal-800 dark:text-teal-300 rounded-full border border-[#E5E5E1] dark:border-[#203248]">
+                <span className="hidden md:inline-flex shrink-0 text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 bg-[#FAF9F6] dark:bg-[#162436] text-teal-800 dark:text-teal-300 rounded-full border border-[#E5E5E1] dark:border-[#203248]">
                   {isBilling ? 'Billing' : 'Bulk Trading'}
                 </span>
               </div>
-              <p className="text-[11px] text-[#8E9299] dark:text-[#94A3B8] font-medium hidden 2xl:block">
-                Simple • Smart • Automated
-              </p>
             </div>
           </div>
 
-
-          {/* Global Command Bar Search Trigger (CMD+K) - High Contrast & Dedicated Width */}
+          {/* Search (Ctrl/⌘ K): a real search field look on wider screens, an icon on phones. */}
           <button
+            type="button"
             onClick={onOpenCommandBar}
-            title="Global Quick Search (Press ⌘K or Ctrl+K to open)"
-            className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] border border-[#CBD5E1] dark:border-[#2A3F5A] hover:border-teal-600/50 dark:hover:border-teal-400/50 rounded-2xl text-xs text-[#374151] dark:text-[#E2E8F0] shadow-2xs transition-all shrink-0 justify-between group cursor-pointer w-auto sm:w-44 lg:w-auto"
+            aria-label="Search"
+            aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
+            title={`Search customers, bills, items… (${isMac ? '⌘K' : 'Ctrl+K'})`}
+            className="group shrink-0 flex items-center justify-center sm:justify-between gap-2 w-11 h-11 sm:w-60 lg:w-72 xl:w-80 sm:h-10 sm:px-3.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-white dark:hover:bg-[#1E2E40] border border-[#E5E5E1] dark:border-[#2A3F5A] hover:border-teal-600/50 dark:hover:border-teal-400/50 text-[#6B7280] dark:text-[#94A3B8] transition-colors"
           >
-            <div className="flex items-center gap-2 min-w-0">
-              <Search className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0 group-hover:scale-110 transition-transform" />
-              <span className="hidden sm:inline lg:hidden text-xs font-medium text-[#4B5563] dark:text-[#CBD5E1] group-hover:text-[#111827] dark:group-hover:text-white truncate">
-                Search...
-              </span>
-            </div>
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono font-semibold bg-[#F1F5F9] dark:bg-[#0D1520] px-1.5 py-0.5 rounded-md border border-[#CBD5E1] dark:border-[#203248] text-[#475569] dark:text-[#94A3B8] shadow-2xs shrink-0">
-              <span>⌘K</span>
+            <span className="flex items-center gap-2 min-w-0">
+              <Search className="w-4.5 h-4.5 sm:w-4 sm:h-4 text-[#374151] dark:text-[#CBD5E1] shrink-0" />
+              <span className="hidden sm:inline text-sm font-medium truncate group-hover:text-[#111827] dark:group-hover:text-white">Search</span>
+            </span>
+            <kbd className="hidden sm:inline-flex items-center text-[11px] font-semibold font-sans bg-white dark:bg-[#0D1520] px-1.5 py-0.5 rounded-md border border-[#E5E5E1] dark:border-[#203248] text-[#6B7280] dark:text-[#94A3B8] shrink-0">
+              {isMac ? '⌘K' : 'Ctrl K'}
             </kbd>
           </button>
 
           {/* Right Action Hub */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <div className={`${isBilling ? 'hidden lg:flex' : 'flex'} items-center rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] p-0.5`}>
             {/* Automated System-Aware Theme Toggle */}
             <div className="relative hidden sm:block" ref={themeMenuRef}>
               <button
                 onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
                 title={`Theme: ${timeLabel}. Click to switch theme.`}
-                className="px-2.5 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-[#F1F5F9] border border-[#E5E5E1] dark:border-[#203248] transition-colors flex items-center gap-1.5"
+                aria-label="Theme"
+                aria-haspopup="menu"
+                aria-expanded={isThemeMenuOpen}
+                className="w-9 h-9 rounded-xl hover:bg-white dark:hover:bg-[#1E2E40] text-[#111827] dark:text-[#F1F5F9] transition-colors flex items-center justify-center"
               >
                 {themeMode === 'auto' ? (
-                  <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 animate-pulse" />
+                  <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                 ) : themeMode === 'dark' ? (
-                  <Moon className="w-3.5 h-3.5 text-teal-400" />
+                  <Moon className="w-4 h-4 text-teal-400" />
                 ) : (
-                  <Sun className="w-3.5 h-3.5 text-amber-500" />
+                  <Sun className="w-4 h-4 text-amber-500" />
                 )}
-                <span className="hidden 2xl:inline text-[11px] font-semibold text-[#6B7280] dark:text-[#94A3B8]">
-                  {themeMode === 'auto' ? 'Auto' : themeMode === 'dark' ? 'Ocean' : 'Light'}
-                </span>
-                <ChevronDown className="w-3 h-3 text-[#8E9299] hidden sm:block" />
               </button>
 
               {/* Theme Dropdown Menu */}
@@ -279,9 +277,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={() => setIsBellOpen((v) => !v)}
                 title="Notifications"
                 aria-label="Notifications"
-                className="relative px-2.5 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] text-[#111827] dark:text-[#F1F5F9] border border-[#E5E5E1] dark:border-[#203248] transition-colors"
+                className="relative w-9 h-9 rounded-xl hover:bg-white dark:hover:bg-[#1E2E40] text-[#111827] dark:text-[#F1F5F9] transition-colors flex items-center justify-center"
               >
-                <Bell className="w-3.5 h-3.5" />
+                <Bell className="w-4 h-4" />
                 {alertCount > 0 && <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">{alertCount > 99 ? '99+' : alertCount}</span>}
               </button>
               {isBellOpen && (
@@ -315,6 +313,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
 
+            </div>
+
             {/* Signed-in user: menu with My account, Lock screen and Log out */}
             {currentUser && (
               <div className="relative" ref={userMenuRef}>
@@ -325,9 +325,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                   aria-expanded={isUserMenuOpen}
                   aria-label={`Account menu for ${currentUser.name}`}
                   title={`Signed in as ${currentUser.name} (@${currentUser.username})`}
-                  className="flex items-center gap-2 p-1 xl:px-2.5 xl:py-1.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] max-w-64 transition-colors"
+                  className="flex items-center gap-2 p-1.5 sm:p-1 xl:pl-1.5 xl:pr-2.5 xl:py-1 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] max-w-64 transition-colors"
                 >
-                  <span className="w-6 h-6 rounded-full bg-teal-600 dark:bg-teal-500 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                  <span className="w-8 h-8 sm:w-7 sm:h-7 rounded-full bg-teal-600 dark:bg-teal-500 text-white flex items-center justify-center text-xs font-bold shrink-0">
                     {currentUser.name.charAt(0).toUpperCase()}
                   </span>
                   <span className="hidden xl:block min-w-0 text-left">
@@ -365,10 +365,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => lockScreen()}
               title="Lock screen (your password is needed to open again)"
               aria-label="Lock screen"
-              className="hidden sm:flex items-center gap-1.5 px-2.5 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#E5E5E1] dark:border-[#203248] hover:border-rose-200 dark:hover:border-rose-900/60 text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600 dark:hover:text-rose-400 transition-all shadow-2xs active:scale-95"
+              className="hidden sm:flex items-center gap-1.5 h-10 px-3 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#E5E5E1] dark:border-[#203248] hover:border-rose-200 dark:hover:border-rose-900/60 text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600 dark:hover:text-rose-400 transition-all shadow-2xs active:scale-95"
             >
-              <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-              <span>Lock</span>
+              <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span className="hidden xl:inline">Lock</span>
             </button>
 
           </div>
@@ -378,7 +378,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {!isBilling && adminItem.length > 0 && (
           <button type="button" onClick={() => { updateSettings({ appMode: 'billing' }); setActiveScreen('dashboard'); }} className="lg:hidden w-full text-left px-1 pt-1.5 text-[11px] font-bold text-indigo-700 dark:text-indigo-300">← Back to simple billing</button>
         )}
-        <nav className={`grid lg:hidden ${navItems.length > 8 ? 'grid-cols-5' : 'grid-cols-4'} gap-0.5 py-1.5 border-t border-[#E5E5E1] dark:border-[#203248]`}>
+        {!isBilling && <nav className={`grid lg:hidden ${navItems.length > 8 ? 'grid-cols-5' : 'grid-cols-4'} gap-0.5 py-1.5 border-t border-[#E5E5E1] dark:border-[#203248]`}>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeScreen === item.id;
@@ -402,7 +402,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             );
           })}
-        </nav>
+        </nav>}
       </div>
       <MyAccountDialog isOpen={isMyAccountOpen} onClose={() => setIsMyAccountOpen(false)} />
     </header>

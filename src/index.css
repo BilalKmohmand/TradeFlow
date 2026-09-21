@@ -104,3 +104,25 @@
     margin: 12mm;
   }
 }
+
+/*
+ * Phones: form fields at 16px or more so iOS Safari doesn't zoom in when a field is focused.
+ * Unlayered on purpose, so it wins over any text-xs/text-sm utility on a field.
+ */
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Room for the phone bottom tab bar (64px + the home-indicator inset). */
+.pb-bottom-bar {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 1024px) {
+  .pb-bottom-bar {
+    padding-bottom: 3rem;
+  }
+}

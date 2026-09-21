@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { BookOpen, Plus, Printer, Trash2, Lock, Unlock, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Plus, Printer, Trash2, Lock, Unlock, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
-import { Notice, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, rs } from '../../components/billing/ui';
+import { Notice, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, rs, PageHeader, pillCls } from '../../components/billing/ui';
 import { JournalEntryModal } from '../../components/accounting/JournalEntryModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useAccounting } from '../../hooks/useAccounting';
@@ -38,7 +38,7 @@ const TABS: { id: Tab; label: string; help: string }[] = [
 const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
 const thCls = 'px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap';
 const tdCls = 'px-3 py-2 text-sm';
-const numCls = 'px-3 py-2 text-sm text-right font-mono whitespace-nowrap';
+const numCls = 'px-3 py-2 text-sm text-right tabular-nums whitespace-nowrap';
 
 /** Double-entry books derived from everyday records, plus manual journals for the accountant. */
 export const AccountsScreen: React.FC = () => {
@@ -86,7 +86,7 @@ export const AccountsScreen: React.FC = () => {
     return (
       <div className={`${cardCls} p-6`}>
         <h1 className="text-xl font-bold text-[#111827] dark:text-white">Accounts</h1>
-        <p className="text-sm text-[#6B7280] mt-1">You do not have permission to see the books.</p>
+        <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">You do not have permission to see the books.</p>
       </div>
     );
   }
@@ -99,7 +99,7 @@ export const AccountsScreen: React.FC = () => {
   const flash = (r: { success: boolean; message: string }) => setNotice({ kind: r.success ? 'ok' : 'error', text: r.message });
 
   const tabBtn = (t: (typeof TABS)[number]) => (
-    <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)} className={`px-3.5 py-2 rounded-2xl text-xs font-bold border whitespace-nowrap ${tab === t.id ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] border-transparent' : 'bg-white dark:bg-[#101A26] border-[#E5E5E1] dark:border-[#203248] text-[#6B7280] dark:text-[#94A3B8]'}`}>{t.label}</button>
+    <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)} className={pillCls(tab === t.id)}>{t.label}</button>
   );
 
   const dateField = (id: string, label: string, value: string, set: (v: string) => void) => (
@@ -126,7 +126,7 @@ export const AccountsScreen: React.FC = () => {
       {rows.length === 0 && <tr><td colSpan={2} className="px-3 py-2 text-sm text-[#8E9299]">Nothing yet.</td></tr>}
       {rows.map((r) => (
         <tr key={r.account.code} className="border-b border-[#F1F0EC] dark:border-[#1E2E40]">
-          <td className={tdCls}><button type="button" onClick={() => openGl(r.account.code)} className="text-left hover:underline"><span className="font-mono text-xs text-[#8E9299] mr-2">{r.account.code}</span>{r.account.name}</button></td>
+          <td className={tdCls}><button type="button" onClick={() => openGl(r.account.code)} className="text-left hover:underline"><span className="tabular-nums text-xs text-[#8E9299] mr-2">{r.account.code}</span>{r.account.name}</button></td>
           <td className={numCls}>{money(r.amount)}</td>
         </tr>
       ))}
@@ -138,15 +138,11 @@ export const AccountsScreen: React.FC = () => {
 
   return (
     <div className="space-y-5 min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-[#111827] dark:text-white flex items-center gap-2"><BookOpen className="w-6 h-6 text-teal-700 dark:text-teal-300" /> Accounts</h1>
-          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Double-entry books, posted automatically from your bills, payments and expenses.</p>
-        </div>
-        {canPost && <button type="button" onClick={() => setNewJournal((n) => n + 1)} className={primaryBtn}><Plus className="w-4 h-4" /> New journal entry</button>}
-      </div>
+      <PageHeader title="Accounts" subtitle="Double-entry books, posted automatically from your bills, payments and expenses.">
+        {canPost && <button type="button" onClick={() => setNewJournal((n) => n + 1)} className={`${primaryBtn} max-sm:flex-1`}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> New journal entry</button>}
+      </PageHeader>
 
-      <div role="tablist" aria-label="Accounts views" className="flex flex-wrap gap-1.5">{TABS.filter((t) => t.id !== 'profit' || canPost).map(tabBtn)}</div>
+      <div role="tablist" aria-label="Accounts views" className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">{TABS.filter((t) => t.id !== 'profit' || canPost).map(tabBtn)}</div>
       <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] -mt-2">{current.help}</p>
 
       {settings.booksLockedUntil && (
@@ -174,8 +170,8 @@ export const AccountsScreen: React.FC = () => {
                 {tb.rows.length === 0 && <tr><td colSpan={4} className="px-3 py-6 text-center text-sm text-[#8E9299]">No postings yet.</td></tr>}
                 {tb.rows.map((r) => (
                   <tr key={r.account.code} className="border-b border-[#F1F0EC] dark:border-[#1E2E40] hover:bg-[#FAF9F6] dark:hover:bg-[#162436] cursor-pointer" onClick={() => openGl(r.account.code)}>
-                    <td className={`${tdCls} font-mono text-xs text-[#8E9299]`}>{r.account.code}</td>
-                    <td className={tdCls}>{r.account.name}</td>
+                    <td className={`${tdCls} tabular-nums text-xs text-[#8E9299]`}>{r.account.code}</td>
+                    <td className={tdCls}><button type="button" onClick={(e) => { e.stopPropagation(); openGl(r.account.code); }} className="text-left hover:underline">{r.account.name}</button></td>
                     <td className={numCls}>{r.debit ? money(r.debit) : ''}</td>
                     <td className={numCls}>{r.credit ? money(r.credit) : ''}</td>
                   </tr>
@@ -210,8 +206,8 @@ export const AccountsScreen: React.FC = () => {
                 {gl.lines.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-[#8E9299]">No postings to {name(glCode)} in this period.</td></tr>}
                 {gl.lines.map((l, i) => (
                   <tr key={`${l.entryId}-${i}`} className="border-b border-[#F1F0EC] dark:border-[#1E2E40]">
-                    <td className={`${tdCls} font-mono text-xs whitespace-nowrap`}>{formatDate(l.date)}</td>
-                    <td className={`${tdCls} font-mono text-xs whitespace-nowrap`}>
+                    <td className={`${tdCls} tabular-nums text-xs whitespace-nowrap`}>{formatDate(l.date)}</td>
+                    <td className={`${tdCls} tabular-nums text-xs whitespace-nowrap`}>
                       {l.billId ? (
                         <button type="button" onClick={() => ui.openBill(l.billId!)} className="inline-flex items-center gap-1 text-teal-700 dark:text-teal-300 font-bold hover:underline" title="Open the bill">{l.ref} <ExternalLink className="w-3 h-3" /></button>
                       ) : l.ref}
@@ -255,11 +251,11 @@ export const AccountsScreen: React.FC = () => {
           {journalRows.slice(0, jLimit).map((e) => (
             <div key={e.id} className={`${cardCls} overflow-hidden`} data-testid="journal-entry">
               <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-[#F1F0EC] dark:border-[#1E2E40]">
-                <span className="font-mono text-xs text-[#8E9299]">{formatDate(e.date)}</span>
+                <span className="tabular-nums text-xs text-[#8E9299]">{formatDate(e.date)}</span>
                 {e.billId ? (
-                  <button type="button" onClick={() => ui.openBill(e.billId!)} className="font-mono text-xs font-bold text-teal-700 dark:text-teal-300 hover:underline">{e.ref}</button>
+                  <button type="button" onClick={() => ui.openBill(e.billId!)} className="tabular-nums text-xs font-bold text-teal-700 dark:text-teal-300 hover:underline">{e.ref}</button>
                 ) : (
-                  <span className="font-mono text-xs font-bold">{e.ref}</span>
+                  <span className="tabular-nums text-xs font-bold">{e.ref}</span>
                 )}
                 <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${e.source === 'manual' ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300' : 'bg-[#F4F3EF] dark:bg-[#162436] text-[#6B7280]'}`}>{e.source === 'manual' ? 'manual' : 'auto'}</span>
                 <span className="text-sm font-semibold text-[#111827] dark:text-white min-w-0 flex-1 truncate">{e.memo}</span>
@@ -272,7 +268,7 @@ export const AccountsScreen: React.FC = () => {
                   <tbody>
                     {e.lines.map((l, i) => (
                       <tr key={i} className="border-b last:border-0 border-[#F7F6F2] dark:border-[#162436]">
-                        <td className={`${tdCls} ${l.credit ? 'pl-8' : ''}`}><button type="button" onClick={() => openGl(l.accountCode)} className="text-left hover:underline"><span className="font-mono text-xs text-[#8E9299] mr-2">{l.accountCode}</span>{name(l.accountCode)}</button>{l.memo && <span className="block text-[11px] text-[#8E9299]">{l.memo}</span>}</td>
+                        <td className={`${tdCls} ${l.credit ? 'pl-8' : ''}`}><button type="button" onClick={() => openGl(l.accountCode)} className="text-left hover:underline"><span className="tabular-nums text-xs text-[#8E9299] mr-2">{l.accountCode}</span>{name(l.accountCode)}</button>{l.memo && <span className="block text-[11px] text-[#8E9299]">{l.memo}</span>}</td>
                         <td className={`${numCls} w-28`}>{l.debit ? money(l.debit) : ''}</td>
                         <td className={`${numCls} w-28`}>{l.credit ? money(l.credit) : ''}</td>
                       </tr>
@@ -296,7 +292,7 @@ export const AccountsScreen: React.FC = () => {
                 <tbody>
                   {accounts.map((a: Account) => (
                     <tr key={a.code} className="border-b border-[#F1F0EC] dark:border-[#1E2E40]">
-                      <td className={`${tdCls} font-mono text-xs text-[#8E9299]`}>{a.code}</td>
+                      <td className={`${tdCls} tabular-nums text-xs text-[#8E9299]`}>{a.code}</td>
                       <td className={tdCls}>
                         <button type="button" onClick={() => openGl(a.code)} className="text-left font-semibold hover:underline">{a.name}</button>
                         {a.description && <span className="block text-[11px] text-[#8E9299]">{a.description}</span>}
@@ -324,7 +320,7 @@ export const AccountsScreen: React.FC = () => {
             className={`${cardCls} p-4 sm:p-5 grid grid-cols-2 sm:grid-cols-5 gap-3`}
           >
             <h2 className="col-span-2 sm:col-span-5 font-bold text-[#111827] dark:text-white">Add an account</h2>
-            <div className="min-w-0"><label className={labelCls} htmlFor="acc-code">Code</label><input id="acc-code" inputMode="numeric" value={acc.code} onChange={(e) => setAcc({ ...acc, code: e.target.value })} placeholder="e.g. 1020" className={`${inputCls} font-mono`} /></div>
+            <div className="min-w-0"><label className={labelCls} htmlFor="acc-code">Code</label><input id="acc-code" inputMode="numeric" value={acc.code} onChange={(e) => setAcc({ ...acc, code: e.target.value })} placeholder="e.g. 1020" className={`${inputCls} tabular-nums`} /></div>
             <div className="min-w-0"><label className={labelCls} htmlFor="acc-type">Type</label><select id="acc-type" value={acc.type} onChange={(e) => setAcc({ ...acc, type: e.target.value as AccountType })} className={inputCls}>{ACCOUNT_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></div>
             <div className="col-span-2 min-w-0"><label className={labelCls} htmlFor="acc-name">Name</label><input id="acc-name" value={acc.name} onChange={(e) => setAcc({ ...acc, name: e.target.value })} placeholder="e.g. Meezan Bank current account" className={inputCls} /></div>
             <div className="col-span-2 sm:col-span-1 flex items-end"><button type="submit" className={`${primaryBtn} w-full`}>Add account</button></div>
@@ -384,7 +380,7 @@ export const AccountsScreen: React.FC = () => {
                 {statementSection('Liabilities', bs.liabilities, bs.totalLiabilities, 'Total liabilities')}
                 <tr className="bg-[#FAF9F6] dark:bg-[#0D1520]"><td colSpan={2} className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Equity</td></tr>
                 {bs.equity.map((r) => (
-                  <tr key={r.account.code} className="border-b border-[#F1F0EC] dark:border-[#1E2E40]"><td className={tdCls}><button type="button" onClick={() => openGl(r.account.code)} className="text-left hover:underline"><span className="font-mono text-xs text-[#8E9299] mr-2">{r.account.code}</span>{r.account.name}</button></td><td className={numCls}>{money(r.amount)}</td></tr>
+                  <tr key={r.account.code} className="border-b border-[#F1F0EC] dark:border-[#1E2E40]"><td className={tdCls}><button type="button" onClick={() => openGl(r.account.code)} className="text-left hover:underline"><span className="tabular-nums text-xs text-[#8E9299] mr-2">{r.account.code}</span>{r.account.name}</button></td><td className={numCls}>{money(r.amount)}</td></tr>
                 ))}
                 <tr className="border-b border-[#F1F0EC] dark:border-[#1E2E40]"><td className={tdCls}>Profit to date (not yet closed)</td><td className={numCls}>{money(bs.profitToDate)}</td></tr>
                 <tr className="border-b border-[#E5E5E1] dark:border-[#203248] font-bold"><td className={tdCls}>Total equity</td><td className={numCls}>{money(bs.totalEquity)}</td></tr>

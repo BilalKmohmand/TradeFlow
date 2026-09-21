@@ -75,7 +75,7 @@ export const ChequesTab: React.FC = () => {
       <div className={`${cardCls} overflow-hidden`}>
         <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]">
           <h2 className="font-bold text-[#111827] dark:text-white">{CHEQUE_VIEWS.find((v) => v.id === view)?.label}</h2>
-          <span className="font-mono font-bold text-sm" data-testid="cheque-list-total">{rs(total)}</span>
+          <span className="tabular-nums font-bold text-sm" data-testid="cheque-list-total">{rs(total)}</span>
         </div>
         {rows.length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-[#8E9299]">{cheques.length === 0 ? 'No cheques yet. Record one when a customer gives you a cheque.' : 'No cheques in this list.'}</div>
@@ -89,12 +89,12 @@ export const ChequesTab: React.FC = () => {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="font-semibold text-sm text-[#111827] dark:text-white truncate">{c.direction === 'issued' ? 'To ' : ''}{c.partyName}</div>
-                      <div className="text-[11px] text-[#8E9299]"><span className="font-mono">#{c.chequeNumber}</span> • {c.bankName} • dated <span className={overdue ? 'font-bold text-amber-700 dark:text-amber-300' : ''}>{formatDate(c.chequeDate)}</span></div>
+                      <div className="text-[11px] text-[#8E9299]"><span className="tabular-nums">#{c.chequeNumber}</span> • {c.bankName} • dated <span className={overdue ? 'font-bold text-amber-700 dark:text-amber-300' : ''}>{formatDate(c.chequeDate)}</span></div>
                       {(c.status === 'bounced' || c.status === 'cancelled') && c.returnReason && <div className="text-[11px] text-rose-700 dark:text-rose-300">{c.returnReason}{c.bankCharge ? ` • bank charge ${rs(c.bankCharge)} (${c.chargeTo === 'customer' ? 'customer pays' : 'shop paid'})` : ''}</div>}
                       {c.status === 'cleared' && c.clearedDate && <div className="text-[11px] text-teal-700 dark:text-teal-300">Cleared {formatDate(c.clearedDate)}</div>}
                     </div>
                     <div className="text-right shrink-0">
-                      <div className={`font-mono font-bold text-sm ${c.direction === 'issued' ? 'text-rose-700 dark:text-rose-300' : 'text-[#111827] dark:text-white'}`}>{c.direction === 'issued' ? '− ' : ''}{rs(c.amount)}</div>
+                      <div className={`tabular-nums font-bold text-sm ${c.direction === 'issued' ? 'text-rose-700 dark:text-rose-300' : 'text-[#111827] dark:text-white'}`}>{c.direction === 'issued' ? '− ' : ''}{rs(c.amount)}</div>
                       <span className={`inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold ${STATUS_TONE[c.status]}`}>{chequeStatusLabel(c)}</span>
                     </div>
                   </div>

@@ -12,7 +12,7 @@ const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDig
 const num = (n: number) => n.toLocaleString('en-PK', { maximumFractionDigits: 2 });
 const th = 'px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap';
 const td = 'px-3 py-2 text-sm';
-const tdNum = 'px-3 py-2 text-sm text-right font-mono whitespace-nowrap';
+const tdNum = 'px-3 py-2 text-sm text-right tabular-nums whitespace-nowrap';
 
 const chip = (active: boolean) =>
   `px-3.5 py-2 rounded-2xl text-xs font-bold border whitespace-nowrap ${active ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] border-transparent' : 'bg-white dark:bg-[#101A26] border-[#E5E5E1] dark:border-[#203248] text-[#6B7280] dark:text-[#94A3B8]'}`;
@@ -130,7 +130,7 @@ export const PurchaseRegisterView: React.FC<{ supplierId?: string }> = ({ suppli
               <tbody className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                 {reg.rows.map((r) => (
                   <tr key={`${r.kind}-${r.id}`} className={r.kind === 'return' ? 'bg-rose-50/50 dark:bg-rose-950/20' : ''}>
-                    <td className={`${td} whitespace-nowrap`}>{formatDate(r.date)}<span className="block text-[11px] font-mono text-[#8E9299]">{r.ref}</span></td>
+                    <td className={`${td} whitespace-nowrap`}>{formatDate(r.date)}<span className="block text-[11px] tabular-nums text-[#8E9299]">{r.ref}</span></td>
                     <td className={td}>{r.supplier}{r.kind === 'return' && <span className="block text-[11px] font-bold text-rose-700 dark:text-rose-300">returned</span>}</td>
                     <td className={td}>{r.item}</td>
                     <td className={tdNum}>{num(r.qty)} {r.unit}</td>

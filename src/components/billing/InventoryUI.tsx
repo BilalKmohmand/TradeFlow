@@ -40,7 +40,7 @@ export const ItemStockDetails: React.FC<{ product: Product }> = ({ product }) =>
       {per && (
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[#6B7280] dark:text-[#94A3B8]">
           {godowns.filter((g) => (per[g.id] || 0) !== 0).map((g) => (
-            <span key={g.id} data-godown={g.name} className="whitespace-nowrap">{g.name}: <strong className="font-mono text-[#374151] dark:text-[#CBD5E1]">{num(per[g.id] || 0)}</strong></span>
+            <span key={g.id} data-godown={g.name} className="whitespace-nowrap">{g.name}: <strong className="tabular-nums text-[#374151] dark:text-[#CBD5E1]">{num(per[g.id] || 0)}</strong></span>
           ))}
         </div>
       )}
@@ -50,7 +50,7 @@ export const ItemStockDetails: React.FC<{ product: Product }> = ({ product }) =>
             <li key={b.id} className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-[#E5E5E1] dark:border-[#203248] px-2 py-1">
               <span className="font-bold text-[#111827] dark:text-white">{b.batchNo}</span>
               <ExpiryBadge expiryDate={b.expiryDate} />
-              <span className="font-mono whitespace-nowrap">{num(b.qty)} {unit}</span>
+              <span className="tabular-nums whitespace-nowrap">{num(b.qty)} {unit}</span>
               {multi && <span className="text-[#8E9299] whitespace-nowrap">{godownName(godowns, b.godownId)}</span>}
             </li>
           ))}
@@ -201,11 +201,11 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={labelCls} htmlFor={id('qty')}>Quantity{p ? ` (${unit})` : ''}</label>
-                    <input id={id('qty')} type="number" inputMode="decimal" min="0" step="any" value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} className={`${inputCls} font-mono`} placeholder="0" />
+                    <input id={id('qty')} type="number" inputMode="decimal" min="0" step="any" value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="0" />
                   </div>
                   <div>
                     <label className={labelCls} htmlFor={id('cost')}>Cost per {unit}{supplierId ? '' : ' (optional)'}</label>
-                    <input id={id('cost')} type="number" inputMode="decimal" min="0" step="any" value={l.cost} onChange={(e) => setLine(l.key, { cost: e.target.value })} className={`${inputCls} font-mono`} placeholder="Rs." />
+                    <input id={id('cost')} type="number" inputMode="decimal" min="0" step="any" value={l.cost} onChange={(e) => setLine(l.key, { cost: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="Rs." />
                   </div>
                   {p?.trackBatches && (
                     <>
@@ -220,7 +220,7 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
                     </>
                   )}
                 </div>
-                {amount > 0 && <p className="text-xs text-right text-[#6B7280] dark:text-[#94A3B8]">Amount <strong className="font-mono text-[#111827] dark:text-white">Rs. {num(amount)}</strong></p>}
+                {amount > 0 && <p className="text-xs text-right text-[#6B7280] dark:text-[#94A3B8]">Amount <strong className="tabular-nums text-[#111827] dark:text-white">Rs. {num(amount)}</strong></p>}
               </div>
             );
           })}
@@ -230,9 +230,9 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
         </div>
 
         {supplierId && total > 0 && (
-          <p className="text-sm text-[#374151] dark:text-[#CBD5E1]">Total <strong className="font-mono">Rs. {num(total)}</strong> will be added to what you owe {supplier?.company || supplier?.name}.</p>
+          <p className="text-sm text-[#374151] dark:text-[#CBD5E1]">Total <strong className="tabular-nums">Rs. {num(total)}</strong> will be added to what you owe {supplier?.company || supplier?.name}.</p>
         )}
-        {!supplierId && total > 0 && <p className="text-sm text-[#374151] dark:text-[#CBD5E1]">Total value <strong className="font-mono">Rs. {num(total)}</strong></p>}
+        {!supplierId && total > 0 && <p className="text-sm text-[#374151] dark:text-[#CBD5E1]">Total value <strong className="tabular-nums">Rs. {num(total)}</strong></p>}
         {used.some((l) => { const p = products.find((x) => x.id === l.pid); return p && !p.trackBatches; }) && lines.length === 1 && (
           <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Want batch numbers and expiry dates? Edit the item and turn on “Track batch &amp; expiry”.</p>
         )}
@@ -294,7 +294,7 @@ export const TransferStockModal: React.FC<{ isOpen: boolean; onClose: () => void
           </div>
           <div>
             <label className={labelCls} htmlFor="tr-qty">Quantity{product ? ` (${product.unit || 'pcs'})` : ''}</label>
-            <input id="tr-qty" type="number" inputMode="decimal" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} className={`${inputCls} font-mono`} placeholder="0" />
+            <input id="tr-qty" type="number" inputMode="decimal" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
           </div>
           <div>
             <label className={labelCls} htmlFor="tr-date">Date</label>
@@ -384,7 +384,7 @@ export const GodownsModal: React.FC<{ isOpen: boolean; onClose: () => void; onMo
                 const p = products.find((x) => x.id === t.productId);
                 return (
                   <li key={t.id}>
-                    <span className="font-mono text-[#8E9299]">{fmtExpiry(t.date)}</span> • <strong>{num(t.qty)} {p?.unit || 'pcs'} {p?.name || 'item'}</strong>: {godownName(godowns, t.fromGodownId)} → {godownName(godowns, t.toGodownId)}{t.note ? ` (${t.note})` : ''}
+                    <span className="tabular-nums text-[#8E9299]">{fmtExpiry(t.date)}</span> • <strong>{num(t.qty)} {p?.unit || 'pcs'} {p?.name || 'item'}</strong>: {godownName(godowns, t.fromGodownId)} → {godownName(godowns, t.toGodownId)}{t.note ? ` (${t.note})` : ''}
                   </li>
                 );
               })}

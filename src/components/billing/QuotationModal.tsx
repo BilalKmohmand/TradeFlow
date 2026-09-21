@@ -79,7 +79,7 @@ export const QuotationModal: React.FC<Props> = ({ isOpen, onClose, editId, custo
       wide
       footer={
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex-1 text-sm"><span className="text-[#6B7280] dark:text-[#94A3B8]">Total </span><span className="font-mono font-extrabold text-lg text-[#111827] dark:text-white">{rs(total)}</span></div>
+          <div className="flex-1 text-sm"><span className="text-[#6B7280] dark:text-[#94A3B8]">Total </span><span className="tabular-nums font-extrabold text-lg text-[#111827] dark:text-white">{rs(total)}</span></div>
           <div className="flex gap-2">
             <button type="button" onClick={() => submit(false)} className={secondaryBtn}><Save className="w-4 h-4" /> Save</button>
             <button type="button" onClick={() => submit(true)} className={primaryBtn}><Printer className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Save &amp; Print</button>
@@ -122,13 +122,13 @@ export const QuotationModal: React.FC<Props> = ({ isOpen, onClose, editId, custo
                 </select>
               </div>
               <div className="col-span-4 sm:col-span-2">
-                <input aria-label={`Quote qty ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.qty} onChange={(e) => setRow(l.key, { qty: e.target.value })} className={`${inputCls} font-mono`} placeholder="Qty" />
+                <input aria-label={`Quote qty ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.qty} onChange={(e) => setRow(l.key, { qty: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="Qty" />
               </div>
               <div className="col-span-4 sm:col-span-2">
-                <input aria-label={`Quote price ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.price} onChange={(e) => setRow(l.key, { price: e.target.value, customerRate: false })} className={`${inputCls} font-mono`} placeholder="Price" />
+                <input aria-label={`Quote price ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.price} onChange={(e) => setRow(l.key, { price: e.target.value, customerRate: false })} className={`${inputCls} tabular-nums`} placeholder="Price" />
                 {l.customerRate && <span className="block mt-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Customer rate</span>}
               </div>
-              <div className="col-span-3 sm:col-span-2 text-right font-mono font-bold text-sm text-[#111827] dark:text-white">{rs(l.amount)}</div>
+              <div className="col-span-3 sm:col-span-2 text-right tabular-nums font-bold text-sm text-[#111827] dark:text-white">{rs(l.amount)}</div>
               <div className="col-span-1 flex justify-end">
                 <button type="button" onClick={() => setRows((prev) => (prev.length > 1 ? prev.filter((r) => r.key !== l.key) : prev))} disabled={rows.length === 1} aria-label={`Remove quote item ${idx + 1}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 disabled:opacity-30"><Trash2 className="w-4 h-4" /></button>
               </div>

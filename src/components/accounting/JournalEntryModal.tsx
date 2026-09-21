@@ -69,7 +69,7 @@ export const JournalEntryModal: React.FC<{ isOpen: boolean; onClose: () => void;
       wide
       footer={
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="text-xs font-mono" aria-live="polite">
+          <div className="text-xs tabular-nums" aria-live="polite">
             <span className="mr-3">Debit <b data-testid="je-total-debit">{rs(totalDebit)}</b></span>
             <span className="mr-3">Credit <b data-testid="je-total-credit">{rs(totalCredit)}</b></span>
             {difference === 0 && totalDebit > 0 ? (
@@ -120,11 +120,11 @@ export const JournalEntryModal: React.FC<{ isOpen: boolean; onClose: () => void;
               </div>
               <div className="col-span-5 sm:col-span-2">
                 {i === 0 && <span className={`${labelCls} hidden sm:block`}>Debit</span>}
-                <input aria-label={`Debit ${i + 1}`} type="number" min="0" step="any" inputMode="decimal" placeholder="Debit" value={l.debit} onChange={(e) => setLine(i, { debit: e.target.value, credit: e.target.value ? '' : l.credit })} className={`${inputCls} font-mono`} />
+                <input aria-label={`Debit ${i + 1}`} type="number" min="0" step="any" inputMode="decimal" placeholder="Debit" value={l.debit} onChange={(e) => setLine(i, { debit: e.target.value, credit: e.target.value ? '' : l.credit })} className={`${inputCls} tabular-nums`} />
               </div>
               <div className="col-span-5 sm:col-span-3">
                 {i === 0 && <span className={`${labelCls} hidden sm:block`}>Credit</span>}
-                <input aria-label={`Credit ${i + 1}`} type="number" min="0" step="any" inputMode="decimal" placeholder="Credit" value={l.credit} onChange={(e) => setLine(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })} className={`${inputCls} font-mono`} />
+                <input aria-label={`Credit ${i + 1}`} type="number" min="0" step="any" inputMode="decimal" placeholder="Credit" value={l.credit} onChange={(e) => setLine(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })} className={`${inputCls} tabular-nums`} />
               </div>
               <div className="col-span-2 sm:col-span-1 flex justify-end">
                 <button type="button" aria-label={`Remove line ${i + 1}`} disabled={lines.length <= 2} onClick={() => setLines((prev) => prev.filter((_, idx) => idx !== i))} className="p-2.5 rounded-xl text-[#9CA3AF] hover:text-rose-600 disabled:opacity-30">

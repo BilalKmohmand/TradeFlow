@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { signIn } from './helpers/login';
+import { goTo } from './helpers/nav';
 
 /** Billing shop: tins bought from Dalda, one bill this week and an old unpaid bill from 75 days ago. */
 const seedShop = () => {
@@ -46,7 +47,6 @@ const noSideScroll = async (page: Page, label: string) => {
   expect(scrolled, `${label}: page must not scroll sideways`).toBe(0);
 };
 
-const go = (page: Page, name: RegExp) => page.getByRole('button', { name }).first().click();
 
 async function flow(page: Page) {
   await unlock(page);
@@ -56,7 +56,7 @@ async function flow(page: Page) {
   await noSideScroll(page, 'home');
 
   // 1. Tap an item: its history lists the receipt and both bills with a running balance.
-  await go(page, /^Items( & Prices)?$/);
+  await goTo(page, 'Items & Prices');
   await page.getByRole('button', { name: 'History of 15.7 kgs Tin' }).click();
   const hist = page.getByRole('dialog', { name: '15.7 kgs Tin — history' });
   const list = hist.getByTestId('item-history');
@@ -79,10 +79,10 @@ async function flow(page: Page) {
   await expect(list.locator('li').first()).toContainText('Adjusted: Leaked');
   await expect(list.locator('li').first()).toContainText('bal 26');
   await hist.getByRole('button', { name: 'Close' }).click();
-  await expect(page.getByRole('cell', { name: '26 tin', exact: true })).toBeVisible();
+  await expect(page.getByTestId('item-stock-p2')).toHaveText('26 tin');
 
   // 3. Suppliers (billing screen, no dispatch or bookings): send 3 tins back and print the debit note.
-  await go(page, /^Suppliers$/);
+  await goTo(page, 'Suppliers');
   await expect(page.getByRole('heading', { name: 'Suppliers' })).toBeVisible();
   await expect(page.getByText('Purchase Orders')).toHaveCount(0);
   await noSideScroll(page, 'suppliers');
@@ -116,7 +116,7 @@ async function flow(page: Page) {
   await noSideScroll(page, 'purchase register');
 
   // 5. Aging from Money: the old bill sits in 61–90 days.
-  await go(page, /^Money$/);
+  await goTo(page, 'Money');
   await page.getByRole('button', { name: 'How long?' }).first().click();
   const aging = page.getByRole('dialog', { name: 'Who owes for how long' });
   await expect(aging.getByTestId('aging-table')).toContainText('Old Khan Store');
@@ -125,7 +125,7 @@ async function flow(page: Page) {
   await aging.getByRole('button', { name: 'Close' }).click();
 
   // 6. Profit by item in Accounts.
-  await go(page, /^Accounts$/);
+  await goTo(page, 'Accounts');
   await page.getByRole('tab', { name: 'Profit by item' }).click();
   await page.getByLabel('From', { exact: true }).fill('2026-01-01');
   const profit = page.getByTestId('profit-by-item');
