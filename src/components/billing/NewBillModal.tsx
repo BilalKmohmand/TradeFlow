@@ -80,7 +80,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const box = useRef<HTMLDivElement>(null);
   /** After adding a line from the keyboard, put the cursor in its item field. */
   const focusRow = useRef<string | null>(null);
-  const allowNegative = Boolean(settings.allowNegativeStock);
+  const allowNegative = settings.allowNegativeStock !== false;
 
   const sortedCustomers = useMemo(() => [...customers].sort((a, b) => a.name.localeCompare(b.name)), [customers]);
   const sortedProducts = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name)), [products]);

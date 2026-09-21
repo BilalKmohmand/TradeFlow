@@ -15,7 +15,7 @@ export const BillSettingsCard: React.FC = () => {
   const [saved, setSaved] = useState(false);
   const toggle = (key: 'showPrevBalanceOnBill' | 'allowNegativeStock', label: string, help: string, id: string) => (
     <label htmlFor={id} className="flex items-start gap-3 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] px-3.5 py-3 cursor-pointer">
-      <input id={id} type="checkbox" disabled={!canEdit} checked={Boolean(settings[key])} onChange={(e) => updateSettings({ [key]: e.target.checked })} className="mt-0.5 w-5 h-5 shrink-0 accent-teal-700" />
+      <input id={id} type="checkbox" disabled={!canEdit} checked={key === 'allowNegativeStock' ? settings[key] !== false : Boolean(settings[key])} onChange={(e) => updateSettings({ [key]: e.target.checked })} className="mt-0.5 w-5 h-5 shrink-0 accent-teal-700" />
       <span>
         <span className="block text-sm font-semibold text-[#111827] dark:text-white">{label}</span>
         <span className="block text-[11px] text-[#6B7280] dark:text-[#94A3B8]">{help}</span>

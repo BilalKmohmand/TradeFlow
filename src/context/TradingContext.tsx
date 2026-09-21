@@ -2617,8 +2617,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Expiry is judged against today (not the bill date), so a back-dated bill can't sell an expired batch.
     const stockPlan = inventory.planBill(items, input.godownId, todayISO());
     if (!stockPlan.ok) return { success: false, message: stockPlan.message || 'Not enough stock.' };
-    // Stock short: refused unless the shop allows bills to take stock below zero (Settings).
-    if (!settings.allowNegativeStock) {
+    // Stock short: allowed with a warning (as before) unless the shop turned it off in Settings.
+    if (settings.allowNegativeStock === false) {
       const short = shortStockLines(items, products);
       if (short.length) return { success: false, message: `${short.map((s) => `${s.name}: only ${formatPackQty(s.have, s.product)} in stock (bill needs ${formatPackQty(s.need, s.product)})`).join('; ')}. Receive the stock first, or turn on "Allow bills when stock is short" in Settings.` };
     }

@@ -197,7 +197,7 @@ CREATE TABLE IF NOT EXISTS settings (
   "companyEmail" TEXT,
   "companyLogo" TEXT,
   "booksLockedUntil" TEXT,
-  "allowNegativeStock" BOOLEAN DEFAULT FALSE,
+  "allowNegativeStock" BOOLEAN DEFAULT TRUE,
   "billPrintSize" TEXT,
   "billFooter" TEXT,
   "showPrevBalanceOnBill" BOOLEAN DEFAULT FALSE

@@ -11,7 +11,7 @@ const seed = () => {
   localStorage.setItem('e2e_b2_seeded', '1');
   const set = (k: string, v: unknown) => localStorage.setItem(k, JSON.stringify(v));
   const today = new Date().toISOString().split('T')[0];
-  set('tradeflow_settings_v2', { appMode: 'billing', companyName: 'Rohail Zaman Traders', companyAddress: 'Batkhela', companyPhone: '3410550055', cashOpeningBalance: 20000, openingBankBalance: 100000, cashOpeningDate: '2026-01-01', taxRatePct: 0 });
+  set('tradeflow_settings_v2', { appMode: 'billing', companyName: 'Rohail Zaman Traders', companyAddress: 'Batkhela', companyPhone: '3410550055', cashOpeningBalance: 20000, openingBankBalance: 100000, cashOpeningDate: '2026-01-01', taxRatePct: 0, allowNegativeStock: false });
   set('tradeflow_customers_v2', [
     { id: 'c1', name: 'Zaman and Co BTK', company: 'Zaman and Co BTK', phone: '03443838294', email: '', address: 'Batkhela', totalDue: 0, creditLimit: 500000, createdAt: today, code: 'Z01' },
     { id: 'c2', name: 'Haji Karim', company: 'Karim Store', phone: '03001234567', email: '', address: '', totalDue: 0, creditLimit: 0, createdAt: today },
@@ -129,7 +129,7 @@ test.describe('Batch 2 (desktop)', () => {
   test('split payment with a cheque, stock-short setting, thermal print with footer, CSV exports', async ({ page }) => {
     await open(page);
 
-    // Stock short is refused by default: Save stays off with a clear reason.
+    // With "allow short stock" turned off, Save stays off with a clear reason.
     await page.getByRole('button', { name: 'New Bill' }).first().click();
     const dialog = page.getByRole('dialog', { name: 'New Bill' });
     await dialog.getByLabel('Customer', { exact: true }).selectOption('c2');

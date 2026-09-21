@@ -94,8 +94,15 @@ describe('pack units', () => {
 });
 
 describe('stock short setting', () => {
-  it('refuses a bill that needs more than is in stock, by default', async () => {
+  it('by default a short bill is allowed (as before) and stock goes below zero', async () => {
     const { result } = await setup();
+    let ok: any;
+    act(() => { ok = result.current.createBill({ customerId: 'c1', items: [{ productId: 'p2', name: 'Can', qty: 11, unitPrice: 2000 }] }); });
+    expect(ok.success).toBe(true);
+    expect(result.current.products.find((p) => p.id === 'p2')!.stockKg).toBe(-1);
+  });
+  it('refuses a bill that needs more than is in stock when the shop turned that off', async () => {
+    const { result } = await setup({ allowNegativeStock: false });
     let r: any;
     act(() => { r = result.current.createBill({ customerId: 'c1', items: [{ productId: 'p2', name: 'Can', qty: 8, unitPrice: 2000 }, { productId: 'p2', name: 'Can', qty: 3, unitPrice: 2000 }] }); });
     expect(r.success).toBe(false);
