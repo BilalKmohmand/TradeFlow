@@ -3,330 +3,750 @@
     "file": "d01.jpg",
     "section": "Getting started",
     "title": "Sign in",
-    "caption": "Each person picks their name, types their own PIN on the keypad and presses Unlock. What they can see and do depends on their role. Wrong PINs are counted; too many lock the account for a while."
+    "caption": "Type your username and password and press Sign in. On a new computer or phone the owner signs in with username Admin and password 1234. Leave \"Keep me signed in\" ticked on the shop computer. Change the 1234 password straight away (step 3)."
   },
   {
     "file": "d02.jpg",
     "section": "Getting started",
-    "title": "Your shop details",
-    "caption": "Admin → System & Backups. The company name, address, phone, email and logo here are printed on every bill. Opening cash and opening bank are the money you start with on day one. App mode stays on Simple billing."
+    "title": "Home",
+    "caption": "The first screen every day: sales, cash received and expenses today, the everyday buttons, anything that needs attention (unpaid bills, old debts, batches about to expire, low stock) and the latest bills."
   },
   {
     "file": "d03.jpg",
     "section": "Getting started",
-    "title": "Staff and PINs",
-    "caption": "Admin → User Accounts. Add each person with their own PIN and a role: Operator (makes bills and takes payments), Manager (also prices, credit overrides, accounts), Admin (everything). Change the default PIN 7860 on day one."
+    "title": "Change your password",
+    "caption": "Click your name at the top right, then My account & password. Type the current password (1234 the first time) and a new one of at least 8 characters, twice, and press Change password."
   },
   {
     "file": "d04.jpg",
     "section": "Getting started",
-    "title": "Home",
-    "caption": "The first screen every day: today's sales, cash received, expenses and money in the business; the four everyday buttons; recent bills; and anything that needs attention, such as low stock."
+    "title": "Your shop details",
+    "caption": "Admin → System & Backups. The company name, tagline, address, phone and email here are printed on every bill, receipt and report."
   },
   {
     "file": "d05.jpg",
-    "section": "Items, stock and godowns",
-    "title": "The price list",
-    "caption": "Items & Prices: every item with its fixed selling price and stock. The tin is red because stock is below its warning level."
+    "section": "Getting started",
+    "title": "Bill settings",
+    "caption": "Same page, the Bills & stock card. Choose the paper: A4, A5 or 80 mm thermal receipt. Type a footer for every bill, tick \"Show previous balance on bill\" if customers should see their old balance, and decide whether a bill may go through when stock is short."
   },
   {
     "file": "d06.jpg",
-    "section": "Items, stock and godowns",
-    "title": "Add an item",
-    "caption": "Name, what it is sold per (can, tin, bag, kg…), the fixed selling price, the cost price (for profit), stock on hand and the low-stock warning level."
+    "section": "Getting started",
+    "title": "Staff accounts",
+    "caption": "Admin → User Accounts & Auth. Every person has their own username and password, so the app knows who made each bill. Here Rashid is a manager and Zahid works the counter as an operator."
   },
   {
     "file": "d07.jpg",
-    "section": "Items, stock and godowns",
-    "title": "Turn on batch and expiry",
-    "caption": "For goods that expire, like oil and ghee, tick \"Track batch & expiry\" on the item. From then on its stock is received in batches, each with its own expiry date."
+    "section": "Getting started",
+    "title": "Add a staff member",
+    "caption": "Press Add staff. Full name, a username, the role (the counter role is called Weighbridge Operator in this list) and a temporary password. Give them the password; the first time they sign in they must choose their own."
   },
   {
     "file": "d08.jpg",
-    "section": "Items, stock and godowns",
-    "title": "Receive stock",
-    "caption": "When goods arrive: quantity, batch number and expiry date. With the supplier and the cost, the purchase is also added to what you owe that supplier."
+    "section": "Getting started",
+    "title": "What each role may do",
+    "caption": "Admin → Roles & RBAC Matrix. Each tick is something a role may do. The built-in roles suit most shops: Operator for the counter, Operations Manager for a trusted manager, Administrator for the owner. The table \"Who can do what\" at the end of this guide sums it up."
   },
   {
     "file": "d09.jpg",
-    "section": "Items, stock and godowns",
-    "title": "Batches and expiry dates",
-    "caption": "The item now shows each batch with its expiry. Amber means it expires within 30 days, red means expired. Expired stock is flagged and can never be sold."
+    "section": "Getting started",
+    "title": "Bill and document numbers",
+    "caption": "Admin → Rules, numbers & branches → Document numbers. Pick the prefix for bills, credit notes, quotations, receipts and orders. Tick \"New series each year\" to start again every year (RZT-2026-0001). Numbers never repeat, even after a delete."
   },
   {
     "file": "d10.jpg",
-    "section": "Items, stock and godowns",
-    "title": "Godowns",
-    "caption": "If stock is kept in more than one place, add each godown. The main godown always exists; a godown holding stock can't be deleted."
+    "section": "Items and stock",
+    "title": "The price list",
+    "caption": "Items & Prices: every item with its code, group, brand, pack, selling price, stock and stock value. Red LOW means stock is at or below the re-order level. Filter by group or brand, or search by name, code or barcode. (Here the side menu is folded with the arrow at its bottom, to give the list more room.)"
   },
   {
     "file": "d11.jpg",
-    "section": "Items, stock and godowns",
-    "title": "Move stock",
-    "caption": "Move stock between godowns. The total never changes; batches keep their number and expiry."
+    "section": "Items and stock",
+    "title": "Add an item",
+    "caption": "New item: name, sold per (tin, can, pouch…), selling price and cost price. A pack such as \"carton = 4 cans\" lets you bill and receive in cartons. Add the group, brand, barcode (or press Make one), a photo, and the re-order level. Tick \"Track batch & expiry\" for goods with an expiry date."
   },
   {
     "file": "d12.jpg",
-    "section": "Items, stock and godowns",
-    "title": "Stock per godown",
-    "caption": "With two godowns, each item shows how much is in each place."
+    "section": "Items and stock",
+    "title": "Receive a delivery",
+    "caption": "Receive stock: pick the supplier, then each item with its quantity and cost. Add another item for the next line of the same delivery. The total is added to what you owe that supplier."
   },
   {
     "file": "d13.jpg",
-    "section": "Customers and credit limits",
-    "title": "Add a customer",
-    "caption": "Name and phone are enough. A credit limit is optional: leave it empty for no limit. With a limit, bills that would take them over it are stopped unless a manager allows it."
+    "section": "Items and stock",
+    "title": "Receive a batch with an expiry date",
+    "caption": "For a batch-tracked item the form also asks for the batch number and expiry date."
   },
   {
     "file": "d14.jpg",
-    "section": "Customers and credit limits",
-    "title": "Customers",
-    "caption": "Every customer with what they owe. The bill icon on a row starts a new bill for that customer."
+    "section": "Items and stock",
+    "title": "Batches on the price list",
+    "caption": "Each batch is listed under its item with its expiry date and quantity. Amber means it expires within 30 days, red means expired. Bills always take the batch that expires first and never sell expired stock."
   },
   {
     "file": "d15.jpg",
-    "section": "Making a bill",
-    "title": "Step 1: New Bill",
-    "caption": "Press New Bill. One empty line, today's date."
+    "section": "Items and stock",
+    "title": "Godowns",
+    "caption": "If you keep stock in more than one place, press Godowns and add each one. The main godown is always there."
   },
   {
     "file": "d16.jpg",
-    "section": "Making a bill",
-    "title": "Step 2: customer and item",
-    "caption": "Pick the customer and the item: its fixed price fills in. For batch items the line shows which batches will be used: the earliest expiry first (50 from B-0911, then 10 from B-0926)."
+    "section": "Items and stock",
+    "title": "Move stock between godowns",
+    "caption": "Move stock between godowns: the item, from, to, and how many. The total stock does not change."
   },
   {
     "file": "d17.jpg",
-    "section": "Making a bill",
-    "title": "Step 3: more lines, change a price",
-    "caption": "Add another item for each line. The tin price was changed to 6,500 for this bill only; the item keeps its normal price."
+    "section": "Items and stock",
+    "title": "Stock in each godown",
+    "caption": "With two godowns, each item shows how much is in each place. A bill can pick which godown the goods leave from."
   },
   {
     "file": "d18.jpg",
-    "section": "Making a bill",
-    "title": "Step 4: discount and payment",
-    "caption": "Discount, then what the customer paid. \"Full\" fills the whole amount; pick the method (Cash, Bank Transfer, Cheque, Easypaisa / JazzCash, Card). Whatever is not paid goes on the customer's account."
+    "section": "Items and stock",
+    "title": "Adjust stock with a reason",
+    "caption": "Adjust stock for a leak, damage, expiry or a count correction. Pick the reason, the quantity and a note. The loss at cost goes to Stock losses in the accounts. A big loss may need a manager's approval."
   },
   {
     "file": "d19.jpg",
-    "section": "Making a bill",
-    "title": "Step 5: the printed bill",
-    "caption": "Save & Print opens the printout: your logo and details, Bill From / Bill To, Description · Qty · Price · Amount, the batch used under each batch item, and the total. \"Print / Save PDF\" to print or send on WhatsApp."
+    "section": "Items and stock",
+    "title": "Item history",
+    "caption": "Click an item's name to see every movement: received, sold on which bill, returned, adjusted or moved, with the balance after each."
   },
   {
     "file": "d20.jpg",
-    "section": "Making a bill",
-    "title": "Home after the first bill",
-    "caption": "Sales, cash received and the recent bills list update straight away. One Save did everything: stock came off, the cash book and the accounts were posted."
+    "section": "Items and stock",
+    "title": "Re-order report",
+    "caption": "Re-order lists what is at or below its re-order level, with the usual supplier, quantity and last rate. Tick what to buy and press Make purchase order: one order is made for each supplier."
   },
   {
     "file": "d21.jpg",
-    "section": "Credit, limits and payments",
-    "title": "Over the credit limit",
-    "caption": "Limited Traders has a Rs. 10,000 limit and already owes 8,000. This bill would take them over, so Save is blocked. Take more payment now, or…"
+    "section": "Items and stock",
+    "title": "Barcode labels",
+    "caption": "Press Labels, type how many labels you want for each item and press Preview labels. You get an A4 sheet with the shop name, item, barcode and price. Print it at 100% on label paper. A barcode scanner on New Bill then finds the item."
   },
   {
     "file": "d22.jpg",
-    "section": "Credit, limits and payments",
-    "title": "Manager allows it",
-    "caption": "…a manager or admin ticks \"Allow over limit\" and writes a reason. The reason is saved on the bill and in the audit log. Operators can't do this."
+    "section": "Customers",
+    "title": "Customers",
+    "caption": "Every customer with their Customer ID, credit limit and balance. The bar shows how much of the limit is used; it turns amber near the limit (Haji Karim is at 82%). Receive and New bill work straight from the row."
   },
   {
     "file": "d23.jpg",
-    "section": "Credit, limits and payments",
-    "title": "Bills",
-    "caption": "Every bill, newest first: search by number, customer, phone or item; Today / 7 days / This month / All; CSV download. Amber means money is still due."
+    "section": "Customers",
+    "title": "Add a customer",
+    "caption": "Add customer: an optional Customer ID (C-107), name, phone and address. A credit limit is optional: leave it empty for no limit. With a limit, a bill that would take them over it is stopped."
   },
   {
     "file": "d24.jpg",
-    "section": "Credit, limits and payments",
-    "title": "Unpaid bills",
-    "caption": "The Unpaid filter shows only bills with money due."
+    "section": "Customers",
+    "title": "One customer",
+    "caption": "Click a customer: what they owe, their bills, money received and how much of the limit is used. The buttons make a new bill, take a payment, make a quotation or print a statement."
   },
   {
     "file": "d25.jpg",
-    "section": "Credit, limits and payments",
-    "title": "Open a bill",
-    "caption": "Lines, total, paid and balance, what the customer owes on all bills, payments taken, and the Receive payment form."
+    "section": "Customers",
+    "title": "Special rates for a customer",
+    "caption": "Special rates for this customer: pick an item and their rate, press Save rate. Their bills then use that rate automatically, marked CUSTOMER RATE."
   },
   {
     "file": "d26.jpg",
-    "section": "Credit, limits and payments",
-    "title": "Take a payment later",
-    "caption": "3,000 received by Easypaisa. The balance drops and the payment is listed. Easypaisa and bank transfers go to the bank side of the cash book; cash goes to cash in hand."
+    "section": "Customers",
+    "title": "Sales & recovery",
+    "caption": "Customers → Sales & recovery holds the salesmen and areas, schemes, sales reports, recovery list, collections, commission and late-payment interest."
   },
   {
     "file": "d27.jpg",
-    "section": "Credit, limits and payments",
-    "title": "One customer",
-    "caption": "What they owe against their limit, every bill, money received, and the buttons: New bill, Receive payment, Statement, Edit."
+    "section": "Customers",
+    "title": "Salesmen",
+    "caption": "Salesmen & areas: add each salesman with their phone and commission %."
   },
   {
     "file": "d28.jpg",
-    "section": "Credit, limits and payments",
-    "title": "Customer statement",
-    "caption": "A printable statement of account: every bill and payment with a running balance."
+    "section": "Customers",
+    "title": "Areas and routes",
+    "caption": "The Areas / routes tab lists the areas you sell into. On each customer (step above) pick their area and salesman; new bills fill them in by themselves."
   },
   {
     "file": "d29.jpg",
-    "section": "Expenses, cash and the daily sheet",
-    "title": "Add an expense",
-    "caption": "The category buttons on the daily sheet open the form with the category and date set. Each category is its own expense sheet. \"Credit (unpaid)\" records something you still owe."
+    "section": "Making a bill",
+    "title": "Open a new bill (F2)",
+    "caption": "Press New Bill, or F2 from any screen. Keyboard: type to find a customer or item, Enter moves to the next box, + adds a line, Ctrl+Enter or F9 saves. F3 opens Receive payment, F4 Add expense, F6 Receive stock."
   },
   {
     "file": "d30.jpg",
-    "section": "Expenses, cash and the daily sheet",
-    "title": "Cash ↔ Bank",
-    "caption": "Deposit cash in the bank or withdraw it. The buttons show what is in the drawer and in the bank; you can't move more than you have."
+    "section": "Making a bill",
+    "title": "Pick the customer",
+    "caption": "Pick the customer by name, phone or Customer ID. The box under it shows their balance, credit left, last payment and last bills, so you know before you sell."
   },
   {
     "file": "d31.jpg",
-    "section": "Expenses, cash and the daily sheet",
-    "title": "The daily sheet",
-    "caption": "One page for the whole day: opening and closing cash and bank, every bill, every rupee received, expenses by sheet, supplier payments and deposits. Count the drawer against \"Closing cash\"."
+    "section": "Making a bill",
+    "title": "Sell in cartons or single cans",
+    "caption": "Pick the item. For items with a pack, press carton to type cartons; the price becomes the carton price. The line shows the stock, the last rate for this customer, the customer's special rate and the batch that will be used."
   },
   {
     "file": "d32.jpg",
-    "section": "Expenses, cash and the daily sheet",
-    "title": "Print the daily sheet",
-    "caption": "Print it at closing time, with Prepared by / Checked by lines."
+    "section": "Making a bill",
+    "title": "Free goods from a scheme",
+    "caption": "With a scheme such as \"buy 10 tins, get 1 free\", the free tins are added by themselves in the green box at price 0. The bin removes them if needed."
   },
   {
     "file": "d33.jpg",
-    "section": "Money",
-    "title": "Where the money is",
-    "caption": "Cash in hand, bank, what customers owe you and what you owe: suppliers, unpaid expenses and any customer advances. \"Money in the business\" adds them up."
+    "section": "Making a bill",
+    "title": "Discount on one line",
+    "caption": "Press Discount under a line and type Rs. or %. A discount on the whole bill goes in the Discount box further down."
   },
   {
     "file": "d34.jpg",
-    "section": "Money",
-    "title": "Opening balances",
-    "caption": "The cash and bank you started with, and the date to count from. Set once on day one."
+    "section": "Making a bill",
+    "title": "Salesman and area",
+    "caption": "The customer's salesman and area fill in by themselves. Change them for this bill if someone else made the sale."
   },
   {
     "file": "d35.jpg",
-    "section": "Money",
-    "title": "Monthly expense sheets",
-    "caption": "One sheet per category for the month, with every entry and its total."
+    "section": "Making a bill",
+    "title": "Freight and loading",
+    "caption": "Type any cartage or loading you charge the customer. It is added to the total and shown on the bill."
   },
   {
     "file": "d36.jpg",
-    "section": "Money",
-    "title": "Cash book",
-    "caption": "Every rupee in and out this month, with its method."
+    "section": "Making a bill",
+    "title": "Split payment: cash + bank + cheque",
+    "caption": "Normally type Paid now (Full fills the whole amount) and pick the method. If the customer pays in more than one way, press Split: cash + bank + cheque and type each part. For a cheque add its number, bank and date. Whatever is not paid stays on their account."
   },
   {
     "file": "d37.jpg",
-    "section": "Bank reconciliation",
-    "title": "Check your bank statement",
-    "caption": "Money → Bank reconciliation. Bring in your bank's statement and the app pairs each line with the bank entries already in your books."
+    "section": "Making a bill",
+    "title": "Save & Print (A4)",
+    "caption": "Save & Print opens the bill: your details, the customer and Customer ID, salesman and area, each line with cartons, batch, discount and free goods, freight, what was paid and the balance, and your footer. Print it or save it as PDF to send on WhatsApp."
   },
   {
     "file": "d38.jpg",
-    "section": "Bank reconciliation",
-    "title": "Upload the statement",
-    "caption": "Upload the CSV from your bank (comma, semicolon or tab separated). The columns are guessed; change them if needed."
+    "section": "Making a bill",
+    "title": "Thermal receipt",
+    "caption": "With 80 mm thermal paper chosen in Bill settings, the same bill prints as a narrow receipt for a counter printer."
   },
   {
     "file": "d39.jpg",
-    "section": "Bank reconciliation",
-    "title": "Matched automatically",
-    "caption": "Each line is matched to your books by amount and date (within 3 days). Lines not in your books are marked in amber."
+    "section": "After the bill",
+    "title": "Bills",
+    "caption": "Bills: every bill, newest first. Today, 7 days, This month or All; search by number, customer, phone or item. Amber amounts are still due."
   },
   {
     "file": "d40.jpg",
-    "section": "Bank reconciliation",
-    "title": "Add what is missing",
-    "caption": "A customer's bank transfer: \"Received from\" picks the customer (guessed from the bank text). Recording it reduces what they owe. Unknown money goes to Suspense for your accountant."
+    "section": "After the bill",
+    "title": "Unpaid bills",
+    "caption": "Press Unpaid to see only bills with money still due."
   },
   {
     "file": "d41.jpg",
-    "section": "Bank reconciliation",
-    "title": "Reconciled ✓",
-    "caption": "Type the closing balance from the statement. When the books and the bank agree it shows Reconciled ✓. Cheques not yet cleared are listed; tick them once they appear."
+    "section": "After the bill",
+    "title": "Open a bill",
+    "caption": "Click a bill: its lines, total, paid and balance, what the customer owes on all bills, and the buttons to print, send on WhatsApp, make a delivery challan or take back items."
   },
   {
     "file": "d42.jpg",
-    "section": "Bank reconciliation",
+    "section": "After the bill",
+    "title": "Take a payment later",
+    "caption": "In Receive payment type the amount, pick the method and press Receive. The balance drops and the payment is listed. Cash goes to the drawer, bank transfers and wallets to the bank."
+  },
+  {
+    "file": "d43.jpg",
+    "section": "After the bill",
+    "title": "Return items",
+    "caption": "Return items: type how many came back on each line and why. If nothing was paid it comes off what they owe; if they paid, you can give the money back. The stock goes back in."
+  },
+  {
+    "file": "d44.jpg",
+    "section": "After the bill",
+    "title": "Credit note",
+    "caption": "Saving prints a credit note (CN-1) for the customer, linked to the bill."
+  },
+  {
+    "file": "d45.jpg",
+    "section": "After the bill",
+    "title": "Delivery challan",
+    "caption": "Delivery challan on the bill: add the driver and vehicle number and press Print challan."
+  },
+  {
+    "file": "d46.jpg",
+    "section": "After the bill",
+    "title": "The printed challan",
+    "caption": "Items and quantities only, no prices, with lines for the driver and the person who receives the goods."
+  },
+  {
+    "file": "d47.jpg",
+    "section": "After the bill",
+    "title": "Make a quotation",
+    "caption": "Bills → Quotations → New Quotation. Pick the customer, items, quantities and your offered price, then Save & Print."
+  },
+  {
+    "file": "d48.jpg",
+    "section": "After the bill",
+    "title": "Quotation to bill",
+    "caption": "The quotation is listed as Not sent. When the customer agrees, press Make bill."
+  },
+  {
+    "file": "d49.jpg",
+    "section": "After the bill",
+    "title": "The bill from the quotation",
+    "caption": "A new bill opens with the quotation's customer, items and prices. Check it and press Save. The quotation is marked Billed."
+  },
+  {
+    "file": "d50.jpg",
+    "section": "After the bill",
+    "title": "Approval rules",
+    "caption": "Admin → Rules, numbers & branches. Set the limits: a discount above 10%, a supplier payment above Rs. 200,000, a stock loss above Rs. 20,000. Anyone who is not a manager must send these for approval. Leave a box empty to switch that rule off."
+  },
+  {
+    "file": "d51.jpg",
+    "section": "After the bill",
+    "title": "A bill that needs approval",
+    "caption": "Zahid (operator) gives a 15% discount. The bill says \"Needs a manager's approval\" and he can write a note for the manager."
+  },
+  {
+    "file": "d52.jpg",
+    "section": "After the bill",
+    "title": "Sent for approval",
+    "caption": "Saving sends it to Approvals. Nothing goes to the stock or the books until a manager approves it."
+  },
+  {
+    "file": "d53.jpg",
+    "section": "After the bill",
+    "title": "Waiting on Home",
+    "caption": "When a manager signs in, Home shows what is waiting for approval."
+  },
+  {
+    "file": "d54.jpg",
+    "section": "After the bill",
+    "title": "Approve or reject",
+    "caption": "The Approvals list shows who asked, why, and the full bill. Approve posts it; Reject needs a note and posts nothing."
+  },
+  {
+    "file": "d55.jpg",
+    "section": "After the bill",
+    "title": "Approved",
+    "caption": "Once approved, the bill gets its number and is posted like any other bill. Done lists everything decided, with who decided."
+  },
+  {
+    "file": "d56.jpg",
+    "section": "Money",
+    "title": "Where the money is",
+    "caption": "Money: cash in hand, bank, what customers owe you and what you owe. \"Money in the business\" adds it up. Opening balances holds the cash and bank you started with."
+  },
+  {
+    "file": "d57.jpg",
+    "section": "Money",
+    "title": "Add an expense (F4)",
+    "caption": "Add expense: what for, the amount, the category and where it was paid from (cash, bank or on credit)."
+  },
+  {
+    "file": "d58.jpg",
+    "section": "Money",
+    "title": "Expense sheets",
+    "caption": "Money → Expense sheets: each category is its own sheet for the month, with every entry and its total."
+  },
+  {
+    "file": "d59.jpg",
+    "section": "Money",
+    "title": "Cash ↔ Bank",
+    "caption": "Deposit cash into the bank or take cash out. The buttons show what is in the drawer and in the bank; you can't move more than you have."
+  },
+  {
+    "file": "d60.jpg",
+    "section": "Money",
+    "title": "Receive from many",
+    "caption": "When the recovery man comes back: Money → Receive from many. Tick each customer who paid and type the amount and method. One save records them all."
+  },
+  {
+    "file": "d61.jpg",
+    "section": "Money",
+    "title": "Collection sheet",
+    "caption": "It prints one collection sheet with every customer and amount."
+  },
+  {
+    "file": "d62.jpg",
+    "section": "Money",
+    "title": "Cheques due",
+    "caption": "Home shows the cheques due this week, coming in and going out. Click it to open the cheque register."
+  },
+  {
+    "file": "d63.jpg",
+    "section": "Money",
+    "title": "Receive a cheque",
+    "caption": "Money → Cheques → Cheque received: the customer, amount, cheque number, bank and the date on the cheque. A post-dated cheque is kept \"in hand\" until its date. The customer's balance goes down at once."
+  },
+  {
+    "file": "d64.jpg",
+    "section": "Money",
+    "title": "The cheque register",
+    "caption": "Every cheque by stage: In hand, Due this week, Deposited, Bounced, Issued (given to suppliers). The tiles show the totals."
+  },
+  {
+    "file": "d65.jpg",
+    "section": "Money",
+    "title": "Deposit a cheque",
+    "caption": "On its date press Deposit on the cheque and confirm."
+  },
+  {
+    "file": "d66.jpg",
+    "section": "Money",
+    "title": "Cheque cleared",
+    "caption": "When the bank credits it, press Mark cleared on the Deposited tab. Only then is the money added to the bank."
+  },
+  {
+    "file": "d67.jpg",
+    "section": "Money",
+    "title": "Cheque bounced",
+    "caption": "If it bounces press Bounced: write why, the bank's charge and who pays it. A manager does this."
+  },
+  {
+    "file": "d68.jpg",
+    "section": "Money",
+    "title": "After a bounce",
+    "caption": "The amount (and the charge, if the customer pays it) goes back on the customer's account, and the cheque moves to the Bounced tab."
+  },
+  {
+    "file": "d69.jpg",
+    "section": "Money",
+    "title": "The daily sheet",
+    "caption": "Daily Sheet: the whole day on one page. Opening and closing cash and bank, every bill, all money received, expenses by sheet, supplier payments, deposits and cheques. Use the arrows to look at another day."
+  },
+  {
+    "file": "d70.jpg",
+    "section": "Money",
+    "title": "Print the daily sheet",
+    "caption": "Print it at closing time, with Prepared by and Checked by lines."
+  },
+  {
+    "file": "d71.jpg",
+    "section": "Money",
+    "title": "Check the bank statement",
+    "caption": "Money → Bank reconciliation → Upload statement (CSV) from your bank. The columns are guessed; check them and press Import."
+  },
+  {
+    "file": "d72.jpg",
+    "section": "Money",
+    "title": "Matched automatically",
+    "caption": "Each statement line is paired with the same amount in your books, within 3 days. Lines not in your books are marked in amber."
+  },
+  {
+    "file": "d73.jpg",
+    "section": "Money",
+    "title": "Add what is missing",
+    "caption": "For a bank charge press Add as expense; for a customer's transfer, record it against the customer. It is then matched."
+  },
+  {
+    "file": "d74.jpg",
+    "section": "Money",
+    "title": "Reconciled ✓",
+    "caption": "Type the closing balance from the statement. When books and bank agree it shows Reconciled ✓. Entries in your books that the bank has not shown yet are listed underneath; tick each one when it appears on a statement (Tick all as cleared does them all)."
+  },
+  {
+    "file": "d75.jpg",
+    "section": "Money",
     "title": "Reconciliation report",
     "caption": "Save it, and print the reconciliation for your records or your accountant."
   },
   {
-    "file": "d43.jpg",
-    "section": "Accounts (double-entry books)",
-    "title": "Trial balance",
-    "caption": "Accounts is for the owner and the accountant. Every bill, payment, expense, purchase and transfer is posted here automatically. The trial balance shows every account; debits must equal credits: Balanced ✓."
-  },
-  {
-    "file": "d44.jpg",
-    "section": "Accounts (double-entry books)",
-    "title": "General ledger",
-    "caption": "Click any account to see every entry with a running balance. Bill numbers open the bill itself."
-  },
-  {
-    "file": "d45.jpg",
-    "section": "Accounts (double-entry books)",
-    "title": "Journal",
-    "caption": "Every entry, automatic and manual, filterable."
-  },
-  {
-    "file": "d46.jpg",
-    "section": "Accounts (double-entry books)",
-    "title": "Manual journal entry",
-    "caption": "The accountant can post their own entries. It only saves when debits equal credits; one account on both sides or a future date is refused."
-  },
-  {
-    "file": "d47.jpg",
-    "section": "Accounts (double-entry books)",
-    "title": "Chart of accounts",
-    "caption": "The accounts money is sorted into, set up for a Pakistani trading shop. Add your own (a second bank, say); system accounts can't be deleted. Admins can close a finished period here so nothing dated in it can change."
-  },
-  {
-    "file": "d48.jpg",
-    "section": "Accounts (double-entry books)",
-    "title": "Profit & Loss",
-    "caption": "Sales, less the cost of what was sold (from the actual batch or purchase cost), less expenses. Did the business make money this period?"
-  },
-  {
-    "file": "d49.jpg",
-    "section": "Accounts (double-entry books)",
-    "title": "Balance sheet",
-    "caption": "What the business owns against what it owes and what belongs to the owner. Balanced ✓."
-  },
-  {
-    "file": "d50.jpg",
-    "section": "Accounts (double-entry books)",
-    "title": "Printed accounts",
-    "caption": "The trial balance, Profit & Loss and balance sheet all print."
-  },
-  {
-    "file": "d51.jpg",
-    "section": "Suppliers",
+    "file": "d76.jpg",
+    "section": "Suppliers and purchasing",
     "title": "Suppliers",
-    "caption": "Who you buy from and what you owe them. Stock received with a supplier and a cost is added here automatically; record payments to them here."
+    "caption": "Every supplier with their Supplier ID (S-104 Dalda Foods, S-105 Tajj Mill…) and what you owe. Pay and Receive stock work from the row."
   },
   {
-    "file": "d52.jpg",
-    "section": "Admin, backups and safety",
+    "file": "d77.jpg",
+    "section": "Suppliers and purchasing",
+    "title": "Purchase order",
+    "caption": "Suppliers → Orders → New order: the supplier, items, quantities and agreed rates. Save and print it for the supplier."
+  },
+  {
+    "file": "d78.jpg",
+    "section": "Suppliers and purchasing",
+    "title": "The order",
+    "caption": "The order shows what was ordered, received and billed for each line. Press Receive goods when the truck arrives."
+  },
+  {
+    "file": "d79.jpg",
+    "section": "Suppliers and purchasing",
+    "title": "Receive against the order",
+    "caption": "The quantities and rates come from the order. Change the quantity if less arrived (28 of 30 tins here)."
+  },
+  {
+    "file": "d80.jpg",
+    "section": "Suppliers and purchasing",
+    "title": "Orders list",
+    "caption": "The order is now Partly received and Waiting for bill."
+  },
+  {
+    "file": "d81.jpg",
+    "section": "Suppliers and purchasing",
+    "title": "Supplier bill (three-way match)",
+    "caption": "Supplier bills → Record supplier bill. Tick the goods received, type the supplier's bill number, quantity and rate. The app checks order, goods received and bill against each other: here the rate is higher, so the Rs. difference is added to what you owe and marked Mismatch."
+  },
+  {
+    "file": "d82.jpg",
+    "section": "Suppliers and purchasing",
+    "title": "Supplier claim",
+    "caption": "Claims → New claim for leaked, damaged or short goods: the supplier, the delivery and the quantity."
+  },
+  {
+    "file": "d83.jpg",
+    "section": "Suppliers and purchasing",
+    "title": "Claims list",
+    "caption": "The claim waits until the supplier answers. Press Accepted (the amount comes off what you owe) or Rejected."
+  },
+  {
+    "file": "d84.jpg",
+    "section": "Suppliers and purchasing",
+    "title": "Return goods to a supplier",
+    "caption": "Return goods: the supplier, item, quantity, rate and reason. Press Send back."
+  },
+  {
+    "file": "d85.jpg",
+    "section": "Suppliers and purchasing",
+    "title": "Debit note",
+    "caption": "A debit note prints for the supplier. The stock goes out and what you owe comes down."
+  },
+  {
+    "file": "d86.jpg",
+    "section": "Suppliers and purchasing",
+    "title": "Purchase register",
+    "caption": "Suppliers → Stock received: every delivery and return for the dates, supplier or item you pick, with the net total. CSV and Print are at the top."
+  },
+  {
+    "file": "d87.jpg",
+    "section": "Suppliers and purchasing",
+    "title": "Pay a supplier",
+    "caption": "Pay on a supplier: the amount and method. It shows the balance before and after. A payment over the approval limit made by staff waits for a manager."
+  },
+  {
+    "file": "d88.jpg",
+    "section": "Suppliers and purchasing",
+    "title": "Cheque layout",
+    "caption": "To print on your own cheque book: Money → Cheques → Cheque layout. Set where the date, name, amount in words and figures go on your bank's leaf (in mm). Set once."
+  },
+  {
+    "file": "d89.jpg",
+    "section": "Suppliers and purchasing",
+    "title": "Print a cheque",
+    "caption": "Print cheque on a cheque you gave a supplier: the name, date, amount in figures and in words (Rupees One Lakh Twenty-Five Thousand Only) land in the right places."
+  },
+  {
+    "file": "d90.jpg",
+    "section": "Reports",
+    "title": "Who owes for how long",
+    "caption": "Customers → Who owes for how long: each customer's money split into 0–30, 31–60, 61–90 and over 90 days. Old Khan Store's bill is over 60 days old. Switch to \"You owe suppliers\" for the other side."
+  },
+  {
+    "file": "d91.jpg",
+    "section": "Reports",
+    "title": "Recovery list by area",
+    "caption": "Sales & recovery → Recovery list, By area: who owes money in each area, oldest bill first."
+  },
+  {
+    "file": "d92.jpg",
+    "section": "Reports",
+    "title": "Recovery sheet for the recovery man",
+    "caption": "Print it for the recovery man, with a column to write what he received."
+  },
+  {
+    "file": "d93.jpg",
+    "section": "Reports",
+    "title": "Sales by salesman",
+    "caption": "Sales by salesman / area: bills, sales, returns and freight for each salesman, for any dates."
+  },
+  {
+    "file": "d94.jpg",
+    "section": "Reports",
+    "title": "Sales by area",
+    "caption": "Press By area for the same figures by area."
+  },
+  {
+    "file": "d95.jpg",
+    "section": "Reports",
+    "title": "Commission",
+    "caption": "Commission: what each salesman earned at their %, what is paid, and what is still owed. Pay commission records it as an expense."
+  },
+  {
+    "file": "d96.jpg",
+    "section": "Reports",
+    "title": "Profit by item",
+    "caption": "Accounts → Profit by item: sales, cost and profit on each item for your dates, with the margin."
+  },
+  {
+    "file": "d97.jpg",
+    "section": "Reports",
+    "title": "Profit by customer",
+    "caption": "By customer: which customers bring the most profit."
+  },
+  {
+    "file": "d98.jpg",
+    "section": "Reports",
+    "title": "Profit by group and brand",
+    "caption": "By group and By brand add up the items, so you can see whether Dalda, Tajj or Habib earns you more."
+  },
+  {
+    "file": "d99.jpg",
+    "section": "Reports",
+    "title": "Owner dashboard",
+    "caption": "Owner dashboard: sales and gross profit today and this month, cash, bank, who owes you and who you owe, stock value, cheques due, old debts, a 30-day sales chart and the top customers and items."
+  },
+  {
+    "file": "d100.jpg",
+    "section": "Reports",
+    "title": "Daily business report",
+    "caption": "Daily business report prints the day's figures on one page for the owner."
+  },
+  {
+    "file": "d101.jpg",
+    "section": "Reports",
+    "title": "Export to Excel (CSV)",
+    "caption": "Every list and report has a CSV button. The file opens in Excel or Google Sheets."
+  },
+  {
+    "file": "d102.jpg",
+    "section": "Accounts",
+    "title": "Trial balance",
+    "caption": "Accounts is for the owner and the accountant. Every bill, payment, expense, cheque and delivery is posted here by itself. The trial balance shows every account; Balanced ✓ means debits equal credits."
+  },
+  {
+    "file": "d103.jpg",
+    "section": "Accounts",
+    "title": "Ledger",
+    "caption": "Click an account to see every entry with a running balance, like a bank statement. Bill numbers open the bill."
+  },
+  {
+    "file": "d104.jpg",
+    "section": "Accounts",
+    "title": "Journal",
+    "caption": "Journal: every entry, automatic and manual, newest first."
+  },
+  {
+    "file": "d105.jpg",
+    "section": "Accounts",
+    "title": "Manual journal entry",
+    "caption": "New journal entry for corrections and owner's money: a narration and the accounts. It only saves when debits equal credits (Balanced ✓)."
+  },
+  {
+    "file": "d106.jpg",
+    "section": "Accounts",
+    "title": "Chart of accounts",
+    "caption": "The accounts money is sorted into, set up for a Pakistani trading shop. Add your own, such as a second bank."
+  },
+  {
+    "file": "d107.jpg",
+    "section": "Accounts",
+    "title": "Profit & Loss",
+    "caption": "Sales, less the cost of what was sold, less expenses, for a financial year or any dates. Did the business make money?"
+  },
+  {
+    "file": "d108.jpg",
+    "section": "Accounts",
+    "title": "Balance sheet",
+    "caption": "What the business owns against what it owes and what belongs to the owner, on one date. Balanced ✓."
+  },
+  {
+    "file": "d109.jpg",
+    "section": "Accounts",
+    "title": "Cash flow & ratios",
+    "caption": "Where the cash came from and went, and a few health numbers such as the current ratio and gross margin."
+  },
+  {
+    "file": "d110.jpg",
+    "section": "Accounts",
+    "title": "Budget vs actual",
+    "caption": "Budgets: set a monthly figure for each expense (Set budget), then Budget vs actual shows how much is used. Green is on track, amber close, red over."
+  },
+  {
+    "file": "d111.jpg",
+    "section": "Accounts",
+    "title": "Cost centres",
+    "caption": "Cost centres: profit and loss by branch, area or vehicle. Tag an expense with the Shehzore truck and see what the truck costs."
+  },
+  {
+    "file": "d112.jpg",
+    "section": "Accounts",
+    "title": "Add a fixed asset",
+    "caption": "Fixed assets → Add asset for things the shop keeps for years: the name, type, cost, date and useful life. It shows the monthly depreciation."
+  },
+  {
+    "file": "d113.jpg",
+    "section": "Accounts",
+    "title": "Depreciation",
+    "caption": "Run for the month books the depreciation. It is never charged twice. Print register gives the asset list with book values."
+  },
+  {
+    "file": "d114.jpg",
+    "section": "Accounts",
+    "title": "Staff",
+    "caption": "Staff & salaries: each person, their job and monthly salary, and any advance they owe."
+  },
+  {
+    "file": "d115.jpg",
+    "section": "Accounts",
+    "title": "Salary sheet",
+    "caption": "Salary sheet for the month: salary, advances taken back, bonus or deduction, and net pay. Pay salaries books it all at once."
+  },
+  {
+    "file": "d116.jpg",
+    "section": "Accounts",
+    "title": "Payslip",
+    "caption": "A payslip for each person, with the net pay in words."
+  },
+  {
+    "file": "d117.jpg",
+    "section": "Accounts",
+    "title": "Year end",
+    "caption": "Year end: the financial year starts on 1 July. When the accountant has finished a year, check the list and press Close. The profit moves to the owner's side and that year is locked."
+  },
+  {
+    "file": "d118.jpg",
+    "section": "Accounts",
+    "title": "Close the year",
+    "caption": "The app asks once more before closing. An admin can reopen the last closed year if a correction is needed."
+  },
+  {
+    "file": "d119.jpg",
+    "section": "Admin and safety",
     "title": "Audit trail",
-    "caption": "Every bill, payment, expense, deletion, credit override and setting change, with who did it and when."
+    "caption": "Admin → Audit Trail: who did what and when. Sign-ins, bills, payments, deletes with their reason, and setting changes."
   },
   {
-    "file": "d53.jpg",
-    "section": "Admin, backups and safety",
-    "title": "Roles and permissions",
-    "caption": "What each role may do. Deleting, overriding credit limits, posting journals and bank reconciliation are for managers and admins."
+    "file": "d120.jpg",
+    "section": "Admin and safety",
+    "title": "Delete with a reason",
+    "caption": "Deleting always asks why. The reason is kept."
   },
   {
-    "file": "d54.jpg",
-    "section": "The full trading suite",
-    "title": "One tap to the full suite",
-    "caption": "For bigger operations: bookings, truck dispatches with weighbridge and freight, purchase orders, fleet and drivers, stock flow and price history, sales analytics. Same data underneath."
+    "file": "d121.jpg",
+    "section": "Admin and safety",
+    "title": "Deleted records",
+    "caption": "Admin → Deleted records keeps a copy of everything deleted, with who, when and why."
   },
   {
-    "file": "d55.jpg",
-    "section": "The full trading suite",
-    "title": "Back to simple billing",
-    "caption": "One tap brings the simple screens back."
+    "file": "d122.jpg",
+    "section": "Admin and safety",
+    "title": "Put it back",
+    "caption": "Press Restore and the customer is back, as it was. Customers, suppliers, items, expenses and cash entries can be put back."
+  },
+  {
+    "file": "d123.jpg",
+    "section": "Admin and safety",
+    "title": "Backups",
+    "caption": "Admin → System & Backups. A backup is made on this device every day the app is open; the last 14 are kept. Press Back up now any time, and Download backup now and then to keep a copy somewhere safe (a USB or your email)."
+  },
+  {
+    "file": "d124.jpg",
+    "section": "Admin and safety",
+    "title": "Branches",
+    "caption": "Rules, numbers & branches → Branches, for shops with more than one outlet. Add each branch and pick where each person works. Home, Bills, Daily sheet, Money and Accounts then get a branch filter."
+  },
+  {
+    "file": "d125.jpg",
+    "section": "Admin and safety",
+    "title": "The full trading suite",
+    "caption": "Full trading suite at the bottom of the side menu opens the bigger screens: bookings, truck dispatches, fleet, stock flow. Back to simple billing brings the simple screens back."
   }
 ]

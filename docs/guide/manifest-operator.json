@@ -3,12 +3,18 @@
     "file": "o01.jpg",
     "section": "What staff see",
     "title": "An operator's Home",
-    "caption": "Signed in as an operator: bills, payments, expenses and the daily sheet. No Accounts and no Admin in the menu."
+    "caption": "Zahid signs in as an operator. He sees bills, the daily sheet, customers, suppliers, items and money. There is no Owner dashboard, Accounts or Admin in his menu."
   },
   {
     "file": "o02.jpg",
     "section": "What staff see",
+    "title": "An operator making a bill",
+    "caption": "Billing works the same for staff. A discount over the limit, a bill over a credit limit or a big supplier payment goes to a manager instead."
+  },
+  {
+    "file": "o03.jpg",
+    "section": "What staff see",
     "title": "An operator's Money screen",
-    "caption": "Cash, bank and who owes what are visible for daily work, but there is no Bank reconciliation tab, and nothing can be deleted."
+    "caption": "Cash, bank and who owes what are visible for daily work. There is no Bank reconciliation, and staff can't delete anything."
   }
 ]
