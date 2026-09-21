@@ -1,5 +1,5 @@
 import { CsvButton } from '../../components/billing/CsvButton';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Phone, PackagePlus, HandCoins, Printer, Pencil, Trash2, Undo2, Clock, Layers } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useStockUI } from '../../components/billing/StockUI';
@@ -22,7 +22,7 @@ const num = (n: number) => n.toLocaleString('en-PK', { maximumFractionDigits: 2 
 
 /** Suppliers the simple way: what you owe them, stock received, goods sent back. No bookings or dispatches. */
 export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd }) => {
-  const { suppliers, purchases, returns, products, ledger, setEditRequest, deleteSupplier, setPrintRequest, can, deletePurchaseReturn, settings } = useTrading();
+  const { suppliers, purchases, returns, products, ledger, setEditRequest, deleteSupplier, setPrintRequest, can, deletePurchaseReturn, settings, selectedSupplierId, setSelectedSupplierId } = useTrading();
   const stock = useStockUI();
   const buy = usePurchasingUI();
   const ui = useBillingUI();
@@ -34,6 +34,12 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null);
+  // Opened from elsewhere (Money, search): show that supplier here.
+  useEffect(() => {
+    if (!selectedSupplierId) return;
+    if (suppliers.some((x) => x.id === selectedSupplierId)) { setTab('suppliers'); setOpenId(selectedSupplierId); }
+    setSelectedSupplierId(null);
+  }, [selectedSupplierId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [pendingReturn, setPendingReturn] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const today = todayISO();

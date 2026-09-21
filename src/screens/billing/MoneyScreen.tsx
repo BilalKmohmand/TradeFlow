@@ -108,7 +108,7 @@ export const MoneyScreen: React.FC = () => {
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                   {debtors.map((c) => (
                     <li key={c.id} className="flex flex-wrap sm:flex-nowrap items-center gap-x-2 pl-4 sm:pl-5 pr-2 py-2 hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors">
-                      <button type="button" onClick={() => setSelectedCustomerId(c.id)} className="flex-1 min-w-0 text-left py-1"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{c.name}</span><span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">{c.phone}</span></button>
+                      <button type="button" onClick={() => { setSelectedCustomerId(c.id); setActiveScreen('customers'); }} className="flex-1 min-w-0 text-left py-1"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{c.name}</span><span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">{c.phone}</span></button>
                       <span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(c.totalDue)}</span>
                       <span className="max-sm:w-full flex justify-end gap-1"><RowAction label={`Receive payment from ${c.name}`} text="Receive" alwaysText tone="teal" icon={<HandCoins className="w-4 h-4" />} onClick={() => ui.receive(c.id)} />
                       <RowAction label={`Print statement for ${c.name}`} icon={<Printer className="w-4 h-4" />} onClick={() => setPrintRequest({ type: 'statement', customerId: c.id, from: `${today.slice(0, 4)}-01-01`, to: today })} /></span>
@@ -123,13 +123,13 @@ export const MoneyScreen: React.FC = () => {
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                   {creditors.map((s) => (
                     <li key={s.id} className="flex items-center gap-2 px-4 sm:px-5 py-2.5 hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors">
-                      <button type="button" onClick={() => setSelectedSupplierId(s.id)} className="flex-1 min-w-0 text-left"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{s.company || s.name}</span><span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">supplier • {s.phone}</span></button>
+                      <button type="button" onClick={() => { setSelectedSupplierId(s.id); setActiveScreen('suppliers'); }} className="flex-1 min-w-0 text-left"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{s.company || s.name}</span><span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">supplier • {s.phone}</span></button>
                       <span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(s.totalOwed)}</span>
                     </li>
                   ))}
                   {advances.map((c) => (
                     <li key={c.id} className="flex flex-wrap sm:flex-nowrap items-center gap-x-2 pl-4 sm:pl-5 pr-2 py-2 hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors">
-                      <button type="button" onClick={() => setSelectedCustomerId(c.id)} className="flex-1 min-w-0 text-left py-1"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{c.name}</span><span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">customer paid in advance</span></button>
+                      <button type="button" onClick={() => { setSelectedCustomerId(c.id); setActiveScreen('customers'); }} className="flex-1 min-w-0 text-left py-1"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{c.name}</span><span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">customer paid in advance</span></button>
                       <span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(-c.totalDue)}</span>
                     </li>
                   ))}

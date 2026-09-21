@@ -3,6 +3,7 @@ import { Pencil, Plus, Trash2, UserRound, MapPin } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { Modal, Notice, EmptyState, inputCls, labelCls, pillCls, primaryBtn, secondaryBtn, RowAction } from './ui';
 import { CommissionBasis } from '../../types';
+import { ConfirmDialog } from '../ConfirmDialog';
 
 type Msg = { kind: 'ok' | 'error'; text: string } | null;
 
@@ -15,6 +16,8 @@ export const SalesTeamModal: React.FC<{ isOpen: boolean; onClose: () => void; in
   const emptySm = { id: '', name: '', phone: '', pct: '', on: 'sales' as CommissionBasis };
   const [sm, setSm] = useState(emptySm);
   const [area, setArea] = useState({ id: '', name: '', note: '' });
+  // Removing asks first (like every delete); the reason goes with the copy in Admin → Deleted records.
+  const [pending, setPending] = useState<{ kind: 'salesman' | 'area'; id: string; name: string } | null>(null);
   const count = (field: 'salesmanId' | 'areaId', id: string) => customers.filter((c) => c[field] === id).length;
 
   const submitSalesman = (e: React.FormEvent) => {
@@ -55,7 +58,7 @@ export const SalesTeamModal: React.FC<{ isOpen: boolean; onClose: () => void; in
                     </div>
                     {canEdit && <RowAction label={`Edit ${s.name}`} icon={<Pencil className="w-4 h-4" />} onClick={() => setSm({ id: s.id, name: s.name, phone: s.phone || '', pct: s.commissionPct ? String(s.commissionPct) : '', on: s.commissionOn || 'sales' })} />}
                     {canEdit && !s.active && <RowAction label={`Switch ${s.name} on`} text="On" alwaysText icon={<Plus className="w-4 h-4" />} onClick={() => { const r = saveSalesman({ id: s.id, name: s.name, phone: s.phone, commissionPct: s.commissionPct, commissionOn: s.commissionOn, active: true }); setMsg({ kind: r.success ? 'ok' : 'error', text: r.message }); }} />}
-                    {canEdit && s.active && <RowAction label={`Remove ${s.name}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => { const r = deleteSalesman(s.id); setMsg({ kind: r.success ? 'ok' : 'error', text: r.message }); }} />}
+                    {canEdit && s.active && <RowAction label={`Remove ${s.name}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => setPending({ kind: 'salesman', id: s.id, name: s.name })} />}
                   </li>
                 ))}
               </ul>
@@ -105,7 +108,7 @@ export const SalesTeamModal: React.FC<{ isOpen: boolean; onClose: () => void; in
                     </div>
                     {canEdit && <RowAction label={`Edit ${a.name}`} icon={<Pencil className="w-4 h-4" />} onClick={() => setArea({ id: a.id, name: a.name, note: a.note || '' })} />}
                     {canEdit && !a.active && <RowAction label={`Switch ${a.name} on`} text="On" alwaysText icon={<Plus className="w-4 h-4" />} onClick={() => { const r = saveArea({ id: a.id, name: a.name, note: a.note, active: true }); setMsg({ kind: r.success ? 'ok' : 'error', text: r.message }); }} />}
-                    {canEdit && a.active && <RowAction label={`Remove ${a.name}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => { const r = deleteArea(a.id); setMsg({ kind: r.success ? 'ok' : 'error', text: r.message }); }} />}
+                    {canEdit && a.active && <RowAction label={`Remove ${a.name}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => setPending({ kind: 'area', id: a.id, name: a.name })} />}
                   </li>
                 ))}
               </ul>
@@ -130,6 +133,20 @@ export const SalesTeamModal: React.FC<{ isOpen: boolean; onClose: () => void; in
           </>
         )}
       </div>
+      <ConfirmDialog
+        isOpen={Boolean(pending)}
+        title={`Remove ${pending?.name || ''}?`}
+        message={pending?.kind === 'salesman' ? 'A salesman who is on bills or customers is only switched off (old bills keep the name).' : 'An area that is on bills or customers is only switched off (old bills keep the name).'}
+        confirmLabel="Remove"
+        onCancel={() => setPending(null)}
+        onConfirm={() => {
+          if (pending) {
+            const r = pending.kind === 'salesman' ? deleteSalesman(pending.id) : deleteArea(pending.id);
+            setMsg({ kind: r.success ? 'ok' : 'error', text: r.message });
+          }
+          setPending(null);
+        }}
+      />
     </Modal>
   );
 };

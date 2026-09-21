@@ -807,6 +807,16 @@ test.describe('QA — money', () => {
     // Money overview: what customers owe = 20,000 − 10,000 − 5,000 + 5,300 + 13,070 − 5,000.
     await page.getByRole('button', { name: 'Overview', exact: true }).click();
     await expect(tile(main(page), 'Customers owe you')).toHaveText('Rs. 18,370');
+    // A name in "Customers owe you" / "You owe" opens that customer / supplier on the billing screens.
+    await main(page).getByRole('button', { name: /^Old Khan Store/ }).first().click();
+    await expect(page.getByRole('heading', { name: 'Customers' })).toBeVisible();
+    await expect(dialog(page, 'Old Khan Store').getByTestId('customer-sales-panel')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await goTo(page, 'Money');
+    await main(page).getByRole('button', { name: /^Dalda Foods/ }).first().click();
+    await expect(page.getByRole('heading', { name: 'Suppliers' })).toBeVisible();
+    await expect(dialog(page, 'Dalda Foods')).toContainText('Stock received');
+    await page.keyboard.press('Escape');
     await checkBooks(page, { item: { id: 'p2', name: 'Habib 5 L Can' } });
     done();
   });
@@ -995,6 +1005,11 @@ test.describe('QA — reports and accounts', () => {
     await fa.getByRole('button', { name: 'Save asset' }).click();
     await assets.getByRole('button', { name: /^Run for (January|February|March|April|May|June|July|August|September|October|November|December)/ }).click();
     await expect(assets.getByTestId('asset-row')).toContainText('Rs. 118,000');
+    await assets.getByRole('button', { name: 'Edit Honda generator' }).click();
+    const edit = dialog(page, 'Edit Honda generator');
+    await edit.getByLabel('Name').fill('Honda generator 5 kVA');
+    await edit.getByRole('button', { name: 'Save changes' }).click();
+    await expect(assets.getByTestId('asset-row')).toContainText('Honda generator 5 kVA');
 
     // Staff: advance, salary sheet recovering it, payslip.
     await accTab('Staff & salaries');
@@ -1169,6 +1184,21 @@ test.describe('QA — admin', () => {
     await expect(page.getByText('Imported 1, skipped 0.')).toBeVisible();
     await goTo(page, 'Customers');
     await expect(main(page).getByText('G-9')).toBeVisible();
+
+    // Removing a salesman asks first, and the bin keeps a copy with the reason.
+    await main(page).getByRole('button', { name: 'Sales & recovery' }).click();
+    await dialog(page, 'Sales & recovery').getByRole('button', { name: /Salesmen & areas/ }).click();
+    const team = dialog(page, 'Salesmen & areas');
+    await team.getByLabel('Name', { exact: true }).fill('Temp man');
+    await team.getByRole('button', { name: 'Add salesman' }).click();
+    await team.getByRole('button', { name: 'Remove Temp man' }).click();
+    await page.getByRole('alertdialog').getByLabel(/Why\?/).fill('left the job');
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Remove' }).click();
+    await expect(team.getByText('Temp man deleted.')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await goTo(page, 'Admin');
+    await adminTab(/Deleted records/);
+    await expect(page.getByTestId('deleted-record').filter({ hasText: 'Salesman Temp man' })).toContainText('“left the job”');
 
     // Audit log.
     await goTo(page, 'Admin');

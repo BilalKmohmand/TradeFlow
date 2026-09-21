@@ -1,5 +1,5 @@
 import { CsvButton } from '../../components/billing/CsvButton';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Phone, FilePlus2, HandCoins, Printer, Pencil, Trash2, Clock, FileText, Users, Route } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useWideLayout } from '../../hooks/useMediaQuery';
@@ -19,13 +19,19 @@ import { billNetTotal } from '../../utils/salesDocs';
 
 /** Customers the simple way: who they are, what they owe, and their bills. */
 export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd }) => {
-  const { customers, invoices, ledger, setEditRequest, deleteCustomer, setPrintRequest, can } = useTrading();
+  const { customers, invoices, ledger, setEditRequest, deleteCustomer, setPrintRequest, can, selectedCustomerId, setSelectedCustomerId } = useTrading();
   const ui = useBillingUI();
   const wide = useWideLayout();
   const stockUI = useStockUI();
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Customer | null>(null);
+  // Opened from elsewhere (Money, search): show that customer here.
+  useEffect(() => {
+    if (!selectedCustomerId) return;
+    if (customers.some((c) => c.id === selectedCustomerId)) setOpenId(selectedCustomerId);
+    setSelectedCustomerId(null);
+  }, [selectedCustomerId]); // eslint-disable-line react-hooks/exhaustive-deps
   const today = todayISO();
   const canDelete = can('delete_records');
   const rows = useMemo(() => {

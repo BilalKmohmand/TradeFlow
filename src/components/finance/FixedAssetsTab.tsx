@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Printer, Trash2, Undo2, Wrench } from 'lucide-react';
+import { Pencil, Plus, Printer, Trash2, Undo2, Wrench } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { ASSET_CATEGORIES, AssetCategory, AssetPaidFrom, DepreciationMethod, FixedAsset } from '../../types';
 import { Modal, Notice, Tile, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, rs, EmptyState, RowAction } from '../billing/ui';
@@ -53,6 +53,32 @@ const AddAssetModal: React.FC<{ onClose: () => void; onDone: Flash }> = ({ onClo
         <div className="col-span-2 sm:col-span-1"><CostCentreSelect id="fa-centre" value={f.centre} onChange={(v) => set({ centre: v })} /></div>
         <div className="col-span-2"><label className={labelCls} htmlFor="fa-note">Note (optional)</label><input id="fa-note" value={f.note} onChange={(e) => set({ note: e.target.value })} className={inputCls} /></div>
         {cost > 0 && life > 0 && <p className="col-span-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">About <b className="tabular-nums">{rs(Math.max(0, Math.round(monthly * 100) / 100))}</b> a month will be charged as depreciation (an expense), starting from the month it was bought.</p>}
+      </form>
+    </Modal>
+  );
+};
+
+/** Change what an asset is called, its type, cost centre and note (money and depreciation stay as posted). */
+const EditAssetModal: React.FC<{ asset: FixedAsset; onClose: () => void; onDone: Flash }> = ({ asset, onClose, onDone }) => {
+  const { updateFixedAsset } = useTrading();
+  const [f, setF] = useState({ name: asset.name, category: asset.category, centre: asset.costCentreId || '', note: asset.note || '' });
+  const [error, setError] = useState('');
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const r = updateFixedAsset(asset.id, { name: f.name, category: f.category, costCentreId: f.centre || null, note: f.note.trim() || undefined });
+    if (!r.success) return setError(r.message);
+    onDone(r);
+    onClose();
+  };
+  return (
+    <Modal isOpen onClose={onClose} title={`Edit ${asset.name}`} subtitle="Cost, dates and depreciation already posted do not change."
+      footer={<div className="flex justify-end gap-2"><button type="button" onClick={onClose} className={secondaryBtn}>Cancel</button><button type="submit" form="asset-edit-form" className={primaryBtn}>Save changes</button></div>}>
+      <form id="asset-edit-form" onSubmit={submit} className="grid grid-cols-2 gap-3">
+        {error && <div className="col-span-2"><Notice kind="error">{error}</Notice></div>}
+        <div className="col-span-2 sm:col-span-1"><label className={labelCls} htmlFor="fae-name">Name</label><input id="fae-name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inputCls} /></div>
+        <div className="col-span-2 sm:col-span-1"><label className={labelCls} htmlFor="fae-cat">Type</label><select id="fae-cat" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value as AssetCategory })} className={inputCls}>{ASSET_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
+        <div className="col-span-2 sm:col-span-1"><CostCentreSelect id="fae-centre" value={f.centre} onChange={(v) => setF({ ...f, centre: v })} /></div>
+        <div className="col-span-2"><label className={labelCls} htmlFor="fae-note">Note (optional)</label><input id="fae-note" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} className={inputCls} /></div>
       </form>
     </Modal>
   );
@@ -132,7 +158,7 @@ export const FixedAssetsTab: React.FC<{ flash: Flash }> = ({ flash }) => {
   const [asOf, setAsOf] = useState(today);
   const [month, setMonth] = useState(monthOf(today));
   const [fy, setFy] = useState(current.start);
-  const [modal, setModal] = useState<{ kind: 'add' } | { kind: 'sell'; asset: FixedAsset } | { kind: 'pay'; asset: FixedAsset; owed: number } | null>(null);
+  const [modal, setModal] = useState<{ kind: 'add' } | { kind: 'edit'; asset: FixedAsset } | { kind: 'sell'; asset: FixedAsset } | { kind: 'pay'; asset: FixedAsset; owed: number } | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; message: string; label: string; action: () => void } | null>(null);
   const reg = useMemo(() => assetRegister(fixedAssets, depreciationRuns, asOf), [fixedAssets, depreciationRuns, asOf]);
   const cat = (id: string) => ASSET_CATEGORIES.find((c) => c.id === id)?.label || id;
@@ -193,6 +219,7 @@ export const FixedAssetsTab: React.FC<{ flash: Flash }> = ({ flash }) => {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1 mt-1.5 -ml-2">
+                    {canPost && <RowAction label={`Edit ${a.name}`} icon={<Pencil className="w-4 h-4" />} onClick={() => setModal({ kind: 'edit', asset: a })} />}
                     {!r.disposed && a.status !== 'disposed' && canPost && <RowAction label={`Sell or scrap ${a.name}`} text="Sell / scrap" alwaysText icon={<Undo2 className="w-4 h-4 rotate-180" />} onClick={() => setModal({ kind: 'sell', asset: a })} />}
                     {owed > 0 && canPay && <RowAction label={`Pay for ${a.name}`} text="Pay seller" alwaysText tone="teal" icon={<Plus className="w-4 h-4" />} onClick={() => setModal({ kind: 'pay', asset: a, owed })} />}
                     {a.status === 'disposed' && canRemove && <RowAction label={`Undo sale of ${a.name}`} text="Undo sale" alwaysText icon={<Undo2 className="w-4 h-4" />} onClick={() => setConfirm({ title: `Undo the sale of ${a.name}?`, message: 'The asset goes back into the register and the sale money is taken off the cash book.', label: 'Undo sale', action: () => flash(undoDisposal(a.id)) })} />}
@@ -223,6 +250,7 @@ export const FixedAssetsTab: React.FC<{ flash: Flash }> = ({ flash }) => {
       )}
 
       {modal?.kind === 'add' && <AddAssetModal onClose={() => setModal(null)} onDone={flash} />}
+      {modal?.kind === 'edit' && <EditAssetModal asset={modal.asset} onClose={() => setModal(null)} onDone={flash} />}
       {modal?.kind === 'sell' && <SellAssetModal asset={modal.asset} onClose={() => setModal(null)} onDone={flash} />}
       {modal?.kind === 'pay' && <PayCreditorModal asset={modal.asset} owed={modal.owed} onClose={() => setModal(null)} onDone={flash} />}
       <ConfirmDialog isOpen={Boolean(confirm)} title={confirm?.title || ''} message={confirm?.message || ''} confirmLabel={confirm?.label} onCancel={() => setConfirm(null)} onConfirm={() => { confirm?.action(); setConfirm(null); }} />
