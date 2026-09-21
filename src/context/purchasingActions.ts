@@ -127,6 +127,8 @@ interface Deps {
   isCloudSyncReady: boolean;
   syncToSupabase: (table: string, rows: unknown[]) => Promise<void>;
   removeRemote: (table: any, ids: string[]) => void;
+  /** Next purchase order number from the shop's number series (Admin → Rules, numbers & branches); PO-n when absent. */
+  docNumber?: (existing: string[]) => string;
 }
 
 const load = <T,>(key: string): T[] => {
@@ -229,13 +231,15 @@ export const usePurchasingStore = (d: Deps) => {
     return withLineTotals(base, items);
   };
 
+  const poNumberFor = (existing: string[]) => (d.docNumber ? d.docNumber(existing) : nextNumber('PO', existing));
+
   const createPurchaseOrder: PurchasingApi['createPurchaseOrder'] = (input) => {
     if (!canOrder()) return NO('make purchase orders');
     const headerError = validateHeader(input);
     if (headerError) return fail(headerError);
     const { lines, error } = cleanLines(input);
     if (error || !lines) return fail(error || 'Add at least one item.');
-    const order = buildOrder(input, lines, nextNumber('PO', d.purchaseOrders.map((p) => p.poNumber)));
+    const order = buildOrder(input, lines, poNumberFor(d.purchaseOrders.map((p) => p.poNumber)));
     d.setPurchaseOrders((prev) => [order, ...prev]);
     d.logAuditEvent('Purchase Order Created', `${order.poNumber} to ${supName(order.supplierId)}: ${lines.length} item${lines.length === 1 ? '' : 's'}, ${formatCurrency(order.amount)}`, 'info');
     return { success: true, message: `Purchase order ${order.poNumber} saved.`, order };
@@ -308,7 +312,7 @@ export const usePurchasingStore = (d: Deps) => {
     const numbers = d.purchaseOrders.map((p) => p.poNumber);
     const orders: PurchaseOrder[] = [];
     bySupplier.forEach((list, supplierId) => {
-      const poNumber = nextNumber('PO', numbers);
+      const poNumber = poNumberFor(numbers);
       numbers.push(poNumber);
       orders.push(buildOrder({ supplierId, lines: list, expectedDate: opts.expectedDate, notes: opts.notes || 'Made from the re-order report' }, list.map((l) => ({ productId: l.productId, qty: round2(Number(l.qty)), rate: round2(Number(l.rate) || 0) })), poNumber));
     });

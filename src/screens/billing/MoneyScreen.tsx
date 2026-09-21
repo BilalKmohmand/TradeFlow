@@ -23,7 +23,7 @@ type Tab = MoneyTab;
 
 /** Where the money is: cash, bank, who owes you, who you owe; plus expense sheets and the cash book. */
 export const MoneyScreen: React.FC = () => {
-  const { customers, suppliers, settings, updateSettings, setSelectedCustomerId, setSelectedSupplierId, setActiveScreen, setPrintRequest, deleteExpense, can, cheques, isChequeRecord } = useTrading();
+  const { customers, suppliers, settings, updateSettings, setSelectedCustomerId, setSelectedSupplierId, setActiveScreen, setPrintRequest, deleteExpense, can, cheques, isLinkedRecord } = useTrading();
   const canDelete = can('delete_records');
   // Money of the branch picked in the branch filter (everything while there is one branch).
   const { ledger, expenses, cashEntries, settings: branchSettings } = useBranchScoped();
@@ -170,7 +170,7 @@ export const MoneyScreen: React.FC = () => {
               <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">{g.label} sheet</h2><span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(g.total)}</span></div>
               <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                 {g.rows.sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (
-                  <li key={e.id} className="flex items-center gap-2 pl-4 sm:pl-5 pr-2 py-2 min-h-12 text-sm hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"><span className="text-xs text-[#6B7280] dark:text-[#8E9299] w-20 shrink-0 tabular-nums">{formatDate(e.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]"> • {e.paidVia || 'Cash'}{e.createdBy ? ` • ${e.createdBy}` : ''}</span></span><span className="tabular-nums whitespace-nowrap font-bold">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && !isChequeRecord(e.id) && <RowAction label={`Delete expense ${e.description}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => setPendingExp({ id: e.id, label: `${e.description} (${rs(e.amount)})` })} />}</li>
+                  <li key={e.id} className="flex items-center gap-2 pl-4 sm:pl-5 pr-2 py-2 min-h-12 text-sm hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"><span className="text-xs text-[#6B7280] dark:text-[#8E9299] w-20 shrink-0 tabular-nums">{formatDate(e.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]"> • {e.paidVia || 'Cash'}{e.createdBy ? ` • ${e.createdBy}` : ''}</span></span><span className="tabular-nums whitespace-nowrap font-bold">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && !isLinkedRecord(e.id) && <RowAction label={`Delete expense ${e.description}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => setPendingExp({ id: e.id, label: `${e.description} (${rs(e.amount)})` })} />}</li>
                 ))}
               </ul>
             </div>

@@ -353,6 +353,8 @@ interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, P
   deleteManualJournal: (id: string) => { success: boolean; message: string };
   addAccount: (acc: { code: string; name: string; type: Account['type']; parent?: string; description?: string }) => { success: boolean; message: string };
   deleteAccount: (code: string) => { success: boolean; message: string };
+  /** An expense / cash entry owned by a cheque or a finance record (salary, asset, advance): not deletable on its own. */
+  isLinkedRecord: (id: string) => boolean;
 }
 
 export interface DeleteSummary {
@@ -3797,6 +3799,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     can: (p) => can(p as Permission),
     logAuditEvent: (a, dt, sev) => logAuditEvent(a, dt, sev, 'billing'),
     uid, userName: currentUser?.name, today: todayISO, isCloudSyncReady, syncToSupabase, removeRemote,
+    branchStamp: controlStore.branchStamp,
   });
   // Billing-mode stock adjustments and purchase returns (godown / batch aware), see stockActions.ts.
   const stockActions = createStockActions({
@@ -3814,6 +3817,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     can: (p) => can(p as Permission),
     logAuditEvent: (a, dt, sev) => logAuditEvent(a, dt, sev),
     uid, userName: currentUser?.name, today: todayISO, isCloudSyncReady, syncToSupabase, removeRemote,
+    docNumber: (existing) => controlStore.nextDocNumber('po', todayISO(), existing),
   });
 
   // Fixed assets, staff & salaries, budgets, cost centres, year-end close (see financeActions.ts / utils/financeBooks.ts).
@@ -3837,6 +3841,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     removeRemote,
     centreInUse: (id) => invoices.some((i) => i.costCentreId === id) || expenses.some((e) => e.costCentreId === id) || manualJournals.some((j) => j.costCentreId === id || j.lines.some((l) => l.costCentreId === id)),
   });
+  /** Expense / cash rows owned by a cheque or a finance record: changed from there, never deleted on their own. */
+  const isLinkedRecord = (id: string) => chequeApi.isChequeRecord(id) || finance.api.isFinanceRecord(id);
   // Approval rules, deleted-records bin, number series, branches, backups (see controlActions.ts).
   const control = createControlApi({
     store: controlStore, settings, setSettings, currentUser, users, setUsers,
@@ -3844,11 +3850,18 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     invoices, customers, suppliers, products, purchases, expenses, cashEntries, returns, adjustments, quotations, purchaseOrders, manualJournals, bookings, dispatches, ledger, cheques,
     stockBatches: inventory.api.stockBatches, godowns: inventory.api.godowns,
     setCustomers, setSuppliers, setProducts, setExpenses, setCashEntries, setInvoices, setLedger,
-    isChequeRecord: chequeApi.isChequeRecord, planBill: inventory.planBill, importSystemBackup, exportSystemBackup,
+    isLinkedRecord, planBill: inventory.planBill, importSystemBackup, exportSystemBackup,
     createBill, recordSupplierPayment, issueCheque: chequeApi.issueCheque, adjustStockBy: stockActions.adjustStockBy,
     deleteBill, deleteInvoice, deleteCustomer, deleteSupplier, deleteProduct, deleteExpense, deleteCashEntry, deleteReturn,
     deletePurchaseReturn: stockActions.deletePurchaseReturn, undoStockAdjustment: stockActions.undoStockAdjustment, deleteAdjustment,
     deleteQuotation, deletePurchaseOrder, deletePurchase, deleteManualJournal, deleteBooking, deleteDispatch, deleteLedgerEntry,
+    more: {
+      supplierBills: purchasing.api.supplierBills, supplierClaims: purchasing.api.supplierClaims, fixedAssets: finance.api.fixedAssets, staff: finance.api.staff,
+      staffAdvances: finance.api.staffAdvances, costCentres: finance.api.costCentres, salesmen: salesExtras.api.salesmen, areas: salesExtras.api.areas, schemes: salesExtras.api.schemes,
+      deleteSupplierBill: purchasing.api.deleteSupplierBill, deleteSupplierClaim: purchasing.api.deleteSupplierClaim, removePurchaseOrder: purchasing.api.removePurchaseOrder,
+      deleteFixedAsset: finance.api.deleteFixedAsset, deleteStaff: finance.api.deleteStaff, deleteStaffAdvance: finance.api.deleteStaffAdvance, deleteCostCentre: finance.api.deleteCostCentre,
+      deleteSalesman: salesExtras.api.deleteSalesman, deleteArea: salesExtras.api.deleteArea, deleteScheme: salesExtras.api.deleteScheme, deleteGodown: inventory.api.deleteGodown,
+    },
   });
   controlStore.backupBuilder.current = buildSystemBackup;
 
@@ -4002,6 +4015,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setCustomerAgreedRate,
         deleteCustomerAgreedRate,
         getCustomerAgreedRate,
+        isLinkedRecord,
         manualJournals,
         customAccounts,
         addManualJournal,

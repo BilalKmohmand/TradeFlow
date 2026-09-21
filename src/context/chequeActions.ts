@@ -2,6 +2,7 @@ import React from 'react';
 import { AppSettings, CashEntry, Cheque, Customer, Expense, Invoice, InvoicePaymentRecord, LedgerEntry, Supplier } from '../types';
 import { ACC, booksLockedFor } from '../utils/accounting';
 import { chequeLinkedIds } from '../utils/cheques';
+import { billBalance } from '../utils/salesDocs';
 import { formatCurrency, formatDate } from '../utils/formatters';
 
 /**
@@ -93,12 +94,13 @@ const fail = (message: string): Result => ({ success: false, message });
 const BANK_METHOD = 'Cheque';
 const CHARGE_PAID_VIA = 'Bank Transfer';
 
-/** Recompute a bill's paid / due / status after its payments changed. */
+/** Recompute a bill's paid / due / status after its payments changed (returns and refunds on it still count). */
 const withPayments = (inv: Invoice, payments: InvoicePaymentRecord[], today: string): Invoice => {
   const paid = round2(payments.reduce((a, p) => a + p.amount, 0));
-  const due = Math.max(0, round2(inv.totalAmount - paid));
-  const status = due === 0 ? 'paid' : paid > 0 ? 'partial' : 'issued';
-  return { ...inv, payments, paidAmount: paid, balanceDue: due, paymentStatus: due === 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid', status, billKind: inv.billKind ? (due === 0 ? 'cash' : 'credit') : inv.billKind, updatedAt: today };
+  const due = billBalance({ ...inv, paidAmount: paid });
+  const kept = round2(paid - (inv.refundedAmount || 0));
+  const status = due === 0 ? 'paid' : kept > 0 ? 'partial' : 'issued';
+  return { ...inv, payments, paidAmount: paid, balanceDue: due, paymentStatus: due === 0 ? 'paid' : kept > 0 ? 'partial' : 'unpaid', status, billKind: inv.billKind ? (due === 0 ? 'cash' : 'credit') : inv.billKind, updatedAt: today };
 };
 
 export const createChequeApi = (d: Deps): ChequeApi => {

@@ -356,8 +356,10 @@ export interface ControlApi {
 export interface BillLikeInput {
   customerId: string;
   newCustomer?: { name: string; phone: string };
-  items: { productId: string; name?: string; qty: number; unitPrice: number; discountType?: 'rs' | 'pct'; discountValue?: number }[];
+  items: { productId: string; name?: string; qty: number; unitPrice: number; discountType?: 'rs' | 'pct'; discountValue?: number; free?: boolean; schemeId?: string }[];
   discount?: number;
+  /** Freight / loading charged on the bill (part of the total the customer owes). */
+  freightCharges?: number;
   paidNow?: number;
   paymentMethod?: string;
   payments?: { method: string; amount: number }[];
@@ -408,7 +410,8 @@ interface ApiDeps {
   setCashEntries: React.Dispatch<React.SetStateAction<CashEntry[]>>;
   setInvoices: React.Dispatch<React.SetStateAction<Invoice[]>>;
   setLedger: React.Dispatch<React.SetStateAction<LedgerEntry[]>>;
-  isChequeRecord: (id: string) => boolean;
+  /** An expense / cash entry owned by a cheque or a finance record (changed from there, never deleted on its own). */
+  isLinkedRecord: (id: string) => boolean;
   planBill?: (items: { productId: string; qty: number }[], godownId: string | undefined, onDate: string) => { ok: boolean; message?: string };
   importSystemBackup: (json: string) => Result;
   exportSystemBackup: () => string;
@@ -435,6 +438,29 @@ interface ApiDeps {
   deleteBooking: (id: string) => SumResult;
   deleteDispatch: (id: string) => SumResult;
   deleteLedgerEntry: (id: string) => void;
+  /** Newer records (purchasing, finance, sales team, godowns) whose deletes also keep a copy in the bin. */
+  more: {
+    supplierBills: { id: string; billNumber: string; supplierId: string; amount: number; date: string }[];
+    supplierClaims: { id: string; claimNumber: string; supplierId: string; amount?: number; qty: number; productId: string }[];
+    fixedAssets: { id: string; name: string; cost: number }[];
+    staff: { id: string; name: string; role?: string }[];
+    staffAdvances: { id: string; staffId: string; amount: number; date: string }[];
+    costCentres: { id: string; name: string }[];
+    salesmen: { id: string; name: string }[];
+    areas: { id: string; name: string }[];
+    schemes: { id: string; name: string }[];
+    deleteSupplierBill: (id: string) => Result;
+    deleteSupplierClaim: (id: string) => Result;
+    removePurchaseOrder: (id: string) => Result;
+    deleteFixedAsset: (id: string) => Result;
+    deleteStaff: (id: string) => Result;
+    deleteStaffAdvance: (id: string) => Result;
+    deleteCostCentre: (id: string) => Result;
+    deleteSalesman: (id: string) => Result;
+    deleteArea: (id: string) => Result;
+    deleteScheme: (id: string) => Result;
+    deleteGodown: (id: string) => Result;
+  };
 }
 
 export const createControlApi = (d: ApiDeps) => {
@@ -473,14 +499,19 @@ export const createControlApi = (d: ApiDeps) => {
     return req;
   };
 
-  /** Bill totals exactly as createBill works them out. */
+  /** Bill lines exactly as createBill takes them (free scheme lines are always price 0, no discount). */
+  const billItems = (input: BillLikeInput) =>
+    (input.items || []).filter((it) => it.productId && it.qty > 0).map((it) => (it.free ? { ...it, unitPrice: 0, discountType: undefined, discountValue: undefined } : it));
+
+  /** Bill totals exactly as createBill works them out (freight included). */
   const billFigures = (input: BillLikeInput) => {
-    const items = (input.items || []).filter((it) => it.productId && it.qty > 0);
+    const items = billItems(input);
     const lineDisc = items.map((it) => lineDiscountAmount(it.qty, it.unitPrice, it.discountType, it.discountValue));
     const subtotal = round2(items.reduce((a, it, i) => a + round2(it.qty * it.unitPrice) - lineDisc[i], 0));
     const discount = round2(Math.min(Math.max(0, input.discount || 0), subtotal));
     const tax = round2(((subtotal - discount) * (d.settings.taxRatePct ?? 0)) / 100);
-    const total = round2(subtotal - discount + tax);
+    const freight = round2(Math.max(0, Number(input.freightCharges) || 0));
+    const total = round2(subtotal - discount + tax + freight);
     const parts = input.payments ? input.payments : (input.paidNow || 0) > 0 ? [{ method: input.paymentMethod || 'Cash', amount: input.paidNow || 0 }] : [];
     const chequeAmt = input.cheque && Number(input.cheque.amount) > 0 ? Number(input.cheque.amount) : 0;
     const pay = resolveBillPayments(total, parts, chequeAmt);
@@ -502,7 +533,9 @@ export const createControlApi = (d: ApiDeps) => {
     const reasons: string[] = [];
     const limit = Number(rules.discountPctAbove) || 0;
     if (limit > 0) {
-      const disc = billDiscountPct(input.items || [], input.discount || 0);
+      // A scheme's own "% off" (the shop's standing offer) is not a discount the staff gave.
+      const lines = billItems(input).map((it) => (it.schemeId && !it.free ? { ...it, discountType: undefined, discountValue: undefined } : it));
+      const disc = billDiscountPct(lines, input.discount || 0);
       if (disc.pct > limit + 1e-9) {
         keys.push('discount');
         reasons.push(`Discount ${fmtPct(disc.pct)} (${rs(disc.discount)}) is over the ${fmtPct(limit)} limit`);
@@ -672,7 +705,7 @@ export const createControlApi = (d: ApiDeps) => {
     return e ? { recordId: id, label: `Expense ${e.description} • ${rs(e.amount)} • ${formatDate(e.date)}`, data: e } : null;
   }, (_r, id) => {
     const e = d.expenses.find((v) => v.id === id);
-    return Boolean(e && !booksLockedFor(d.settings, e.date) && !d.isChequeRecord(id));
+    return Boolean(e && !booksLockedFor(d.settings, e.date) && !d.isLinkedRecord(id));
   });
   const deleteCashEntry = wrap('cash_entry', d.deleteCashEntry, (id) => {
     const e = d.cashEntries.find((v) => v.id === id);
@@ -681,7 +714,7 @@ export const createControlApi = (d: ApiDeps) => {
     return { recordId: id, label: `Cash ${e.direction === 'in' ? 'in' : 'out'} ${rs(e.amount)} • ${e.description} • ${formatDate(e.date)}`, data: legs };
   }, (_r, id) => {
     const e = d.cashEntries.find((v) => v.id === id);
-    return Boolean(e && !booksLockedFor(d.settings, e.date) && !d.isChequeRecord(id));
+    return Boolean(e && !booksLockedFor(d.settings, e.date) && !d.isLinkedRecord(id));
   });
   const retSnap = (id: string) => {
     const r = d.returns.find((v) => v.id === id);
@@ -725,6 +758,29 @@ export const createControlApi = (d: ApiDeps) => {
     return l ? { recordId: id, label: `${l.type.replace(/_/g, ' ')} ${l.referenceId} • ${l.entityType === 'customer' ? custName(l.entityId) : supName(l.entityId)} • ${rs(l.debit || l.credit)}`, data: l } : null;
   }, (_r, id) => d.ledger.some((l) => l.id === id));
 
+  // Purchasing, finance, sales team and godowns. A salesman / area still on bills is only switched off: no copy then.
+  const m = d.more;
+  const kept = (r: Result) => okResult(r) && !/switched off/i.test(r.message);
+  const snapOf = <T extends { id: string }>(rows: T[], label: (x: T) => string) => (id: string) => {
+    const x = rows.find((v) => v.id === id);
+    return x ? { recordId: id, label: label(x), data: x } : null;
+  };
+  const staffName = (id: string) => m.staff.find((x) => x.id === id)?.name || 'staff';
+  const deleteSupplierBill = wrap('supplier_bill', m.deleteSupplierBill, snapOf(m.supplierBills, (b) => `Supplier bill ${b.billNumber} • ${supName(b.supplierId)} • ${rs(b.amount)}`), okResult);
+  const deleteSupplierClaim = wrap('supplier_claim', m.deleteSupplierClaim, snapOf(m.supplierClaims, (c) => `Claim ${c.claimNumber} • ${supName(c.supplierId)} • ${c.qty} ${d.products.find((p) => p.id === c.productId)?.name || 'item'}`), okResult);
+  const removePurchaseOrder = wrap('purchase_order', m.removePurchaseOrder, (id) => {
+    const po = d.purchaseOrders.find((v) => v.id === id);
+    return po ? { recordId: id, label: `Purchase order ${po.poNumber} • ${supName(po.supplierId)} • ${rs(po.amount)}`, data: po } : null;
+  }, okResult);
+  const deleteFixedAsset = wrap('fixed_asset', m.deleteFixedAsset, snapOf(m.fixedAssets, (a) => `Fixed asset ${a.name} • ${rs(a.cost)}`), okResult);
+  const deleteStaff = wrap('staff', m.deleteStaff, snapOf(m.staff, (x) => `Staff ${x.name}${x.role ? ` • ${x.role}` : ''}`), okResult);
+  const deleteStaffAdvance = wrap('staff_advance', m.deleteStaffAdvance, snapOf(m.staffAdvances, (a) => `Advance to ${staffName(a.staffId)} • ${rs(a.amount)} • ${formatDate(a.date)}`), okResult);
+  const deleteCostCentre = wrap('cost_centre', m.deleteCostCentre, snapOf(m.costCentres, (c) => `Cost centre ${c.name}`), okResult);
+  const deleteSalesman = wrap('salesman', m.deleteSalesman, snapOf(m.salesmen, (x) => `Salesman ${x.name}`), kept);
+  const deleteArea = wrap('area', m.deleteArea, snapOf(m.areas, (x) => `Area ${x.name}`), kept);
+  const deleteScheme = wrap('scheme', m.deleteScheme, snapOf(m.schemes, (x) => `Scheme ${x.name}`), okResult);
+  const deleteGodown = wrap('godown', m.deleteGodown, snapOf(d.godowns, (g) => `Godown ${g.name}`), okResult);
+
   const deleters: Partial<Record<DeletedKind, (id: string) => unknown>> = {
     bill: deleteBill,
     customer: deleteCustomer,
@@ -742,6 +798,16 @@ export const createControlApi = (d: ApiDeps) => {
     payment: deleteLedgerEntry,
     booking: deleteBooking,
     dispatch: deleteDispatch,
+    supplier_bill: deleteSupplierBill,
+    supplier_claim: deleteSupplierClaim,
+    fixed_asset: deleteFixedAsset,
+    staff: deleteStaff,
+    staff_advance: deleteStaffAdvance,
+    cost_centre: deleteCostCentre,
+    salesman: deleteSalesman,
+    area: deleteArea,
+    scheme: deleteScheme,
+    godown: deleteGodown,
   };
 
   const deleteRecord = (kind: DeletedKind, id: string, reason = ''): Result => {
@@ -1113,6 +1179,17 @@ export const createControlApi = (d: ApiDeps) => {
     deleteBooking,
     deleteDispatch,
     deleteLedgerEntry,
+    deleteSupplierBill,
+    deleteSupplierClaim,
+    removePurchaseOrder,
+    deleteFixedAsset,
+    deleteStaff,
+    deleteStaffAdvance,
+    deleteCostCentre,
+    deleteSalesman,
+    deleteArea,
+    deleteScheme,
+    deleteGodown,
     exportSystemBackup,
   };
 
