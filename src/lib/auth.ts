@@ -1,6 +1,4 @@
-import bcrypt from 'bcryptjs';
 import {
-  AppUser,
   ActiveScreen,
   Permission,
   RoleDefinition,
@@ -261,110 +259,8 @@ export const DEFAULT_SECURITY_POLICY: SecurityPolicySettings = {
   enableRoleHierarchy: true,
 };
 
-// ---------------------------------------------------------------------------
-// Cryptographic Password Hashing & Verification via bcryptjs
-// ---------------------------------------------------------------------------
-
-export const hashPassword = (password: string): string => {
-  const salt = bcrypt.genSaltSync(10);
-  return bcrypt.hashSync(password, salt);
-};
-
-export const verifyPassword = (password: string, hash: string): boolean => {
-  try {
-    return bcrypt.compareSync(password, hash);
-  } catch (err) {
-    console.error('Password verification error:', err);
-    return false;
-  }
-};
-
-export const hashPin = (pin: string): string => {
-  const salt = bcrypt.genSaltSync(10);
-  return bcrypt.hashSync(pin.trim(), salt);
-};
-
-export const verifyPin = (enteredPin: string, storedHashOrPlain: string): boolean => {
-  if (!enteredPin || !storedHashOrPlain) return false;
-  const cleanEntered = enteredPin.trim();
-  const cleanStored = storedHashOrPlain.trim();
-  if (cleanStored.startsWith('$2a$') || cleanStored.startsWith('$2b$')) {
-    try {
-      return bcrypt.compareSync(cleanEntered, cleanStored);
-    } catch {
-      return false;
-    }
-  }
-  return cleanEntered === cleanStored;
-};
-
-// Default seed users with pre-hashed PINs and passwords
-export const INITIAL_DEMO_USERS: AppUser[] = [
-  {
-    id: 'user-superadmin',
-    name: 'Bilal Khan Mohmand',
-    username: 'superadmin',
-    email: 'bilal@sarmaya.pk',
-    role: 'super_admin',
-    roles: ['super_admin'],
-    pin: '7860',
-    pinHash: hashPin('7860'),
-    passwordHash: hashPassword('Admin@7860'),
-    active: true,
-    status: 'active',
-    twoFactorEnabled: false,
-    failedAttempts: 0,
-    createdAt: '2026-09-01T00:00:00.000Z',
-  },
-  {
-    id: 'user-manager',
-    name: 'Rashid Minhas',
-    username: 'rashid.ops',
-    email: 'rashid@sarmaya.pk',
-    role: 'manager',
-    roles: ['manager'],
-    pin: '1234',
-    pinHash: hashPin('1234'),
-    passwordHash: hashPassword('Manager@123'),
-    active: true,
-    status: 'active',
-    twoFactorEnabled: false,
-    failedAttempts: 0,
-    createdAt: '2026-09-02T00:00:00.000Z',
-  },
-  {
-    id: 'user-operator',
-    name: 'Zahid Yard Weighbridge',
-    username: 'zahid.weigh',
-    email: 'zahid@sarmaya.pk',
-    role: 'operator',
-    roles: ['operator'],
-    pin: '9876',
-    pinHash: hashPin('9876'),
-    passwordHash: hashPassword('Operator@123'),
-    active: true,
-    status: 'active',
-    twoFactorEnabled: false,
-    failedAttempts: 0,
-    createdAt: '2026-09-03T00:00:00.000Z',
-  },
-  {
-    id: 'user-viewer',
-    name: 'Auditor Ayesha',
-    username: 'ayesha.audit',
-    email: 'ayesha@external-audit.com',
-    role: 'viewer',
-    roles: ['viewer'],
-    pin: '5566',
-    pinHash: hashPin('5566'),
-    passwordHash: hashPassword('Viewer@123'),
-    active: true,
-    status: 'active',
-    twoFactorEnabled: false,
-    failedAttempts: 0,
-    createdAt: '2026-09-04T00:00:00.000Z',
-  },
-];
+// Password hashing, legacy-PIN migration and lockout rules live in ./password.ts.
+// There are no built-in demo users any more: a fresh device shows "Create your account".
 
 // ---------------------------------------------------------------------------
 // Multi-Role & Hierarchy Permission Evaluation

@@ -5,6 +5,7 @@ import { TradingProvider, useTrading } from '../context/TradingContext';
 import { buildJournal, trialBalance, balanceSheet, accountBalance, mergeAccounts } from '../utils/accounting';
 import { collectCashMovements, accountBalancesOn } from '../utils/finance';
 import { todayISO, shiftDate } from '../utils/stockFlow';
+import { seedTestUsers, signIn, OPERATOR } from './helpers/auth';
 
 /**
  * The three ERP features were built separately (accounting; batches/expiry/godowns; credit limits
@@ -13,7 +14,7 @@ import { todayISO, shiftDate } from '../utils/stockFlow';
  */
 const wrapper = ({ children }: { children: React.ReactNode }) => <TradingProvider>{children}</TradingProvider>;
 
-const setup = () => {
+const setup = async () => {
   const set = (k: string, v: unknown) => localStorage.setItem(k, JSON.stringify(v));
   set('tradeflow_settings_v2', { appMode: 'billing', cashOpeningBalance: 20000, openingBankBalance: 100000, cashOpeningDate: '2026-01-01', taxRatePct: 0 });
   set('tradeflow_customers_v2', [
@@ -26,18 +27,17 @@ const setup = () => {
     { id: 'p2', name: '15.7 kgs Tin', category: 'General', unit: 'tin', unitPricePerKg: 6535, costPricePerKg: 6000, stockKg: 100, minThresholdKg: 10 },
   ]);
   ['tradeflow_invoices_v1', 'tradeflow_ledger_v2', 'tradeflow_expenses_v2', 'tradeflow_cash_entries_v2', 'tradeflow_purchases_v2'].forEach((k) => localStorage.setItem(k, '[]'));
+  seedTestUsers();
   const hook = renderHook(() => useTrading(), { wrapper });
-  act(() => {
-    hook.result.current.unlockAdmin('7860');
-  });
+  await signIn(() => hook.result.current);
   return hook;
 };
 
 beforeEach(() => localStorage.clear());
 
 describe('all ERP features together', () => {
-  it('batches, credit limits, bank reconciliation and manual journals keep the books balanced and in step', () => {
-    const { result } = setup();
+  it('batches, credit limits, bank reconciliation and manual journals keep the books balanced and in step', async () => {
+    const { result } = await setup();
     const today = todayISO();
 
     // Inventory: two batches bought on credit from the supplier, the later one expiring first.

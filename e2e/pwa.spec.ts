@@ -46,7 +46,7 @@ test.describe('Installable as a mobile app (PWA)', () => {
 
     await context.setOffline(true);
     await page.reload();
-    await expect(page.getByText(/Sign In with PIN/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible({ timeout: 10_000 });
     await context.setOffline(false);
   });
 });

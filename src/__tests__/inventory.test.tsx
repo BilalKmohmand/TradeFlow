@@ -4,11 +4,12 @@ import { renderHook, act } from '@testing-library/react';
 import { TradingProvider, useTrading } from '../context/TradingContext';
 import { todayISO, shiftDate } from '../utils/stockFlow';
 import { stockByGodown, expiryStatus, expiryAlerts, reconcileBatches, fmtExpiry, MAIN_GODOWN_ID } from '../utils/inventory';
+import { seedTestUsers, signIn, OPERATOR } from './helpers/auth';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => <TradingProvider>{children}</TradingProvider>;
 const today = todayISO();
 
-const setup = () => {
+const setup = async () => {
   localStorage.setItem('tradeflow_customers_v2', JSON.stringify([{ id: 'c1', name: 'Zaman & Co', company: 'Zaman & Co', phone: '0344', email: '', address: '', totalDue: 0, creditLimit: 0, createdAt: '2026-01-01' }]));
   localStorage.setItem('tradeflow_suppliers_v2', JSON.stringify([{ id: 's1', name: 'Ahmed', company: 'Dalda Foods', phone: '0300', email: '', materialCategory: 'Oil', address: '', totalOwed: 0, createdAt: '2026-01-01' }]));
   localStorage.setItem('tradeflow_products_v2', JSON.stringify([
@@ -16,14 +17,13 @@ const setup = () => {
     { id: 'p2', name: '15.7 kgs Tin', category: 'General', unit: 'tin', unitPricePerKg: 6535, stockKg: 100, minThresholdKg: 10 },
   ]));
   ['tradeflow_invoices_v1', 'tradeflow_ledger_v2', 'tradeflow_expenses_v2', 'tradeflow_cash_entries_v2', 'tradeflow_purchases_v2'].forEach((k) => localStorage.setItem(k, '[]'));
+  seedTestUsers();
   const hook = renderHook(() => useTrading(), { wrapper });
-  act(() => {
-    hook.result.current.unlockAdmin('7860');
-  });
+  await signIn(() => hook.result.current);
   return hook;
 };
 
-type Hook = ReturnType<typeof setup>;
+type Hook = Awaited<ReturnType<typeof setup>>;
 const product = (h: Hook, id: string) => h.result.current.products.find((p) => p.id === id)!;
 const batchesOf = (h: Hook, id: string) => h.result.current.stockBatches.filter((b) => b.productId === id && b.batchNo);
 /** Invariant: stockKg equals the sum over all godowns and never leaves rows claiming more than the total. */
@@ -44,8 +44,8 @@ beforeEach(() => {
 });
 
 describe('receive stock into batches', () => {
-  it('adds batches, raises stockKg, and books a purchase owed to the supplier when cost + supplier are given', () => {
-    const h = setup();
+  it('adds batches, raises stockKg, and books a purchase owed to the supplier when cost + supplier are given', async () => {
+    const h = await setup();
     act(() => {
       const r = h.result.current.receiveStock({ productId: 'p1', qty: 50, batchNo: 'LATE', expiryDate: shiftDate(today, 200), costPrice: 1800, supplierId: 's1' });
       expect(r.success).toBe(true);
@@ -70,8 +70,8 @@ describe('bills take batch stock first-expiry-first-out', () => {
     act(() => { h.result.current.receiveStock({ productId: 'p1', qty: 30, batchNo: 'EARLY', expiryDate: shiftDate(today, 20) }); });
   };
 
-  it('allocates across batches earliest expiry first and records it on the bill line', () => {
-    const h = setup();
+  it('allocates across batches earliest expiry first and records it on the bill line', async () => {
+    const h = await setup();
     receiveTwo(h);
     let res: ReturnType<Hook['result']['current']['createBill']> | undefined;
     act(() => {
@@ -86,8 +86,8 @@ describe('bills take batch stock first-expiry-first-out', () => {
     expectConsistent(h);
   });
 
-  it('two lines of the same item in one bill continue down the batches', () => {
-    const h = setup();
+  it('two lines of the same item in one bill continue down the batches', async () => {
+    const h = await setup();
     receiveTwo(h);
     act(() => {
       h.result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'a', qty: 20, unitPrice: 1 }, { productId: 'p1', name: 'b', qty: 20, unitPrice: 1 }], paidNow: 0 });
@@ -98,8 +98,8 @@ describe('bills take batch stock first-expiry-first-out', () => {
     expectConsistent(h);
   });
 
-  it('skips an expired batch, and refuses with a clear message when only expired stock is left', () => {
-    const h = setup();
+  it('skips an expired batch, and refuses with a clear message when only expired stock is left', async () => {
+    const h = await setup();
     // An old batch received a while ago that has now expired.
     act(() => { h.result.current.receiveStock({ productId: 'p1', qty: 10, batchNo: 'OLD', expiryDate: shiftDate(today, 5), date: shiftDate(today, -60) }); });
     act(() => {
@@ -130,8 +130,8 @@ describe('bills take batch stock first-expiry-first-out', () => {
     expectConsistent(h);
   });
 
-  it('deleting a bill puts the quantity back into the exact batches', () => {
-    const h = setup();
+  it('deleting a bill puts the quantity back into the exact batches', async () => {
+    const h = await setup();
     receiveTwo(h);
     act(() => {
       h.result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'x', qty: 45, unitPrice: 10 }], paidNow: 0 });
@@ -147,8 +147,8 @@ describe('bills take batch stock first-expiry-first-out', () => {
 });
 
 describe('godowns and transfers', () => {
-  it('transfers keep the total, and a bill from the second godown takes stock from there', () => {
-    const h = setup();
+  it('transfers keep the total, and a bill from the second godown takes stock from there', async () => {
+    const h = await setup();
     let gid = '';
     act(() => {
       const r = h.result.current.addGodown('Batkhela godown');
@@ -196,8 +196,8 @@ describe('godowns and transfers', () => {
     expectConsistent(h);
   });
 
-  it('moves batches with their number and expiry', () => {
-    const h = setup();
+  it('moves batches with their number and expiry', async () => {
+    const h = await setup();
     let gid = '';
     act(() => { gid = h.result.current.addGodown('Store 2').godown!.id; });
     act(() => { h.result.current.receiveStock({ productId: 'p1', qty: 20, batchNo: 'A1', expiryDate: shiftDate(today, 100) }); });
@@ -210,8 +210,8 @@ describe('godowns and transfers', () => {
     expectConsistent(h);
   });
 
-  it("can't delete a godown that still has stock, or the main godown", () => {
-    const h = setup();
+  it("can't delete a godown that still has stock, or the main godown", async () => {
+    const h = await setup();
     let gid = '';
     act(() => { gid = h.result.current.addGodown('Store 2').godown!.id; });
     act(() => { h.result.current.receiveStock({ productId: 'p2', qty: 5, godownId: gid }); });
@@ -228,8 +228,8 @@ describe('godowns and transfers', () => {
     expectConsistent(h);
   });
 
-  it('renames godowns (including the main one)', () => {
-    const h = setup();
+  it('renames godowns (including the main one)', async () => {
+    const h = await setup();
     act(() => { expect(h.result.current.updateGodown(MAIN_GODOWN_ID, { name: 'Shop' }).success).toBe(true); });
     expect(h.result.current.godowns[0].name).toBe('Shop');
     expect(h.result.current.godowns[0].isDefault).toBe(true);
@@ -237,8 +237,8 @@ describe('godowns and transfers', () => {
 });
 
 describe('plain items and older actions', () => {
-  it('non-batch items in a one-godown shop behave exactly as before (can go negative, no rows)', () => {
-    const h = setup();
+  it('non-batch items in a one-godown shop behave exactly as before (can go negative, no rows)', async () => {
+    const h = await setup();
     act(() => {
       h.result.current.createBill({ customerId: 'c1', items: [{ productId: 'p2', name: 'Tin', qty: 120, unitPrice: 1 }], paidNow: 0 });
     });
@@ -251,8 +251,8 @@ describe('plain items and older actions', () => {
     expect(product(h, 'p2').stockKg).toBe(100);
   });
 
-  it('stock edited down elsewhere comes out of batches (earliest expiry first) so the total always matches', () => {
-    const h = setup();
+  it('stock edited down elsewhere comes out of batches (earliest expiry first) so the total always matches', async () => {
+    const h = await setup();
     act(() => { h.result.current.receiveStock({ productId: 'p1', qty: 10, batchNo: 'B', expiryDate: shiftDate(today, 100) }); });
     act(() => { h.result.current.receiveStock({ productId: 'p1', qty: 10, batchNo: 'A', expiryDate: shiftDate(today, 50) }); });
     act(() => { h.result.current.updateProduct('p1', { stockKg: 12 }); });
@@ -260,15 +260,15 @@ describe('plain items and older actions', () => {
     expectConsistent(h);
   });
 
-  it('batches of a deleted item are dropped', () => {
-    const h = setup();
+  it('batches of a deleted item are dropped', async () => {
+    const h = await setup();
     act(() => { h.result.current.receiveStock({ productId: 'p1', qty: 10, batchNo: 'B' }); });
     act(() => { h.result.current.deleteProduct('p1'); });
     expect(h.result.current.stockBatches).toHaveLength(0);
   });
 
-  it('godowns, batches and transfers survive a backup round trip', () => {
-    const h = setup();
+  it('godowns, batches and transfers survive a backup round trip', async () => {
+    const h = await setup();
     let gid = '';
     act(() => { gid = h.result.current.addGodown('Store 2').godown!.id; });
     act(() => { h.result.current.receiveStock({ productId: 'p1', qty: 10, batchNo: 'B', godownId: gid, expiryDate: shiftDate(today, 10) }); });
@@ -284,7 +284,7 @@ describe('plain items and older actions', () => {
 });
 
 describe('expiry helpers', () => {
-  it('classifies expiry dates and lists alerts most urgent first', () => {
+  it('classifies expiry dates and lists alerts most urgent first', async () => {
     expect(expiryStatus(undefined, '2026-09-19')).toBe('none');
     expect(expiryStatus('2026-09-18', '2026-09-19')).toBe('expired');
     expect(expiryStatus('2026-09-19', '2026-09-19')).toBe('soon');

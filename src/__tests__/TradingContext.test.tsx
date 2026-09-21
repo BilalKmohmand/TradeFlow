@@ -3,59 +3,66 @@ import React from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { TradingProvider, useTrading, uid } from '../context/TradingContext';
 import { computeMonthlyPnL } from '../utils/finance';
+import { seedTestUsers, signIn } from './helpers/auth';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => <TradingProvider>{children}</TradingProvider>;
 
-const setup = () => {
+const setup = async () => {
+  seedTestUsers();
   const hook = renderHook(() => useTrading(), { wrapper });
-  act(() => {
-    hook.result.current.unlockAdmin('7860');
-  });
+  await signIn(() => hook.result.current);
   return hook;
 };
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 describe('ids', () => {
-  it('never collide in a tight loop', () => {
+  it('never collide in a tight loop', async () => {
     const ids = new Set(Array.from({ length: 2000 }, () => uid('x')));
     expect(ids.size).toBe(2000);
   });
 });
 
 describe('sessions & permissions', () => {
-  it('master PIN signs in as an administrator with every permission', () => {
-    const { result } = setup();
+  it('the owner signs in with username + password and has every permission', async () => {
+    const { result } = await setup();
     expect(result.current.isAdminUnlocked).toBe(true);
-    expect(['admin', 'super_admin']).toContain(result.current.currentUser?.role);
+    expect(result.current.currentUser?.role).toBe('super_admin');
     expect(result.current.can('purge_data')).toBe(true);
+    expect(result.current.auditLogs[0].action).toBe('User Login');
   });
-  it('rejects a wrong PIN and logs the attempt', () => {
+  it('rejects a wrong password and logs the attempt', async () => {
+    seedTestUsers();
     const { result } = renderHook(() => useTrading(), { wrapper });
-    let ok = true;
-    act(() => {
-      ok = result.current.unlockAdmin('0000');
+    let res: any;
+    await act(async () => {
+      res = await result.current.login('bilal', 'wrong-password');
     });
-    expect(ok).toBe(false);
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/Username or password is incorrect/);
     expect(result.current.isAdminUnlocked).toBe(false);
-    expect(result.current.auditLogs[0].action).toBe('Invalid PIN Attempt');
+    expect(result.current.auditLogs[0].action).toBe('Login Failed');
   });
-  it('operators can record transactions but not delete, see finance or open admin', () => {
-    const { result } = setup();
-    act(() => {
-      expect(result.current.addUser({ name: 'Bilal Test', role: 'operator', pin: '4321' }).success).toBe(true);
+  it('operators can record transactions but not delete, see finance or open admin', async () => {
+    const { result } = await setup();
+    await act(async () => {
+      expect((await result.current.addUser({ name: 'Bilal Test', username: 'bilaltest', role: 'operator', password: 'Temp-pass-1' })).success).toBe(true);
     });
     act(() => {
-      result.current.lockAdmin();
+      result.current.logout();
     });
-    const userId = result.current.users.find((u) => u.name === 'Bilal Test')!.id;
-    act(() => {
-      expect(result.current.unlockAsUser(userId, '9999').success).toBe(false);
+    await act(async () => {
+      expect((await result.current.login('bilaltest', 'nope-nope-nope')).success).toBe(false);
     });
-    act(() => {
-      expect(result.current.unlockAsUser(userId, '4321').success).toBe(true);
+    await act(async () => {
+      expect((await result.current.login('BilalTest ', 'Temp-pass-1')).mustChangePassword).toBe(true);
+    });
+    expect(result.current.authStatus).toBe('change_password');
+    await act(async () => {
+      expect((await result.current.changePassword(null, 'my-own-password')).success).toBe(true);
     });
     expect(result.current.currentUser?.name).toBe('Bilal Test');
     expect(result.current.can('delete_records')).toBe(false);
@@ -67,17 +74,22 @@ describe('sessions & permissions', () => {
     });
     expect(result.current.expenses[0].createdBy).toBe('Bilal Test');
   });
-  it('deactivated users cannot sign in', () => {
-    const { result } = setup();
-    act(() => {
-      result.current.addUser({ name: 'Sara Test', role: 'manager', pin: '2222' });
+  it('deactivated users cannot sign in', async () => {
+    const { result } = await setup();
+    await act(async () => {
+      await result.current.addUser({ name: 'Sara Test', username: 'sara', role: 'manager', password: 'Temp-pass-2' });
     });
     const id = result.current.users.find((u) => u.name === 'Sara Test')!.id;
     act(() => {
-      result.current.updateUser(id, { active: false });
+      result.current.updateUser(id, { active: false, status: 'inactive' });
     });
     act(() => {
-      expect(result.current.unlockAsUser(id, '2222').success).toBe(false);
+      result.current.logout();
+    });
+    await act(async () => {
+      const res = await result.current.login('sara', 'Temp-pass-2');
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/switched off/);
     });
   });
 });
@@ -97,8 +109,8 @@ describe('trading flow', () => {
     return { customerId, supplierId, productId };
   };
 
-  it('booking -> dispatch updates stock, dues, ledger and price history; delete reverses all of it', () => {
-    const { result } = setup();
+  it('booking -> dispatch updates stock, dues, ledger and price history; delete reverses all of it', async () => {
+    const { result } = await setup();
     const { customerId, productId } = seed(result);
     expect(result.current.priceHistory).toHaveLength(1);
 
@@ -140,8 +152,8 @@ describe('trading flow', () => {
     expect(result.current.whatsappMessages.filter((m) => m.type === 'dispatch_alert')).toHaveLength(0);
   });
 
-  it('paid-on-dispatch does not add to dues and marks the booking partial', () => {
-    const { result } = setup();
+  it('paid-on-dispatch does not add to dues and marks the booking partial', async () => {
+    const { result } = await setup();
     const { customerId, productId } = seed(result);
     let bookingId = '';
     act(() => {
@@ -156,8 +168,8 @@ describe('trading flow', () => {
     expect(result.current.ledger.filter((l) => l.entityId === customerId)).toHaveLength(2);
   });
 
-  it('receiving stock raises stock and the supplier payable; deleting it reverses', () => {
-    const { result } = setup();
+  it('receiving stock raises stock and the supplier payable; deleting it reverses', async () => {
+    const { result } = await setup();
     const { supplierId, productId } = seed(result);
     let purchaseId = '';
     act(() => {
@@ -179,8 +191,8 @@ describe('trading flow', () => {
     expect(result.current.ledger.filter((l) => l.type === 'purchase_received')).toHaveLength(0);
   });
 
-  it('deleting a customer cascades bookings, dispatches, ledger and messages', () => {
-    const { result } = setup();
+  it('deleting a customer cascades bookings, dispatches, ledger and messages', async () => {
+    const { result } = await setup();
     const { customerId, productId } = seed(result);
     let bookingId = '';
     act(() => {
@@ -203,8 +215,8 @@ describe('trading flow', () => {
     expect(result.current.products[0].stockKg).toBe(10000);
   });
 
-  it('editing a booking recalculates amounts; cancelling keeps dispatches', () => {
-    const { result } = setup();
+  it('editing a booking recalculates amounts; cancelling keeps dispatches', async () => {
+    const { result } = await setup();
     const { customerId, productId } = seed(result);
     let bookingId = '';
     act(() => {
@@ -233,8 +245,8 @@ describe('trading flow', () => {
     expect(result.current.dispatches).toHaveLength(1);
   });
 
-  it('supports multi-item bookings and item-level dispatch fulfillment', () => {
-    const { result } = setup();
+  it('supports multi-item bookings and item-level dispatch fulfillment', async () => {
+    const { result } = await setup();
     const { customerId, supplierId, productId } = seed(result);
     let secondProductId = '';
     act(() => {
@@ -283,8 +295,8 @@ describe('trading flow', () => {
     expect(updated.remainingKg).toBe(7000);
   });
 
-  it('price changes are recorded in history and product deletion removes it', () => {
-    const { result } = setup();
+  it('price changes are recorded in history and product deletion removes it', async () => {
+    const { result } = await setup();
     const { productId } = seed(result);
     act(() => {
       result.current.updateProductPrice(productId, 45, 'market up');
@@ -300,8 +312,8 @@ describe('trading flow', () => {
     expect(result.current.priceHistory).toHaveLength(0);
   });
 
-  it('bulk reminders create one message per customer with unique ids', () => {
-    const { result } = setup();
+  it('bulk reminders create one message per customer with unique ids', async () => {
+    const { result } = await setup();
     act(() => {
       for (let i = 0; i < 5; i++) {
         const c = result.current.addCustomer({ name: `C${i}`, company: 'x', phone: `+92${i}`, email: '', address: '', creditLimit: 0 });
@@ -316,8 +328,8 @@ describe('trading flow', () => {
     expect(new Set(result.current.whatsappMessages.map((m) => m.id)).size).toBe(5);
   });
 
-  it('factory reset wipes business data but keeps the session and PIN', () => {
-    const { result } = setup();
+  it('factory reset wipes business data but keeps the session and users', async () => {
+    const { result } = await setup();
     seed(result);
     act(() => {
       result.current.factoryResetAllData();
@@ -329,8 +341,8 @@ describe('trading flow', () => {
 });
 
 describe('tax, freight and delivery', () => {
-  it('applies sales tax and freight to the invoice, ledger and customer due; delete reverses the billed total', () => {
-    const { result } = setup();
+  it('applies sales tax and freight to the invoice, ledger and customer due; delete reverses the billed total', async () => {
+    const { result } = await setup();
     let customerId = '';
     let productId = '';
     act(() => {
@@ -368,8 +380,8 @@ describe('tax, freight and delivery', () => {
     expect(result.current.products[0].stockKg).toBe(10000);
   });
 
-  it('dispatching with a fleet vehicle puts it on trip and delivery frees it', () => {
-    const { result } = setup();
+  it('dispatching with a fleet vehicle puts it on trip and delivery frees it', async () => {
+    const { result } = await setup();
     let customerId = '', productId = '', truckId = '';
     act(() => {
       customerId = result.current.addCustomer({ name: 'Ali', company: 'A', phone: '1', email: '', address: '', creditLimit: 0 }).id;
@@ -399,8 +411,8 @@ describe('trade documents & workflow', () => {
     return { customerId, supplierId, productId };
   };
 
-  it('quotation converts into a booking exactly once', () => {
-    const { result } = setup();
+  it('quotation converts into a booking exactly once', async () => {
+    const { result } = await setup();
     const { customerId, productId } = seedAll(result);
     let quoteId = '';
     act(() => { quoteId = result.current.addQuotation({ customerId, productId, kg: 5000, pricePerKg: 42, validUntil: '2030-01-01', notes: 'FOB' }).id; });
@@ -417,8 +429,8 @@ describe('trade documents & workflow', () => {
     expect(result.current.bookings).toHaveLength(1);
   });
 
-  it('purchase order is filled by receipts and closes when complete', () => {
-    const { result } = setup();
+  it('purchase order is filled by receipts and closes when complete', async () => {
+    const { result } = await setup();
     const { supplierId, productId } = seedAll(result);
     let poId = '';
     act(() => { poId = result.current.addPurchaseOrder({ supplierId, productId, kg: 3000, pricePerKg: 20, expectedDate: '2026-09-10' }).id; });
@@ -430,8 +442,8 @@ describe('trade documents & workflow', () => {
     expect(result.current.products[0].stockKg).toBe(13000);
   });
 
-  it('sales return credits the customer and restocks; purchase return debits the supplier; deletes reverse', () => {
-    const { result } = setup();
+  it('sales return credits the customer and restocks; purchase return debits the supplier; deletes reverse', async () => {
+    const { result } = await setup();
     const { customerId, supplierId, productId } = seedAll(result);
     act(() => { result.current.updateCustomer(customerId, { totalDue: 50000 }); result.current.updateSupplier(supplierId, { totalOwed: 30000 }); });
     let cn = '', dn = '';
@@ -449,8 +461,8 @@ describe('trade documents & workflow', () => {
     expect(result.current.ledger.filter((l) => l.type === 'credit_note' || l.type === 'debit_note')).toHaveLength(0);
   });
 
-  it('stock adjustments record the delta with a reason and can be reversed', () => {
-    const { result } = setup();
+  it('stock adjustments record the delta with a reason and can be reversed', async () => {
+    const { result } = await setup();
     const { productId } = seedAll(result);
     let adj: any;
     act(() => { adj = result.current.adjustStock(productId, 9800, 'moisture', 'sun dried'); });
@@ -463,8 +475,8 @@ describe('trade documents & workflow', () => {
     expect(result.current.products[0].stockKg).toBe(10000);
   });
 
-  it('tasks can be attached, completed and reopened', () => {
-    const { result } = setup();
+  it('tasks can be attached, completed and reopened', async () => {
+    const { result } = await setup();
     const { customerId } = seedAll(result);
     let id = '';
     act(() => { id = result.current.addTask({ title: 'Call Ali', dueDate: '2026-09-01', linkType: 'customer', linkId: customerId }).id; });
@@ -476,8 +488,8 @@ describe('trade documents & workflow', () => {
     expect(result.current.tasks[0].status).toBe('open');
   });
 
-  it('broker commission accrues in the P&L as dispatched', () => {
-    const { result } = setup();
+  it('broker commission accrues in the P&L as dispatched', async () => {
+    const { result } = await setup();
     const { customerId, productId } = seedAll(result);
     let bookingId = '';
     act(() => { bookingId = result.current.createBooking({ customerId, productId, totalKg: 1000, pricePerKg: 40, brokerName: 'Karim', brokerCommissionPerKg: 0.5 }).id; });

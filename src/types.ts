@@ -393,9 +393,20 @@ export interface AppUser {
   email?: string;
   role: UserRole; // primary role for backwards compatibility
   roles?: UserRole[]; // supports assigning one or more roles to a user
-  pin: string;
-  pinHash?: string; // bcrypt-hashed PIN for secure storage
-  passwordHash?: string; // bcrypt-hashed password
+  /** Legacy 4–6 digit PIN (before username + password sign-in). Cleared once the user sets a password. */
+  pin?: string;
+  /** Legacy bcrypt-hashed PIN. Cleared once the user sets a password. */
+  pinHash?: string | null;
+  /** PBKDF2-SHA256 hash of the password, base64 (see src/lib/password.ts). Older records may hold a bcrypt hash with no salt. */
+  passwordHash?: string | null;
+  /** Random 16-byte salt for passwordHash, base64. */
+  passwordSalt?: string | null;
+  /** PBKDF2 iteration count used for passwordHash. */
+  passwordIter?: number | null;
+  /** True after an admin sets a temporary password or after a one-time sign-in with an old PIN: a new password must be chosen. */
+  mustChangePassword?: boolean;
+  /** Last change to the record (ISO); the newer copy wins when device and cloud disagree. */
+  updatedAt?: string;
   active: boolean;
   status?: UserAccountStatus;
   twoFactorEnabled?: boolean;
@@ -604,8 +615,8 @@ export interface AppSettings {
   id: 'default';
   cashOpeningBalance: number;
   cashOpeningDate: string;
-  /** Shared master PIN stored in cloud settings for multi-device unlock consistency. */
-  masterPin?: string;
+  /** @deprecated Old shared master PIN. Only read once so the owner can sign in and set a password; then cleared. */
+  masterPin?: string | null;
   /** Sales tax % applied to new dispatches (0 = none). */
   taxRatePct?: number;
   taxLabel?: string;

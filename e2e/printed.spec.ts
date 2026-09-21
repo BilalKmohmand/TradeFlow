@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import fs from 'fs';
+import { signIn } from './helpers/login';
 
 /**
  * Real print output: renders the bill, daily sheet and statement through Chrome's print engine
@@ -48,9 +49,7 @@ const sampleBill = async (page: Page, full: boolean) => {
 
 test('printed bill, daily sheet and statement come out as real documents', async ({ page }) => {
   await page.addInitScript(seed, LOGO);
-  await page.goto('/');
-  for (const d of '7860') await page.getByRole('button', { name: d, exact: true }).click();
-  await page.getByRole('button', { name: /^Unlock/ }).click();
+  await signIn(page); // owner "bilal" / Sarmaya@2026
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible({ timeout: 10_000 });
 
   await sampleBill(page, false);

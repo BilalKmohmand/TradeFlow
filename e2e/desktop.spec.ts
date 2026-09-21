@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { seed } from './seed';
+import { signIn } from './helpers/login';
 
 const SHOTS = 'e2e/screenshots/desktop';
 const shot = async (page: Page, name: string) => {
@@ -14,9 +15,7 @@ test('desktop screens with data', async ({ page }) => {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   await page.addInitScript(seed);
-  await page.goto('/');
-  for (const d of '7860') await page.getByRole('button', { name: d, exact: true }).click();
-  await page.getByRole('button', { name: /^Unlock/ }).click();
+  await signIn(page); // owner "bilal" / Sarmaya@2026
   await expect(page.getByRole('heading', { name: 'Trading Overview' })).toBeVisible({ timeout: 10_000 });
   await page.keyboard.press('Escape');
   await shot(page, '01-dashboard');

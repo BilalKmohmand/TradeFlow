@@ -3,15 +3,18 @@ import React, { useState } from 'react';
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import { TradingProvider, useTrading } from '../context/TradingContext';
 import { PrintDocument } from '../components/PrintDocument';
+import { seedTestUsers, signIn } from './helpers/auth';
+
+let ctx: ReturnType<typeof useTrading>;
 
 const Harness: React.FC = () => {
   const t = useTrading();
+  ctx = t;
   const [request, setRequest] = useState<any>(null);
   return (
     <div>
       <button
         onClick={() => {
-          t.unlockAdmin('7860');
           t.addCustomer({ name: 'Ali', company: 'Raza', phone: '1', email: '', address: '', creditLimit: 0 });
           t.addProduct({ name: 'Cement', category: 'x', unitPricePerKg: 25, stockKg: 100000, minThresholdKg: 0 });
         }}
@@ -35,11 +38,13 @@ const Harness: React.FC = () => {
 describe('PrintDocument', () => {
   it('renders an invoice for a dispatch and closes on Escape', async () => {
     localStorage.clear();
+    seedTestUsers();
     render(
       <TradingProvider>
         <Harness />
       </TradingProvider>
     );
+    await signIn(() => ctx);
     for (const step of ['step1', 'step2', 'step3']) {
       await act(async () => {
         screen.getByText(step).click();
