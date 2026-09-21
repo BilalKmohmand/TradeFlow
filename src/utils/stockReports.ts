@@ -75,7 +75,7 @@ export const itemHistory = (productId: string, src: HistorySources): { rows: His
     const s = src.suppliers.find((x) => x.id === id);
     return s ? s.company || s.name : undefined;
   };
-  type Raw = Omit<HistoryRow, 'balance'> & { sortKey: string };
+  type Raw = Omit<HistoryRow, 'balance'> & { sortKey: string; seq?: number };
   const raw: Raw[] = [];
 
   src.purchases.filter((p) => p.productId === productId).forEach((p) => {
@@ -90,6 +90,8 @@ export const itemHistory = (productId: string, src: HistorySources): { rows: His
         id: `inv-${inv.id}-${it.id || idx}`,
         date: inv.issueDate,
         sortKey: inv.issuedAt || inv.createdAt || inv.issueDate,
+        // Bills made in the same instant keep their bill-number order.
+        seq: parseInt(inv.invoiceNumber.replace(/\D/g, ''), 10) || 0,
         kind: 'sold',
         label: `Sold on bill ${inv.invoiceNumber}`,
         party: inv.customerName || custName(inv.customerId),
@@ -139,7 +141,7 @@ export const itemHistory = (productId: string, src: HistorySources): { rows: His
     raw.push({ id: `xfr-${t.id}`, date: t.date, sortKey: t.createdAt || t.date, kind: 'transferred', label: `Moved ${t.qty} ${unit}: ${godownName(src.godowns, t.fromGodownId)} → ${godownName(src.godowns, t.toGodownId)}`, change: 0, note: t.note });
   });
 
-  raw.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
+  raw.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : (a.seq ?? 0) - (b.seq ?? 0)));
   const closing = round2(product?.stockKg ?? 0);
   const moved = round2(raw.reduce((s, r) => s + r.change, 0));
   const opening = round2(closing - moved);

@@ -29,6 +29,18 @@
  *                                      or Suspense 2900 for the accountant to reclassify
  *  - Stock adjustment                  Dr Stock losses 5100 / Cr Inventory (or the reverse) at cost;
  *                                      goods received free: Dr Inventory / Cr Other income 4900
+ *  - Post-dated cheques (Cheque register). A cheque is not money until the bank clears it, so it
+ *    sits in its own account in between; the customer's / supplier's balance moves on the day the
+ *    cheque changes hands (that is what the party expects to see on their statement):
+ *      cheque received (ledger cheque_received)   Dr Cheques in hand 1150     Cr Receivable 1100
+ *      deposited                                  no posting (still not money; stays in 1150)
+ *      cleared (cash entry, accountCode 1150)     Dr Bank 1010                Cr Cheques in hand 1150
+ *      bounced / given back (cheque_returned)     Dr Receivable 1100          Cr Cheques in hand 1150
+ *      bank charge on a bounce                    Dr Bank charges 6900        Cr Bank 1010   (an expense row)
+ *        … recovered from the customer (cheque_charge)  Dr Receivable 1100    Cr Bank charges 6900
+ *      cheque issued (ledger cheque_issued)       Dr Payable 2000             Cr Cheques issued 2050
+ *      issued cheque cleared (cash entry, 2050)   Dr Cheques issued 2050      Cr Bank 1010
+ *      issued cheque cancelled (cheque_returned)  Dr Cheques issued 2050      Cr Payable 2000
  *  - Opening stock                     Dr Inventory 1200                   Cr Opening balance equity 3900
  *  - Customer / supplier balances that are not explained by their history (opening dues typed in
  *    when the account was created) are posted against Opening balance equity so Receivable and
@@ -107,10 +119,12 @@ const EPS = 0.005;
 export const ACC = {
   CASH: '1000',
   BANK: '1010',
+  CHEQUES_IN_HAND: '1150',
   RECEIVABLE: '1100',
   INVENTORY: '1200',
   PAYABLE: '2000',
   UNPAID_EXPENSES: '2010',
+  CHEQUES_ISSUED: '2050',
   SALES_TAX: '2100',
   LOANS: '2200',
   SUSPENSE: '2900',
@@ -154,9 +168,11 @@ export const DEFAULT_ACCOUNTS: Account[] = [
   sys('1000', 'Cash in hand', 'asset', 'Cash payments (Cash, Cash at Terminal)'),
   sys('1010', 'Bank', 'asset', 'Bank transfers, cheques, cards and mobile wallets (Easypaisa / JazzCash)'),
   sys('1100', 'Accounts receivable (customers)', 'asset', 'What customers owe you'),
+  sys('1150', 'Cheques in hand', 'asset', 'Customer cheques received but not yet cleared by the bank (post-dated or deposited)'),
   sys('1200', 'Inventory (stock at cost)', 'asset'),
   sys('2000', 'Accounts payable (suppliers)', 'liability', 'What you owe suppliers'),
   sys('2010', 'Unpaid expenses', 'liability', 'Expenses recorded as "Credit (unpaid)"'),
+  sys('2050', 'Cheques issued (not cleared)', 'liability', 'Cheques given to suppliers that the bank has not paid yet'),
   sys('2100', 'Sales tax payable', 'liability'),
   sys('2200', 'Loans payable', 'liability'),
   sys('2900', 'Suspense (to be classified)', 'liability', 'Cash entries the app cannot classify; move them with a journal entry'),
@@ -446,6 +462,16 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
           if (l.sourceId && invById.has(l.sourceId)) billId = l.sourceId;
           b.dr(ACC.RECEIVABLE, debit, who).cr(moneyAccount(methodOf.get(l.id) ?? l.method, l.date), debit);
           memo = `Refund to ${who}${l.referenceId ? ` (${l.referenceId})` : ''}`;
+        } else if (l.type === 'cheque_returned') {
+          // Bounced, or handed back: the cheque leaves "Cheques in hand" and the customer owes again.
+          sourceType = 'cheque_bounced';
+          b.dr(ACC.RECEIVABLE, debit, who).cr(ACC.CHEQUES_IN_HAND, debit);
+          memo = `${l.description || 'Cheque returned'} — ${who}`;
+        } else if (l.type === 'cheque_charge') {
+          // Bank charge on a bounced cheque passed on to the customer: recovers the bank-charges expense.
+          sourceType = 'cheque_charge';
+          b.dr(ACC.RECEIVABLE, debit, who).cr(ACC.BANK_CHARGES, debit);
+          memo = `${l.description || 'Bounced cheque charge'} — ${who}`;
         } else {
           b.dr(ACC.RECEIVABLE, debit, who).cr(ACC.SALES, debit);
           memo = `${l.description || 'Invoice'} — ${who}`;
@@ -457,6 +483,10 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
           if (!billId && l.sourceId && invById.has(l.sourceId)) billId = l.sourceId;
           b.dr(moneyAccount(methodOf.get(l.id) ?? l.method, l.date), credit).cr(ACC.RECEIVABLE, credit, who);
           if (debit <= 0) memo = `Received from ${who}${l.referenceId ? ` (${l.referenceId})` : ''}`;
+        } else if (l.type === 'cheque_received') {
+          sourceType = 'cheque_received';
+          b.dr(ACC.CHEQUES_IN_HAND, credit).cr(ACC.RECEIVABLE, credit, who);
+          memo = `${l.description || 'Cheque received'} — ${who}`;
         } else if (l.type === 'credit_note') {
           sourceType = 'sales_return';
           const r = returnByNumber.get(l.referenceId);
@@ -483,15 +513,26 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
     } else {
       // Supplier ledger: debit = more owed to the supplier, credit = less owed.
       if (debit > 0) {
-        sourceType = l.type === 'purchase_received' ? 'purchase' : l.type;
-        b.dr(ACC.INVENTORY, debit, l.kg ? `${l.kg} received` : undefined).cr(ACC.PAYABLE, debit, who);
-        memo = `${l.description || 'Purchase'} — ${who}`;
+        if (l.type === 'cheque_returned') {
+          // Issued cheque cancelled before the bank paid it: the supplier is owed again.
+          sourceType = 'cheque_cancelled';
+          b.dr(ACC.CHEQUES_ISSUED, debit).cr(ACC.PAYABLE, debit, who);
+          memo = `${l.description || 'Cheque cancelled'} — ${who}`;
+        } else {
+          sourceType = l.type === 'purchase_received' ? 'purchase' : l.type;
+          b.dr(ACC.INVENTORY, debit, l.kg ? `${l.kg} received` : undefined).cr(ACC.PAYABLE, debit, who);
+          memo = `${l.description || 'Purchase'} — ${who}`;
+        }
       }
       if (credit > 0) {
         if (l.type === 'payment_made') {
           sourceType = debit > 0 ? sourceType : 'supplier_payment';
           b.dr(ACC.PAYABLE, credit, who).cr(moneyAccount(methodOf.get(l.id) ?? l.method, l.date), credit);
           if (debit <= 0) memo = `Paid to ${who}${l.referenceId ? ` (${l.referenceId})` : ''}`;
+        } else if (l.type === 'cheque_issued') {
+          sourceType = 'cheque_issued';
+          b.dr(ACC.PAYABLE, credit, who).cr(ACC.CHEQUES_ISSUED, credit);
+          memo = `${l.description || 'Cheque issued'} — ${who}`;
         } else if (l.type === 'debit_note') {
           sourceType = 'purchase_return';
           b.dr(ACC.PAYABLE, credit, who).cr(ACC.INVENTORY, credit, 'Stock returned to supplier');
@@ -570,7 +611,8 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
       const other = c.accountCode || (cashDrawingRe.test(c.description || '') ? ACC.DRAWINGS : ACC.SUSPENSE);
       b.dr(other, amount, c.description).cr(money, amount);
     }
-    push({ id: `auto-cash-${c.id}`, date: c.date, ref: c.direction === 'in' ? 'CASH IN' : 'CASH OUT', memo: c.description || 'Cash entry', sourceType: 'cash', sourceId: c.id, builder: b });
+    const chequeClear = c.accountCode === ACC.CHEQUES_IN_HAND || c.accountCode === ACC.CHEQUES_ISSUED;
+    push({ id: `auto-cash-${c.id}`, date: c.date, ref: chequeClear ? 'CHEQUE' : c.direction === 'in' ? 'CASH IN' : 'CASH OUT', memo: c.description || 'Cash entry', sourceType: chequeClear ? 'cheque_cleared' : 'cash', sourceId: c.id, builder: b });
   });
 
   // --- 6. Stock: adjustments and opening stock ---------------------------------------------

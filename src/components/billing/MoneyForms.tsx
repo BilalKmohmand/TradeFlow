@@ -6,6 +6,7 @@ import { todayISO } from '../../utils/stockFlow';
 import { collectCashMovements, accountBalancesOn } from '../../utils/finance';
 import { rs } from './ui';
 import { booksLockedFor } from '../../utils/accounting';
+import { ChequeFieldsInput, emptyChequeFields } from './ChequeForms';
 
 const EXPENSE_PAID_VIA = ['Cash', 'Bank Transfer', 'Easypaisa / JazzCash', 'Card', 'Credit (unpaid)'];
 
@@ -110,12 +111,14 @@ export const TransferModal: React.FC<{ isOpen: boolean; onClose: () => void }> =
 
 /** Take money from a customer against their whole account (old dues), not a specific bill. */
 export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; customerId?: string | null }> = ({ isOpen, onClose, customerId }) => {
-  const { customers, recordCustomerPayment, settings } = useTrading();
+  const { customers, recordCustomerPayment, receiveCheque, settings } = useTrading();
   const [cust, setCust] = useState(customerId || '');
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Cash');
   const [note, setNote] = useState('');
+  const [cheque, setCheque] = useState(emptyChequeFields());
   const [error, setError] = useState('');
+  const isCheque = method === 'Cheque';
   const c = customers.find((x) => x.id === cust);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,6 +128,12 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
     const closed = booksLockedFor(settings, todayISO());
     if (closed) return setError(closed);
     if (amt > c.totalDue + 0.005) return setError(c.totalDue > 0 ? `${c.name} owes only ${rs(c.totalDue)}. Enter up to that amount.` : `${c.name} owes nothing right now. Make a bill first.`);
+    if (isCheque) {
+      // A cheque goes into the cheque register (in hand until the bank clears it), not straight into the bank.
+      const r = receiveCheque({ customerId: c.id, amount: amt, ...cheque, note: note.trim() || undefined });
+      if (!r.success) return setError(r.message);
+      return onClose();
+    }
     recordCustomerPayment(c.id, amt, `${method}${note.trim() ? ` - ${note.trim()}` : ''}`);
     onClose();
   };
@@ -151,6 +160,7 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
             <label className={labelCls} htmlFor="rc-method">Method</label>
             <select id="rc-method" value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}>{BILL_PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}</select>
           </div>
+          {isCheque && <ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="rc-chq" />}
           <div className="col-span-2">
             <label className={labelCls} htmlFor="rc-note">Note</label>
             <input id="rc-note" value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} placeholder="optional" />

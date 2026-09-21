@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { TradingProvider, useTrading } from '../context/TradingContext';
@@ -165,13 +165,32 @@ describe('purchase return (debit note)', () => {
 
 describe('item history, purchase register and profit from bills', () => {
   const sellAndMove = (h: Hook) => {
+    // Each step a second apart, as in real use, so the history order is well defined.
+    const t0 = Date.now();
+    let step = 0;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const tick = () => vi.setSystemTime(t0 + ++step * 1000);
+    try {
+      sellAndMoveSteps(h, tick);
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+  const sellAndMoveSteps = (h: Hook, tick: () => void) => {
+    tick();
     receiveBatches(h);
+    tick();
     act(() => { h.result.current.createBill({ customerId: 'c1', items: [{ productId: 'p2', name: '15.7 kgs Tin', qty: 10, unitPrice: 6535 }], paidNow: 0, discount: 350 }); });
+    tick();
     act(() => { h.result.current.createBill({ customerId: 'c2', items: [{ productId: 'p2', name: '15.7 kgs Tin', qty: 5, unitPrice: 6600 }, { productId: 'p1', name: '5 kgs Can', qty: 6, unitPrice: 2065 }], paidNow: 0 }); });
+    tick();
     act(() => { h.result.current.adjustStockBy({ productId: 'p2', deltaQty: -1, reason: 'damage' }); });
+    tick();
     act(() => { h.result.current.returnToSupplier({ supplierId: 's1', productId: 'p2', qty: 2, rate: 6000, reason: 'dented' }); });
     let gid = '';
+    tick();
     act(() => { gid = h.result.current.addGodown('Shop 2')!.godown!.id; });
+    tick();
     act(() => { h.result.current.transferStock({ productId: 'p2', fromGodownId: h.result.current.godowns[0].id, toGodownId: gid, qty: 4 }); });
   };
 

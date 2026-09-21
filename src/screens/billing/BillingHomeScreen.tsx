@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { FilePlus2, Receipt, Wallet, ArrowLeftRight, HandCoins, AlertTriangle, ChevronRight, Landmark, Banknote, Boxes } from 'lucide-react';
+import { FilePlus2, Receipt, Wallet, ArrowLeftRight, HandCoins, AlertTriangle, ChevronRight, Landmark, Banknote, Boxes, CalendarClock } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
 import { useStockUI } from '../../components/billing/StockUI';
@@ -12,10 +12,11 @@ import { formatDate } from '../../utils/formatters';
 import { customersOverLimit } from '../../utils/credit';
 import { ExpiryAttention } from '../../components/billing/InventoryUI';
 import { expiryAlerts } from '../../utils/inventory';
+import { chequeTotals, unclearedChequeTotals } from '../../utils/cheques';
 
 /** The first screen every morning: today's numbers, the four buttons you press all day, recent bills. */
 export const BillingHomeScreen: React.FC = () => {
-  const { invoices, ledger, expenses, cashEntries, customers, suppliers, products, settings, setActiveScreen, currentUser, can, updateSettings, stockBatches } = useTrading();
+  const { invoices, ledger, expenses, cashEntries, customers, suppliers, products, settings, setActiveScreen, currentUser, can, updateSettings, stockBatches, cheques } = useTrading();
   const isAdmin = can('admin_screen') || can('system:admin_screen');
   const ui = useBillingUI();
   const today = todayISO();
@@ -27,6 +28,8 @@ export const BillingHomeScreen: React.FC = () => {
   const lowStock = products.filter((p) => p.minThresholdKg > 0 && p.stockKg <= p.minThresholdKg);
   const unpaid = billsOnly(invoices).filter((i) => i.balanceDue > 0);
   const overLimit = useMemo(() => customersOverLimit(customers), [customers]);
+  const chq = useMemo(() => chequeTotals(cheques, today), [cheques, today]);
+  const pdc = useMemo(() => unclearedChequeTotals(cheques), [cheques]);
   const expiring = useMemo(() => expiryAlerts(stockBatches, products, today).length, [stockBatches, products, today]);
   const stockUI = useStockUI();
   // Customers with money owed for more than 60 days (credit-limit breaches are listed separately above).
@@ -46,7 +49,7 @@ export const BillingHomeScreen: React.FC = () => {
         <Tile label="Sales today" value={rs(day.sales)} hint={`${day.billCount} bill${day.billCount === 1 ? '' : 's'}`} onClick={() => setActiveScreen('bills')} />
         <Tile label="Cash received today" value={rs(day.received)} tone="good" hint={day.creditGiven > 0 ? `${rs(day.creditGiven)} given on credit` : 'all bills paid'} onClick={() => setActiveScreen('daily')} />
         <Tile label="Expenses today" value={rs(day.expenses)} tone={day.expenses > 0 ? 'bad' : 'default'} onClick={() => setActiveScreen('daily')} />
-        <Tile label="Money in business" value={rs(position.netPosition)} hint={`cash + bank + owed to you − what you owe`} onClick={() => setActiveScreen('money')} />
+        <Tile label="Money in business" value={rs(position.netPosition + pdc.receivable - pdc.payable)} hint={`cash + bank + owed to you − what you owe`} onClick={() => setActiveScreen('money')} />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -85,10 +88,21 @@ export const BillingHomeScreen: React.FC = () => {
         </div>
 
         <div className="space-y-4">
+          <div data-testid="cheques-due-tile">
+            <Tile
+              label="Cheques due this week"
+              value={`${chq.dueThisWeek.count} • ${rs(chq.dueThisWeek.amount)}`}
+              tone={chq.dueThisWeek.count > 0 ? 'warn' : 'default'}
+              icon={<CalendarClock className="w-4 h-4" />}
+              hint={chq.dueThisWeek.count === 0 ? `${chq.inHand.count} in hand • nothing due in the next 7 days` : `coming in ${rs(chq.dueThisWeek.received)}${chq.dueThisWeek.issued > 0 ? ` • going out ${rs(chq.dueThisWeek.issued)}` : ''}`}
+              onClick={() => { ui.openMoneyTab('cheques'); setActiveScreen('money'); }}
+            />
+          </div>
           <div className={`${cardCls} p-5 space-y-3`}>
             <h2 className="font-bold text-[#111827] dark:text-white">Money now</h2>
             <div className="flex justify-between text-sm"><span className="flex items-center gap-2 text-[#6B7280] dark:text-[#94A3B8]"><Banknote className="w-4 h-4" /> Cash in hand</span><span className="font-mono font-bold text-[#111827] dark:text-white">{rs(balances.cash)}</span></div>
             <div className="flex justify-between text-sm"><span className="flex items-center gap-2 text-[#6B7280] dark:text-[#94A3B8]"><Landmark className="w-4 h-4" /> In bank</span><span className="font-mono font-bold text-[#111827] dark:text-white">{rs(balances.bank)}</span></div>
+            {pdc.receivable > 0 && <div className="flex justify-between text-sm"><span className="flex items-center gap-2 text-[#6B7280] dark:text-[#94A3B8]"><CalendarClock className="w-4 h-4" /> Cheques in hand</span><span className="font-mono font-bold text-[#111827] dark:text-white">{rs(pdc.receivable)}</span></div>}
             <div className="flex justify-between text-sm border-t border-[#E5E5E1] dark:border-[#203248] pt-2"><span className="text-[#6B7280] dark:text-[#94A3B8]">Customers owe you</span><span className="font-mono font-bold text-teal-700 dark:text-teal-300">{rs(position.receivables)}</span></div>
             <div className="flex justify-between text-sm"><span className="text-[#6B7280] dark:text-[#94A3B8]">You owe others</span><span className="font-mono font-bold text-rose-700 dark:text-rose-300">{rs(position.payables)}</span></div>
             <button type="button" onClick={() => setActiveScreen('money')} className="text-xs font-bold text-teal-700 dark:text-teal-300 inline-flex items-center gap-1">Money screen <ChevronRight className="w-3.5 h-3.5" /></button>
