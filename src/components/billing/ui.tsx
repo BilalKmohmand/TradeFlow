@@ -119,12 +119,13 @@ export const moneyCls = 'tabular-nums whitespace-nowrap';
 
 /** Page title, one-line subtitle, actions on the right (below the title on phones). */
 export const PageHeader: React.FC<{ title: string; subtitle?: React.ReactNode; children?: React.ReactNode }> = ({ title, subtitle, children }) => (
-  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-    <div className="min-w-0">
+  // Many buttons never squeeze the title: they wrap onto the next row instead (title on top).
+  <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end justify-between gap-3">
+    <div className="min-w-0 sm:shrink-0 max-w-full">
       <h1 className="text-2xl font-bold tracking-tight text-[#111827] dark:text-white">{title}</h1>
       {subtitle && <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-0.5">{subtitle}</p>}
     </div>
-    {children && <div className="flex flex-wrap gap-2 sm:justify-end shrink-0 max-sm:[&>*]:grow max-sm:[&>*:last-child]:order-first max-sm:[&>*:last-child]:basis-full">{children}</div>}
+    {children && <div className="flex flex-wrap gap-2 sm:justify-end min-w-0 max-sm:[&>*]:grow max-sm:[&>*:last-child]:order-first max-sm:[&>*:last-child]:basis-full">{children}</div>}
   </div>
 );
 

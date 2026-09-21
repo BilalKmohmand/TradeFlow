@@ -154,7 +154,7 @@ export const MoneyScreen: React.FC = () => {
       {(tab === 'expenses' || tab === 'cashbook') && (
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-xs font-bold text-[#6B7280] dark:text-[#94A3B8]" htmlFor="money-month">Month</label>
-          <input id="money-month" type="month" value={month} max={today.slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} className={`${inputCls} w-auto`} />
+          <input id="money-month" type="month" value={month} max={today.slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} className={`${inputCls} !w-auto`} />
           <span className="ml-auto" />
           {tab === 'expenses' && <CsvButton fileName={`expenses-${month}.csv`} table={() => expensesCsv(monthExpenses.flatMap((g) => g.rows))} label="Download expenses CSV" />}
           {tab === 'cashbook' && <CsvButton fileName={`cash-book-${month}.csv`} table={() => cashBookCsv(monthMoves)} label="Download cash book CSV" />}

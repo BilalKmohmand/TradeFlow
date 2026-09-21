@@ -144,7 +144,7 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     if (can('products:create') || can('stock:adjust')) act('b-receive-stock', 'Receive stock', 'Stock you bought or brought in • F6', PackagePlus, () => stockUI.receiveStock(), 'Stock', 'success');
     if (can('stock:adjust')) act('b-adjust-stock', 'Adjust stock', 'Leaked, damaged, expired, count correction, received free', Scale, () => stockUI.adjustStock(), 'Stock');
     if (can('products:create') || can('stock:adjust')) act('b-return-goods', 'Return goods to supplier', 'Send stock back and make a debit note', Undo2, () => stockUI.purchaseReturn(), 'Supplier');
-    act('b-pay-supplier', 'Pay a supplier', 'Money you paid a supplier', CreditCard, () => onOpenPayment('supplier'), 'Money out', 'warning');
+    act('b-pay-supplier', 'Pay a supplier', 'Money you paid a supplier', CreditCard, () => billingUI.paySupplier(), 'Money out', 'warning');
     act('b-aging', 'Who owes for how long', 'Customers and suppliers by 0–30, 31–60, 61–90, 90+ days', Clock, () => stockUI.aging('customers'), 'Report');
 
     const go = (id: ActiveScreen, title: string, subtitle: string, icon: CommandItem['icon']) => {

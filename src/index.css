@@ -100,6 +100,10 @@
     background: #fff !important;
     color: #111 !important;
   }
+  /* The on-screen preview is scaled down to fit a phone (see PrintDocument.tsx); paper is never scaled. */
+  #print-fit {
+    zoom: 1 !important;
+  }
   @page {
     margin: 12mm;
   }

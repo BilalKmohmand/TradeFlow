@@ -119,7 +119,7 @@ export const DailyBusinessReport: React.FC<{ date: string; src: OwnerSources; on
       <div onClick={onClose} className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs print:hidden" />
       <div className="relative z-10 w-full max-w-3xl my-4 print:my-0 print:max-w-none">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3 print:hidden">
-          <input type="date" value={date} max={todayISO()} onChange={(e) => e.target.value && onDate(e.target.value)} className={`${inputCls} w-auto`} aria-label="Report date" />
+          <input type="date" value={date} max={todayISO()} onChange={(e) => e.target.value && onDate(e.target.value)} className={`${inputCls} !w-auto`} aria-label="Report date" />
           <div className="flex gap-2">
             <button type="button" onClick={() => window.print()} className={`${secondaryBtn} bg-white`}><Printer className="w-4 h-4 text-teal-700" /> Print / Save PDF</button>
             <button type="button" onClick={onClose} aria-label="Close report" className="p-2.5 rounded-2xl bg-white/10 text-white hover:bg-white/20"><X className="w-5 h-5" /></button>

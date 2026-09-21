@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import { X, Printer, Truck } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
@@ -918,14 +918,36 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
     return null;
   }, [request, paper, books, billingReport, salesExtrasReport, purchasingDoc, financeDoc, salesmen, areas, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques]);
 
+  // On a narrow screen (a phone) the A4 / A5 page is scaled down to fit the width instead of being cut
+  // off at the right. Only the preview: print CSS resets the zoom, so the paper is unchanged.
+  const fitRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const inner = fitRef.current;
+    const root = inner?.parentElement;
+    const frame = root?.parentElement;
+    if (!inner || !root || !frame) return;
+    const measure = () => {
+      inner.style.zoom = '';
+      const cs = getComputedStyle(root);
+      const have = frame.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+      const need = inner.scrollWidth;
+      if (have > 0 && need > have + 1) inner.style.zoom = String(Math.max(0.3, have / need));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(frame);
+    return () => ro.disconnect();
+  }, [request, content, paper]);
+
   if (!request) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 overflow-y-auto print:static print:p-0 print:block print:overflow-visible">
+    <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 sm:p-6 overflow-y-auto print:static print:p-0 print:block print:overflow-visible">
       <div onClick={onClose} className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs print:hidden" />
       {sizedDoc && paperCss(paper) && <style data-testid="print-paper" data-paper={paper}>{paperCss(paper)}</style>}
       {content && (content as { pageCss?: string }).pageCss && <style data-testid="print-page">{(content as { pageCss?: string }).pageCss}</style>}
-      <div className={`relative z-10 w-full ${sizedDoc && paper === 'thermal80' ? 'max-w-sm' : sizedDoc && paper === 'a5' ? 'max-w-xl' : 'max-w-3xl'} my-6 print:my-0 print:max-w-none`}>
+      <div className={`relative z-10 w-full ${sizedDoc && paper === 'thermal80' ? 'max-w-sm' : sizedDoc && paper === 'a5' ? 'max-w-xl' : 'max-w-3xl'} my-auto print:my-0 print:max-w-none`}>
         <div className="flex items-center justify-between mb-3 print:hidden">
           <span className="text-xs text-white/80">Preview • use "Print / Save PDF" to print or export.</span>
           <div className="flex items-center gap-2">
@@ -935,6 +957,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
         </div>
 
         <div id="print-root" data-paper={sizedDoc ? paper : undefined} className={`bg-white text-gray-900 rounded-2xl print:rounded-none shadow-2xl print:shadow-none ${content && (content as { raw?: boolean }).raw ? 'p-0 w-fit mx-auto' : content && (content as { thermal?: boolean }).thermal ? 'p-3' : sizedDoc && paper === 'a5' ? 'p-4 sm:p-6' : 'p-4 sm:p-10'} overflow-x-auto`}>
+          <div id="print-fit" ref={fitRef}>
           {content && ((content as { thermal?: boolean }).thermal || (content as { raw?: boolean }).raw) ? (
             content.body
           ) : content ? (
@@ -964,6 +987,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
           ) : (
             <div className="py-10 text-center text-xs text-gray-500">The record for this document no longer exists.</div>
           )}
+          </div>
         </div>
       </div>
     </div>

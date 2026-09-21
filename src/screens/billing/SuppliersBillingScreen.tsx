@@ -11,6 +11,7 @@ import { todayISO } from '../../utils/stockFlow';
 import { booksLockedFor } from '../../utils/accounting';
 import { Supplier } from '../../types';
 import { usePurchasingUI } from '../../components/billing/purchasing/PurchasingUI';
+import { useBillingUI } from '../../components/billing/BillingUI';
 import { PurchaseOrdersView } from '../../components/billing/purchasing/PurchaseOrders';
 import { SupplierBillsView } from '../../components/billing/purchasing/SupplierBills';
 import { SupplierClaimsView } from '../../components/billing/purchasing/SupplierClaims';
@@ -20,10 +21,12 @@ type Tab = 'suppliers' | 'orders' | 'received' | 'bills' | 'claims' | 'returns';
 const num = (n: number) => n.toLocaleString('en-PK', { maximumFractionDigits: 2 });
 
 /** Suppliers the simple way: what you owe them, stock received, goods sent back. No bookings or dispatches. */
-export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (supplierId: string) => void }> = ({ onAdd, onPay }) => {
+export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd }) => {
   const { suppliers, purchases, returns, products, ledger, setEditRequest, deleteSupplier, setPrintRequest, can, deletePurchaseReturn, settings } = useTrading();
   const stock = useStockUI();
   const buy = usePurchasingUI();
+  const ui = useBillingUI();
+  const onPay = (id: string) => ui.paySupplier(id);
   const { purchaseOrders, supplierClaims } = useTrading();
   const openOrders = purchaseOrders.filter((p) => p.status === 'open' || p.status === 'partial').length;
   const openClaims = supplierClaims.filter((c) => c.status === 'open').length;

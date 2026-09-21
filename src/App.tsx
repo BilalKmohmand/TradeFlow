@@ -186,7 +186,7 @@ function MainApp() {
               />
             )}
 
-            {activeScreen === 'suppliers' && isBilling && <SuppliersBillingScreen onAdd={() => setIsSupplierModalOpen(true)} onPay={handleOpenSupplierPayment} />}
+            {activeScreen === 'suppliers' && isBilling && <SuppliersBillingScreen onAdd={() => setIsSupplierModalOpen(true)} />}
             {activeScreen === 'suppliers' && !isBilling && (
               <SuppliersScreen
                 onSelectSupplier={(sId) => setSelectedSupplierId(sId)}
