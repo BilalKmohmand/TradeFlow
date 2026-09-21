@@ -20,7 +20,7 @@ interface Props {
 
 /** One bill: its lines, its payments, and the three things you do with it — take money, print, delete. */
 export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
-  const { invoices, customers, payBill, receiveCheque, deleteBill, setPrintRequest, can, currentUser, returns, deleteReturn } = useTrading();
+  const { invoices, customers, payBill, receiveCheque, deleteBill, setPrintRequest, can, currentUser, returns, deleteReturn, salesmen, areas } = useTrading();
   const ui = useBillingUI();
   const inv = invoices.find((i) => i.id === invoiceId) || null;
   const billReturns = inv ? returnsForBill(returns, inv.id) : [];
@@ -91,10 +91,11 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
                         {it.productName}
                         {batchLines(it).map((b) => <div key={b} className="text-[11px] font-normal text-[#6B7280] dark:text-[#94A3B8]">{b}</div>)}
                         {it.customerRate && <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Customer rate</div>}
+                        {it.free && <div className="text-[10px] font-bold uppercase tracking-wider text-teal-700 dark:text-teal-300">Free — {it.schemeName || 'scheme'}</div>}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">{lineQty(it)} {it.unit || ''}{hasPack(it) && Math.abs(lineQty(it)) >= (it.packSize || 0) && <div className="text-[11px] font-sans text-[#6B7280] dark:text-[#94A3B8]" data-testid="line-packs">{formatPackQty(lineQty(it), it)}</div>}</td>
                       {anyBack && <td className="px-3 py-2 text-right tabular-nums text-amber-700 dark:text-amber-300" data-testid="returned-qty">{backQty.get(it.id) ? backQty.get(it.id) : '—'}</td>}
-                      <td className="px-3 py-2 text-right tabular-nums">{rs(linePrice(it))}{it.packPrice != null && hasPack(it) && <div className="text-[11px] font-sans text-[#6B7280] dark:text-[#94A3B8]">{rs(it.packPrice)}/{shortPack(it.packName || '')}</div>}{(it.discountAmount || 0) > 0 && <div className="text-[11px] font-sans text-[#6B7280] dark:text-[#94A3B8]">less {lineDiscountLabel(it)}</div>}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{it.free ? 'Free' : rs(linePrice(it))}{it.packPrice != null && hasPack(it) && <div className="text-[11px] font-sans text-[#6B7280] dark:text-[#94A3B8]">{rs(it.packPrice)}/{shortPack(it.packName || '')}</div>}{(it.discountAmount || 0) > 0 && <div className="text-[11px] font-sans text-[#6B7280] dark:text-[#94A3B8]">less {lineDiscountLabel(it)}</div>}</td>
                       <td className="px-3 py-2 text-right tabular-nums font-bold">{rs(it.amount)}</td>
                     </tr>
                   ))}
@@ -107,6 +108,15 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Balance</div><div className={`tabular-nums font-extrabold ${inv.balanceDue > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-[#111827] dark:text-white'}`}>{rs(inv.balanceDue)}</div></div>
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Customer owes (all bills)</div><div className="tabular-nums font-extrabold text-[#111827] dark:text-white">{rs(customer?.totalDue || 0)}</div></div>
             </div>
+            {((inv.freightCharges || 0) + (inv.handlingCharges || 0) > 0 || inv.salesmanId || inv.areaId) && (
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]" data-testid="bill-extras">
+                {[
+                  (inv.freightCharges || 0) + (inv.handlingCharges || 0) > 0 && `Freight / loading ${rs((inv.freightCharges || 0) + (inv.handlingCharges || 0))} (in the total)`,
+                  inv.salesmanId && `Salesman: ${salesmen.find((x) => x.id === inv.salesmanId)?.name || '—'}`,
+                  inv.areaId && `Area: ${areas.find((x) => x.id === inv.areaId)?.name || '—'}`,
+                ].filter(Boolean).join(' • ')}
+              </p>
+            )}
             {inv.notes && <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Note: {inv.notes}</p>}
 
             {challan.open && (

@@ -41,6 +41,13 @@
  *      cheque issued (ledger cheque_issued)       Dr Payable 2000             Cr Cheques issued 2050
  *      issued cheque cleared (cash entry, 2050)   Dr Cheques issued 2050      Cr Bank 1010
  *      issued cheque cancelled (cheque_returned)  Dr Cheques issued 2050      Cr Payable 2000
+ *  - Sales extras (salesExtrasActions.ts):
+ *      free goods on a bill (scheme line, price 0)  Dr Scheme / free goods 5250   Cr Inventory 1200   at cost
+ *        … returned by the customer                 Dr Inventory 1200             Cr Scheme / free goods 5250
+ *      freight / cartage / loading on a bill        Cr Freight income 4100 (in the bill entry above; what the
+ *                                                   shop pays a transporter stays an expense in 6030)
+ *      interest / late-payment charge (interest_charge)  Dr Receivable 1100       Cr Interest income 4150
+ *      salesman commission paid (expense row)       Dr Salesman commission 6125   Cr Cash / Bank
  *  - Opening stock                     Dr Inventory 1200                   Cr Opening balance equity 3900
  *  - Customer / supplier balances that are not explained by their history (opening dues typed in
  *    when the account was created) are posted against Opening balance equity so Receivable and
@@ -135,11 +142,14 @@ export const ACC = {
   SALES_DISCOUNTS: '4010',
   SALES_RETURNS: '4020',
   FREIGHT_INCOME: '4100',
+  INTEREST_INCOME: '4150',
   OTHER_INCOME: '4900',
   COGS: '5000',
   STOCK_LOSSES: '5100',
+  SCHEME_GOODS: '5250',
   OTHER_EXPENSES: '6800',
   BANK_CHARGES: '6900',
+  SALESMAN_COMMISSION: '6125',
 } as const;
 
 /** Where each expense category is posted. Owner drawings are equity, not an expense. */
@@ -160,6 +170,7 @@ export const EXPENSE_ACCOUNT: Record<ExpenseCategory, string> = {
   other: ACC.OTHER_EXPENSES,
   bank_charges: ACC.BANK_CHARGES,
   drawings: ACC.DRAWINGS,
+  salesman_commission: ACC.SALESMAN_COMMISSION,
 };
 
 const sys = (code: string, name: string, type: AccountType, description?: string): Account => ({ code, name, type, system: true, description });
@@ -183,9 +194,11 @@ export const DEFAULT_ACCOUNTS: Account[] = [
   sys('4010', 'Sales discounts', 'income', 'Contra-income: reduces sales'),
   sys('4020', 'Sales returns', 'income', 'Contra-income: goods returned by customers'),
   sys('4100', 'Freight & other charges income', 'income'),
+  sys('4150', 'Interest / late-payment income', 'income', 'Charged to customers on overdue balances'),
   sys('4900', 'Other income', 'income'),
   sys('5000', 'Cost of goods sold', 'expense'),
   sys('5100', 'Stock losses & adjustments', 'expense'),
+  sys('5250', 'Scheme / free goods', 'expense', 'Cost of goods given free under trade schemes (bonus qty)'),
   sys('6000', 'Day-to-day expenses', 'expense'),
   sys('6010', 'Employee expenses', 'expense'),
   sys('6020', 'Food & refreshments', 'expense'),
@@ -199,6 +212,7 @@ export const DEFAULT_ACCOUNTS: Account[] = [
   sys('6100', 'Vehicle maintenance', 'expense'),
   sys('6110', 'Taxes & duties', 'expense'),
   sys('6120', 'Broker commission', 'expense'),
+  sys('6125', 'Salesman commission', 'expense'),
   sys('6800', 'Other expenses', 'expense'),
   sys('6900', 'Bank charges', 'expense'),
 ];
@@ -434,11 +448,15 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
             // Sales takes whatever is left so the entry always balances with the ledger amount.
             b.cr(ACC.SALES, debit + discount - tax - charges);
             // Cost captured on the bill line (batch cost when batches were used); older bills fall back to the purchase cost then.
-            const cogs = inv.items.reduce((a, it) => {
+            // Free goods under a scheme leave stock at cost too, but as a scheme expense, not cost of sales.
+            const costOf = (free: boolean) => inv.items.reduce((a, it) => {
+              if (Boolean(it.free) !== free) return a;
               const unitCost = billLineUnitCost(it, inv.issueDate, purchases, products);
               return a + (unitCost ? unitCost * (it.qty ?? it.kg ?? 0) : 0);
             }, 0);
-            b.dr(ACC.COGS, cogs, 'Cost of items sold').cr(ACC.INVENTORY, cogs);
+            const cogs = costOf(false);
+            const freeGoods = costOf(true);
+            b.dr(ACC.COGS, cogs, 'Cost of items sold').dr(ACC.SCHEME_GOODS, freeGoods, 'Free goods (scheme) at cost').cr(ACC.INVENTORY, cogs + freeGoods);
           } else {
             b.cr(ACC.SALES, debit);
           }
@@ -467,6 +485,11 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
           sourceType = 'cheque_bounced';
           b.dr(ACC.RECEIVABLE, debit, who).cr(ACC.CHEQUES_IN_HAND, debit);
           memo = `${l.description || 'Cheque returned'} — ${who}`;
+        } else if (l.type === 'interest_charge') {
+          // Late-payment / interest debit note: income, not a sale.
+          sourceType = 'interest_charge';
+          b.dr(ACC.RECEIVABLE, debit, who).cr(ACC.INTEREST_INCOME, debit);
+          memo = `${l.description || 'Interest on overdue balance'} — ${who}`;
         } else if (l.type === 'cheque_charge') {
           // Bank charge on a bounced cheque passed on to the customer: recovers the bank-charges expense.
           sourceType = 'cheque_charge';
@@ -496,11 +519,17 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
           if (r?.invoiceId) billId = r.invoiceId;
           if (r?.items?.length) {
             // Bill return: stock comes back at the cost it left at (captured on the bill line).
-            const value = r.items.reduce((a, it) => {
+            // Free (scheme) goods coming back reverse the scheme expense instead of cost of sales.
+            const retBill = r.invoiceId ? invById.get(r.invoiceId) : undefined;
+            const freeLine = (id: string) => Boolean(retBill?.items.find((x) => x.id === id)?.free);
+            const valueOf = (free: boolean) => r.items!.reduce((a, it) => {
+              if (freeLine(it.billLineId) !== free) return a;
               const unitCost = it.costPricePerKg && it.costPricePerKg > 0 ? it.costPricePerKg : productCost(it.productId, r.date);
               return a + (unitCost ? unitCost * it.qty : 0);
             }, 0);
-            b.dr(ACC.INVENTORY, value, 'Returned stock at cost').cr(ACC.COGS, value);
+            const value = valueOf(false);
+            const freeValue = valueOf(true);
+            b.dr(ACC.INVENTORY, value + freeValue, 'Returned stock at cost').cr(ACC.COGS, value).cr(ACC.SCHEME_GOODS, freeValue);
           } else if (r) {
             const cost = productCost(r.productId, r.date);
             if (cost != null) b.dr(ACC.INVENTORY, cost * r.kg, 'Returned stock at cost').cr(ACC.COGS, cost * r.kg);

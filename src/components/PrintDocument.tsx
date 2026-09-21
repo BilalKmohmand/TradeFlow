@@ -15,6 +15,8 @@ import { batchLines } from '../utils/inventory';
 import { useAccounting } from '../hooks/useAccounting';
 import { accountingPrintContent, isAccountingPrint } from './accounting/AccountingPrint';
 import { BillingPrintRequest, isBillingPrint, useBillingReportPrint } from './billing/BillingReportsPrint';
+import { isSalesExtrasPrint, useSalesExtrasPrint } from './billing/SalesExtrasPrint';
+import type { SalesExtrasPrintRequest } from '../context/salesExtrasActions';
 import { lineDiscountLabel, lineGross, billNetTotal, returnsForBill, returnedQtyByLine, quotationLines, quotationTotal } from '../utils/salesDocs';
 
 export type PrintRequest =
@@ -35,7 +37,8 @@ export type PrintRequest =
   | { type: 'profit_loss'; from: string; to: string }
   | { type: 'balance_sheet'; asOf: string }
   | BillingPrintRequest
-  | { type: 'cheque_register'; view?: string };
+  | { type: 'cheque_register'; view?: string }
+  | SalesExtrasPrintRequest;
 
 /** One line of a thermal receipt: text on the left, amount on the right. */
 const ThermalRow: React.FC<{ left: string; right: string; bold?: boolean }> = ({ left, right, bold }) => (
@@ -86,7 +89,7 @@ interface PrintDocumentProps {
  * print dialog, with CSS in index.css that prints only #print-root.
  */
 export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }) => {
-  const { dispatches, bookings, customers, suppliers, products, ledger, trucks, currentUser, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques } = useTrading();
+  const { dispatches, bookings, customers, suppliers, products, ledger, trucks, currentUser, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques, salesmen, areas } = useTrading();
   const COMPANY = {
     name: settings.companyName || 'Sarmaya',
     tagline: settings.companyTagline || '',
@@ -102,11 +105,13 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
   const sizedDoc = Boolean(request && (request.type === 'bill' || request.type === 'voucher'));
   const books = useAccounting(isAccountingPrint(request));
   const billingReport = useBillingReportPrint(request);
+  const salesExtrasReport = useSalesExtrasPrint(request);
 
   const content = useMemo(() => {
     if (!request) return null;
     if (isAccountingPrint(request)) return accountingPrintContent(request, books);
     if (isBillingPrint(request)) return billingReport;
+    if (isSalesExtrasPrint(request)) return salesExtrasReport;
 
     if (request.type === 'bill') {
       const inv = invoices.find((i) => i.id === request.invoiceId);
@@ -123,6 +128,9 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       const prevBalance = settings.showPrevBalanceOnBill && billRow ? Math.round((billRow.balanceAfter - billRow.debit) * 100) / 100 : null;
       const totalDueWithPrev = prevBalance != null ? Math.round((prevBalance + inv.balanceDue) * 100) / 100 : null;
       const time = inv.issuedAt ? new Date(inv.issuedAt).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' }) : undefined;
+      const freight = (inv.freightCharges || 0) + (inv.handlingCharges || 0);
+      const salesmanName = inv.salesmanId ? salesmen.find((s) => s.id === inv.salesmanId)?.name : undefined;
+      const areaName = inv.areaId ? areas.find((a) => a.id === inv.areaId)?.name : undefined;
       const qtyText = (it: (typeof inv.items)[number]) => (hasPack(it) ? formatQtyWithPacks(lineQty(it), it) : `${money(lineQty(it))}${it.unit && it.unit !== 'pcs' ? ` ${it.unit}` : ''}`);
 
       if (paper === 'thermal80') {
@@ -136,12 +144,17 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               <div data-testid="thermal-customer">
                 <div>Customer: <b>{inv.customerName}</b></div>
                 {(inv.customerPhone || customer?.phone) && <div>Ph: {inv.customerPhone || customer?.phone}</div>}
+                {(salesmanName || areaName) && <div>{[salesmanName && `Salesman: ${salesmanName}`, areaName && `Area: ${areaName}`].filter(Boolean).join(' · ')}</div>}
               </div>
               <ThermalRule />
               {inv.items.map((it) => (
                 <div key={it.id} className="py-0.5">
                   <div className="font-bold">{it.productName}</div>
-                  <ThermalRow left={`${qtyText(it)} x ${money(it.packPrice != null && hasPack(it) ? it.packPrice : linePrice(it))}${it.packPrice != null && hasPack(it) ? `/${shortPack(it.packName || '')}` : ''}`} right={money(it.amount)} />
+                  {it.free ? (
+                    <ThermalRow left={`${qtyText(it)} FREE${it.schemeName ? ` (${it.schemeName})` : ' (scheme)'}`} right="0" />
+                  ) : (
+                    <ThermalRow left={`${qtyText(it)} x ${money(it.packPrice != null && hasPack(it) ? it.packPrice : linePrice(it))}${it.packPrice != null && hasPack(it) ? `/${shortPack(it.packName || '')}` : ''}`} right={money(it.amount)} />
+                  )}
                   {(it.discountAmount || 0) > 0 && <ThermalRow left={`  less ${lineDiscountLabel(it)}`} right="" />}
                 </div>
               ))}
@@ -149,6 +162,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               <ThermalRow left="Subtotal" right={money(inv.subtotal)} />
               {(inv.discount || 0) > 0 && <ThermalRow left="Discount" right={`-${money(inv.discount || 0)}`} />}
               {inv.taxAmount > 0 && <ThermalRow left={`${settings.taxLabel || 'Sales Tax'} ${inv.taxRatePct}%`} right={money(inv.taxAmount)} />}
+              {freight > 0 && <ThermalRow left="Freight / loading" right={money(freight)} />}
               <ThermalRow left="TOTAL" right={`Rs. ${money(inv.totalAmount)}`} bold />
               {billRets.map((r) => <ThermalRow key={r.id} left={`Returned ${r.returnNumber}`} right={`-${money(r.amount)}`} />)}
               {inv.paidAmount > 0 && <ThermalRow left={`Paid${inv.paymentMethod ? ` (${inv.paymentMethod})` : ''}`} right={money(inv.paidAmount)} />}
@@ -189,6 +203,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 {(inv.customerAddress || customer?.address) && <div>{inv.customerAddress || customer?.address}</div>}
                 <div className="font-mono">{inv.customerPhone || customer?.phone}</div>
                 {customer?.code && <div>Customer ID: <span className="font-mono font-bold">{customer.code}</span></div>}
+                {(salesmanName || areaName) && <div data-testid="print-bill-salesman">{[salesmanName && `Salesman: ${salesmanName}`, areaName && `Area: ${areaName}`].filter(Boolean).join(' · ')}</div>}
               </div>
             </div>
             <table className={`w-full text-xs ${paper === 'a5' ? 'mt-4' : 'mt-6'} border-collapse`}>
@@ -206,6 +221,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                   <tr key={it.id} className="border-b border-gray-200">
                     <td className={`${paper === 'a5' ? 'py-2' : 'py-3'} px-3 font-bold`}>
                       {it.productName}
+                      {it.free && <div className="text-[10px] font-bold text-teal-700" data-testid="print-free-line">FREE — {it.schemeName || 'scheme'}</div>}
                       {batchLines(it).map((b) => <div key={b} className="text-[10px] font-normal text-gray-600">{b}</div>)}
                     </td>
                     <td className={`${paper === 'a5' ? 'py-2' : 'py-3'} px-3 text-right font-mono whitespace-nowrap`}>
@@ -213,7 +229,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                       {hasPack(it) && Math.abs(lineQty(it)) >= (it.packSize || 0) && <div className="text-[10px] text-gray-600" data-testid="print-line-packs">{formatPackQty(lineQty(it), it)}</div>}
                     </td>
                     <td className={`${paper === 'a5' ? 'py-2' : 'py-3'} px-3 text-right font-mono whitespace-nowrap`}>
-                      {money(linePrice(it))}
+                      {it.free ? 'FREE' : money(linePrice(it))}
                       {it.packPrice != null && hasPack(it) && <div className="text-[10px] text-gray-600">{money(it.packPrice)}/{shortPack(it.packName || '')}</div>}
                     </td>
                     {hasLineDisc && <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{(it.discountAmount || 0) > 0 ? <>{money(it.discountAmount || 0)}{it.discountType === 'pct' ? <div className="text-[10px] text-gray-500">{lineDiscountLabel(it)}</div> : null}</> : '—'}</td>}
@@ -227,6 +243,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 <tr><td colSpan={span} className="pt-4 text-right text-[11px] text-gray-600">Subtotal</td><td className="pt-4 text-right font-mono px-3">{money(inv.subtotal)}</td></tr>
                 {(inv.discount || 0) > 0 && <tr><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">Discount</td><td className="pt-1 text-right font-mono px-3">− {money(inv.discount || 0)}</td></tr>}
                 {inv.taxAmount > 0 && <tr><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">{settings.taxLabel || 'Sales Tax'} ({inv.taxRatePct}%)</td><td className="pt-1 text-right font-mono px-3">{money(inv.taxAmount)}</td></tr>}
+                {freight > 0 && <tr data-testid="print-freight"><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">Freight / cartage / loading</td><td className="pt-1 text-right font-mono px-3">{money(freight)}</td></tr>}
                 <tr><td colSpan={span} className="pt-3 text-right font-bold uppercase tracking-widest text-[10px] text-gray-600">Total</td><td className="pt-3 text-right font-mono font-extrabold text-base px-3 whitespace-nowrap">Rs. {money(inv.totalAmount)}</td></tr>
                 {billRets.map((r) => <tr key={r.id}><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">Returned ({r.returnNumber}, {formatDate(r.date)})</td><td className="pt-1 text-right font-mono px-3">− {money(r.amount)}</td></tr>)}
                 {billRets.length > 0 && <tr><td colSpan={span} className="pt-1 text-right font-bold text-[11px] text-gray-800">Net total</td><td className="pt-1 text-right font-mono font-bold px-3 whitespace-nowrap">Rs. {money(billNetTotal(inv))}</td></tr>}
@@ -891,7 +908,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       };
     }
     return null;
-  }, [request, paper, books, billingReport, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques]);
+  }, [request, paper, books, billingReport, salesExtrasReport, salesmen, areas, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques]);
 
   if (!request) return null;
 
@@ -932,7 +949,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               <div className="mt-6">{content.body}</div>
               <div className="mt-10 pt-3 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-500">
                 <span>Generated by {COMPANY.name} on {formatDate(todayISO())}{currentUser ? ` by ${currentUser.name}` : ''}</span>
-                <span>{request.type === 'bill' || request.type === 'bill_challan' || (request.type === 'note' && returns.find((x) => x.id === request.returnId)?.items?.length) || (request.type === 'quotation' && quotations.find((x) => x.id === request.quotationId)?.items?.length) || request.type === 'daily_sheet' || request.type === 'bank_reconciliation' || request.type === 'cheque_register' || isAccountingPrint(request) || isBillingPrint(request) ? 'All amounts in PKR (Rs.)' : 'All quantities in kg • amounts in PKR'}</span>
+                <span>{request.type === 'bill' || request.type === 'bill_challan' || (request.type === 'note' && returns.find((x) => x.id === request.returnId)?.items?.length) || (request.type === 'quotation' && quotations.find((x) => x.id === request.quotationId)?.items?.length) || request.type === 'daily_sheet' || request.type === 'bank_reconciliation' || request.type === 'cheque_register' || isAccountingPrint(request) || isBillingPrint(request) || isSalesExtrasPrint(request) ? 'All amounts in PKR (Rs.)' : 'All quantities in kg • amounts in PKR'}</span>
               </div>
             </>
           ) : (

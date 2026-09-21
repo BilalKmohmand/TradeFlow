@@ -1,6 +1,6 @@
 import { CsvButton } from '../../components/billing/CsvButton';
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Phone, FilePlus2, HandCoins, Printer, Pencil, Trash2, Clock, FileText, Users } from 'lucide-react';
+import { Plus, Search, Phone, FilePlus2, HandCoins, Printer, Pencil, Trash2, Clock, FileText, Users, Route } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useWideLayout } from '../../hooks/useMediaQuery';
 import { useBillingUI } from '../../components/billing/BillingUI';
@@ -14,6 +14,7 @@ import { todayISO } from '../../utils/stockFlow';
 import { Customer } from '../../types';
 import { OverLimitBadge, CreditUsageBar } from '../../components/billing/CreditLimit';
 import { CustomerRatesPanel } from '../../components/billing/CustomerRates';
+import { CustomerSalesPanel } from '../../components/billing/SalesTeam';
 import { billNetTotal } from '../../utils/salesDocs';
 
 /** Customers the simple way: who they are, what they owe, and their bills. */
@@ -34,12 +35,13 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
   const owed = customers.reduce((a, c) => a + c.totalDue, 0);
   const open = customers.find((c) => c.id === openId) || null;
   const openBills = open ? billsOnly(invoices).filter((i) => i.customerId === open.id).sort((a, b) => (a.issueDate < b.issueDate ? 1 : -1)) : [];
-  const openPayments = open ? ledger.filter((l) => l.entityType === 'customer' && l.entityId === open.id && (l.type === 'payment_received' || l.type === 'cheque_received' || l.type === 'cheque_returned' || l.type === 'cheque_charge')).sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
+  const openPayments = open ? ledger.filter((l) => l.entityType === 'customer' && l.entityId === open.id && (l.type === 'payment_received' || l.type === 'cheque_received' || l.type === 'cheque_returned' || l.type === 'cheque_charge' || l.type === 'interest_charge')).sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
 
   return (
     <div className="space-y-5">
       <PageHeader title="Customers" subtitle={<>{customers.length} customer{customers.length === 1 ? '' : 's'}{owed > 0 ? <> • they owe you <span className={moneyCls}>{rs(owed)}</span></> : ''}</>}>
         <button type="button" onClick={() => stockUI.aging('customers')} className={secondaryBtn}><Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" /> Who owes for how long</button>
+        <button type="button" onClick={() => ui.salesExtras('hub')} className={secondaryBtn}><Route className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Sales &amp; recovery</button>
         <CsvButton fileName={`customers-${today}.csv`} table={() => ({ headers: ['Code', 'Name', 'Company', 'Phone', 'Address', 'Balance (Rs.)', 'Credit limit (Rs.)'], rows: rows.map((c) => [c.code || '', c.name, c.company, c.phone, c.address, c.totalDue, c.creditLimit || '']) })} label="Download customers CSV" />
         <button type="button" onClick={onAdd} className={`${primaryBtn} max-sm:flex-1`}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add customer</button>
       </PageHeader>
@@ -135,6 +137,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
             </div>
             <CreditUsageBar customer={open} />
             <CustomerRatesPanel customerId={open.id} />
+            <CustomerSalesPanel key={open.id} customerId={open.id} />
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Bills</h3>
               {openBills.length === 0 ? <p className="text-sm text-[#8E9299]">No bills yet.</p> : (
