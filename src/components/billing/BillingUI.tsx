@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useRef, useState } from 'react';
 import { NewBillModal } from './NewBillModal';
 import { BillDetailModal } from './BillDetailModal';
 import { ItemModal } from './ItemModal';
@@ -13,6 +13,10 @@ interface BillingUI {
   transfer: () => void;
   newItem: () => void;
   editItem: (productId: string) => void;
+  /** Ask the Money screen to open on a tab the next time it mounts (then call setActiveScreen('money')). */
+  openMoneyTab: (tab: 'overview' | 'expenses' | 'cashbook' | 'cheques' | 'bank' | null) => void;
+  /** The requested Money tab, if any (the Money screen reads it on mount, then clears it). */
+  peekMoneyTab: () => 'overview' | 'expenses' | 'cashbook' | 'cheques' | 'bank' | null;
 }
 
 const Ctx = createContext<BillingUI | null>(null);
@@ -28,6 +32,7 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Every open bumps the nonce so the dialog remounts with fresh form state (no stale values, no reset race).
   const [nonce, setNonce] = useState(0);
   const bump = () => setNonce((n) => n + 1);
+  const moneyTab = useRef<ReturnType<BillingUI['peekMoneyTab']>>(null);
 
   const api: BillingUI = {
     newBill: (customerId) => { bump(); setBill({ open: true, customerId: customerId || null }); },
@@ -37,6 +42,8 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     transfer: () => { bump(); setTransferOpen(true); },
     newItem: () => { bump(); setItem({ open: true, editId: null }); },
     editItem: (id) => { bump(); setItem({ open: true, editId: id }); },
+    openMoneyTab: (tab) => { moneyTab.current = tab; },
+    peekMoneyTab: () => moneyTab.current,
   };
 
   return (

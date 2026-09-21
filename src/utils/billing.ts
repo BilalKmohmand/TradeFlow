@@ -1,4 +1,5 @@
-import { Invoice, Expense, CashEntry, LedgerEntry, Customer, Supplier, AppSettings, EXPENSE_CATEGORIES, isCashMethod } from '../types';
+import { Invoice, Expense, CashEntry, LedgerEntry, Customer, Supplier, AppSettings, Cheque, EXPENSE_CATEGORIES, isCashMethod } from '../types';
+import { ChequeEvent, chequeEventsOn } from './cheques';
 import { collectCashMovements, accountBalancesOn, CashMovement, AccountBalances } from './finance';
 import { shiftDate } from './stockFlow';
 
@@ -67,6 +68,8 @@ export interface DailySheet {
   expenses: ExpenseGroup[];
   /** Manual cash entries and cash<->bank transfers. */
   other: CashMovement[];
+  /** Cheques received, given, deposited, cleared, bounced or cancelled on the day (cleared ones are also in bank in/out). */
+  cheques: ChequeEvent[];
   cashIn: number;
   cashOut: number;
   bankIn: number;
@@ -81,6 +84,7 @@ export interface DailySheetSources {
   customers: Customer[];
   suppliers: Supplier[];
   settings: AppSettings;
+  cheques?: Cheque[];
 }
 
 /** The whole day on one page: opening money, every bill, every rupee in and out, closing money. */
@@ -91,6 +95,8 @@ export const buildDailySheet = (src: DailySheetSources, date: string): DailyShee
   const closing = accountBalancesOn(movements, src.settings, date);
   const bills = billsOnly(src.invoices).filter((i) => i.issueDate === date).sort((a, b) => (a.invoiceNumber < b.invoiceNumber ? -1 : 1));
   const sum = (rows: CashMovement[]) => round2(rows.reduce((a, m) => a + m.amount, 0));
+  // A cleared cheque's bank entry is listed under Cheques, not again as a loose deposit.
+  const chequeEntryIds = new Set((src.cheques || []).map((c) => c.clearedEntryId).filter(Boolean) as string[]);
   return {
     date,
     opening,
@@ -101,7 +107,8 @@ export const buildDailySheet = (src: DailySheetSources, date: string): DailyShee
     supplierPayments: todays.filter((m) => m.source === 'supplier_payment'),
     expenses: groupExpenses(src.expenses.filter((e) => e.date === date)),
     // A cash<->bank transfer has two legs; show it once (the "out" leg carries the direction in its text).
-    other: todays.filter((m) => m.source === 'manual').filter((m, _, arr) => {
+    cheques: chequeEventsOn(src.cheques || [], date),
+    other: todays.filter((m) => m.source === 'manual' && !chequeEntryIds.has(m.sourceId)).filter((m, _, arr) => {
       const entry = src.cashEntries.find((c) => c.id === m.sourceId);
       if (!entry?.pairId) return true;
       return m.direction === 'out' || !arr.some((o) => o.direction === 'out' && src.cashEntries.find((c) => c.id === o.sourceId)?.pairId === entry.pairId);

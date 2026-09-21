@@ -8,6 +8,8 @@ import { dispatchBilledTotal, EXPENSE_CATEGORIES } from '../types';
 import { buildDailySheet, lineQty, linePrice } from '../utils/billing';
 import { collectCashMovements } from '../utils/finance';
 import { bankRecPrintContent } from './billing/BankRecPrint';
+import { chequeRegisterPrintContent } from './billing/ChequeRegisterPrint';
+import { CHEQUE_EVENT_LABEL } from '../utils/cheques';
 import { batchLines } from '../utils/inventory';
 import { useAccounting } from '../hooks/useAccounting';
 import { accountingPrintContent, isAccountingPrint } from './accounting/AccountingPrint';
@@ -27,7 +29,8 @@ export type PrintRequest =
   | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number }
   | { type: 'trial_balance'; asOf: string }
   | { type: 'profit_loss'; from: string; to: string }
-  | { type: 'balance_sheet'; asOf: string };
+  | { type: 'balance_sheet'; asOf: string }
+  | { type: 'cheque_register'; view?: string };
 
 interface PrintDocumentProps {
   request: PrintRequest | null;
@@ -40,7 +43,7 @@ interface PrintDocumentProps {
  * print dialog, with CSS in index.css that prints only #print-root.
  */
 export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }) => {
-  const { dispatches, bookings, customers, suppliers, products, ledger, trucks, currentUser, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations } = useTrading();
+  const { dispatches, bookings, customers, suppliers, products, ledger, trucks, currentUser, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques } = useTrading();
   const COMPANY = {
     name: settings.companyName || 'Sarmaya',
     tagline: settings.companyTagline || '',
@@ -131,13 +134,15 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       };
     }
 
+    if (request.type === 'cheque_register') return chequeRegisterPrintContent({ cheques, view: request.view, today: todayISO() });
+
     if (request.type === 'bank_reconciliation') {
       const movements = collectCashMovements(ledger, expenses, cashEntries, customers, suppliers);
       return bankRecPrintContent({ ...request, movements, settings, lines: bankStatementLines, reconciliations: bankReconciliations });
     }
 
     if (request.type === 'daily_sheet') {
-      const sheet = buildDailySheet({ invoices, ledger, expenses, cashEntries, customers, suppliers, settings }, request.date);
+      const sheet = buildDailySheet({ invoices, ledger, expenses, cashEntries, customers, suppliers, settings, cheques }, request.date);
       const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
       const row = (label: string, value: number, bold = false) => (
         <tr className={`border-b border-gray-100 ${bold ? 'font-bold' : ''}`}><td className="py-1.5">{label}</td><td className="py-1.5 text-right font-mono">{money(value)}</td></tr>
@@ -188,6 +193,14 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                   {sheet.supplierPayments.map((m) => row(`${m.counterparty} (${m.method || 'Cash'})`, m.amount))}
                   {sheet.other.map((m) => row(m.description, m.amount))}
                 </tbody></table>
+                {sheet.cheques.length > 0 && (
+                  <>
+                    <div className="font-bold uppercase tracking-widest text-[10px] border-b-2 border-gray-900 pb-1 mb-1 mt-5">Cheques</div>
+                    <table className="w-full"><tbody>
+                      {sheet.cheques.map((ev) => <React.Fragment key={`${ev.cheque.id}-${ev.kind}`}>{row(`${CHEQUE_EVENT_LABEL[ev.kind]}: ${ev.cheque.partyName} #${ev.cheque.chequeNumber} ${ev.cheque.bankName}`, ev.cheque.amount)}</React.Fragment>)}
+                    </tbody></table>
+                  </>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-10 mt-14 text-xs">
@@ -558,7 +571,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       };
     }
     return null;
-  }, [request, books, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations]);
+  }, [request, books, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques]);
 
   if (!request) return null;
 
@@ -596,7 +609,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               <div className="mt-6">{content.body}</div>
               <div className="mt-10 pt-3 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-500">
                 <span>Generated by {COMPANY.name} on {formatDate(todayISO())}{currentUser ? ` by ${currentUser.name}` : ''}</span>
-                <span>{request.type === 'bill' || request.type === 'daily_sheet' || request.type === 'bank_reconciliation' || isAccountingPrint(request) ? 'All amounts in PKR (Rs.)' : 'All quantities in kg • amounts in PKR'}</span>
+                <span>{request.type === 'bill' || request.type === 'daily_sheet' || request.type === 'bank_reconciliation' || request.type === 'cheque_register' || isAccountingPrint(request) ? 'All amounts in PKR (Rs.)' : 'All quantities in kg • amounts in PKR'}</span>
               </div>
             </>
           ) : (

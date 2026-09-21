@@ -8,13 +8,14 @@ import { todayISO, shiftDate } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 import { booksLockedFor } from '../../utils/accounting';
 import { EXPENSE_CATEGORIES } from '../../types';
+import { CHEQUE_EVENT_LABEL } from '../../utils/cheques';
 
 /** One day on one page: bills, money in, money out (by category), cash & bank opening/closing. */
 export const DailySheetScreen: React.FC = () => {
-  const { invoices, ledger, expenses, cashEntries, customers, suppliers, settings, setPrintRequest, deleteExpense, deleteCashEntry, can } = useTrading();
+  const { invoices, ledger, expenses, cashEntries, customers, suppliers, settings, setPrintRequest, deleteExpense, deleteCashEntry, can, cheques, isChequeRecord } = useTrading();
   const ui = useBillingUI();
   const [date, setDate] = useState(todayISO());
-  const sheet = useMemo(() => buildDailySheet({ invoices, ledger, expenses, cashEntries, customers, suppliers, settings }, date), [invoices, ledger, expenses, cashEntries, customers, suppliers, settings, date]);
+  const sheet = useMemo(() => buildDailySheet({ invoices, ledger, expenses, cashEntries, customers, suppliers, settings, cheques }, date), [invoices, ledger, expenses, cashEntries, customers, suppliers, settings, cheques, date]);
   const isToday = date === todayISO();
   const canDelete = can('delete_records');
 
@@ -93,7 +94,7 @@ export const DailySheetScreen: React.FC = () => {
                   <div className="flex justify-between text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]"><span>{g.label}</span><span className="font-mono">{rs(g.total)}</span></div>
                   <ul className="mt-1 space-y-1">
                     {g.rows.map((e) => (
-                      <li key={e.id} className="flex items-center justify-between gap-2 text-sm"><span className="min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#8E9299]"> • {e.paidVia || 'Cash'}</span></span><span className="flex items-center gap-1 shrink-0"><span className="font-mono">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && <button type="button" onClick={() => deleteExpense(e.id)} aria-label={`Delete expense ${e.description}`} className="text-[#9CA3AF] hover:text-rose-600 text-sm px-2 py-1">✕</button>}</span></li>
+                      <li key={e.id} className="flex items-center justify-between gap-2 text-sm"><span className="min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#8E9299]"> • {e.paidVia || 'Cash'}</span></span><span className="flex items-center gap-1 shrink-0"><span className="font-mono">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && !isChequeRecord(e.id) && <button type="button" onClick={() => deleteExpense(e.id)} aria-label={`Delete expense ${e.description}`} className="text-[#9CA3AF] hover:text-rose-600 text-sm px-2 py-1">✕</button>}</span></li>
                     ))}
                   </ul>
                 </div>
@@ -117,6 +118,23 @@ export const DailySheetScreen: React.FC = () => {
             </ul>
           )}
         </Section>
+
+        {sheet.cheques.length > 0 && (
+          <Section title={`Cheques (${sheet.cheques.length})`}>
+            <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]" data-testid="daily-cheques">
+              {sheet.cheques.map((ev) => {
+                const c = ev.cheque;
+                const out = c.direction === 'issued';
+                return (
+                  <li key={`${c.id}-${ev.kind}`} className="flex items-center justify-between gap-3 px-5 py-2.5">
+                    <span className="min-w-0"><span className="font-semibold text-sm text-[#111827] dark:text-white">{CHEQUE_EVENT_LABEL[ev.kind]}{out ? ' to' : ev.kind === 'received' ? ' from' : ' •'} {c.partyName}</span><span className="block text-[11px] text-[#8E9299] truncate">#{c.chequeNumber} {c.bankName} • dated {formatDate(c.chequeDate)}{ev.kind === 'cleared' ? (out ? ' • paid from bank' : ' • into bank') : ev.kind === 'received' || ev.kind === 'issued' ? ' • not in bank yet' : ''}{c.returnReason && (ev.kind === 'bounced' || ev.kind === 'cancelled') ? ` • ${c.returnReason}` : ''}</span></span>
+                    <span className={`font-mono font-bold text-sm ${ev.kind === 'bounced' ? 'text-rose-700 dark:text-rose-300' : 'text-[#111827] dark:text-white'}`}>{rs(c.amount)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </Section>
+        )}
       </div>
     </div>
   );

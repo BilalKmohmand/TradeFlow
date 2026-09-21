@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../ConfirmDialog';
 import { formatDate } from '../../utils/formatters';
 import { lineQty, linePrice } from '../../utils/billing';
 import { todayISO } from '../../utils/stockFlow';
+import { ChequeFieldsInput, emptyChequeFields } from './ChequeForms';
 
 interface Props {
   invoiceId: string | null;
@@ -15,12 +16,13 @@ interface Props {
 
 /** One bill: its lines, its payments, and the three things you do with it — take money, print, delete. */
 export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
-  const { invoices, customers, payBill, deleteBill, setPrintRequest, can, currentUser } = useTrading();
+  const { invoices, customers, payBill, receiveCheque, deleteBill, setPrintRequest, can, currentUser } = useTrading();
   const inv = invoices.find((i) => i.id === invoiceId) || null;
   const customer = inv ? customers.find((c) => c.id === inv.customerId) : undefined;
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Cash');
   const [note, setNote] = useState('');
+  const [cheque, setCheque] = useState(emptyChequeFields());
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const canDelete = can('delete_records') || can('system:admin_screen') || can('admin_screen') || currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
@@ -28,11 +30,15 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
   const takePayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inv) return;
-    const r = payBill(inv.id, parseFloat(amount) || 0, method, note.trim() || undefined);
+    // Cheques go into the cheque register against this bill (in hand until the bank clears them).
+    const r = method === 'Cheque'
+      ? receiveCheque({ customerId: inv.customerId, invoiceId: inv.id, amount: parseFloat(amount) || 0, ...cheque, note: note.trim() || undefined })
+      : payBill(inv.id, parseFloat(amount) || 0, method, note.trim() || undefined);
     setMsg({ kind: r.success ? 'ok' : 'error', text: r.message });
     if (r.success) {
       setAmount('');
       setNote('');
+      setCheque(emptyChequeFields());
     }
   };
 
@@ -119,6 +125,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
                     <label className={labelCls} htmlFor="pay-note">Note</label>
                     <input id="pay-note" value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} placeholder="optional" />
                   </div>
+                  {method === 'Cheque' && <ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="pay-chq" />}
                   <div className="flex items-end"><button type="submit" className={`${primaryBtn} w-full`}>Receive</button></div>
                 </div>
               </form>

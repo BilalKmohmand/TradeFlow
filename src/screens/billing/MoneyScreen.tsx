@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Banknote, Landmark, ArrowLeftRight, HandCoins, Receipt, Settings2, ChevronRight, Printer } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
@@ -9,18 +9,23 @@ import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 import { booksLockedFor } from '../../utils/accounting';
 import { BankReconciliationTab } from '../../components/billing/BankReconciliationTab';
+import { ChequesTab } from '../../components/billing/ChequesTab';
+import { unclearedChequeTotals } from '../../utils/cheques';
 
-type Tab = 'overview' | 'expenses' | 'cashbook' | 'bank';
+export type MoneyTab = 'overview' | 'expenses' | 'cashbook' | 'cheques' | 'bank';
+type Tab = MoneyTab;
 
 /** Where the money is: cash, bank, who owes you, who you owe; plus expense sheets and the cash book. */
 export const MoneyScreen: React.FC = () => {
-  const { ledger, expenses, cashEntries, customers, suppliers, settings, updateSettings, setSelectedCustomerId, setSelectedSupplierId, setActiveScreen, setPrintRequest, deleteExpense, can } = useTrading();
+  const { ledger, expenses, cashEntries, customers, suppliers, settings, updateSettings, setSelectedCustomerId, setSelectedSupplierId, setActiveScreen, setPrintRequest, deleteExpense, can, cheques, isChequeRecord } = useTrading();
   const canDelete = can('delete_records');
   // Bank reconciliation is book-keeping: staff without finance access (operators) don't see it.
   const canSeeBank = can('view_finance');
   const ui = useBillingUI();
   const today = todayISO();
-  const [tab, setTab] = useState<Tab>('overview');
+  // The home screen can open Money straight on a tab (e.g. "Cheques due this week").
+  const [tab, setTab] = useState<Tab>(() => ui.peekMoneyTab() || 'overview');
+  useEffect(() => { ui.openMoneyTab(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [month, setMonth] = useState(today.slice(0, 7));
   const [showOpening, setShowOpening] = useState(false);
   const [opening, setOpening] = useState({ cash: String(settings.cashOpeningBalance || 0), bank: String(settings.openingBankBalance || 0), date: settings.cashOpeningDate });
@@ -28,6 +33,9 @@ export const MoneyScreen: React.FC = () => {
   const movements = useMemo(() => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), [ledger, expenses, cashEntries, customers, suppliers]);
   const balances = useMemo(() => accountBalancesOn(movements, settings, today), [movements, settings, today]);
   const position = useMemo(() => positionSummary(customers, suppliers, expenses, balances), [customers, suppliers, expenses, balances]);
+  // Cheques not yet cleared are still the business's money (or still owed): count them in the total.
+  const pdc = useMemo(() => unclearedChequeTotals(cheques), [cheques]);
+  const netWithCheques = position.netPosition + pdc.receivable - pdc.payable;
   const debtors = useMemo(() => customers.filter((c) => c.totalDue > 0).sort((a, b) => b.totalDue - a.totalDue), [customers]);
   const creditors = useMemo(() => suppliers.filter((s) => s.totalOwed > 0).sort((a, b) => b.totalOwed - a.totalOwed), [suppliers]);
   // Customers who paid in advance: the shop owes them goods or money back.
@@ -54,7 +62,7 @@ export const MoneyScreen: React.FC = () => {
           <h1 className="text-2xl font-bold text-[#111827] dark:text-white">Money</h1>
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">How much is in the business, who owes you, and who you owe.</p>
         </div>
-        <div className="flex flex-wrap gap-1.5">{tabBtn('overview', 'Overview')}{tabBtn('expenses', 'Expense sheets')}{tabBtn('cashbook', 'Cash book')}{canSeeBank && tabBtn('bank', 'Bank reconciliation')}</div>
+        <div className="flex flex-wrap gap-1.5">{tabBtn('overview', 'Overview')}{tabBtn('expenses', 'Expense sheets')}{tabBtn('cashbook', 'Cash book')}{tabBtn('cheques', 'Cheques')}{canSeeBank && tabBtn('bank', 'Bank reconciliation')}</div>
       </div>
 
       {tab === 'overview' && (
@@ -68,8 +76,8 @@ export const MoneyScreen: React.FC = () => {
           <div className={`${cardCls} p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
             <div>
               <div className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Money in the business</div>
-              <div className={`text-3xl font-extrabold font-mono ${position.netPosition >= 0 ? 'text-[#111827] dark:text-white' : 'text-rose-700'}`}>{rs(position.netPosition)}</div>
-              <div className="text-xs text-[#8E9299]">cash {rs(balances.cash)} + bank {rs(balances.bank)} + owed to you {rs(position.receivables)} − you owe {rs(position.payables)}</div>
+              <div className={`text-3xl font-extrabold font-mono ${netWithCheques >= 0 ? 'text-[#111827] dark:text-white' : 'text-rose-700'}`}>{rs(netWithCheques)}</div>
+              <div className="text-xs text-[#8E9299]">cash {rs(balances.cash)} + bank {rs(balances.bank)} + owed to you {rs(position.receivables)} − you owe {rs(position.payables)}{pdc.receivable > 0 ? ` + cheques in hand ${rs(pdc.receivable)}` : ''}{pdc.payable > 0 ? ` − cheques not yet cleared ${rs(pdc.payable)}` : ''}</div>
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => ui.transfer()} className={secondaryBtn}><ArrowLeftRight className="w-4 h-4 text-indigo-600" /> Cash ↔ Bank</button>
@@ -133,7 +141,9 @@ export const MoneyScreen: React.FC = () => {
 
       {tab === 'bank' && canSeeBank && <BankReconciliationTab />}
 
-      {tab !== 'overview' && tab !== 'bank' && (
+      {tab === 'cheques' && <ChequesTab />}
+
+      {(tab === 'expenses' || tab === 'cashbook') && (
         <div className="flex items-center gap-2">
           <label className="text-xs font-bold text-[#6B7280] dark:text-[#94A3B8]" htmlFor="money-month">Month</label>
           <input id="money-month" type="month" value={month} max={today.slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} className={`${inputCls} w-auto`} />
@@ -149,7 +159,7 @@ export const MoneyScreen: React.FC = () => {
               <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">{g.label} sheet</h2><span className="font-mono font-bold text-sm">{rs(g.total)}</span></div>
               <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                 {g.rows.sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (
-                  <li key={e.id} className="flex items-center gap-2 px-5 py-2.5 text-sm"><span className="font-mono text-xs text-[#8E9299] w-20 shrink-0">{formatDate(e.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#8E9299]"> • {e.paidVia || 'Cash'}{e.createdBy ? ` • ${e.createdBy}` : ''}</span></span><span className="font-mono font-bold">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && <button type="button" onClick={() => deleteExpense(e.id)} aria-label={`Delete expense ${e.description}`} className="text-[#9CA3AF] hover:text-rose-600 text-sm px-2 py-1">✕</button>}</li>
+                  <li key={e.id} className="flex items-center gap-2 px-5 py-2.5 text-sm"><span className="font-mono text-xs text-[#8E9299] w-20 shrink-0">{formatDate(e.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#8E9299]"> • {e.paidVia || 'Cash'}{e.createdBy ? ` • ${e.createdBy}` : ''}</span></span><span className="font-mono font-bold">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && !isChequeRecord(e.id) && <button type="button" onClick={() => deleteExpense(e.id)} aria-label={`Delete expense ${e.description}`} className="text-[#9CA3AF] hover:text-rose-600 text-sm px-2 py-1">✕</button>}</li>
                 ))}
               </ul>
             </div>

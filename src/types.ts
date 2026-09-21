@@ -139,7 +139,12 @@ export type TransactionType =
   | 'purchase_received'
   | 'credit_note'
   | 'debit_note'
-  | 'bill_issued';
+  | 'bill_issued'
+  /** Post-dated cheques (see Cheque below and the posting rules in utils/accounting.ts). */
+  | 'cheque_received'
+  | 'cheque_issued'
+  | 'cheque_returned'
+  | 'cheque_charge';
 
 export interface LedgerEntry {
   id: string;
@@ -855,4 +860,51 @@ export interface StockTransfer {
   batches?: BatchAllocation[];
   createdAt: string;
   createdBy?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Post-dated cheques (PDC register)
+// ---------------------------------------------------------------------------
+/**
+ * received: from a customer → in_hand → deposited → cleared, or bounced / cancelled (given back).
+ * issued:   to a supplier   → issued → cleared, or cancelled.
+ */
+export type ChequeDirection = 'received' | 'issued';
+export type ChequeStatus = 'in_hand' | 'deposited' | 'issued' | 'cleared' | 'bounced' | 'cancelled';
+
+export interface Cheque {
+  id: string;
+  direction: ChequeDirection;
+  customerId?: string | null;
+  supplierId?: string | null;
+  /** Customer / supplier name at the time (kept for the register if the party is renamed or deleted). */
+  partyName: string;
+  bankName: string;
+  chequeNumber: string;
+  amount: number;
+  /** Date written on the cheque: may be in the future (post-dated). */
+  chequeDate: string;
+  /** Day the cheque was received from the customer / handed to the supplier (the books date). */
+  entryDate: string;
+  /** Bill this cheque pays (received cheques only). */
+  invoiceId?: string | null;
+  status: ChequeStatus;
+  depositedDate?: string | null;
+  clearedDate?: string | null;
+  /** Bounced or cancelled on this date. */
+  returnedDate?: string | null;
+  returnReason?: string;
+  /** Bank's charge for the bounced cheque and who carries it. */
+  bankCharge?: number;
+  chargeTo?: 'customer' | 'shop' | null;
+  note?: string;
+  /** Records this cheque created, so it can be reversed exactly and they can't be deleted on their own. */
+  ledgerId?: string | null;
+  reversalLedgerId?: string | null;
+  clearedEntryId?: string | null;
+  chargeExpenseId?: string | null;
+  chargeLedgerId?: string | null;
+  createdAt: string;
+  createdBy?: string;
+  updatedAt?: string;
 }

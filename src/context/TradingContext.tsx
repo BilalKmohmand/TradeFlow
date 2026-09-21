@@ -49,10 +49,12 @@ import {
   InvoiceStatus,
   BankStatementLine,
   BankReconciliation,
+  Cheque,
 } from '../types';
 import { creditCheck } from '../utils/credit';
 import { collectCashMovements, costPerKgOn } from '../utils/finance';
 import { BankRecApi, createBankRecApi } from './bankRecActions';
+import { ChequeApi, createChequeApi } from './chequeActions';
 import {
   DEFAULT_ROLES,
   DEFAULT_VISIBILITY_SETTINGS,
@@ -93,7 +95,7 @@ import {
   initialWhatsAppMessages,
 } from '../data/initialData';
 
-interface TradingContextType extends InventoryApi {
+interface TradingContextType extends InventoryApi, ChequeApi {
   customers: Customer[];
   suppliers: Supplier[];
   products: Product[];
@@ -402,7 +404,8 @@ export type PrintRequestLike =
   | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number }
   | { type: 'trial_balance'; asOf: string }
   | { type: 'profit_loss'; from: string; to: string }
-  | { type: 'balance_sheet'; asOf: string };
+  | { type: 'balance_sheet'; asOf: string }
+  | { type: 'cheque_register'; view?: string };
 
 /** Collision-safe id generator (Date.now() alone repeats when called in a tight loop). */
 let idCounter = 0;
@@ -647,6 +650,7 @@ const STORAGE_KEYS = {
   AGREED_RATES: 'tradeflow_agreed_rates_v1',
   BANK_LINES: 'tradeflow_bank_statement_lines_v1',
   BANK_RECS: 'tradeflow_bank_reconciliations_v1',
+  CHEQUES: 'tradeflow_cheques_v1',
   ...INVENTORY_STORAGE_KEYS,
   JOURNALS: 'tradeflow_journal_entries_v1',
   ACCOUNTS: 'tradeflow_accounts_v1',
@@ -737,6 +741,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [bankStatementLines, setBankStatementLines] = useState<BankStatementLine[]>(() => loadLocal(STORAGE_KEYS.BANK_LINES, []));
   const [bankReconciliations, setBankReconciliations] = useState<BankReconciliation[]>(() => loadLocal(STORAGE_KEYS.BANK_RECS, []));
+  const [cheques, setCheques] = useState<Cheque[]>(() => loadLocal(STORAGE_KEYS.CHEQUES, []));
 
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>('dashboard');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -819,6 +824,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // Bank reconciliation: only when the cloud tables exist (migration v12).
         if (data.bankStatementLines) setBankStatementLines(cloudOrLocal(data.bankStatementLines));
         if (data.bankReconciliations) setBankReconciliations(cloudOrLocal(data.bankReconciliations));
+        // Cheque register: only when the cloud table exists (migration v14).
+        if (data.cheques) setCheques(cloudOrLocal(data.cheques));
         // Godowns / batches / transfers: only when the cloud tables exist (migration v11).
         inventory.hydrate({ godowns: data.godowns, stockBatches: data.stockBatches, stockTransfers: data.stockTransfers }, { keepLocalIfEmpty: true });
         // Accounts: only when the cloud tables exist (migration v10); otherwise keep local copies.
@@ -923,6 +930,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [customerAgreedRates]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.BANK_LINES, JSON.stringify(bankStatementLines)); }, [bankStatementLines]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.BANK_RECS, JSON.stringify(bankReconciliations)); }, [bankReconciliations]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CHEQUES, JSON.stringify(cheques)); }, [cheques]);
 
   const syncToSupabase = async (table: string, rows: unknown[]) => {
     if (!isCloudSyncReady || rows.length === 0) return;
@@ -959,6 +967,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { void syncToSupabase('whatsapp_messages', whatsappMessages); }, [whatsappMessages, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('bank_statement_lines', bankStatementLines); }, [bankStatementLines, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('bank_reconciliations', bankReconciliations); }, [bankReconciliations, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('cheques', cheques); }, [cheques, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('journal_entries', manualJournals); }, [manualJournals, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('accounts', customAccounts); }, [customAccounts, isCloudSyncReady]);
 
@@ -994,6 +1003,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTasks([]);
     setBankStatementLines([]);
     setBankReconciliations([]);
+    setCheques([]);
     setManualJournals([]);
     setCustomAccounts([]);
     inventory.reset();
@@ -1596,6 +1606,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ...inventory.purgeSetters,
       journal_entries: () => setManualJournals([]),
       accounts: () => setCustomAccounts([]),
+      cheques: () => setCheques([]),
     };
     setters[table]();
     if (isCloudSyncReady) void clearTable(table);
@@ -3321,6 +3332,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!inv) return { success: false, message: 'Bill not found.' };
     const closedDel = booksLockedFor(settings, [inv.issueDate, ...(inv.payments || []).map((p) => p.date)].sort()[0]);
     if (closedDel) return { success: false, message: `This bill is in a closed period. ${closedDel}` };
+    const billCheque = cheques.find((c) => c.invoiceId === inv.id && c.status !== 'bounced' && c.status !== 'cancelled');
+    if (billCheque) return { success: false, message: `Cheque ${billCheque.chequeNumber} was taken against this bill. ${billCheque.status === 'cleared' ? 'It has cleared, so the bill cannot be deleted.' : 'Cancel or bounce the cheque first (Money → Cheques).'}` };
     // Put stock back, take the unpaid part off the customer, drop the bill's ledger lines.
     setProducts((prev) =>
       prev.map((p) => {
@@ -3475,6 +3488,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const existing = expenses.find((e) => e.id === id);
     if (!existing) return;
     if (booksLockedFor(settings, existing.date)) return; // closed period: the screens hide the delete button too
+    if (chequeApi.isChequeRecord(id)) return; // a bounced cheque's bank charge: changed through the cheque, not deleted
     setExpenses((prev) => prev.filter((e) => e.id !== id));
     removeRemote('expenses', [id]);
     logAuditEvent('Expense Deleted', `${existing.category}: ${formatCurrency(existing.amount)} — ${existing.description}`, 'danger');
@@ -3518,6 +3532,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const existing = cashEntries.find((e) => e.id === id);
     if (!existing) return;
     if (booksLockedFor(settings, existing.date)) return; // closed period: the screens hide the delete button too
+    if (chequeApi.isChequeRecord(id)) return; // a cleared cheque: part of the cheque register, not a loose cash entry
     // A transfer has two legs; remove both so cash and bank stay in step.
     const ids = existing.pairId ? cashEntries.filter((e) => e.pairId === existing.pairId).map((e) => e.id) : [id];
     setCashEntries((prev) => prev.filter((e) => !ids.includes(e.id)));
@@ -3776,6 +3791,26 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     userName: currentUser?.name,
     today: todayISO,
   });
+  // Post-dated cheque register (see chequeActions.ts for the accounting treatment).
+  const chequeApi = createChequeApi({
+    cheques,
+    setCheques,
+    customers,
+    setCustomers,
+    suppliers,
+    setSuppliers,
+    invoices,
+    setInvoices,
+    setLedger,
+    setCashEntries,
+    setExpenses,
+    settings,
+    can: (p) => can(p as Permission),
+    logAuditEvent: (a, dt, sev) => logAuditEvent(a, dt, sev, 'billing'),
+    uid,
+    userName: currentUser?.name,
+    today: todayISO,
+  });
   // ---------------------------------------------------------------------------
   // Accounts (double-entry): manual journals, custom accounts, period lock
   // ---------------------------------------------------------------------------
@@ -3878,6 +3913,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       invoices,
       bankStatementLines,
       bankReconciliations,
+      cheques,
       ...inventory.backupData(),
       manualJournals,
       customAccounts,
@@ -3942,6 +3978,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (Array.isArray(data.invoices)) setInvoices(data.invoices);
       if (Array.isArray(data.bankStatementLines)) setBankStatementLines(data.bankStatementLines);
       if (Array.isArray(data.bankReconciliations)) setBankReconciliations(data.bankReconciliations);
+      if (Array.isArray(data.cheques)) setCheques(data.cheques);
       inventory.hydrate({ godowns: data.godowns ?? [], stockBatches: data.stockBatches ?? [], stockTransfers: data.stockTransfers ?? [] });
       if (Array.isArray(data.manualJournals)) setManualJournals(data.manualJournals);
       if (Array.isArray(data.customAccounts)) setCustomAccounts(data.customAccounts);
@@ -3978,8 +4015,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setInvoices([]);
     setBankStatementLines([]);
     setBankReconciliations([]);
+    setCheques([]);
     inventory.reset();
     localStorage.removeItem(STORAGE_KEYS.INVOICES);
+    localStorage.removeItem(STORAGE_KEYS.CHEQUES);
     localStorage.removeItem(STORAGE_KEYS.BANK_LINES);
     localStorage.removeItem(STORAGE_KEYS.BANK_RECS);
     setManualJournals([]);
@@ -4014,6 +4053,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     <TradingContext.Provider
       value={{
         ...inventory.api,
+        ...chequeApi,
         customers,
         suppliers,
         products,

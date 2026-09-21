@@ -26,7 +26,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
   const owed = customers.reduce((a, c) => a + c.totalDue, 0);
   const open = customers.find((c) => c.id === openId) || null;
   const openBills = open ? billsOnly(invoices).filter((i) => i.customerId === open.id).sort((a, b) => (a.issueDate < b.issueDate ? 1 : -1)) : [];
-  const openPayments = open ? ledger.filter((l) => l.entityType === 'customer' && l.entityId === open.id && l.type === 'payment_received').sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
+  const openPayments = open ? ledger.filter((l) => l.entityType === 'customer' && l.entityId === open.id && (l.type === 'payment_received' || l.type === 'cheque_received' || l.type === 'cheque_returned' || l.type === 'cheque_charge')).sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
 
   return (
     <div className="space-y-5">
@@ -103,7 +103,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Money received</h3>
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-sm">
                   {openPayments.slice(0, 12).map((l) => (
-                    <li key={l.id} className="flex justify-between px-3 py-2"><span>{formatDate(l.date)} • {l.method || l.description.replace(/^Payment received:?\s*/, '')}</span><span className="font-mono font-bold text-teal-700 dark:text-teal-300">{rs(l.credit)}</span></li>
+                    <li key={l.id} className="flex justify-between gap-2 px-3 py-2"><span className="min-w-0 truncate">{formatDate(l.date)} • {l.type === 'payment_received' ? l.method || l.description.replace(/^Payment received:?\s*/, '') : l.description}</span>{l.debit > 0 ? <span className="font-mono font-bold text-rose-700 dark:text-rose-300 shrink-0">+ {rs(l.debit)}</span> : <span className="font-mono font-bold text-teal-700 dark:text-teal-300 shrink-0">{rs(l.credit)}</span>}</li>
                   ))}
                 </ul>
               </div>
