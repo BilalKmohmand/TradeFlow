@@ -98,7 +98,13 @@ export const buildMovements = (
     productName: productName(a.productId),
     notes: a.note,
   }));
-  const rets: StockMovement[] = (lookups.returns || []).map((r) => {
+  // A return against a bill can bring back several items: one movement per item.
+  const retLines = (lookups.returns || []).flatMap((r) =>
+    r.items?.length
+      ? r.items.map((l, i) => ({ ...r, id: `${r.id}-${i}`, productId: l.productId, kg: l.qty, amount: l.amount, pricePerKg: l.unitPrice }))
+      : [r]
+  );
+  const rets: StockMovement[] = retLines.map((r) => {
     const cust = lookups.customers.find((c) => c.id === r.customerId);
     const sup = lookups.suppliers.find((s) => s.id === r.supplierId);
     return {

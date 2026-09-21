@@ -49,7 +49,10 @@ import {
   InvoiceStatus,
   BankStatementLine,
   BankReconciliation,
+  QuotationLine,
+  ReturnLine,
 } from '../types';
+import { lineDiscountAmount, planReturn, maxRefund, returnsForBill, billBalance, quotationTotal, ReturnPick } from '../utils/salesDocs';
 import { creditCheck } from '../utils/credit';
 import { collectCashMovements, costPerKgOn } from '../utils/finance';
 import { BankRecApi, createBankRecApi } from './bankRecActions';
@@ -217,6 +220,15 @@ interface TradingContextType extends InventoryApi, StockActionsApi {
   createBill: (input: CreateBillInput) => { success: boolean; message: string; invoice?: Invoice };
   payBill: (invoiceId: string, amount: number, method: string, notes?: string, date?: string) => { success: boolean; message: string };
   deleteBill: (invoiceId: string) => { success: boolean; message: string };
+  /** Sales return against a bill: goods back to stock, credit note, money back now or off what they owe. */
+  returnBillItems: (input: ReturnBillInput) => { success: boolean; message: string; stockReturn?: StockReturn };
+  /** Billing-mode quotation (several items); pass id to edit an existing one. */
+  saveBillQuotation: (input: { id?: string; customerId: string; items: QuotationLine[]; validUntil: string; notes?: string }) => { success: boolean; message: string; quotation?: Quotation };
+  quotations: Quotation[];
+  setQuotationStatus: (id: string, status: QuotationStatus) => void;
+  deleteQuotation: (id: string) => void;
+  returns: StockReturn[];
+  deleteReturn: (id: string) => { success: boolean; message: string };
   addCashTransfer: (input: { amount: number; from: 'cash' | 'bank'; date?: string; note?: string }) => { success: boolean; message: string };
   // Bank reconciliation (see bankRecActions.ts)
   bankStatementLines: BankRecApi['bankStatementLines'];
@@ -399,6 +411,7 @@ export type PrintRequestLike =
   | { type: 'statement'; customerId: string; from: string; to: string }
   | { type: 'supplier_statement'; supplierId: string; from: string; to: string }
   | { type: 'bill'; invoiceId: string }
+  | { type: 'bill_challan'; invoiceId: string; driver?: string; vehicle?: string }
   | { type: 'daily_sheet'; date: string }
   | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number }
   | { type: 'trial_balance'; asOf: string }
@@ -425,6 +438,21 @@ export interface CreateBillItemInput {
   qty: number;
   unitPrice: number;
   unit?: string;
+  /** Discount on this line only: Rs. off the line, or % off the line. */
+  discountType?: 'rs' | 'pct';
+  discountValue?: number;
+  /** The price is the customer's agreed rate for this item. */
+  customerRate?: boolean;
+}
+
+export interface ReturnBillInput {
+  invoiceId: string;
+  lines: ReturnPick[];
+  /** 'refund' = money back now (up to what they paid), 'credit' = take it off what they owe. */
+  settle: 'refund' | 'credit';
+  refundMethod?: string;
+  reason?: string;
+  date?: string;
 }
 export interface CreateBillInput {
   customerId: string;
@@ -441,6 +469,8 @@ export interface CreateBillInput {
   overrideReason?: string;
   /** Godown the stock is taken from (default: the main godown). */
   godownId?: string;
+  /** Quotation this bill is made from (marked converted once the bill saves). */
+  quotationId?: string | null;
 }
 
 /** Payment methods offered on bills. Anything starting with "Cash" counts as cash in hand. */
@@ -833,6 +863,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // Accounts: only when the cloud tables exist (migration v10); otherwise keep local copies.
         if (data.journalEntries) setManualJournals(cloudOrLocal(data.journalEntries));
         if (data.accounts) setCustomAccounts(cloudOrLocal(data.accounts));
+        // Customer rates: only when the cloud table exists (migration v13).
+        if (data.customerAgreedRates) setCustomerAgreedRates(cloudOrLocal(data.customerAgreedRates));
         setIsCloudSyncReady(true);
       })
       .catch((err) => {
@@ -979,6 +1011,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { void syncToSupabase('bank_reconciliations', bankReconciliations); }, [bankReconciliations, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('journal_entries', manualJournals); }, [manualJournals, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('accounts', customAccounts); }, [customAccounts, isCloudSyncReady]);
+  useEffect(() => { void syncToSupabase('customer_agreed_rates', customerAgreedRates); }, [customerAgreedRates, isCloudSyncReady]);
 
   /** Remote delete helper; only touches Supabase when cloud sync is live. */
   const removeRemote = (table: TableName, ids: string[]) => {
@@ -1463,6 +1496,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTasks((prev) => prev.filter((t) => !(t.linkType === 'customer' && t.linkId === id)));
     if (selectedCustomerId === id) setSelectedCustomerId(null);
 
+    const custReturnIds = returns.filter((r) => r.kind === 'sales' && r.customerId === id).map((r) => r.id);
+    setReturns((prev) => prev.filter((r) => !custReturnIds.includes(r.id)));
+    removeRemote('returns', custReturnIds);
+    const custRateIds = customerAgreedRates.filter((r) => r.customerId === id).map((r) => r.id);
+    setCustomerAgreedRates((prev) => prev.filter((r) => r.customerId !== id));
+    removeRemote('customer_agreed_rates', custRateIds);
     const custInvoiceIds = invoices.filter((i) => i.customerId === id).map((i) => i.id);
     setInvoices((prev) => prev.filter((i) => i.customerId !== id));
     removeRemote('invoices', custInvoiceIds);
@@ -1621,6 +1660,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ...inventory.purgeSetters,
       journal_entries: () => setManualJournals([]),
       accounts: () => setCustomAccounts([]),
+      customer_agreed_rates: () => setCustomerAgreedRates([]),
     };
     setters[table]();
     if (isCloudSyncReady) void clearTable(table);
@@ -3042,7 +3082,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updatedAt: todayISO(),
       };
       setCustomerAgreedRates((prev) =>
-        prev.map((r, i) => (i === existingIndex ? updatedRecord : r))
+        prev.map((r) => (r.id === updatedRecord.id ? updatedRecord : r))
       );
     } else {
       updatedRecord = {
@@ -3068,6 +3108,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteCustomerAgreedRate = (id: string) => {
     setCustomerAgreedRates((prev) => prev.filter((r) => r.id !== id));
+    removeRemote('customer_agreed_rates', [id]);
   };
 
   // ---------------------------------------------------------------------------
@@ -3169,7 +3210,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (date > todayISO()) return { success: false, message: 'The bill date cannot be in the future.' };
     const closedBill = booksLockedFor(settings, date);
     if (closedBill) return { success: false, message: closedBill };
-    const subtotal = round2(items.reduce((a, it) => a + round2(it.qty * it.unitPrice), 0));
+    // Line discounts come off each line first; subtotal is the sum of the lines after their own discounts.
+    const lineDisc = items.map((it) => lineDiscountAmount(it.qty, it.unitPrice, it.discountType, it.discountValue));
+    const subtotal = round2(items.reduce((a, it, i) => a + round2(it.qty * it.unitPrice) - lineDisc[i], 0));
     const discount = round2(Math.min(Math.max(0, input.discount || 0), subtotal));
     const taxRatePct = settings.taxRatePct ?? 0;
     const taxAmount = round2(((subtotal - discount) * taxRatePct) / 100);
@@ -3208,12 +3251,15 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         kg: it.qty,
         ratePerKg: round2(it.unitPrice),
         costPricePerKg: unitCost,
-        amount: round2(it.qty * it.unitPrice),
+        amount: round2(round2(it.qty * it.unitPrice) - lineDisc[idx]),
         qty: it.qty,
         unitPrice: round2(it.unitPrice),
         unit: it.unit || product?.unit || 'pcs',
+        ...(lineDisc[idx] > 0 ? { discountType: it.discountType === 'pct' ? 'pct' as const : 'rs' as const, discountValue: round2(Number(it.discountValue) || 0), discountAmount: lineDisc[idx] } : {}),
+        ...(it.customerRate ? { customerRate: true } : {}),
       };
     });
+    const fromQuote = input.quotationId ? quotations.find((q) => q.id === input.quotationId) : undefined;
     const payments: InvoicePaymentRecord[] =
       paidAmount > 0 ? [{ id: uid('pay'), date, amount: paidAmount, method: invoiceMethod(method), notes: method, recordedBy: currentUser?.name }] : [];
     const invoice: Invoice = {
@@ -3244,8 +3290,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdAt: todayISO(),
       createdBy: currentUser?.name,
       ...(creditOverride ? { creditOverride } : {}),
+      ...(fromQuote ? { quotationId: fromQuote.id } : {}),
     };
     invoicesRef.current = [invoice, ...invoicesRef.current];
+    if (fromQuote) setQuotations((prev) => prev.map((q) => (q.id === fromQuote.id ? { ...q, status: 'converted', invoiceId: invoice.id } : q)));
     setInvoices((prev) => [invoice, ...prev]);
 
     // Stock comes off in the product's own unit.
@@ -3308,7 +3356,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const closedPay = booksLockedFor(settings, when);
     if (closedPay) return { success: false, message: closedPay };
     const newPaid = round2(inv.paidAmount + payAmt);
-    const newBalance = Math.max(0, round2(inv.totalAmount - newPaid));
+    const newBalance = billBalance({ ...inv, paidAmount: newPaid });
     const record: InvoicePaymentRecord = { id: uid('pay'), date: when, amount: payAmt, method: invoiceMethod(method), notes: notes ? `${method} - ${notes}` : method, recordedBy: currentUser?.name };
     setInvoices((prev) =>
       prev.map((i) =>
@@ -3346,6 +3394,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!inv) return { success: false, message: 'Bill not found.' };
     const closedDel = booksLockedFor(settings, [inv.issueDate, ...(inv.payments || []).map((p) => p.date)].sort()[0]);
     if (closedDel) return { success: false, message: `This bill is in a closed period. ${closedDel}` };
+    const billReturns = returnsForBill(returns, inv.id);
+    if (billReturns.length) return { success: false, message: `Goods were returned on this bill (${billReturns.map((r) => r.returnNumber).join(', ')}). Delete the return first.` };
+    if (inv.quotationId) setQuotations((prev) => prev.map((q) => (q.id === inv.quotationId ? { ...q, status: 'accepted', invoiceId: null } : q)));
     // Put stock back, take the unpaid part off the customer, drop the bill's ledger lines.
     setProducts((prev) =>
       prev.map((p) => {
@@ -3363,6 +3414,86 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     removeRemote('invoices', [invoiceId]);
     logAuditEvent('Bill Deleted', `${inv.invoiceNumber} (${formatCurrency(inv.totalAmount)}) for ${inv.customerName} removed; stock and account reversed.`, 'danger', 'billing');
     return { success: true, message: `Bill ${inv.invoiceNumber} deleted.` };
+  };
+
+  /** Bill status after its money, returns and refunds changed. */
+  const billAfter = (inv: Invoice, patch: Partial<Invoice>): Invoice => {
+    const next = { ...inv, ...patch };
+    const balanceDue = billBalance(next);
+    const kept = round2(next.paidAmount - (next.refundedAmount || 0));
+    const paymentStatus: InvoicePaymentStatus = balanceDue === 0 ? 'paid' : kept > 0 ? 'partial' : 'unpaid';
+    return { ...next, balanceDue, paymentStatus, status: paymentStatus === 'unpaid' ? 'issued' : paymentStatus, updatedAt: todayISO() };
+  };
+
+  const returnBillItems = (input: ReturnBillInput): { success: boolean; message: string; stockReturn?: StockReturn } => {
+    const inv = invoices.find((i) => i.id === input.invoiceId);
+    if (!inv) return { success: false, message: 'Bill not found.' };
+    const date = input.date || todayISO();
+    if (date > todayISO()) return { success: false, message: 'The return date cannot be in the future.' };
+    if (date < inv.issueDate) return { success: false, message: 'The return date cannot be before the bill date.' };
+    const closed = booksLockedFor(settings, date);
+    if (closed) return { success: false, message: closed };
+    const plan = planReturn(inv, returns, input.lines);
+    if (!plan.ok) return { success: false, message: plan.message || 'Nothing to return.' };
+    const refund = input.settle === 'refund' ? maxRefund(inv, plan.total) : 0;
+    if (input.settle === 'refund' && refund <= 0) return { success: false, message: 'The customer has not paid enough on this bill to give money back. Choose "Take it off what they owe" instead.' };
+    const method = input.refundMethod || 'Cash';
+    const n = returns.reduce((m, r) => {
+      const hit = /^CN-(\d+)$/.exec(r.returnNumber);
+      return hit ? Math.max(m, parseInt(hit[1], 10)) : m;
+    }, 0);
+    const qty = round2(plan.lines.reduce((a, l) => a + l.qty, 0));
+    const reason = (input.reason || '').trim() || 'Returned by customer';
+    const r: StockReturn = {
+      id: uid('ret'),
+      returnNumber: `CN-${n + 1}`,
+      kind: 'sales',
+      customerId: inv.customerId,
+      supplierId: null,
+      productId: plan.lines[0].productId,
+      dispatchId: null,
+      purchaseId: null,
+      kg: qty,
+      pricePerKg: qty > 0 ? round2(plan.total / qty) : 0,
+      amount: plan.total,
+      reason,
+      date,
+      createdAt: new Date().toISOString(),
+      createdBy: currentUser?.name,
+      invoiceId: inv.id,
+      items: plan.lines,
+      taxAmount: plan.tax,
+      refundAmount: refund,
+      ...(refund > 0 ? { refundMethod: method } : {}),
+    };
+    // Goods back on the shelf: totals per item, and the batches / godown they left from.
+    setProducts((prev) =>
+      prev.map((p) => {
+        const back = plan.lines.filter((l) => l.productId === p.id).reduce((a, l) => a + l.qty, 0);
+        return back > 0 ? { ...p, stockKg: round2(p.stockKg + back) } : p;
+      })
+    );
+    inventory.restoreReturn(plan.lines);
+    const customer = customers.find((c) => c.id === inv.customerId);
+    const dueAfterCredit = round2((customer?.totalDue || 0) - plan.total);
+    setCustomers((prev) => prev.map((c) => (c.id === inv.customerId ? { ...c, totalDue: round2((c.totalDue || 0) - plan.total + refund) } : c)));
+    const what = plan.lines.map((l) => `${l.productName} × ${l.qty}`).join(', ');
+    const rows: LedgerEntry[] = [
+      { id: uid('led'), entityType: 'customer', entityId: inv.customerId, type: 'credit_note', referenceId: r.returnNumber, sourceId: r.id, date, description: `Credit note ${r.returnNumber} for bill ${inv.invoiceNumber}: ${what} returned — ${reason}`, debit: 0, credit: plan.total, balanceAfter: dueAfterCredit, kg: qty },
+    ];
+    if (refund > 0) {
+      rows.push({ id: uid('led'), entityType: 'customer', entityId: inv.customerId, type: 'refund_paid', referenceId: r.returnNumber, sourceId: r.id, method, date, description: `Refund paid: ${method} - ${r.returnNumber} (bill ${inv.invoiceNumber})`, debit: refund, credit: 0, balanceAfter: round2(dueAfterCredit + refund) });
+    }
+    setLedger((prev) => [...rows, ...prev]);
+    setInvoices((prev) => prev.map((i) => (i.id === inv.id ? billAfter(i, { returnedAmount: round2((i.returnedAmount || 0) + plan.total), refundedAmount: round2((i.refundedAmount || 0) + refund) }) : i)));
+    setReturns((prev) => [r, ...prev]);
+    logAuditEvent('Sales Return', `${r.returnNumber} on ${inv.invoiceNumber} for ${inv.customerName}: ${what} (${formatCurrency(plan.total)})${refund > 0 ? `, ${formatCurrency(refund)} paid back by ${method}` : ''}.`, 'warning', 'billing');
+    const rest = round2(plan.total - refund);
+    const message =
+      refund > 0
+        ? `Return ${r.returnNumber} saved. Give ${formatCurrency(refund)} back${rest > 0 ? `; ${formatCurrency(rest)} comes off what they owe` : ''}.`
+        : `Return ${r.returnNumber} saved. ${formatCurrency(plan.total)} taken off what ${inv.customerName} owes.`;
+    return { success: true, message, stockReturn: r };
   };
 
   const addCashTransfer = ({ amount, from, date, note }: { amount: number; from: 'cash' | 'bank'; date?: string; note?: string }): { success: boolean; message: string } => {
@@ -3579,6 +3710,36 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return q;
   };
 
+  /** Billing-mode quotation: a customer, several items at quoted prices, and a valid-until date. */
+  const saveBillQuotation = (input: { id?: string; customerId: string; items: QuotationLine[]; validUntil: string; notes?: string }): { success: boolean; message: string; quotation?: Quotation } => {
+    if (!customers.some((c) => c.id === input.customerId)) return { success: false, message: 'Pick a customer.' };
+    const lines = (input.items || []).filter((l) => l.productId && l.qty > 0).map((l) => ({ ...l, qty: round2(l.qty), unitPrice: round2(l.unitPrice) }));
+    if (lines.length === 0) return { success: false, message: 'Add at least one item with a quantity.' };
+    if (lines.some((l) => !(l.unitPrice >= 0))) return { success: false, message: 'A price cannot be negative.' };
+    if (!input.validUntil) return { success: false, message: 'Enter the date these prices are good until.' };
+    const amount = quotationTotal(lines);
+    if (amount <= 0) return { success: false, message: 'The quotation total must be more than zero.' };
+    const kg = round2(lines.reduce((a, l) => a + l.qty, 0));
+    const base = { customerId: input.customerId, productId: lines[0].productId, kg, pricePerKg: round2(amount / kg), amount, validUntil: input.validUntil, notes: input.notes?.trim() || undefined, items: lines };
+    if (input.id) {
+      const existing = quotations.find((q) => q.id === input.id);
+      if (!existing) return { success: false, message: 'Quotation not found.' };
+      if (existing.status === 'converted') return { success: false, message: 'This quotation is already a bill and cannot be changed.' };
+      const updated: Quotation = { ...existing, ...base };
+      setQuotations((prev) => prev.map((q) => (q.id === input.id ? updated : q)));
+      logAuditEvent('Quotation Updated', `${existing.quoteNumber}: ${lines.length} item(s), ${formatCurrency(amount)}.`, 'info', 'billing');
+      return { success: true, message: `Quotation ${existing.quoteNumber} saved.`, quotation: updated };
+    }
+    const n = quotations.reduce((m, q) => {
+      const hit = /^QT-(\d+)$/.exec(q.quoteNumber);
+      return hit ? Math.max(m, parseInt(hit[1], 10)) : m;
+    }, 0);
+    const q: Quotation = { id: uid('quote'), quoteNumber: `QT-${n + 1}`, ...base, status: 'draft', createdAt: todayISO(), createdBy: currentUser?.name, bookingId: null, invoiceId: null };
+    setQuotations((prev) => [q, ...prev]);
+    logAuditEvent('Quotation Created', `${q.quoteNumber} for ${customers.find((c) => c.id === q.customerId)?.name || 'customer'}: ${lines.length} item(s), ${formatCurrency(amount)}.`, 'info', 'billing');
+    return { success: true, message: `Quotation ${q.quoteNumber} saved.`, quotation: q };
+  };
+
   const setQuotationStatus = (id: string, status: QuotationStatus) => {
     const q = quotations.find((x) => x.id === id);
     if (!q) return;
@@ -3689,11 +3850,26 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return r;
   };
 
-  const deleteReturn = (id: string) => {
+  const deleteReturn = (id: string): { success: boolean; message: string } => {
     const r = returns.find((x) => x.id === id);
-    if (!r) return;
+    if (!r) return { success: false, message: 'Return not found.' };
     const ledgerIds = ledger.filter((l) => l.referenceId === r.returnNumber).map((l) => l.id);
-    if (r.kind === 'sales' && r.customerId) {
+    if (r.invoiceId && r.items?.length) {
+      // Return against a bill: undo exactly what it did.
+      const closedRet = booksLockedFor(settings, r.date);
+      if (closedRet) return { success: false, message: `This return is in a closed period. ${closedRet}` };
+      const items = r.items;
+      const refund = r.refundAmount || 0;
+      setProducts((prev) =>
+        prev.map((p) => {
+          const back = items.filter((l) => l.productId === p.id).reduce((a, l) => a + l.qty, 0);
+          return back > 0 ? { ...p, stockKg: round2(p.stockKg - back) } : p;
+        })
+      );
+      inventory.takeBackReturn(items);
+      setCustomers((prev) => prev.map((c) => (c.id === r.customerId ? { ...c, totalDue: round2(c.totalDue + r.amount - refund) } : c)));
+      setInvoices((prev) => prev.map((i) => (i.id === r.invoiceId ? billAfter(i, { returnedAmount: Math.max(0, round2((i.returnedAmount || 0) - r.amount)), refundedAmount: Math.max(0, round2((i.refundedAmount || 0) - refund)) }) : i)));
+    } else if (r.kind === 'sales' && r.customerId) {
       setProducts((prev) => prev.map((p) => (p.id === r.productId ? { ...p, stockKg: Math.max(0, round2(p.stockKg - r.kg)) } : p)));
       setCustomers((prev) => prev.map((c) => (c.id === r.customerId ? { ...c, totalDue: round2(c.totalDue + r.amount) } : c)));
     } else if (r.kind === 'purchase' && r.supplierId) {
@@ -3705,6 +3881,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     removeRemote('ledger', ledgerIds);
     removeRemote('returns', [id]);
     logAuditEvent('Return Deleted', `${r.returnNumber} removed; stock and balance reversed.`, 'danger');
+    return { success: true, message: `Return ${r.returnNumber} deleted.` };
   };
 
   // ---------------------------------------------------------------------------
@@ -3906,6 +4083,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ...inventory.backupData(),
       manualJournals,
       customAccounts,
+      customerAgreedRates,
       auditLogs,
     };
     const jsonString = JSON.stringify(backupData, null, 2);
@@ -3970,6 +4148,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       inventory.hydrate({ godowns: data.godowns ?? [], stockBatches: data.stockBatches ?? [], stockTransfers: data.stockTransfers ?? [] });
       if (Array.isArray(data.manualJournals)) setManualJournals(data.manualJournals);
       if (Array.isArray(data.customAccounts)) setCustomAccounts(data.customAccounts);
+      if (Array.isArray(data.customerAgreedRates)) setCustomerAgreedRates(data.customerAgreedRates);
       if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
       logAuditEvent('Backup Restored', 'Full system database restored from JSON backup.', 'warning');
       };
@@ -4194,6 +4373,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         createBill,
         payBill,
         deleteBill,
+        returnBillItems,
+        saveBillQuotation,
         addCashTransfer,
         ...bankRec,
         generateInvoiceFromBookings,

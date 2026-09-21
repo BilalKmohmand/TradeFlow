@@ -143,7 +143,9 @@ export type TransactionType =
   | 'purchase_received'
   | 'credit_note'
   | 'debit_note'
-  | 'bill_issued';
+  | 'bill_issued'
+  /** Money handed back to a customer for goods they returned (customer debit, cash/bank out). */
+  | 'refund_paid';
 
 export interface LedgerEntry {
   id: string;
@@ -250,6 +252,13 @@ export interface InvoiceItem {
   godownId?: string;
   /** Batches this line took stock from (first-expiry-first-out). */
   batches?: BatchAllocation[];
+  /** Line discount as typed on the bill: Rs. off the line, or % off the line. */
+  discountType?: 'rs' | 'pct';
+  discountValue?: number;
+  /** Rs. taken off this line (amount = qty × unitPrice − discountAmount). Posted to Sales discounts 4010. */
+  discountAmount?: number;
+  /** The unit price came from the customer's agreed rate. */
+  customerRate?: boolean;
 }
 
 export interface InvoicePaymentRecord {
@@ -299,6 +308,11 @@ export interface Invoice {
   issuedAt?: string;
   /** Set when a bill was allowed over the customer's credit limit (who allowed it and why). */
   creditOverride?: CreditOverride;
+  /** Sales returns against this bill: value credited (incl. tax) and the part paid back in money. */
+  returnedAmount?: number;
+  refundedAmount?: number;
+  /** Quotation this bill was made from. */
+  quotationId?: string | null;
 }
 
 export type AuditCategory = 'auth' | 'roles' | 'users' | 'visibility' | 'data' | 'system' | 'billing';
@@ -652,13 +666,24 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 export type QuotationStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired' | 'converted';
 
+/** One line of a billing-mode quotation (qty in the item's own unit). */
+export interface QuotationLine {
+  productId: string;
+  productName: string;
+  qty: number;
+  unitPrice: number;
+  unit?: string;
+}
+
 export interface Quotation {
   id: string;
   quoteNumber: string;
   customerId: string;
+  /** First line's item (older single-item quotes only have these). */
   productId: string;
   kg: number;
   pricePerKg: number;
+  /** Quotation total. */
   amount: number;
   validUntil: string;
   status: QuotationStatus;
@@ -666,6 +691,10 @@ export interface Quotation {
   createdAt: string;
   createdBy?: string;
   bookingId?: string | null;
+  /** Billing mode: several items per quotation. */
+  items?: QuotationLine[];
+  /** Bill made from this quotation. */
+  invoiceId?: string | null;
 }
 
 export type PurchaseOrderStatus = 'open' | 'partial' | 'received' | 'cancelled';
@@ -709,6 +738,33 @@ export interface StockReturn {
   godownId?: string | null;
   batches?: BatchAllocation[];
   unit?: string;
+  /** Billing mode: the bill these goods were sold on, and the lines returned. */
+  invoiceId?: string | null;
+  items?: ReturnLine[];
+  /** Part of `amount` that is sales tax being reversed. */
+  taxAmount?: number;
+  /** Part of `amount` paid back to the customer in money now (the rest reduces what they owe). */
+  refundAmount?: number;
+  refundMethod?: string;
+}
+
+/** One returned line of a bill. */
+export interface ReturnLine {
+  /** InvoiceItem.id this line came from. */
+  billLineId: string;
+  productId: string;
+  productName: string;
+  unit?: string;
+  qty: number;
+  /** Value per unit credited, after line and bill discounts, before tax. */
+  unitPrice: number;
+  /** qty × unitPrice (before tax). */
+  amount: number;
+  /** Cost per unit when it was sold, so stock comes back at the same value. */
+  costPricePerKg?: number;
+  /** Where the stock went back to. */
+  godownId?: string;
+  batches?: BatchAllocation[];
 }
 
 export type AdjustmentReason = 'count' | 'wastage' | 'moisture' | 'damage' | 'theft' | 'other' | 'received' | 'leaked' | 'expired' | 'free';

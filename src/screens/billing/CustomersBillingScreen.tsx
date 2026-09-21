@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Phone, FilePlus2, HandCoins, Printer, Pencil, Trash2, Clock } from 'lucide-react';
+import { Plus, Search, Phone, FilePlus2, HandCoins, Printer, Pencil, Trash2, Clock, FileText } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
 import { useStockUI } from '../../components/billing/StockUI';
@@ -10,6 +10,8 @@ import { formatDate } from '../../utils/formatters';
 import { todayISO } from '../../utils/stockFlow';
 import { Customer } from '../../types';
 import { OverLimitBadge, CreditUsageBar } from '../../components/billing/CreditLimit';
+import { CustomerRatesPanel } from '../../components/billing/CustomerRates';
+import { billNetTotal } from '../../utils/salesDocs';
 
 /** Customers the simple way: who they are, what they owe, and their bills. */
 export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd }) => {
@@ -75,6 +77,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => { setOpenId(null); ui.newBill(open.id); }} className={primaryBtn}><FilePlus2 className="w-4 h-4 text-teal-400 dark:text-teal-700" /> New bill</button>
               {open.totalDue > 0 && <button type="button" onClick={() => { setOpenId(null); ui.receive(open.id); }} className={secondaryBtn}><HandCoins className="w-4 h-4 text-teal-700" /> Receive payment</button>}
+              <button type="button" onClick={() => { setOpenId(null); ui.newQuote(open.id); }} className={secondaryBtn}><FileText className="w-4 h-4" /> Quotation</button>
               <button type="button" onClick={() => setPrintRequest({ type: 'statement', customerId: open.id, from: `${today.slice(0, 4)}-01-01`, to: today })} className={secondaryBtn}><Printer className="w-4 h-4" /> Statement</button>
               <button type="button" onClick={() => { setOpenId(null); setEditRequest({ type: 'customer', id: open.id }); }} className={secondaryBtn}><Pencil className="w-4 h-4" /> Edit</button>
             </div>
@@ -87,9 +90,10 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
             <div className="grid grid-cols-3 gap-2 text-sm">
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">{open.totalDue < 0 ? 'Advance paid' : 'Owes you'}</div><div className={`font-mono font-extrabold ${open.totalDue > 0 ? 'text-amber-700 dark:text-amber-300' : open.totalDue < 0 ? 'text-teal-700 dark:text-teal-300' : 'text-[#111827] dark:text-white'}`}>{rs(Math.abs(open.totalDue))}</div></div>
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Bills</div><div className="font-mono font-extrabold text-[#111827] dark:text-white">{openBills.length}</div></div>
-              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Bought so far</div><div className="font-mono font-extrabold text-[#111827] dark:text-white">{rs(openBills.reduce((a, b) => a + b.totalAmount, 0))}</div></div>
+              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Bought so far</div><div className="font-mono font-extrabold text-[#111827] dark:text-white">{rs(openBills.reduce((a, b) => a + billNetTotal(b), 0))}</div></div>
             </div>
             <CreditUsageBar customer={open} />
+            <CustomerRatesPanel customerId={open.id} />
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Bills</h3>
               {openBills.length === 0 ? <p className="text-sm text-[#8E9299]">No bills yet.</p> : (
@@ -97,7 +101,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
                   {openBills.map((b) => (
                     <li key={b.id}><button type="button" onClick={() => { setOpenId(null); ui.openBill(b.id); }} className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-[#FAF9F6] dark:hover:bg-[#162436]">
                       <span className="min-w-0"><span className="font-mono text-xs text-[#8E9299] mr-2">{b.invoiceNumber}</span><span className="text-sm text-[#111827] dark:text-white">{formatDate(b.issueDate)}</span><span className="block text-[11px] text-[#8E9299] truncate">{b.items.map((it) => `${it.productName} × ${it.qty ?? it.kg}`).join(', ')}</span></span>
-                      <span className="text-right shrink-0"><span className="font-mono font-bold text-sm text-[#111827] dark:text-white">{rs(b.totalAmount)}</span><span className={`block text-[11px] font-bold ${b.balanceDue > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{b.balanceDue > 0 ? `${rs(b.balanceDue)} due` : 'Paid'}</span></span>
+                      <span className="text-right shrink-0"><span className="font-mono font-bold text-sm text-[#111827] dark:text-white">{rs(billNetTotal(b))}</span><span className={`block text-[11px] font-bold ${b.balanceDue > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{b.balanceDue > 0 ? `${rs(b.balanceDue)} due` : 'Paid'}</span></span>
                     </button></li>
                   ))}
                 </ul>

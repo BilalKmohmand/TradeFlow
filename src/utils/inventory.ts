@@ -267,6 +267,33 @@ export const restoreBillRows = (
 };
 
 /**
+ * Undo a sales return's stock: take the returned qty back out of the batches (and non-main godown
+ * plain stock) it was put into. Rows never go below zero.
+ */
+export const takeBackReturnRows = (
+  rows: StockBatch[],
+  lines: { productId: string; qty: number; godownId?: string; batches?: BatchAllocation[] }[],
+  godowns: Godown[]
+): StockBatch[] => {
+  const mainId = mainGodownId(godowns);
+  const deltas: Record<string, number> = {};
+  for (const line of lines) {
+    let inBatches = 0;
+    for (const a of line.batches || []) {
+      inBatches = round2(inBatches + a.qty);
+      if (rows.some((r) => r.id === a.batchId)) deltas[a.batchId] = round2((deltas[a.batchId] || 0) - a.qty);
+    }
+    const loose = round2(line.qty - inBatches);
+    if (loose > EPS && line.godownId && line.godownId !== mainId) {
+      const row = rows.find((r) => r.productId === line.productId && r.godownId === line.godownId && !r.batchNo);
+      if (row) deltas[row.id] = round2((deltas[row.id] || 0) - loose);
+    }
+  }
+  if (Object.keys(deltas).length === 0) return rows;
+  return rows.map((r) => (deltas[r.id] ? { ...r, qty: Math.max(0, round2(r.qty + deltas[r.id])) } : r));
+};
+
+/**
  * Keep rows consistent with the totals: drop rows of deleted items, and when an older action took
  * more stock than the main godown's plain stock, take the rest out of the rows (main godown first,
  * earliest expiry first). Returns the same array when nothing changed.

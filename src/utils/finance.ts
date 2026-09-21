@@ -372,7 +372,7 @@ export interface CashMovement {
   direction: 'in' | 'out';
   amount: number;
   description: string;
-  source: 'customer_payment' | 'supplier_payment' | 'expense' | 'manual';
+  source: 'customer_payment' | 'supplier_payment' | 'expense' | 'manual' | 'customer_refund';
   counterparty?: string;
   reference?: string;
   method?: string;
@@ -418,6 +418,10 @@ export const collectCashMovements = (
     if (l.entityType === 'customer' && l.type === 'payment_received' && l.credit > 0) {
       const c = customers.find((x) => x.id === l.entityId);
       out.push({ id: `cm-${l.id}`, date: l.date, direction: 'in', amount: l.credit, description: l.description, source: 'customer_payment', counterparty: c?.name || 'Customer', reference: l.referenceId, method: l.method || methodFromDescription(l.description), link: c ? { type: 'customer', id: c.id } : undefined, sourceId: l.id });
+    }
+    if (l.entityType === 'customer' && l.type === 'refund_paid' && l.debit > 0) {
+      const c = customers.find((x) => x.id === l.entityId);
+      out.push({ id: `cm-${l.id}`, date: l.date, direction: 'out', amount: l.debit, description: l.description, source: 'customer_refund', counterparty: c?.name || 'Customer', reference: l.referenceId, method: l.method || methodFromDescription(l.description), link: c ? { type: 'customer', id: c.id } : undefined, sourceId: l.id });
     }
     if (l.entityType === 'supplier' && l.type === 'payment_made' && l.credit > 0) {
       const s = suppliers.find((x) => x.id === l.entityId);
