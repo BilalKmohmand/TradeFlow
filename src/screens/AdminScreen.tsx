@@ -12,8 +12,6 @@ import {
   KeyRound,
   AlertTriangle,
   Upload,
-  Boxes,
-  ChevronRight,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { UserManagementTab } from '../components/admin/UserManagementTab';
@@ -115,23 +113,6 @@ export const AdminScreen: React.FC = () => {
           </span>
         </div>
       </div>
-
-      {/* Simple billing: the full trading suite lives here, out of the way of daily billing work. */}
-      {(settings.appMode || 'billing') === 'billing' && (
-        <div className="bg-white dark:bg-[#101A26] rounded-[24px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-          <div className="flex-1 min-w-0">
-            <h2 className="font-bold text-[#111827] dark:text-white flex items-center gap-2"><Boxes className="w-4 h-4 text-indigo-600 dark:text-indigo-300" /> Full trading suite</h2>
-            <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-1">Bookings, truck dispatches, purchase orders, fleet and stock-flow reports — on the same data. Come back to simple billing with one tap.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => { updateSettings({ appMode: 'trading' }); setActiveScreen('dashboard'); }}
-            className="inline-flex items-center justify-center gap-2 min-h-11 px-4 py-2.5 rounded-2xl bg-white dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-sm font-semibold text-[#111827] dark:text-white hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] shrink-0"
-          >
-            Open full suite <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Main Tab Navigation Bar */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">

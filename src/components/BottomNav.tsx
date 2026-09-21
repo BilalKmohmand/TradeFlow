@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Home, FileText, Coins, MoreHorizontal, Plus, Users, Layers, Tag, CalendarDays, BookOpen, ShieldCheck, Sun, Moon, Sparkles, Bell, KeyRound, Lock, LogOut, ChevronDown } from 'lucide-react';
+import { Home, FileText, Coins, MoreHorizontal, Plus, Users, Layers, Tag, CalendarDays, BookOpen, ShieldCheck, Sun, Moon, Sparkles, Bell, KeyRound, Lock, LogOut, ChevronDown, ArrowLeftRight } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { useTheme, ThemeMode } from '../context/ThemeContext';
 import { useBillingUI } from './billing/BillingUI';
@@ -18,7 +18,7 @@ type Icon = React.FC<{ className?: string }>;
  */
 export const BottomNav: React.FC = () => {
   const {
-    activeScreen, setActiveScreen, can, isScreenVisible, invoices, currentUser, roles, lockScreen, logout,
+    activeScreen, setActiveScreen, can, isScreenVisible, invoices, currentUser, roles, lockScreen, logout, updateSettings,
     products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders,
   } = useTrading();
   const { themeMode, setThemeMode } = useTheme();
@@ -188,6 +188,11 @@ export const BottomNav: React.FC = () => {
                   <span className="block text-[11px] text-[#6B7280] dark:text-[#94A3B8] truncate">@{currentUser.username} · {roles.find((r) => r.id === currentUser.role)?.name || currentUser.role}</span>
                 </span>
               </div>
+              {(can('admin_screen') || can('system:admin_screen')) && (
+                <button type="button" onClick={() => { setMoreOpen(false); updateSettings({ appMode: 'trading' }); setActiveScreen('dashboard'); }} className={`${rowCls} text-indigo-800 dark:text-indigo-300`}>
+                  <ArrowLeftRight className="w-4.5 h-4.5" /> Full trading suite
+                </button>
+              )}
               <button type="button" onClick={() => { setMoreOpen(false); setAccountOpen(true); }} className={`${rowCls} text-[#111827] dark:text-white`}>
                 <KeyRound className="w-4.5 h-4.5 text-teal-600 dark:text-teal-400" /> My account &amp; password
               </button>
