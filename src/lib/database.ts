@@ -32,6 +32,9 @@ import {
   Scheme,
   SupplierBill,
   SupplierClaim,
+  ApprovalRequest,
+  DeletedRecord,
+  Branch,
 } from '../types';
 import type { Account, JournalEntry } from '../utils/accounting';
 
@@ -84,6 +87,10 @@ export interface AppData {
   supplierClaims: SupplierClaim[] | null;
   /** Finance rows by table; a table missing in the cloud (migration v21 not run) is left out. */
   finance: Partial<Record<FinanceTableName, unknown[]>>;
+  /** Controls (migration v22): approval requests, deleted records bin, branches. null when the table does not exist yet. */
+  approvals?: ApprovalRequest[] | null;
+  deletedRecords?: DeletedRecord[] | null;
+  branches?: Branch[] | null;
 }
 
 export type TableName =
@@ -121,7 +128,10 @@ export type TableName =
   | 'schemes'
   | 'supplier_bills'
   | 'supplier_claims'
-  | FinanceTableName;
+  | FinanceTableName
+  | 'approvals'
+  | 'deleted_records'
+  | 'branches';
 
 export const ALL_TABLES: TableName[] = [
   'customers',
@@ -159,6 +169,9 @@ export const ALL_TABLES: TableName[] = [
   'supplier_bills',
   'supplier_claims',
   ...FINANCE_TABLE_NAMES,
+  'approvals',
+  'deleted_records',
+  'branches',
 ];
 
 // ---------------------------------------------------------------------------
@@ -231,7 +244,7 @@ const stripLegacy = <T,>(rows: T[]): T[] =>
   });
 
 /** Tables that may be missing on a project that has not run the migration yet. */
-const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'bank_statement_lines', 'bank_reconciliations', 'godowns', 'stock_batches', 'stock_transfers', 'journal_entries', 'accounts', 'customer_agreed_rates', 'cheques', 'salesmen', 'areas', 'schemes', 'supplier_bills', 'supplier_claims', ...FINANCE_TABLE_NAMES];
+const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'bank_statement_lines', 'bank_reconciliations', 'godowns', 'stock_batches', 'stock_transfers', 'journal_entries', 'accounts', 'customer_agreed_rates', 'cheques', 'salesmen', 'areas', 'schemes', 'supplier_bills', 'supplier_claims', ...FINANCE_TABLE_NAMES, 'approvals', 'deleted_records', 'branches'];
 
 /** Read a whole table in pages (PostgREST caps a single select at 1000 rows). */
 const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { message: string } | null }> => {
@@ -247,7 +260,7 @@ const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { m
 };
 
 export const loadAllData = async (): Promise<AppData> => {
-  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, cashEntries, settings, quotations, purchaseOrders, returns, adjustments, tasks, invoices, ledger, whatsappMessages, bankStatementLines, bankReconciliations, godowns, stockBatches, stockTransfers, journalEntries, accounts, agreedRates, cheques, salesmen, areas, schemes, supplierBills, supplierClaims] =
+  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, cashEntries, settings, quotations, purchaseOrders, returns, adjustments, tasks, invoices, ledger, whatsappMessages, bankStatementLines, bankReconciliations, godowns, stockBatches, stockTransfers, journalEntries, accounts, agreedRates, cheques, salesmen, areas, schemes, supplierBills, supplierClaims, approvals, deletedRecords, branches] =
     await Promise.all([
       fetchAll('customers'),
       fetchAll('suppliers'),
@@ -283,6 +296,9 @@ export const loadAllData = async (): Promise<AppData> => {
       fetchAll('schemes'),
       fetchAll('supplier_bills'),
       fetchAll('supplier_claims'),
+      fetchAll('approvals'),
+      fetchAll('deleted_records'),
+      fetchAll('branches'),
     ]);
 
   const maybeThrow = (result: { error?: { message: string } | null }, label: TableName) => {
@@ -324,6 +340,9 @@ export const loadAllData = async (): Promise<AppData> => {
   maybeThrow(accounts, 'accounts');
   maybeThrow(agreedRates, 'customer_agreed_rates');
   maybeThrow(cheques, 'cheques');
+  maybeThrow(approvals, 'approvals');
+  maybeThrow(deletedRecords, 'deleted_records');
+  maybeThrow(branches, 'branches');
   maybeThrow(salesmen, 'salesmen');
   maybeThrow(areas, 'areas');
   maybeThrow(schemes, 'schemes');
@@ -379,6 +398,9 @@ export const loadAllData = async (): Promise<AppData> => {
       ? null
       : ((supplierClaims.data || []).map((r: any) => ({ ...r, qty: num(r.qty), rate: num(r.rate), amount: num(r.amount), acceptedAmount: r.acceptedAmount == null ? undefined : num(r.acceptedAmount) })) as SupplierClaim[]),
     finance,
+    approvals: approvals.error ? null : ((approvals.data || []).map((r: any) => ({ ...r, amount: num(r.amount), rules: r.rules || [], reasons: r.reasons || [] })) as ApprovalRequest[]),
+    deletedRecords: deletedRecords.error ? null : ((deletedRecords.data || []) as DeletedRecord[]),
+    branches: branches.error ? null : ((branches.data || []).map((r: any) => ({ ...r, godownIds: r.godownIds || [] })) as Branch[]),
   };
 };
 

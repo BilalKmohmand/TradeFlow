@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
 import { useEscape } from '../hooks/useEscape';
+import { setDeleteReason } from '../context/controlActions';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -12,6 +13,11 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   /** When set, the user must type this exact text before the confirm button enables. */
   requireText?: string;
+  /**
+   * Ask "Why?" (a short reason kept with the copy in Admin → Deleted records). On by default for
+   * deletes (title or button says Delete / Remove / Undo); pass false to hide it.
+   */
+  askReason?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -27,14 +33,30 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   details,
   confirmLabel = 'Delete',
   requireText,
+  askReason,
   onConfirm,
   onCancel,
 }) => {
   const [typed, setTyped] = useState('');
+  const [reason, setReason] = useState('');
+  const showReason = askReason ?? /\b(delete|remove|undo)\b/i.test(`${title} ${confirmLabel}`);
 
   useEffect(() => {
-    if (isOpen) setTyped('');
+    if (isOpen) {
+      setTyped('');
+      setReason('');
+    }
   }, [isOpen]);
+
+  // The reason reaches the deleted-records bin through a slot read by the delete itself.
+  const confirm = () => {
+    setDeleteReason(showReason ? reason.trim() : '');
+    try {
+      onConfirm();
+    } finally {
+      setDeleteReason('');
+    }
+  };
 
   useEscape(isOpen, onCancel);
 
@@ -93,6 +115,24 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               </ul>
             )}
 
+            {showReason && (
+              <div className="mt-4">
+                <label htmlFor="confirm-reason" className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">
+                  Why? <span className="font-normal text-[#6B7280] dark:text-[#94A3B8]">(kept with the deleted copy)</span>
+                </label>
+                <input
+                  id="confirm-reason"
+                  autoFocus={!requireText}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && canConfirm) { e.preventDefault(); confirm(); } }}
+                  placeholder="e.g. entered twice, wrong customer"
+                  maxLength={200}
+                  className="w-full px-3.5 py-2.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-base sm:text-xs text-[#111827] dark:text-white focus:outline-hidden focus:ring-2 focus:ring-rose-500/40"
+                />
+              </div>
+            )}
+
             {requireText && (
               <div className="mt-4">
                 <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">
@@ -118,7 +158,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               <button
                 type="button"
                 disabled={!canConfirm}
-                onClick={onConfirm}
+                onClick={confirm}
                 className="px-5 py-2.5 rounded-2xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all active:scale-95"
               >
                 <Trash2 className="w-3.5 h-3.5" />

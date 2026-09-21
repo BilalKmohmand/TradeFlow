@@ -89,6 +89,9 @@ export const PERMISSION_METAS: PermissionMeta[] = [
   { key: 'system:backup_restore', label: 'Backup & Restore', category: 'System Administration', description: 'Download JSON snapshots or restore previous backups' },
   { key: 'system:purge_data', label: 'Purge Tables & Reset', category: 'System Administration', description: 'Execute table purges or full factory database resets' },
   { key: 'system:company_settings', label: 'Company Profile & Tax', category: 'System Administration', description: 'Change NTN/STRN, sales tax % and header info' },
+
+  // Approvals
+  { key: 'approvals:approve', label: 'Approve / Reject', category: 'Approvals', description: 'Approve or reject bills, supplier payments, stock losses and bill deletes that are waiting for approval (and skip the approval rules)' },
 ];
 
 export const DEFAULT_ROLES: RoleDefinition[] = [
@@ -134,7 +137,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
       'dispatches:view', 'dispatches:create', 'dispatches:edit', 'fleet:manage',
       'finance:view_ledger', 'finance:record_payment', 'finance:view_pnl', 'finance:manage_expenses', 'finance:cashbook',
       'reports:view', 'reports:export',
-      'system:admin_screen', 'system:audit_view',
+      'system:admin_screen', 'system:audit_view', 'approvals:approve',
       'delete_records', 'edit_prices', 'override_credit', 'view_finance', 'manage_fleet', 'manage_expenses', 'admin_screen'
     ],
   },
@@ -318,6 +321,8 @@ export const hasPermission = (
   if (permission === 'admin_screen' && effective.includes('system:admin_screen')) return true;
   if (permission === 'purge_data' && effective.includes('system:purge_data')) return true;
   if (permission === 'manage_users' && effective.includes('users:manage_roles')) return true;
+  // Roles saved before approvals existed: whoever may override a credit limit may approve.
+  if (permission === 'approvals:approve' && effective.includes('override_credit')) return true;
 
   return false;
 };

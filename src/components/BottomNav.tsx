@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Home, FileText, Coins, MoreHorizontal, Plus, Users, Layers, Tag, CalendarDays, BookOpen, ShieldCheck, Sun, Moon, Sparkles, Bell, KeyRound, Lock, LogOut, ChevronDown, ArrowLeftRight } from 'lucide-react';
+import { Gauge, Home, FileText, Coins, MoreHorizontal, Plus, Users, Layers, Tag, CalendarDays, BookOpen, ShieldCheck, Sun, Moon, Sparkles, Bell, KeyRound, Lock, LogOut, ChevronDown, ArrowLeftRight } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { useTheme, ThemeMode } from '../context/ThemeContext';
 import { useBillingUI } from './billing/BillingUI';
@@ -40,6 +40,7 @@ export const BottomNav: React.FC = () => {
   ];
   const tabsRight: { id: ActiveScreen; label: string; icon: Icon }[] = [{ id: 'money', label: 'Money', icon: Coins }];
   const moreScreens: { id: ActiveScreen; label: string; icon: Icon; tint: string }[] = ([
+    ...(can('finance:view_pnl') ? [{ id: 'owner' as ActiveScreen, label: 'Owner dashboard', icon: Gauge, tint: 'text-teal-700 dark:text-teal-300' }] : []),
     { id: 'customers', label: 'Customers', icon: Users, tint: 'text-teal-700 dark:text-teal-300' },
     { id: 'suppliers', label: 'Suppliers', icon: Layers, tint: 'text-indigo-600 dark:text-indigo-300' },
     { id: 'products', label: 'Items & Prices', icon: Tag, tint: 'text-amber-600 dark:text-amber-300' },

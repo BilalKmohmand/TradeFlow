@@ -61,6 +61,8 @@ interface Deps {
   uid: (prefix: string) => string;
   userName?: string;
   today: () => string;
+  /** Next debit note number from the shop's number series (see controlActions.ts); DN-n when absent. */
+  docNumber?: (date: string) => string;
 }
 
 const EPS = 0.0001;
@@ -197,7 +199,7 @@ export const createStockActions = (d: Deps): StockActionsApi => {
     const unit = unitOf(product);
     const stockReturn: StockReturn = {
       id: d.uid('ret'),
-      returnNumber: nextDebitNoteNumber(d.returns),
+      returnNumber: d.docNumber ? d.docNumber(date) : nextDebitNoteNumber(d.returns),
       kind: 'purchase',
       customerId: null,
       supplierId: supplier.id,

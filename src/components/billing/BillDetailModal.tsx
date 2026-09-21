@@ -12,6 +12,7 @@ import { useBillingUI } from './BillingUI';
 import { returnsForBill, returnedQtyByLine, billNetTotal, lineDiscountLabel } from '../../utils/salesDocs';
 import { StockReturn } from '../../types';
 import { ChequeFieldsInput, emptyChequeFields } from './ChequeForms';
+import { isPendingApproval } from '../../context/controlActions';
 
 interface Props {
   invoiceId: string | null;
@@ -20,7 +21,7 @@ interface Props {
 
 /** One bill: its lines, its payments, and the three things you do with it — take money, print, delete. */
 export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
-  const { invoices, customers, payBill, receiveCheque, deleteBill, setPrintRequest, can, currentUser, returns, deleteReturn, salesmen, areas } = useTrading();
+  const { invoices, customers, payBill, receiveCheque, deleteBill, setPrintRequest, can, currentUser, returns, deleteReturn, salesmen, areas, billDeleteNeedsApproval } = useTrading();
   const ui = useBillingUI();
   const inv = invoices.find((i) => i.id === invoiceId) || null;
   const billReturns = inv ? returnsForBill(returns, inv.id) : [];
@@ -73,7 +74,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
               <button type="button" onClick={() => setChallan((c) => ({ ...c, open: !c.open }))} className={secondaryBtn} aria-expanded={challan.open}><Truck className="w-4 h-4 text-indigo-600" /> Delivery challan</button>
               {!allBack && <button type="button" onClick={() => ui.returnItems(inv.id)} className={secondaryBtn}><RotateCcw className="w-4 h-4 text-amber-600" /> Return items</button>}
             </div>
-            {canDelete && billReturns.length === 0 && <button type="button" onClick={() => setConfirmDelete(true)} className={dangerBtn}><Trash2 className="w-4 h-4" /> Delete bill</button>}
+            {(canDelete || billDeleteNeedsApproval) && billReturns.length === 0 && <button type="button" onClick={() => setConfirmDelete(true)} className={dangerBtn}><Trash2 className="w-4 h-4" /> {billDeleteNeedsApproval ? 'Ask to delete' : 'Delete bill'}</button>}
           </div>
         )}
       >
@@ -217,12 +218,14 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
         title={`Delete bill ${inv?.invoiceNumber || ''}?`}
         message="The bill will be removed as if it never happened: stock goes back to the items, the unpaid amount comes off the customer's account, and any money received on it is taken out of the cash book (treat it as refunded)."
         details={inv ? [`Total ${rs(inv.totalAmount)}, paid ${rs(inv.paidAmount)}`, `Customer: ${inv.customerName}`, `Dated ${formatDate(inv.issueDate)} (today is ${formatDate(todayISO())})`] : []}
-        confirmLabel="Delete bill"
+        confirmLabel={billDeleteNeedsApproval ? 'Delete bill (ask manager)' : 'Delete bill'}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={() => {
           if (!inv) return;
-          deleteBill(inv.id);
+          const r = deleteBill(inv.id);
           setConfirmDelete(false);
+          // Not deleted (sent for approval, or refused): stay on the bill and say why.
+          if (!r.success) return setMsg({ kind: isPendingApproval(r) ? 'ok' : 'error', text: r.message });
           onClose();
         }}
       />

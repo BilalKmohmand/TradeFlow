@@ -14,14 +14,20 @@ import { booksLockedFor } from '../../utils/accounting';
 import { BankReconciliationTab } from '../../components/billing/BankReconciliationTab';
 import { ChequesTab } from '../../components/billing/ChequesTab';
 import { unclearedChequeTotals } from '../../utils/cheques';
+import { useBranchScoped } from '../../hooks/useBranchScoped';
+import { BranchFilter } from '../../components/control/BranchFilter';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 export type MoneyTab = 'overview' | 'expenses' | 'cashbook' | 'cheques' | 'bank';
 type Tab = MoneyTab;
 
 /** Where the money is: cash, bank, who owes you, who you owe; plus expense sheets and the cash book. */
 export const MoneyScreen: React.FC = () => {
-  const { ledger, expenses, cashEntries, customers, suppliers, settings, updateSettings, setSelectedCustomerId, setSelectedSupplierId, setActiveScreen, setPrintRequest, deleteExpense, can, cheques, isChequeRecord } = useTrading();
+  const { customers, suppliers, settings, updateSettings, setSelectedCustomerId, setSelectedSupplierId, setActiveScreen, setPrintRequest, deleteExpense, can, cheques, isChequeRecord } = useTrading();
   const canDelete = can('delete_records');
+  // Money of the branch picked in the branch filter (everything while there is one branch).
+  const { ledger, expenses, cashEntries, settings: branchSettings } = useBranchScoped();
+  const [pendingExp, setPendingExp] = useState<{ id: string; label: string } | null>(null);
   // Bank reconciliation is book-keeping: staff without finance access (operators) don't see it.
   const canSeeBank = can('view_finance');
   const ui = useBillingUI();
@@ -35,7 +41,7 @@ export const MoneyScreen: React.FC = () => {
   const [opening, setOpening] = useState({ cash: String(settings.cashOpeningBalance || 0), bank: String(settings.openingBankBalance || 0), date: settings.cashOpeningDate });
 
   const movements = useMemo(() => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), [ledger, expenses, cashEntries, customers, suppliers]);
-  const balances = useMemo(() => accountBalancesOn(movements, settings, today), [movements, settings, today]);
+  const balances = useMemo(() => accountBalancesOn(movements, branchSettings, today), [movements, branchSettings, today]);
   const position = useMemo(() => positionSummary(customers, suppliers, expenses, balances), [customers, suppliers, expenses, balances]);
   // Cheques not yet cleared are still the business's money (or still owed): count them in the total.
   const pdc = useMemo(() => unclearedChequeTotals(cheques), [cheques]);
@@ -63,6 +69,7 @@ export const MoneyScreen: React.FC = () => {
     <div className="space-y-5">
       <PageHeader title="Money" subtitle="How much is in the business, who owes you, and who you owe.">
         {can('finance:record_payment') && <button type="button" onClick={() => ui.salesExtras('receive_many')} className={secondaryBtn}><HandCoins className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Receive from many</button>}
+        <BranchFilter />
         <button type="button" onClick={() => ui.receive()} className={`${primaryBtn} max-sm:flex-1`}><HandCoins className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Receive payment</button>
       </PageHeader>
       <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]" aria-label="Money views">{tabBtn('overview', 'Overview')}{tabBtn('expenses', 'Expense sheets')}{tabBtn('cashbook', 'Cash book')}{tabBtn('cheques', 'Cheques')}{canSeeBank && tabBtn('bank', 'Bank reconciliation')}</div>
@@ -163,7 +170,7 @@ export const MoneyScreen: React.FC = () => {
               <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">{g.label} sheet</h2><span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(g.total)}</span></div>
               <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                 {g.rows.sort((a, b) => (a.date < b.date ? 1 : -1)).map((e) => (
-                  <li key={e.id} className="flex items-center gap-2 pl-4 sm:pl-5 pr-2 py-2 min-h-12 text-sm hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"><span className="text-xs text-[#6B7280] dark:text-[#8E9299] w-20 shrink-0 tabular-nums">{formatDate(e.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]"> • {e.paidVia || 'Cash'}{e.createdBy ? ` • ${e.createdBy}` : ''}</span></span><span className="tabular-nums whitespace-nowrap font-bold">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && !isChequeRecord(e.id) && <RowAction label={`Delete expense ${e.description}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => deleteExpense(e.id)} />}</li>
+                  <li key={e.id} className="flex items-center gap-2 pl-4 sm:pl-5 pr-2 py-2 min-h-12 text-sm hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"><span className="text-xs text-[#6B7280] dark:text-[#8E9299] w-20 shrink-0 tabular-nums">{formatDate(e.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]"> • {e.paidVia || 'Cash'}{e.createdBy ? ` • ${e.createdBy}` : ''}</span></span><span className="tabular-nums whitespace-nowrap font-bold">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && !isChequeRecord(e.id) && <RowAction label={`Delete expense ${e.description}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => setPendingExp({ id: e.id, label: `${e.description} (${rs(e.amount)})` })} />}</li>
                 ))}
               </ul>
             </div>
@@ -187,6 +194,14 @@ export const MoneyScreen: React.FC = () => {
           )}
         </div>
       )}
+      <ConfirmDialog
+        isOpen={Boolean(pendingExp)}
+        title="Delete this expense?"
+        message={`${pendingExp?.label || ''} is removed. A copy is kept in Admin → Deleted records.`}
+        confirmLabel="Delete"
+        onCancel={() => setPendingExp(null)}
+        onConfirm={() => { if (pendingExp) deleteExpense(pendingExp.id); setPendingExp(null); }}
+      />
     </div>
   );
 };

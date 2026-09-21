@@ -44,19 +44,24 @@ export const ChequeFormModal: React.FC<{ isOpen: boolean; onClose: () => void; d
   const [note, setNote] = useState('');
   const [fields, setFields] = useState<ChequeFields>(emptyChequeFields());
   const [error, setError] = useState('');
+  const [sent, setSent] = useState('');
   const openBills = received && party ? billsOnly(invoices).filter((i) => i.customerId === party && i.balanceDue > 0) : [];
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (sent) return;
     const amt = parseFloat(amount) || 0;
     const common = { amount: amt, bankName: fields.bankName, chequeNumber: fields.chequeNumber, chequeDate: fields.chequeDate, date, note: note.trim() || undefined };
     const r = received ? receiveCheque({ ...common, customerId: party, invoiceId: billId || null }) : issueCheque({ ...common, supplierId: party });
     if (!r.success) return setError(r.message);
+    // Approval rule "payment to a supplier above Rs. Y": the cheque waits for a manager.
+    if ('pendingApproval' in r && r.pendingApproval) return setSent(r.message);
     onClose();
   };
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={received ? 'Cheque received' : 'Give a cheque'} subtitle={received ? "Takes it off what the customer owes. Not in the bank until it clears." : 'Takes it off what you owe the supplier. Paid from the bank when it clears.'}>
       <form onSubmit={submit} className="space-y-4">
         {error && <Notice kind="error">{error}</Notice>}
+        {sent && <Notice kind="ok">{sent}</Notice>}
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <label className={labelCls} htmlFor="chq-party">{received ? 'Customer' : 'Supplier'}</label>

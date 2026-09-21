@@ -204,6 +204,8 @@ export interface LedgerEntry {
   method?: string;
   /** Salesman / recovery man who collected this payment (for recovery commission). */
   salesmanId?: string | null;
+  /** Branch (shop) where the money moved; absent = the main branch. */
+  branchId?: string | null;
 }
 
 export interface WhatsAppMessage {
@@ -256,7 +258,7 @@ export interface PriceHistoryEntry {
 export type ReportsTab = 'daily' | 'monthly' | 'flow' | 'pnl' | 'aging' | 'balance' | 'cashbook' | 'analytics';
 export type OpsTab = 'fleet' | 'expenses' | 'alerts' | 'tasks';
 
-export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'billing' | 'reports' | 'ops' | 'admin' | 'bills' | 'daily' | 'money' | 'accounts';
+export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'billing' | 'reports' | 'ops' | 'admin' | 'bills' | 'daily' | 'money' | 'accounts' | 'owner';
 
 /** Payment methods treated as cash in hand; everything else is the bank account. */
 export const CASH_METHODS = ['Cash', 'Cash at Terminal'];
@@ -370,6 +372,10 @@ export interface Invoice {
   areaId?: string | null;
   /** Optional cost / profit centre tag (branch, area, vehicle) for the P&L by cost centre. */
   costCentreId?: string | null;
+  /** Branch (shop) the bill was made in; absent = the main branch. */
+  branchId?: string | null;
+  /** Set when the bill needed a manager's approval before it was posted. */
+  approval?: { requestId: string; requestedBy?: string; approvedBy?: string; approvedAt?: string; note?: string; rules?: string[] };
 }
 
 export type AuditCategory = 'auth' | 'roles' | 'users' | 'visibility' | 'data' | 'system' | 'billing';
@@ -445,6 +451,8 @@ export interface Expense {
   createdBy?: string;
   /** Optional cost / profit centre tag (branch, area, vehicle) for the P&L by cost centre. */
   costCentreId?: string | null;
+  /** Branch (shop) that paid it; absent = the main branch. */
+  branchId?: string | null;
 }
 
 export type TruckStatus = 'available' | 'on_trip' | 'maintenance' | 'inactive';
@@ -498,6 +506,8 @@ export interface AppUser {
   passwordResetExpires?: string | null;
   sessionToken?: string | null;
   createdAt: string;
+  /** Default branch (shop) this user works in; bills, expenses and cash entries they make are recorded there. */
+  branchId?: string | null;
 }
 
 export type GranularPermission =
@@ -550,7 +560,8 @@ export type GranularPermission =
   | 'system:audit_clear'
   | 'system:backup_restore'
   | 'system:purge_data'
-  | 'system:company_settings';
+  | 'system:company_settings'
+  | 'approvals:approve';
 
 export type Permission =
   | GranularPermission
@@ -631,7 +642,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     'dispatches:view', 'dispatches:create', 'dispatches:edit', 'fleet:manage',
     'finance:view_ledger', 'finance:record_payment', 'finance:view_pnl', 'finance:manage_expenses', 'finance:cashbook',
     'reports:view', 'reports:export',
-    'system:admin_screen', 'system:audit_view',
+    'system:admin_screen', 'system:audit_view', 'approvals:approve',
     'delete_records', 'edit_prices', 'override_credit', 'view_finance', 'manage_fleet', 'manage_expenses', 'admin_screen'
   ],
   editor: [
@@ -688,6 +699,8 @@ export interface CashEntry {
   pairId?: string;
   /** Ledger account the other side posts to (e.g. '2900' suspense). Set explicitly; never guessed from bank text. */
   accountCode?: string;
+  /** Branch (shop) of the drawer / account; absent = the main branch. */
+  branchId?: string | null;
 }
 
 export interface AppSettings {
@@ -728,6 +741,12 @@ export interface AppSettings {
   financialYearStart?: string;
   /** Where each field is printed on the shop's bank cheque (see utils/chequePrint.ts). */
   chequeLayout?: ChequeLayout;
+  /** Approval rules (see ApprovalRules): what staff without approval rights must send to a manager. */
+  approvalRules?: ApprovalRules;
+  /** Document number series: prefix, yearly reset and padding per kind of document. */
+  numberSeries?: Partial<Record<DocSeriesKey, DocSeriesConfig>>;
+  /** Last number used per series (key = series, or series:year for yearly series). Never goes down, so a deleted number is never reused. */
+  docCounters?: Record<string, number>;
 }
 
 export type BillPrintSize = 'a4' | 'a5' | 'thermal80';
@@ -1431,4 +1450,97 @@ export interface ChequeLayout {
   figures: ChequeFieldPos;
   /** Print "A/C Payee Only" across the top-left corner. */
   acPayee: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Controls: approvals, deleted records bin, document numbers, branches
+// ---------------------------------------------------------------------------
+/** Limits set by the admin. A rule that is null / false is off. */
+export interface ApprovalRules {
+  /** Bill discount (line + bill discounts, % of the items before discount) above this needs approval. */
+  discountPctAbove?: number | null;
+  /** A bill that takes the customer over their credit limit goes for approval instead of being refused. */
+  creditLimit?: boolean;
+  /** A payment (cash, bank or cheque) to a supplier above this amount needs approval. */
+  supplierPaymentAbove?: number | null;
+  /** Stock taken off (leaked, damaged, expired, count) worth more than this at cost needs approval. */
+  stockLossAbove?: number | null;
+  /** Deleting any bill needs approval. */
+  deleteBills?: boolean;
+}
+
+export type ApprovalKind = 'bill' | 'supplier_payment' | 'supplier_cheque' | 'stock_loss' | 'delete_bill';
+export type ApprovalRuleKey = 'discount' | 'credit_limit' | 'supplier_payment' | 'stock_loss' | 'delete_bill';
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+/** A document waiting for a manager: only its input is stored, so nothing is posted until it is approved. */
+export interface ApprovalRequest {
+  id: string;
+  kind: ApprovalKind;
+  rules: ApprovalRuleKey[];
+  status: ApprovalStatus;
+  /** One line, e.g. "Bill for Ali Traders — Rs. 12,000". */
+  title: string;
+  /** Why it needs approval, e.g. "Discount 15% (limit 10%)". */
+  reasons: string[];
+  amount: number;
+  /** The original input (bill, payment, adjustment or the bill to delete). */
+  payload: any;
+  /** Note from the person asking (e.g. why the discount). */
+  note?: string;
+  requestedBy?: string;
+  requestedById?: string;
+  requestedAt: string;
+  decidedBy?: string;
+  decidedAt?: string;
+  decisionNote?: string;
+  /** What approving created or removed (e.g. the bill number). */
+  resultRef?: string;
+  branchId?: string | null;
+  updatedAt?: string;
+}
+
+export type DeletedKind =
+  | 'bill' | 'customer' | 'supplier' | 'item' | 'expense' | 'cash_entry' | 'return' | 'debit_note' | 'quotation'
+  | 'purchase_order' | 'stock_receipt' | 'stock_adjustment' | 'journal' | 'payment' | 'booking' | 'dispatch' | 'other';
+
+/** A copy of a deleted record: who deleted it, when and why. */
+export interface DeletedRecord {
+  id: string;
+  kind: DeletedKind;
+  recordId: string;
+  /** One line shown in the list, e.g. "Bill INV-12 • Ali Traders • Rs. 5,000". */
+  label: string;
+  data: any;
+  /** Other rows removed with it (for reference only). */
+  related?: any;
+  reason?: string;
+  deletedBy?: string;
+  deletedAt: string;
+  restoredAt?: string | null;
+  restoredBy?: string | null;
+}
+
+export type DocSeriesKey = 'bill' | 'credit_note' | 'debit_note' | 'quotation' | 'receipt' | 'supplier_payment' | 'po';
+
+export interface DocSeriesConfig {
+  prefix: string;
+  /** Start again at 1 every calendar year: INV-2026-0001. */
+  yearly?: boolean;
+  /** Digits (zero padded), 0 = as is. */
+  pad?: number;
+  /** Next number to use when it should jump ahead (e.g. continue from the old desktop app). */
+  startAt?: number | null;
+}
+
+/** A shop / branch. The first one is the main branch; rows with no branch belong to it. */
+export interface Branch {
+  id: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  /** Godowns that belong to this branch. */
+  godownIds?: string[];
+  createdAt: string;
+  updatedAt?: string;
 }

@@ -23,7 +23,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     suppliers,
     recordCustomerPayment,
     recordSupplierPayment,
+    supplierPaymentApproval,
   } = useTrading();
+  // Approval rule "payment to a supplier above Rs. Y": staff without approval rights send it to a manager.
+  const [sentForApproval, setSentForApproval] = useState('');
+  useEffect(() => { if (isOpen) setSentForApproval(''); }, [isOpen]);
 
   useEscape(isOpen, onClose);
   const [selectedId, setSelectedId] = useState<string>(
@@ -33,6 +37,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<string>('Wire Transfer / RTGS');
   const [notes, setNotes] = useState<string>('');
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
+
+  // Each time it opens: the chosen party (the modal stays mounted, so an old customer id could linger
+  // when it is reopened to pay a supplier, and the payment went nowhere).
+  useEffect(() => {
+    if (!isOpen) return;
+    const list: { id: string }[] = entityType === 'customer' ? customers : suppliers;
+    if (preselectedEntityId && list.some((x) => x.id === preselectedEntityId)) setSelectedId(preselectedEntityId);
+    else if (!list.some((x) => x.id === selectedId)) setSelectedId(list[0]?.id || '');
+  }, [isOpen, entityType, preselectedEntityId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!selectedId) {
@@ -62,7 +75,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     if (entityType === 'customer') {
       recordCustomerPayment(selectedId, parsedAmount, `${paymentMethod}${notes ? ` - ${notes}` : ''}`);
     } else {
+      const why = supplierPaymentApproval(parsedAmount);
       recordSupplierPayment(selectedId, parsedAmount, `${paymentMethod}${notes ? ` - ${notes}` : ''}`);
+      if (why) {
+        setSentForApproval(`Sent for approval: ${why}. Nothing is paid or posted until a manager approves it.`);
+        return;
+      }
     }
 
     setIsSuccess(true);
@@ -119,6 +137,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </div>
 
           <form onSubmit={handleSubmit} className="p-7 space-y-4">
+            {sentForApproval && <div role="status" data-testid="payment-sent-for-approval" className="rounded-2xl px-4 py-3 text-sm font-semibold bg-amber-50 text-amber-900 border border-amber-200">{sentForApproval}</div>}
+            {!sentForApproval && entityType === 'supplier' && supplierPaymentApproval(parsedAmount) && <div role="note" className="rounded-2xl px-4 py-3 text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200">Needs a manager’s approval: {supplierPaymentApproval(parsedAmount)}. Saving sends it to Approvals.</div>}
             {/* Entity Select */}
             <div>
               <label className="block text-[10px] font-bold text-[#8E9299] mb-1.5 uppercase tracking-widest">
@@ -166,6 +186,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               </label>
               <div className="relative">
                 <input
+                  aria-label="Payment amount"
                   type="number"
                   step="0.01"
                   min="1"
@@ -222,7 +243,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={isSuccess || parsedAmount <= 0}
+                disabled={isSuccess || parsedAmount <= 0 || Boolean(sentForApproval)}
                 className="px-6 py-2.5 bg-[#111827] hover:bg-black text-white text-xs font-bold rounded-2xl shadow-xs flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 border border-[#111827]"
               >
                 {isSuccess ? (
