@@ -3,63 +3,60 @@
     "file": "m01.jpg",
     "section": "On a phone",
     "title": "Sign in",
-    "caption": "Same keypad on the phone.",
-    "full": false
+    "caption": "Same keypad on the phone."
   },
   {
     "file": "m02.jpg",
     "section": "On a phone",
     "title": "Home",
-    "caption": "The menu is a two-row grid under the header; the big New Bill button is first.",
-    "full": false
+    "caption": "The menu sits in two rows under the header; New Bill is the first big button."
   },
   {
     "file": "m03.jpg",
     "section": "On a phone",
     "title": "New bill",
-    "caption": "Item, Qty, Price and Amount are labelled; the totals box and Save buttons are at the bottom.",
-    "full": false
+    "caption": "Qty, Price and Amount are labelled on each line; totals and Save at the bottom."
   },
   {
     "file": "m04.jpg",
     "section": "On a phone",
-    "title": "Print preview",
-    "caption": "The bill preview on the phone; \"Print / Save PDF\" lets you share it on WhatsApp.",
-    "full": false
+    "title": "Bill preview",
+    "caption": "\"Print / Save PDF\" saves it to send on WhatsApp."
   },
   {
     "file": "m05.jpg",
     "section": "On a phone",
     "title": "Bills",
-    "caption": "Bills list with the amber due amount.",
-    "full": false
+    "caption": "The amber amount is still due."
   },
   {
     "file": "m06.jpg",
     "section": "On a phone",
     "title": "Bill and payment",
-    "caption": "The bill slides up from the bottom with the Receive payment form.",
-    "full": false
+    "caption": "The bill slides up with the Receive payment form."
   },
   {
     "file": "m07.jpg",
     "section": "On a phone",
     "title": "Daily sheet",
-    "caption": "The whole day on the phone.",
-    "full": true
+    "caption": "The whole day, on the phone."
   },
   {
     "file": "m08.jpg",
     "section": "On a phone",
     "title": "Money",
-    "caption": "Cash, bank, who owes you, who you owe.",
-    "full": true
+    "caption": "Cash, bank, who owes you, who you owe."
   },
   {
     "file": "m09.jpg",
     "section": "On a phone",
-    "title": "Customers",
-    "caption": "Customers with what they owe; the bill icon starts a bill.",
-    "full": false
+    "title": "Accounts",
+    "caption": "The books work on the phone too; wide tables scroll sideways inside their card."
+  },
+  {
+    "file": "m10.jpg",
+    "section": "On a phone",
+    "title": "Items",
+    "caption": "The price list with stock."
   }
 ]
