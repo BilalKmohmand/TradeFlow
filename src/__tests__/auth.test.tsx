@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import React from 'react';
 import bcrypt from 'bcryptjs';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { TradingProvider, useTrading } from '../context/TradingContext';
 import { SESSION_KEY } from '../context/authStore';
 import {
@@ -144,8 +144,21 @@ describe('lockout', () => {
   });
 });
 
+describe('built-in Admin / 1234', () => {
+  it('an empty device gets a super admin "Admin" who signs in with 1234, once', async () => {
+    const { result } = render();
+    await waitFor(() => expect(result.current.authStatus).toBe('login'), { timeout: 20_000 });
+    let r: any;
+    await act(async () => { r = await result.current.login('Admin', '1234'); });
+    expect(r.success).toBe(true);
+    expect(r.mustChangePassword).toBe(false);
+    expect(result.current.currentUser?.role).toBe('super_admin');
+  });
+});
+
 describe('sign-up, login, lock and logout through the app state', () => {
   it('an empty device asks to create the owner account; the password is stored hashed', async () => {
+    localStorage.setItem('sarmaya_default_admin_added_v1', '1'); // without the built-in Admin
     const { result } = render();
     expect(result.current.authStatus).toBe('signup');
     expect(result.current.users).toHaveLength(0);
@@ -286,6 +299,7 @@ describe('sign-up, login, lock and logout through the app state', () => {
 
   it('the only owner cannot be deleted or demoted, and canSignIn needs a credential', async () => {
     seedTestUsers();
+    localStorage.setItem('sarmaya_default_admin_added_v1', '1'); // this test needs a single owner
     const { result } = render();
     await signIn(() => result.current);
     const res = result.current.updateUser('user-superadmin', { role: 'manager', roles: ['manager'] });

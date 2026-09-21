@@ -32,6 +32,9 @@ import {
 
 export const SESSION_KEY = 'sarmaya_session_v2';
 /** Old keys from the PIN era, removed on start (the master PIN is read once for the owner's first sign-in). */
+/** Built-in super admin sign-in (username is matched case-insensitively, so "Admin" works). */
+export const DEFAULT_ADMIN = { id: 'user-default-admin', username: 'admin', password: '1234' } as const;
+
 export const LEGACY_KEYS = { ADMIN_PIN: 'sarmaya_admin_pin_v1', SESSION_USER: 'sarmaya_current_user_v1', AUTH_TOKEN: 'sarmaya_jwt_token_v1' };
 const KEEP_SIGNED_IN_DAYS = 30;
 
@@ -192,6 +195,58 @@ export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings,
     }
     if (settings.masterPin) setSettings((prev) => ({ ...prev, masterPin: null }));
   }, [ownerHasPassword, settings.masterPin, setSettings]);
+
+  // Built-in super admin (owner's request): username "Admin", password "1234". Added once, after the
+  // cloud copy has loaded, when no account uses that username. It has a fixed id so devices that each
+  // add it merge into one record. Change the password in My account whenever the shop is ready.
+  useEffect(() => {
+    if (!cloudSettled) return;
+    const FLAG = 'sarmaya_default_admin_added_v1';
+    try {
+      if (localStorage.getItem(FLAG)) return; // once per device: deleting it later keeps it deleted
+    } catch {
+      /* ignore */
+    }
+    const markDone = () => {
+      try {
+        localStorage.setItem(FLAG, '1');
+      } catch {
+        /* ignore */
+      }
+    };
+    if (users.some((u) => u.id === DEFAULT_ADMIN.id || normalizeUsername(u.username) === DEFAULT_ADMIN.username)) return markDone();
+    let cancelled = false;
+    void hashPassword(DEFAULT_ADMIN.password).then((hash) => {
+      if (cancelled) return;
+      const now = nowISO();
+      setUsers((prev) =>
+        prev.some((u) => u.id === DEFAULT_ADMIN.id || normalizeUsername(u.username) === DEFAULT_ADMIN.username)
+          ? prev
+          : [
+              {
+                id: DEFAULT_ADMIN.id,
+                name: 'Admin',
+                username: DEFAULT_ADMIN.username,
+                role: 'super_admin',
+                roles: ['super_admin'],
+                pin: '',
+                ...hash,
+                mustChangePassword: false,
+                active: true,
+                status: 'active',
+                failedAttempts: 0,
+                createdAt: now.split('T')[0],
+                updatedAt: now,
+              } as AppUser,
+              ...prev,
+            ]
+      );
+      markDone();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudSettled, users, setUsers]);
 
   const sessionUser = session ? users.find((u) => u.id === session.userId && isAccountActive(u)) : undefined;
   const anyAccount = users.some(canSignIn);

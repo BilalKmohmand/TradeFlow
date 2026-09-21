@@ -23,7 +23,16 @@ test.describe('Sign-up, sign-in and passwords', () => {
     });
   });
 
+  test('an empty device signs in with the built-in Admin / 1234', async ({ page }) => {
+    await login(page, 'Admin', '1234');
+    await appIsOpen(page);
+    await openUserMenu(page);
+    await expect(page.getByText('Super Admin').first()).toBeVisible();
+  });
+
   test('an empty device creates the owner account, then stays signed in', async ({ page }) => {
+    // Without the built-in Admin, a fresh device asks for the owner account.
+    await page.addInitScript(() => localStorage.setItem('sarmaya_default_admin_added_v1', '1'));
     await page.goto('/');
     const form = page.getByTestId('signup-form');
     await expect(form.getByRole('heading', { name: 'Create your account' })).toBeVisible();
@@ -194,6 +203,7 @@ test.describe('Sign-in screens on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
   test('sign-up, login and lock fit a 390px screen in light and dark mode', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('sarmaya_default_admin_added_v1', '1'));
     await page.goto('/');
     await expect(page.getByTestId('signup-form')).toBeVisible();
     await noOverflow(page, 'sign-up');

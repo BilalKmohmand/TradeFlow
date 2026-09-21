@@ -46,7 +46,8 @@ test.describe('Installable as a mobile app (PWA)', () => {
 
     await context.setOffline(true);
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible({ timeout: 10_000 });
+    // The app shell loads with no network: the sign-in screen (built-in Admin) appears.
+    await expect(page.getByTestId('login-form')).toBeVisible({ timeout: 10_000 });
     await context.setOffline(false);
   });
 });
