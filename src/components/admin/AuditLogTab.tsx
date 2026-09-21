@@ -1,3 +1,4 @@
+import { downloadCsvText } from '../../utils/listTools';
 import React, { useState } from 'react';
 import {
   ScrollText,
@@ -48,15 +49,7 @@ export const AuditLogTab: React.FC = () => {
       `"${(l.details || '').replace(/"/g, '""')}"`,
     ]);
     const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `sarmaya-audit-log-${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadCsvText(`sarmaya-audit-log-${new Date().toISOString().split('T')[0]}.csv`, csvContent);
   };
 
   const getSeverityBadge = (sev: AuditSeverity) => {

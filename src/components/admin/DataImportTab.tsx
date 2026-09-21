@@ -1,3 +1,4 @@
+import { downloadCsvText } from '../../utils/listTools';
 import React, { useRef, useState } from 'react';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -63,14 +64,7 @@ export const DataImportTab: React.FC = () => {
   const downloadTemplate = () => {
     const t = TEMPLATES[kind];
     const csv = `${t.headers.join(',')}\n${t.sample.join(',')}\n`;
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sarmaya-${kind}-template.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadCsvText(`sarmaya-${kind}-template.csv`, csv);
   };
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {

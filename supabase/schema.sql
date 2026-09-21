@@ -40,7 +40,10 @@ CREATE TABLE IF NOT EXISTS products (
   description TEXT,
   unit TEXT,
   "costPricePerKg" NUMERIC,
-  "trackBatches" BOOLEAN
+  "trackBatches" BOOLEAN,
+  "packName" TEXT,
+  "packSize" NUMERIC,
+  code TEXT
 );
 
 CREATE TABLE IF NOT EXISTS bookings (
@@ -193,7 +196,11 @@ CREATE TABLE IF NOT EXISTS settings (
   "openingBankBalance" NUMERIC DEFAULT 0,
   "companyEmail" TEXT,
   "companyLogo" TEXT,
-  "booksLockedUntil" TEXT
+  "booksLockedUntil" TEXT,
+  "allowNegativeStock" BOOLEAN DEFAULT TRUE,
+  "billPrintSize" TEXT,
+  "billFooter" TEXT,
+  "showPrevBalanceOnBill" BOOLEAN DEFAULT FALSE
 );
 
 -- Customer quotations (convert to bookings)

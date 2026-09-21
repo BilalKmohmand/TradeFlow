@@ -1,3 +1,4 @@
+import { downloadCsvText } from '../utils/listTools';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Truck as TruckIcon,
@@ -144,15 +145,7 @@ export const OpsScreen: React.FC<OpsScreenProps> = ({ initialTab = 'alerts' }) =
       csv += `"${e.date}","${EXPENSE_CATEGORIES.find((c) => c.id === e.category)?.label || e.category}","${e.description.replace(/"/g, '""')}","${truck?.number || ''}","${e.paidVia || ''}",${e.amount},"${e.createdBy || ''}"\n`;
     });
     csv += `\nTotal,,,,,${monthTotal}\n`;
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sarmaya-expenses-${expMonth}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadCsvText(`sarmaya-expenses-${expMonth}.csv`, csv);
   };
 
   // ---- Alerts ----

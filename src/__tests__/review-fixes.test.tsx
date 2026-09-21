@@ -12,7 +12,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => <TradingProvide
 
 const setup = async (opts: { trackBatches?: boolean; productCost?: number } = {}) => {
   const set = (k: string, v: unknown) => localStorage.setItem(k, JSON.stringify(v));
-  set('tradeflow_settings_v2', { appMode: 'billing', cashOpeningBalance: 20000, openingBankBalance: 100000, cashOpeningDate: '2026-01-01', taxRatePct: 0 });
+  set('tradeflow_settings_v2', { appMode: 'billing', cashOpeningBalance: 20000, openingBankBalance: 100000, cashOpeningDate: '2026-01-01', taxRatePct: 0, allowNegativeStock: true }); // these tests sell from zero stock
   set('tradeflow_customers_v2', [{ id: 'c1', name: 'Zaman & Co', company: 'Zaman & Co', phone: '0344', email: '', address: '', totalDue: 0, creditLimit: 0, createdAt: '2026-01-01' }]);
   set('tradeflow_suppliers_v2', [{ id: 's1', name: 'Ahmed', company: 'Dalda Foods', phone: '0301', email: '', materialCategory: 'Oil', address: '', totalOwed: 0, createdAt: '2026-01-01' }]);
   set('tradeflow_products_v2', [

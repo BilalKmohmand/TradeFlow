@@ -1,3 +1,4 @@
+import { hasPack, formatPackQty } from '../utils/packUnits';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -137,10 +138,10 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     const items: CommandItem[] = [];
     const act = (id: string, title: string, subtitle: string, icon: CommandItem['icon'], run: () => void, badge?: string, badgeType?: CommandItem['badgeType']) =>
       items.push({ id, category: 'actions', title, subtitle, icon, badge, badgeType, perform: () => { onClose(); run(); } });
-    act('b-new-bill', 'New bill', 'Make a bill for a customer', FilePlus2, () => billingUI.newBill(), 'Bill', 'info');
-    act('b-receive-payment', 'Receive payment', 'Money a customer paid you', HandCoins, () => billingUI.receive(), 'Money in', 'success');
-    act('b-add-expense', 'Add expense', 'Rent, salaries, food, transport…', Receipt, () => billingUI.addExpense(), 'Money out', 'warning');
-    if (can('products:create') || can('stock:adjust')) act('b-receive-stock', 'Receive stock', 'Stock you bought or brought in', PackagePlus, () => stockUI.receiveStock(), 'Stock', 'success');
+    act('b-new-bill', 'New bill', 'Make a bill for a customer • F2', FilePlus2, () => billingUI.newBill(), 'Bill', 'info');
+    act('b-receive-payment', 'Receive payment', 'Money a customer paid you • F3', HandCoins, () => billingUI.receive(), 'Money in', 'success');
+    act('b-add-expense', 'Add expense', 'Rent, salaries, food, transport… • F4', Receipt, () => billingUI.addExpense(), 'Money out', 'warning');
+    if (can('products:create') || can('stock:adjust')) act('b-receive-stock', 'Receive stock', 'Stock you bought or brought in • F6', PackagePlus, () => stockUI.receiveStock(), 'Stock', 'success');
     if (can('stock:adjust')) act('b-adjust-stock', 'Adjust stock', 'Leaked, damaged, expired, count correction, received free', Scale, () => stockUI.adjustStock(), 'Stock');
     if (can('products:create') || can('stock:adjust')) act('b-return-goods', 'Return goods to supplier', 'Send stock back and make a debit note', Undo2, () => stockUI.purchaseReturn(), 'Supplier');
     act('b-pay-supplier', 'Pay a supplier', 'Money you paid a supplier', CreditCard, () => onOpenPayment('supplier'), 'Money out', 'warning');
@@ -170,7 +171,7 @@ export const CommandBar: React.FC<CommandBarProps> = ({
       items.push({ id: `supplier-${s.id}`, category: 'suppliers', title: s.company || s.name, subtitle: `Supplier • ${s.phone || 'no phone'}`, badge: s.totalOwed > 0 ? `You owe ${formatCurrency(s.totalOwed)}` : 'Clear', badgeType: s.totalOwed > 0 ? 'warning' : 'default', icon: Layers, perform: () => { onClose(); onOpenSupplier(s.id); } })
     );
     products.forEach((p) =>
-      items.push({ id: `product-${p.id}`, category: 'products', title: p.name, subtitle: `Item • ${formatCurrency(p.unitPricePerKg)} per ${p.unit || 'pcs'} • tap for stock history`, badge: `Stock ${p.stockKg.toLocaleString()} ${p.unit || 'pcs'}`, badgeType: p.minThresholdKg > 0 && p.stockKg <= p.minThresholdKg ? 'warning' : 'info', icon: Package, perform: () => { onClose(); stockUI.itemHistory(p.id); } })
+      items.push({ id: `product-${p.id}`, category: 'products', title: p.name, subtitle: `Item • ${formatCurrency(p.unitPricePerKg)} per ${p.unit || 'pcs'} • tap for stock history`, badge: `Stock ${hasPack(p) ? formatPackQty(p.stockKg, p, 'short') : `${p.stockKg.toLocaleString()} ${p.unit || 'pcs'}`}`, badgeType: p.stockKg < 0 || (p.minThresholdKg > 0 && p.stockKg <= p.minThresholdKg) ? 'warning' : 'info', icon: Package, perform: () => { onClose(); stockUI.itemHistory(p.id); } })
     );
     return items;
   };
@@ -487,7 +488,7 @@ export const CommandBar: React.FC<CommandBarProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-black/60 backdrop-blur-xs">
+      <div data-command-bar className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-black/60 backdrop-blur-xs">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

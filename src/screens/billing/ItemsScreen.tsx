@@ -10,6 +10,7 @@ import { todayISO } from '../../utils/stockFlow';
 import { ItemStockDetails, ReceiveStockModal, GodownsModal, TransferStockModal } from '../../components/billing/InventoryUI';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Product } from '../../types';
+import { hasPack, formatPackQty } from '../../utils/packUnits';
 
 /** Your price list: every item with its fixed price and how many are left. */
 export const ItemsScreen: React.FC = () => {
@@ -26,7 +27,7 @@ export const ItemsScreen: React.FC = () => {
   const closeStock = () => setStockUI((s) => ({ ...s, kind: null }));
   const canStock = can('products:create') || can('stock:adjust');
   const canGodowns = can('stock:adjust');
-  const rows = useMemo(() => products.filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => a.name.localeCompare(b.name)), [products, query]);
+  const rows = useMemo(() => products.filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase()) || (p.code || '').toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => a.name.localeCompare(b.name)), [products, query]);
   const canDelete = can('delete_records');
   const today = todayISO();
   const isLow = (p: Product) => p.minThresholdKg > 0 && p.stockKg <= p.minThresholdKg;
@@ -77,12 +78,12 @@ export const ItemsScreen: React.FC = () => {
                   <div className="flex items-start gap-3">
                     <button type="button" onClick={() => stock.itemHistory(p.id)} className="flex-1 min-w-0 text-left" aria-label={`History of ${p.name}`} title="Stock history">
                       <span className="flex items-center gap-1.5 font-semibold text-sm text-[#111827] dark:text-white"><span className="truncate">{p.name}</span><History className="w-3.5 h-3.5 shrink-0 text-[#9CA3AF]" /></span>
-                      <span className="block text-[11px] text-[#6B7280] dark:text-[#8E9299]">per {p.unit || 'pcs'}{p.costPricePerKg ? ` • cost ${rs(p.costPricePerKg)}` : ''}{p.trackBatches ? ' • batch & expiry' : ''}</span>
+                      <span className="block text-[11px] text-[#6B7280] dark:text-[#8E9299]">{p.code ? `${p.code} • ` : ''}per {p.unit || 'pcs'}{hasPack(p) ? ` • 1 ${p.packName} = ${p.packSize} ${p.unit || 'pcs'}` : ''}{p.costPricePerKg ? ` • cost ${rs(p.costPricePerKg)}` : ''}{p.trackBatches ? ' • batch & expiry' : ''}</span>
                     </button>
                     <div className={`${moneyCls} font-bold text-sm text-[#111827] dark:text-white shrink-0`}>{rs(p.unitPricePerKg)}</div>
                   </div>
                   <div className="mt-2 flex items-center gap-2 flex-wrap text-xs">
-                    <StockChip id={p.id} qty={p.stockKg} unit={p.unit || 'pcs'} low={low} />
+                    <StockChip product={p} low={low} />
                     {expired > 0 && <span className="font-semibold text-rose-700 dark:text-rose-300">{expired.toLocaleString()} expired, can't be sold</span>}
                     <span className="text-[#6B7280] dark:text-[#94A3B8]">worth <span className={`${moneyCls} font-semibold text-[#374151] dark:text-[#CBD5E1]`}>{rs(valueOf(p))}</span></span>
                   </div>
@@ -113,12 +114,12 @@ export const ItemsScreen: React.FC = () => {
                     <tr key={p.id} className="hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors align-top">
                       <td className="px-4 py-3">
                         <button type="button" onClick={() => stock.itemHistory(p.id)} className="font-semibold text-left text-[#111827] dark:text-white hover:underline inline-flex items-center gap-1.5" aria-label={`History of ${p.name}`} title="Stock history">{p.name}<History className="w-3.5 h-3.5 text-[#9CA3AF]" /></button>
-                        <div className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">per {p.unit || 'pcs'}{p.costPricePerKg ? ` • cost ${rs(p.costPricePerKg)}` : ''}{p.trackBatches ? ' • batch & expiry' : ''}</div>
+                        <div className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">{p.code ? `${p.code} • ` : ''}per {p.unit || 'pcs'}{hasPack(p) ? ` • 1 ${p.packName} = ${p.packSize} ${p.unit || 'pcs'}` : ''}{p.costPricePerKg ? ` • cost ${rs(p.costPricePerKg)}` : ''}{p.trackBatches ? ' • batch & expiry' : ''}</div>
                         <ItemStockDetails product={p} />
                       </td>
                       <td className={`px-4 py-3 text-right font-bold text-[#111827] dark:text-white ${moneyCls}`}>{rs(p.unitPricePerKg)}</td>
                       <td className="px-4 py-3 text-right">
-                        <StockChip id={p.id} qty={p.stockKg} unit={p.unit || 'pcs'} low={low} />
+                        <StockChip product={p} low={low} />
                         {expired > 0 && <span className="block mt-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">{expired.toLocaleString()} expired, can't be sold</span>}
                       </td>
                       <td className={`px-4 py-3 text-right text-[#374151] dark:text-[#CBD5E1] ${moneyCls}`}>{rs(valueOf(p))}</td>
@@ -156,12 +157,25 @@ export const ItemsScreen: React.FC = () => {
   );
 };
 
-/** Stock figure; a clear red "Low" chip when at or under the re-order level. */
-const StockChip: React.FC<{ id: string; qty: number; unit: string; low: boolean }> = ({ id, qty, unit, low }) =>
-  low ? (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs font-bold whitespace-nowrap tabular-nums">
-      <AlertTriangle className="w-3 h-3" /> <span data-testid={`item-stock-${id}`}>{qty.toLocaleString()} {unit}</span> <span className="uppercase tracking-wide text-[10px]">low</span>
+/**
+ * Stock figure (in packs when the item has a pack size, e.g. "6 ctn + 4 tins"); a clear red "Low" chip at or
+ * under the re-order level, red with "oversold" when below zero.
+ */
+const StockChip: React.FC<{ product: Product; low: boolean }> = ({ product: p, low }) => {
+  const unit = p.unit || 'pcs';
+  const neg = p.stockKg < 0;
+  const text = hasPack(p) ? formatPackQty(p.stockKg, p, 'short') : `${p.stockKg.toLocaleString()} ${unit}`;
+  return (
+    <span data-testid={`stock-${p.id}`} data-negative={neg ? 'true' : undefined} className="inline-flex flex-col items-start md:items-end gap-0.5">
+      {low || neg ? (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs font-bold whitespace-nowrap tabular-nums">
+          <AlertTriangle className="w-3 h-3" /> <span data-testid={`item-stock-${p.id}`}>{text}</span> <span className="uppercase tracking-wide text-[10px]">{neg ? 'oversold' : 'low'}</span>
+        </span>
+      ) : (
+        <span data-testid={`item-stock-${p.id}`} className="text-sm font-semibold text-[#374151] dark:text-[#CBD5E1] whitespace-nowrap tabular-nums">{text}</span>
+      )}
+      {hasPack(p) && Math.abs(p.stockKg) >= (p.packSize || 0) && <span className="text-[11px] text-[#6B7280] dark:text-[#8E9299] whitespace-nowrap tabular-nums">{p.stockKg.toLocaleString()} {unit} in all</span>}
+      {neg && <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-300">oversold — below zero</span>}
     </span>
-  ) : (
-    <span data-testid={`item-stock-${id}`} className="text-sm font-semibold text-[#374151] dark:text-[#CBD5E1] whitespace-nowrap tabular-nums">{qty.toLocaleString()} {unit}</span>
   );
+};

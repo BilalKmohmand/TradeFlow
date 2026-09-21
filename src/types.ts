@@ -42,6 +42,14 @@ export interface Product {
   unit?: string;
   /** Stock is received in batches with an expiry date; bills take the earliest-expiring batch first. */
   trackBatches?: boolean;
+  /**
+   * Optional second (bigger) unit, e.g. base unit "tin" with packName "carton" and packSize 6
+   * (1 carton = 6 tins). Stock, prices and bill quantities are always kept in the base unit.
+   */
+  packName?: string;
+  packSize?: number;
+  /** The shop's own item code (typed on New Bill to find the item quickly). Optional. */
+  code?: string;
 }
 
 export type BookingStatus = 'active' | 'completed' | 'cancelled';
@@ -264,6 +272,11 @@ export interface InvoiceItem {
   discountAmount?: number;
   /** The unit price came from the customer's agreed rate. */
   customerRate?: boolean;
+  /** The item's pack unit at the time of the bill (qty stays in the base unit; used to print "2 ctn + 3 tins"). */
+  packName?: string;
+  packSize?: number;
+  /** The line was typed in packs at this price per pack. */
+  packPrice?: number;
 }
 
 export interface InvoicePaymentRecord {
@@ -660,7 +673,22 @@ export interface AppSettings {
   openingBankBalance?: number;
   /** Accounts: manual journal entries dated on or before this date are refused (period lock). */
   booksLockedUntil?: string;
+  /** Bills may take an item's stock below zero (with a warning). Off = a bill short of stock is refused. */
+  allowNegativeStock?: boolean;
+  /** Paper for bills and receipts. Default A4. */
+  billPrintSize?: BillPrintSize;
+  /** Footer / terms printed at the bottom of every bill and receipt. */
+  billFooter?: string;
+  /** Print the customer's balance before this bill and the total owed after it. */
+  showPrevBalanceOnBill?: boolean;
 }
+
+export type BillPrintSize = 'a4' | 'a5' | 'thermal80';
+export const BILL_PRINT_SIZES: { id: BillPrintSize; label: string }[] = [
+  { id: 'a4', label: 'A4 (full page)' },
+  { id: 'a5', label: 'A5 (half page)' },
+  { id: 'thermal80', label: 'Thermal 80 mm (receipt printer)' },
+];
 
 export const DEFAULT_SETTINGS: AppSettings = {
   id: 'default',

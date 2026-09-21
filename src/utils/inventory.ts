@@ -228,7 +228,25 @@ export const planBillStock = (
   return { ok: true, lines, deltas };
 };
 
-export const applyDeltas = (rows: StockBatch[], deltas: Record<string, number>): StockBatch[] =>
+/**
+ * Items a bill needs more of than there is in stock (all godowns together). Used when the shop has
+ * NOT turned on "Allow bills when stock is short": such a bill is refused.
+ */
+export const shortStockLines = (
+  items: { productId: string; qty: number }[],
+  products: Product[]
+): { productId: string; name: string; need: number; have: number; product: Product }[] => {
+  const need = new Map<string, number>();
+  for (const it of items) if (it.productId && it.qty > 0) need.set(it.productId, round2((need.get(it.productId) || 0) + it.qty));
+  const out: { productId: string; name: string; need: number; have: number; product: Product }[] = [];
+  need.forEach((qty, id) => {
+    const p = products.find((x) => x.id === id);
+    if (p && qty > round2(p.stockKg) + EPS) out.push({ productId: id, name: p.name, need: qty, have: round2(p.stockKg), product: p });
+  });
+  return out;
+};
+
+export const applyDeltas =(rows: StockBatch[], deltas: Record<string, number>): StockBatch[] =>
   Object.keys(deltas).length === 0 ? rows : rows.map((r) => (deltas[r.id] ? { ...r, qty: round2(r.qty + deltas[r.id]) } : r));
 
 /** Add plain stock to a godown other than the main one (main-godown plain stock is implied). */

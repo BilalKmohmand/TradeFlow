@@ -1,3 +1,4 @@
+import { CsvButton } from '../../components/billing/CsvButton';
 import React, { useMemo, useState } from 'react';
 import { Plus, Search, Phone, PackagePlus, HandCoins, Printer, Pencil, Trash2, Undo2, Clock, Layers } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -54,6 +55,7 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
       <PageHeader title="Suppliers" subtitle={<>{suppliers.length} supplier{suppliers.length === 1 ? '' : 's'}{owed > 0 ? <> • you owe <span className={moneyCls}>{rs(owed)}</span></> : ''}</>}>
         {canStock && <button type="button" onClick={() => stock.purchaseReturn()} className={secondaryBtn}><Undo2 className="w-4 h-4 text-rose-600 dark:text-rose-400" /> Return goods</button>}
         <button type="button" onClick={() => stock.aging('suppliers')} className={secondaryBtn}><Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" /> How long owed</button>
+        <CsvButton fileName={`suppliers-${todayISO()}.csv`} table={() => ({ headers: ['Code', 'Name', 'Company', 'Phone', 'Address', 'You owe (Rs.)'], rows: rows.map((x) => [x.code || '', x.name, x.company, x.phone, x.address, x.totalOwed]) })} label="Download suppliers CSV" />
         <button type="button" onClick={onAdd} className={`${primaryBtn} max-sm:flex-1`}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add supplier</button>
       </PageHeader>
       <div role="tablist" aria-label="Suppliers views" className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">

@@ -1,3 +1,4 @@
+import { downloadCsvText } from '../utils/listTools';
 import React, { useMemo, useState } from 'react';
 import {
   ArrowDownLeft,
@@ -96,16 +97,8 @@ export const StockFlowPanel: React.FC<StockFlowPanelProps> = ({ onReceiveStock, 
       })
     );
     csv += `\nTotals\nIncoming (kg),${totals.inKg}\nIncoming value (Rs.),${totals.inAmount}\nOutgoing (kg),${totals.outKg}\nOutgoing value (Rs.),${totals.outAmount}\nNet (kg),${totals.inKg - totals.outKg}\n`;
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
     const fileName = `sarmaya-stock-flow-${from}-to-${to}.csv`;
-    link.href = url;
-    link.setAttribute('download', fileName);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadCsvText(fileName, csv);
     onDownload?.(fileName);
   };
 

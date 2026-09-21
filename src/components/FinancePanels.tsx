@@ -1,3 +1,4 @@
+import { downloadCsvText } from '../utils/listTools';
 import React, { useMemo, useState } from 'react';
 import { TrendingUp, TrendingDown, AlertTriangle, Download, Receipt, Scale, Landmark, Wallet, ChevronDown, ChevronRight, Plus, Trash2, ArrowDownLeft, ArrowUpRight, Settings2, Printer } from 'lucide-react';
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell } from 'recharts';
@@ -12,15 +13,7 @@ import { EXPENSE_CATEGORIES, ExpenseCategory } from '../types';
 const card = 'bg-white dark:bg-[#101A26] rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs';
 
 const downloadCsv = (name: string, csv: string, onDone?: (f: string) => void) => {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadCsvText(name, csv);
   onDone?.(name);
 };
 

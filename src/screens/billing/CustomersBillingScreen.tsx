@@ -1,3 +1,4 @@
+import { CsvButton } from '../../components/billing/CsvButton';
 import React, { useMemo, useState } from 'react';
 import { Plus, Search, Phone, FilePlus2, HandCoins, Printer, Pencil, Trash2, Clock, FileText, Users } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -39,6 +40,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
     <div className="space-y-5">
       <PageHeader title="Customers" subtitle={<>{customers.length} customer{customers.length === 1 ? '' : 's'}{owed > 0 ? <> • they owe you <span className={moneyCls}>{rs(owed)}</span></> : ''}</>}>
         <button type="button" onClick={() => stockUI.aging('customers')} className={secondaryBtn}><Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" /> Who owes for how long</button>
+        <CsvButton fileName={`customers-${today}.csv`} table={() => ({ headers: ['Code', 'Name', 'Company', 'Phone', 'Address', 'Balance (Rs.)', 'Credit limit (Rs.)'], rows: rows.map((c) => [c.code || '', c.name, c.company, c.phone, c.address, c.totalDue, c.creditLimit || '']) })} label="Download customers CSV" />
         <button type="button" onClick={onAdd} className={`${primaryBtn} max-sm:flex-1`}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add customer</button>
       </PageHeader>
       <div className="relative">

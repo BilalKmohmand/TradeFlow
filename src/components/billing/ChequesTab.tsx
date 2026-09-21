@@ -1,3 +1,5 @@
+import { CsvButton } from './CsvButton';
+import { chequesCsv } from '../../utils/csvReports';
 import React, { useMemo, useState } from 'react';
 import { Printer, Plus, Search, Send } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -56,7 +58,8 @@ export const ChequesTab: React.FC = () => {
       <div className="flex flex-wrap gap-2">
         {canRecord && <button type="button" onClick={() => setForm({ direction: 'received', n: Date.now() })} className={primaryBtn}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Cheque received</button>}
         {canRecord && <button type="button" onClick={() => setForm({ direction: 'issued', n: Date.now() })} className={secondaryBtn}><Send className="w-4 h-4 text-sky-600" /> Give a cheque</button>}
-        <button type="button" onClick={() => setPrintRequest({ type: 'cheque_register', view })} className={`${secondaryBtn} sm:ml-auto`}><Printer className="w-4 h-4" /> Print register</button>
+        <span className="sm:ml-auto"><CsvButton fileName={`cheques-${view}-${today}.csv`} table={() => chequesCsv(rows)} label="Download cheques CSV" /></span>
+        <button type="button" onClick={() => setPrintRequest({ type: 'cheque_register', view })} className={secondaryBtn}><Printer className="w-4 h-4" /> Print register</button>
       </div>
 
       {msg && <Notice kind="ok">{msg}</Notice>}

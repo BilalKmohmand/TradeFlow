@@ -1,3 +1,5 @@
+import { CsvButton } from '../../components/billing/CsvButton';
+import { dailySheetCsv } from '../../utils/csvReports';
 import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Printer, Receipt, HandCoins, ArrowLeftRight, FilePlus2, Trash2 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -36,6 +38,7 @@ export const DailySheetScreen: React.FC = () => {
   return (
     <div className="space-y-5">
       <PageHeader title="Daily Sheet" subtitle={`Everything that happened on ${formatDate(date)}${isToday ? ' (today)' : ''}.`}>
+        <CsvButton fileName={`daily-sheet-${date}.csv`} table={() => dailySheetCsv(sheet)} label="Download daily sheet CSV" />
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
           <button type="button" onClick={() => setDate(shiftDate(date, -1))} aria-label="Previous day" className={`${secondaryBtn} px-2.5 max-sm:min-w-11`}><ChevronLeft className="w-4 h-4" /></button>
           <input type="date" value={date} max={todayISO()} onChange={(e) => e.target.value && setDate(e.target.value > todayISO() ? todayISO() : e.target.value)} className={`${inputCls} flex-1 sm:flex-none sm:w-auto min-w-0`} aria-label="Sheet date" />
