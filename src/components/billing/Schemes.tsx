@@ -6,6 +6,7 @@ import { Scheme, SchemeKind, SchemeSlab } from '../../types';
 import { schemeRule } from '../../utils/salesExtras';
 import { formatDate } from '../../utils/formatters';
 import { todayISO } from '../../utils/stockFlow';
+import { ConfirmDialog } from '../ConfirmDialog';
 
 const KINDS: { id: SchemeKind; label: string; help: string }[] = [
   { id: 'free_every', label: 'Buy N get M free', help: 'Every N bought gives M free (buy 10 get 1: 20 bought → 2 free).' },
@@ -56,6 +57,7 @@ export const SchemesModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
   const [form, setForm] = useState<Form | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [custPick, setCustPick] = useState('');
+  const [pending, setPending] = useState<Scheme | null>(null);
   const today = todayISO();
   const sortedProducts = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name)), [products]);
   const sortedCustomers = useMemo(() => [...customers].sort((a, b) => a.name.localeCompare(b.name)), [customers]);
@@ -114,7 +116,7 @@ export const SchemesModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
                         </div>
                       </div>
                       {canEdit && <RowAction label={`Edit scheme ${s.name}`} icon={<Pencil className="w-4 h-4" />} onClick={() => { setMsg(null); setForm(toForm(s)); }} />}
-                      {canEdit && <RowAction label={`Delete scheme ${s.name}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => { const r = deleteScheme(s.id); setMsg({ kind: r.success ? 'ok' : 'error', text: r.message }); }} />}
+                      {canEdit && <RowAction label={`Delete scheme ${s.name}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => setPending(s)} />}
                     </li>
                   );
                 })}
@@ -239,6 +241,20 @@ export const SchemesModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
           </form>
         )}
       </div>
+      <ConfirmDialog
+        isOpen={Boolean(pending)}
+        title={`Delete scheme ${pending?.name || ''}?`}
+        message="New bills stop adding it. Bills already made keep their free lines."
+        confirmLabel="Delete scheme"
+        onCancel={() => setPending(null)}
+        onConfirm={() => {
+          if (pending) {
+            const r = deleteScheme(pending.id);
+            setMsg({ kind: r.success ? 'ok' : 'error', text: r.message });
+          }
+          setPending(null);
+        }}
+      />
     </Modal>
   );
 };

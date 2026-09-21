@@ -48,11 +48,12 @@ test('staff: a big supplier payment is sent for approval, nothing is paid', asyn
   await signIn(page, OPERATOR);
   await goTo(page, 'Suppliers');
   await page.getByRole('button', { name: 'Pay Dalda Foods' }).click();
-  await page.getByLabel('Payment amount').fill('150000');
-  await expect(page.getByText(/Needs a manager’s approval: Supplier payment of Rs\. 150,000/)).toBeVisible();
-  await page.getByRole('button', { name: /Record Payment/ }).click();
-  await expect(page.getByTestId('payment-sent-for-approval')).toContainText('Sent for approval');
-  await page.getByRole('button', { name: 'Cancel' }).click();
+  const pay = page.getByRole('dialog', { name: 'Pay supplier' });
+  await pay.getByLabel('Amount (Rs.)').fill('150000');
+  await expect(pay.getByText(/Needs a manager’s approval: Supplier payment of Rs\. 150,000/)).toBeVisible();
+  await pay.getByRole('button', { name: 'Pay', exact: true }).click();
+  await expect(pay.getByTestId('payment-sent-for-approval')).toContainText('Sent for approval');
+  await pay.getByRole('button', { name: 'Close', exact: true }).last().click();
   // Still owed in full; the request shows on Home for the person who sent it.
   await expect(page.getByText('Rs. 240,000').first()).toBeVisible();
   await goTo(page, 'Home');

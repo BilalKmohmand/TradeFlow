@@ -1502,7 +1502,9 @@ export interface ApprovalRequest {
 
 export type DeletedKind =
   | 'bill' | 'customer' | 'supplier' | 'item' | 'expense' | 'cash_entry' | 'return' | 'debit_note' | 'quotation'
-  | 'purchase_order' | 'stock_receipt' | 'stock_adjustment' | 'journal' | 'payment' | 'booking' | 'dispatch' | 'other';
+  | 'purchase_order' | 'stock_receipt' | 'stock_adjustment' | 'journal' | 'payment' | 'booking' | 'dispatch'
+  | 'supplier_bill' | 'supplier_claim' | 'fixed_asset' | 'staff' | 'staff_advance' | 'cost_centre' | 'salesman' | 'area' | 'scheme' | 'godown'
+  | 'other';
 
 /** A copy of a deleted record: who deleted it, when and why. */
 export interface DeletedRecord {

@@ -220,7 +220,7 @@ export const BarcodeLabelsModal: React.FC<{ isOpen: boolean; onClose: () => void
                   <div className="text-sm font-semibold text-[#111827] dark:text-white truncate">{p.name}</div>
                   <div className="text-[11px] text-[#8E9299] font-mono truncate">{codeOf(p) || 'no barcode'}{p.brand ? <span className="font-sans"> • {p.brand}</span> : ''}</div>
                 </div>
-                <input aria-label={`Labels for ${p.name}`} type="number" min="0" inputMode="numeric" value={counts[p.id] || ''} onChange={(e) => setCounts((c) => ({ ...c, [p.id]: e.target.value }))} placeholder="0" className={`${inputCls} w-20 tabular-nums text-right`} />
+                <input aria-label={`Labels for ${p.name}`} type="number" min="0" inputMode="numeric" value={counts[p.id] || ''} onChange={(e) => setCounts((c) => ({ ...c, [p.id]: e.target.value }))} placeholder="0" className={`${inputCls} !w-20 shrink-0 tabular-nums text-right`} />
               </li>
             ))}
             {list.length === 0 && <li className="px-3 py-6 text-center text-sm text-[#8E9299]">No items match.</li>}

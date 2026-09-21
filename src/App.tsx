@@ -186,7 +186,7 @@ function MainApp() {
               />
             )}
 
-            {activeScreen === 'suppliers' && isBilling && <SuppliersBillingScreen onAdd={() => setIsSupplierModalOpen(true)} onPay={handleOpenSupplierPayment} />}
+            {activeScreen === 'suppliers' && isBilling && <SuppliersBillingScreen onAdd={() => setIsSupplierModalOpen(true)} />}
             {activeScreen === 'suppliers' && !isBilling && (
               <SuppliersScreen
                 onSelectSupplier={(sId) => setSelectedSupplierId(sId)}
@@ -231,8 +231,8 @@ function MainApp() {
         onClose={() => setIsCommandBarOpen(false)}
         onOpenDispatch={handleOpenDispatch}
         onOpenBooking={() => setIsBookingModalOpen(true)}
-        onOpenCustomer={(cId) => setSelectedCustomerId(cId)}
-        onOpenSupplier={(sId) => setSelectedSupplierId(sId)}
+        onOpenCustomer={(cId) => { setSelectedCustomerId(cId); if (isBilling) setActiveScreen('customers'); }}
+        onOpenSupplier={(sId) => { setSelectedSupplierId(sId); if (isBilling) setActiveScreen('suppliers'); }}
         onOpenPayment={(type, id) => {
           if (type === 'customer' && id) handleOpenCustomerPayment(id);
           else if (type === 'supplier' && id) handleOpenSupplierPayment(id);
@@ -281,6 +281,8 @@ function MainApp() {
         editBookingId={editRequest?.type === 'booking' ? editRequest.id : null}
       />
 
+      {/* Trading-suite detail windows. Simple billing opens the customer / supplier on its own screens instead. */}
+      {!isBilling && <>
       {/* Customer Detail & Ledger Modal */}
       <CustomerDetailModal
         customerId={selectedCustomerId}
@@ -311,6 +313,7 @@ function MainApp() {
         onClose={() => openBooking(null)}
         onOpenDispatchForBooking={handleOpenDispatch}
       />
+      </>}
 
       {/* Receive Stock (incoming purchase) */}
       <ReceiveStockModal

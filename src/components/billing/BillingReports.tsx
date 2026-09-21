@@ -78,7 +78,7 @@ export const AgingModal: React.FC<{ isOpen: boolean; onClose: () => void; side: 
           </div>
           <div className="ml-auto">
             <label className={labelCls} htmlFor="aging-asof">As of</label>
-            <input id="aging-asof" type="date" value={asOf} max={todayISO()} onChange={(e) => e.target.value && setAsOf(e.target.value)} className={`${inputCls} w-auto`} />
+            <input id="aging-asof" type="date" value={asOf} max={todayISO()} onChange={(e) => e.target.value && setAsOf(e.target.value)} className={`${inputCls} !w-auto`} />
           </div>
         </div>
         <AgingTable rows={rows} empty={side === 'customers' ? 'Nobody owes you anything.' : 'You owe no supplier anything.'} />
@@ -194,8 +194,8 @@ export const ProfitView: React.FC = () => {
   return (
     <div className="space-y-4" data-testid="profit-report">
       <div className="flex flex-wrap items-end gap-3">
-        <div><label className={labelCls} htmlFor="pf-from">From</label><input id="pf-from" type="date" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} className={`${inputCls} w-auto`} /></div>
-        <div><label className={labelCls} htmlFor="pf-to">To</label><input id="pf-to" type="date" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} className={`${inputCls} w-auto`} /></div>
+        <div><label className={labelCls} htmlFor="pf-from">From</label><input id="pf-from" type="date" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} className={`${inputCls} !w-auto`} /></div>
+        <div><label className={labelCls} htmlFor="pf-to">To</label><input id="pf-to" type="date" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} className={`${inputCls} !w-auto`} /></div>
         <div className="flex gap-2 ml-auto">
           <button type="button" onClick={exportCsv} className={secondaryBtn}><Download className="w-4 h-4" /> CSV</button>
           <button type="button" onClick={() => setPrintRequest({ type: 'billing_report', report: 'profit', from, to })} className={secondaryBtn}><Printer className="w-4 h-4" /> Print</button>

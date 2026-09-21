@@ -94,6 +94,8 @@ interface Deps {
   isCloudSyncReady: boolean;
   syncToSupabase: (table: string, rows: unknown[]) => Promise<void>;
   removeRemote: (table: any, ids: string[]) => void;
+  /** Branch of the signed-in user for money rows (nothing while the shop has one branch). */
+  branchStamp?: () => { branchId?: string };
 }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -321,6 +323,7 @@ export const useSalesExtrasStore = (d: Deps) => {
         credit: r.amount,
         balanceAfter: round2(c.totalDue - r.amount),
         ...(input.salesmanId ? { salesmanId: input.salesmanId } : {}),
+        ...(d.branchStamp ? d.branchStamp() : {}),
       };
     });
     const byCustomer = new Map(rows.map((r) => [r.customerId, r.amount]));

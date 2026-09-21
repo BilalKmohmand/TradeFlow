@@ -164,7 +164,7 @@ export const BranchesForm: React.FC = () => {
               {users.map((u) => (
                 <li key={u.id} className="flex items-center gap-2">
                   <span className="flex-1 min-w-0 truncate text-sm font-semibold text-[#111827] dark:text-white">{u.name}</span>
-                  <select aria-label={`Branch of ${u.name}`} value={u.branchId && branches.some((b) => b.id === u.branchId) ? u.branchId : ''} onChange={(e) => show(setUserBranch(u.id, e.target.value || null))} className={`${inputCls} w-48`}>
+                  <select aria-label={`Branch of ${u.name}`} value={u.branchId && branches.some((b) => b.id === u.branchId) ? u.branchId : ''} onChange={(e) => show(setUserBranch(u.id, e.target.value || null))} className={`${inputCls} !w-48`}>
                     <option value="">{branches.find((b) => b.id === mainBranchId)?.name || 'Main'} (main)</option>
                     {branches.filter((b) => b.id !== mainBranchId).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
@@ -178,7 +178,7 @@ export const BranchesForm: React.FC = () => {
               {godowns.map((g) => (
                 <li key={g.id} className="flex items-center gap-2">
                   <span className="flex-1 min-w-0 truncate text-sm font-semibold text-[#111827] dark:text-white">{g.name}</span>
-                  <select aria-label={`Branch of godown ${g.name}`} value={godownBranch(g.id)} onChange={(e) => show(setGodownBranch(g.id, e.target.value || null))} className={`${inputCls} w-48`}>
+                  <select aria-label={`Branch of godown ${g.name}`} value={godownBranch(g.id)} onChange={(e) => show(setGodownBranch(g.id, e.target.value || null))} className={`${inputCls} !w-48`}>
                     <option value="">Not tied to a branch</option>
                     {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>

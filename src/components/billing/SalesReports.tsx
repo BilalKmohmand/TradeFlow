@@ -155,9 +155,11 @@ export const SalesReportsModal: React.FC<{ isOpen: boolean; onClose: () => void;
                   <li key={r.salesman.id} className="rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-3 space-y-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-semibold text-sm">{r.salesman.name}</span>
-                      <span className={`${moneyCls} font-bold`}>{rs(r.earned)}</span>
+                      <span className="text-right"><span className={`${moneyCls} font-bold`}>{rs(r.earned)}</span><span className="block text-[10px] text-[#6B7280] dark:text-[#94A3B8]">earned in these dates</span></span>
                     </div>
-                    <div className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">{r.pct}% of {rs(r.base)} {r.basis === 'recovery' ? 'recovered' : 'sold'} in these dates • paid so far {rs(r.paidToDate)} • <strong className={r.owed > 0 ? 'text-amber-700 dark:text-amber-300' : ''}>still owed {rs(r.owed)}</strong></div>
+                    <div className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]" data-testid="commission-in-range">{r.pct}% of {rs(r.base)} {r.basis === 'recovery' ? 'recovered' : 'sold'} in these dates.</div>
+                    {/* What is owed is everything earned up to the end date less everything paid (all time), not just these dates. */}
+                    <div className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]" data-testid="commission-to-date">All time up to {formatDate(to)}: earned {rs(r.earnedToDate)} • paid {rs(r.paidToDate)} • <strong className={r.owed > 0 ? 'text-amber-700 dark:text-amber-300' : ''}>still owed {rs(r.owed)}</strong></div>
                     {canPay && pay?.salesmanId !== r.salesman.id && r.owed > 0 && <button type="button" onClick={() => { setMsg(null); setPay({ salesmanId: r.salesman.id, amount: String(r.owed), via: 'Cash', date: today, note: '' }); }} className="inline-flex items-center gap-1 text-xs font-bold text-teal-700 dark:text-teal-300 hover:underline"><HandCoins className="w-3.5 h-3.5" /> Pay commission</button>}
                     {pay?.salesmanId === r.salesman.id && (
                       <form onSubmit={submitPay} className="grid grid-cols-2 gap-2 pt-1" data-testid="pay-commission-form">

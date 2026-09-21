@@ -176,3 +176,82 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
     </Modal>
   );
 };
+
+/**
+ * Pay a supplier against what you owe them: cash, bank / wallet, or a cheque (which goes into the
+ * cheque register as "given" and is paid from the bank only when it clears). Approval rules apply.
+ */
+export const PaySupplierModal: React.FC<{ isOpen: boolean; onClose: () => void; supplierId?: string | null }> = ({ isOpen, onClose, supplierId }) => {
+  const { suppliers, recordSupplierPayment, issueCheque, supplierPaymentApproval, settings } = useTrading();
+  const [sup, setSup] = useState(supplierId || '');
+  const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState('Cash');
+  const [note, setNote] = useState('');
+  const [cheque, setCheque] = useState(emptyChequeFields());
+  const [error, setError] = useState('');
+  const [sent, setSent] = useState('');
+  const isCheque = method === 'Cheque';
+  const s = suppliers.find((x) => x.id === sup);
+  const amt = parseFloat(amount) || 0;
+  const needsApproval = amt > 0 ? supplierPaymentApproval(amt) : null;
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (sent) return;
+    if (!s) return setError('Pick the supplier.');
+    if (amt <= 0) return setError('Enter the amount.');
+    const closed = booksLockedFor(settings, todayISO());
+    if (closed) return setError(closed);
+    if (isCheque) {
+      // A cheque goes into the cheque register (given, paid from the bank when it clears).
+      const r = issueCheque({ supplierId: s.id, amount: amt, ...cheque, note: note.trim() || undefined });
+      if (!r.success) return setError(r.message);
+      if ('pendingApproval' in r && r.pendingApproval) return setSent(r.message);
+      return onClose();
+    }
+    recordSupplierPayment(s.id, amt, `${method}${note.trim() ? ` - ${note.trim()}` : ''}`);
+    if (needsApproval) return setSent(`Sent for approval: ${needsApproval}. Nothing is paid until a manager approves it.`);
+    onClose();
+  };
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Pay supplier" subtitle="Money paid against what you owe a supplier.">
+      <form onSubmit={submit} className="space-y-4">
+        {error && <Notice kind="error">{error}</Notice>}
+        {sent && <div data-testid="payment-sent-for-approval"><Notice kind="ok">{sent}</Notice></div>}
+        {!sent && needsApproval && (
+          <p data-testid="payment-needs-approval" className="rounded-2xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3.5 py-2.5 text-xs font-bold text-amber-900 dark:text-amber-200">
+            Needs a manager’s approval: {needsApproval}. Saving sends it to Approvals.
+          </p>
+        )}
+        <div>
+          <label className={labelCls} htmlFor="ps-sup">Supplier</label>
+          <select id="ps-sup" value={sup} onChange={(e) => setSup(e.target.value)} className={inputCls}>
+            <option value="">Select supplier…</option>
+            {[...suppliers].sort((a, b) => b.totalOwed - a.totalOwed).map((x) => <option key={x.id} value={x.id}>{x.code ? `${x.code} • ` : ''}{x.company || x.name}{x.totalOwed > 0 ? ` (you owe Rs. ${x.totalOwed.toLocaleString()})` : ''}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls} htmlFor="ps-amount">Amount (Rs.)</label>
+            <div className="flex gap-1">
+              <input id="ps-amount" type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
+              {s && s.totalOwed > 0 && <button type="button" onClick={() => setAmount(String(s.totalOwed))} className="shrink-0 px-2 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-[11px] font-bold text-teal-700 dark:text-teal-300">Full</button>}
+            </div>
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="ps-method">Method</label>
+            <select id="ps-method" value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}>{BILL_PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}</select>
+          </div>
+          {isCheque && <ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="ps-chq" />}
+          <div className="col-span-2">
+            <label className={labelCls} htmlFor="ps-note">Note</label>
+            <input id="ps-note" value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} placeholder="optional" />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className={secondaryBtn}>{sent ? 'Close' : 'Cancel'}</button>
+          <button type="submit" disabled={Boolean(sent)} className={primaryBtn}>Pay</button>
+        </div>
+      </form>
+    </Modal>
+  );
+};

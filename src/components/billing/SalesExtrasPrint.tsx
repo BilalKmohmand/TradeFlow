@@ -118,14 +118,14 @@ export const useSalesExtrasPrint = (request: { type: string } | null): Content |
         date: todayISO(),
         body: (
           <table className="w-full text-xs border-collapse" data-testid="print-commission">
-            <thead><tr className="border-b-2 border-gray-900"><th className={`${th} text-left`}>Salesman</th><th className={`${th} text-left`}>On</th><th className={`${th} text-right`}>Base</th><th className={`${th} text-right`}>%</th><th className={`${th} text-right`}>Earned</th><th className={`${th} text-right`}>Paid to date</th><th className={`${th} text-right`}>Still owed</th></tr></thead>
+            <thead><tr className="border-b-2 border-gray-900"><th className={`${th} text-left`}>Salesman</th><th className={`${th} text-left`}>On</th><th className={`${th} text-right`}>Base</th><th className={`${th} text-right`}>%</th><th className={`${th} text-right`}>Earned in these dates</th><th className={`${th} text-right`}>Earned to date</th><th className={`${th} text-right`}>Paid to date</th><th className={`${th} text-right`}>Still owed (to date)</th></tr></thead>
             <tbody>
-              {rows.length === 0 && <tr><td colSpan={7} className="py-4 text-center text-gray-500">No salesman has a commission set.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={8} className="py-4 text-center text-gray-500">No salesman has a commission set.</td></tr>}
               {rows.map((r) => (
-                <tr key={r.salesman.id} className="border-b border-gray-100"><td className="py-1.5 px-2">{r.salesman.name}</td><td className="py-1.5 px-2">{r.basis === 'recovery' ? 'Money recovered' : 'Sales'}</td><td className={tdn}>{money(r.base)}</td><td className={tdn}>{r.pct}%</td><td className={`${tdn} font-bold`}>{money(r.earned)}</td><td className={tdn}>{money(r.paidToDate)}</td><td className={`${tdn} font-bold`}>{money(r.owed)}</td></tr>
+                <tr key={r.salesman.id} className="border-b border-gray-100"><td className="py-1.5 px-2">{r.salesman.name}</td><td className="py-1.5 px-2">{r.basis === 'recovery' ? 'Money recovered' : 'Sales'}</td><td className={tdn}>{money(r.base)}</td><td className={tdn}>{r.pct}%</td><td className={`${tdn} font-bold`}>{money(r.earned)}</td><td className={tdn}>{money(r.earnedToDate)}</td><td className={tdn}>{money(r.paidToDate)}</td><td className={`${tdn} font-bold`}>{money(r.owed)}</td></tr>
               ))}
             </tbody>
-            <tfoot><tr className="font-bold border-t-2 border-gray-900"><td colSpan={4} className="py-2 px-2 text-right">Total earned</td><td className={tdn}>{money(rows.reduce((a, r) => a + r.earned, 0))}</td><td className={tdn}>{money(rows.reduce((a, r) => a + r.paidToDate, 0))}</td><td className={tdn}>{money(rows.reduce((a, r) => a + r.owed, 0))}</td></tr></tfoot>
+            <tfoot><tr className="font-bold border-t-2 border-gray-900"><td colSpan={4} className="py-2 px-2 text-right">Total earned</td><td className={tdn}>{money(rows.reduce((a, r) => a + r.earned, 0))}</td><td className={tdn}>{money(rows.reduce((a, r) => a + r.earnedToDate, 0))}</td><td className={tdn}>{money(rows.reduce((a, r) => a + r.paidToDate, 0))}</td><td className={tdn}>{money(rows.reduce((a, r) => a + r.owed, 0))}</td></tr></tfoot>
           </table>
         ),
       };

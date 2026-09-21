@@ -47,7 +47,7 @@ test('desktop screens with data', async ({ page }) => {
   await page.getByRole('button', { name: /Purchase Orders/ }).click();
   await page.getByRole('button', { name: 'New Purchase Order' }).click();
   await page.getByRole('button', { name: 'Create PO' }).click();
-  await expect(page.getByText(/PO-\d{4}-\d{3}/)).toBeVisible();
+  await expect(page.getByText(/\bPO-\d+\b/).first()).toBeVisible(); // one purchase-order number series for both modes (PO-1, PO-2 …)
   await shot(page, '06-purchase-orders');
   await page.getByRole('button', { name: /Receive against PO/ }).click();
   await expect(page.getByText('Against purchase order')).toBeVisible();

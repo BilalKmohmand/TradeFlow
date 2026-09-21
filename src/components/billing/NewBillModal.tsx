@@ -267,8 +267,9 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const approvalWhy = billApprovalReasons({
     customerId: newCustomer ? '' : customer,
     newCustomer: newCustomer || undefined,
-    items: lines.filter((l) => l.productId && l.qty > 0).map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: l.price, ...(l.lineDisc > 0 ? { discountType: l.discType, discountValue: l.discValue } : {}) })),
+    items: lines.filter((l) => l.productId && l.qty > 0).map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: l.price, ...(l.lineDisc > 0 ? { discountType: l.discType, discountValue: l.discValue } : {}), ...(l.schemePct ? { schemeId: l.schemePct.schemeId } : {}) })),
     discount: disc,
+    freightCharges: freightAmt,
     payments: payment.parts,
     ...(hasCheque ? { cheque: { amount: chequeAmount, ...cheque } } : {}),
     date,
@@ -310,6 +311,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
         ...(l.lineDisc > 0 ? { discountType: l.discType, discountValue: l.discValue } : {}),
         ...(l.priceFrom === 'customer' ? { customerRate: true } : {}),
         ...(l.pack > 1 ? { packPrice: l.typedPrice } : {}),
+        ...(l.schemePct ? { schemeId: l.schemePct.schemeId, schemeName: l.schemePct.schemeName } : {}),
       } as CreateBillItemInput)).concat(freeLines.map((f) => ({ productId: f.productId, name: f.product!.name, qty: f.qty, unitPrice: 0, unit: f.product!.unit, free: true, schemeId: f.schemeId, schemeName: f.schemeName }))),
       freightCharges: freightAmt,
       ...(salesmen.length ? { salesmanId: salesmanId || null } : {}),
