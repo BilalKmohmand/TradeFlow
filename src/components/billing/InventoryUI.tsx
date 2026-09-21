@@ -87,7 +87,7 @@ export const ExpiryAttention: React.FC<{ onOpen: () => void }> = ({ onOpen }) =>
 };
 
 /** Receive stock into a godown, as a batch with expiry for batch-tracked items. */
-export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void; productId?: string | null }> = ({ isOpen, onClose, productId }) => {
+export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void; productId?: string | null; supplierId?: string | null }> = ({ isOpen, onClose, productId, supplierId: presetSupplierId }) => {
   const { products, suppliers, godowns, receiveStock } = useTrading();
   const sorted = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name)), [products]);
   const [pid, setPid] = useState(productId || '');
@@ -96,7 +96,7 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
   const [batchNo, setBatchNo] = useState('');
   const [expiry, setExpiry] = useState('');
   const [cost, setCost] = useState('');
-  const [supplierId, setSupplierId] = useState('');
+  const [supplierId, setSupplierId] = useState(presetSupplierId || '');
   const [date, setDate] = useState(todayISO());
   const [error, setError] = useState('');
   const busy = useRef(false);

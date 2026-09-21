@@ -273,7 +273,10 @@ export const useInventoryStore = (deps: Deps) => {
     removeRemote('stock_batches', ids);
   };
 
+  /** Change batch / godown rows on the latest state (stock adjustments and purchase returns). */
+  const updateRows = (fn: (rows: StockBatch[]) => StockBatch[]) => setStockBatches((prev) => fn(prev));
+
   const api: InventoryApi = { godowns, stockBatches, stockTransfers, addGodown, updateGodown, deleteGodown, receiveStock, transferStock };
-  return { api, planBill, applyBill, restoreBill, hydrate, backupData, reset, purgeSetters, removePurchaseRows };
+  return { api, planBill, applyBill, restoreBill, hydrate, backupData, reset, purgeSetters, removePurchaseRows, updateRows, storedGodowns };
 };
 

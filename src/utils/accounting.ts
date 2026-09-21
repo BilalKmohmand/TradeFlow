@@ -24,7 +24,8 @@
  *  - Cash <-> bank transfer            Dr receiving side                   Cr giving side
  *  - Other cash entry in / out         Cash / Bank against Capital 3000 ("capital"), Drawings 3100 ("drawing")
  *                                      or Suspense 2900 for the accountant to reclassify
- *  - Stock adjustment                  Dr Stock losses 5100 / Cr Inventory (or the reverse) at cost
+ *  - Stock adjustment                  Dr Stock losses 5100 / Cr Inventory (or the reverse) at cost;
+ *                                      goods received free: Dr Inventory / Cr Other income 4900
  *  - Opening stock                     Dr Inventory 1200                   Cr Opening balance equity 3900
  *  - Customer / supplier balances that are not explained by their history (opening dues typed in
  *    when the account was created) are posted against Opening balance equity so Receivable and
@@ -313,6 +314,24 @@ export const booksLockedFor = (settings: Pick<AppSettings, 'booksLockedUntil'>, 
     ? `The books are closed up to ${formatDate(settings.booksLockedUntil)}. Use a later date, or ask an admin to reopen the period in Accounts.`
     : null;
 
+/**
+ * Cost of one unit on a bill line: the cost captured on the line (batch cost when batches were used),
+ * else what the item was bought for up to the bill date, else the item's cost price. null = unknown.
+ * Shared by the journal (COGS) and the profit-by-item report so both always agree.
+ */
+export const billLineUnitCost = (
+  line: { productId: string; costPricePerKg?: number },
+  date: string,
+  purchases: Purchase[],
+  products: Product[]
+): number | null => {
+  if (line.costPricePerKg && line.costPricePerKg > 0) return line.costPricePerKg;
+  const dated = costPerKgOn(purchases, line.productId, date);
+  if (dated != null && dated > 0) return dated;
+  const p = products.find((x) => x.id === line.productId);
+  return p?.costPricePerKg != null && p.costPricePerKg > 0 ? p.costPricePerKg : null;
+};
+
 export const buildJournal = (src: JournalSources): JournalEntry[] => {
   const {
     settings,
@@ -396,7 +415,7 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
             b.cr(ACC.SALES, debit + discount - tax - charges);
             // Cost captured on the bill line (batch cost when batches were used); older bills fall back to the purchase cost then.
             const cogs = inv.items.reduce((a, it) => {
-              const unitCost = it.costPricePerKg && it.costPricePerKg > 0 ? it.costPricePerKg : productCost(it.productId, inv.issueDate);
+              const unitCost = billLineUnitCost(it, inv.issueDate, purchases, products);
               return a + (unitCost ? unitCost * (it.qty ?? it.kg ?? 0) : 0);
             }, 0);
             b.dr(ACC.COGS, cogs, 'Cost of items sold').cr(ACC.INVENTORY, cogs);
@@ -543,6 +562,8 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
     const b = new EntryBuilder();
     // Stock that arrived with no supplier bill: where it came from is for the accountant to decide.
     if (a.reason === 'received' && a.deltaKg > 0) b.dr(ACC.INVENTORY, value).cr(ACC.SUSPENSE, value, a.note || 'Stock received without a supplier bill');
+    // Goods a supplier gave free: a gain, not a correction of an earlier loss.
+    else if (a.reason === 'free' && a.deltaKg > 0) b.dr(ACC.INVENTORY, value).cr(ACC.OTHER_INCOME, value, a.note || 'Stock received free');
     else if (a.deltaKg < 0) b.dr(ACC.STOCK_LOSSES, value, a.note || a.reason).cr(ACC.INVENTORY, value);
     else b.dr(ACC.INVENTORY, value).cr(ACC.STOCK_LOSSES, value, a.note || a.reason);
     push({ id: `auto-adj-${a.id}`, date: a.date.slice(0, 10), ref: 'STOCK ADJ', memo: `Stock adjustment (${a.reason})`, sourceType: 'stock_adjustment', sourceId: a.id, builder: b });

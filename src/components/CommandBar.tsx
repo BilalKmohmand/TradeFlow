@@ -21,10 +21,24 @@ import {
   ShieldCheck,
   Lock,
   PackagePlus,
+  FilePlus2,
+  HandCoins,
+  Receipt,
+  Home,
+  FileText,
+  CalendarDays,
+  Tag,
+  Coins,
+  BookOpen,
+  Scale,
+  Undo2,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { useTheme } from '../context/ThemeContext';
 import { formatCurrency, formatKg } from '../utils/formatters';
+import { useBillingUI } from './billing/BillingUI';
+import { useStockUI } from './billing/StockUI';
+import { ActiveScreen } from '../types';
 
 interface CommandBarProps {
   isOpen: boolean;
@@ -39,6 +53,8 @@ interface CommandBarProps {
   onOpenProductModal: () => void;
   onOpenWhatsAppDrawer: () => void;
   onOpenPurchaseModal: () => void;
+  /** Simple billing mode: offer billing actions and the billing screens only (no bookings, dispatches, reports, ops). */
+  isBilling?: boolean;
 }
 
 type CommandItem = {
@@ -65,6 +81,7 @@ export const CommandBar: React.FC<CommandBarProps> = ({
   onOpenProductModal,
   onOpenWhatsAppDrawer,
   onOpenPurchaseModal,
+  isBilling = false,
 }) => {
   const {
     customers,
@@ -75,7 +92,11 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     lockAdmin,
     setSelectedProductId,
     openBooking,
+    can,
+    isScreenVisible,
   } = useTrading();
+  const billingUI = useBillingUI();
+  const stockUI = useStockUI();
 
   const { themeMode, setThemeMode, cycleTheme, resolvedTheme } = useTheme();
 
@@ -111,9 +132,53 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  /** Billing mode: the everyday actions, the billing screens, then people and items. */
+  const billingItems = (): CommandItem[] => {
+    const items: CommandItem[] = [];
+    const act = (id: string, title: string, subtitle: string, icon: CommandItem['icon'], run: () => void, badge?: string, badgeType?: CommandItem['badgeType']) =>
+      items.push({ id, category: 'actions', title, subtitle, icon, badge, badgeType, perform: () => { onClose(); run(); } });
+    act('b-new-bill', 'New bill', 'Make a bill for a customer', FilePlus2, () => billingUI.newBill(), 'Bill', 'info');
+    act('b-receive-payment', 'Receive payment', 'Money a customer paid you', HandCoins, () => billingUI.receive(), 'Money in', 'success');
+    act('b-add-expense', 'Add expense', 'Rent, salaries, food, transport…', Receipt, () => billingUI.addExpense(), 'Money out', 'warning');
+    if (can('products:create') || can('stock:adjust')) act('b-receive-stock', 'Receive stock', 'Stock you bought or brought in', PackagePlus, () => stockUI.receiveStock(), 'Stock', 'success');
+    if (can('stock:adjust')) act('b-adjust-stock', 'Adjust stock', 'Leaked, damaged, expired, count correction, received free', Scale, () => stockUI.adjustStock(), 'Stock');
+    if (can('products:create') || can('stock:adjust')) act('b-return-goods', 'Return goods to supplier', 'Send stock back and make a debit note', Undo2, () => stockUI.purchaseReturn(), 'Supplier');
+    act('b-pay-supplier', 'Pay a supplier', 'Money you paid a supplier', CreditCard, () => onOpenPayment('supplier'), 'Money out', 'warning');
+    act('b-aging', 'Who owes for how long', 'Customers and suppliers by 0–30, 31–60, 61–90, 90+ days', Clock, () => stockUI.aging('customers'), 'Report');
+
+    const go = (id: ActiveScreen, title: string, subtitle: string, icon: CommandItem['icon']) => {
+      if (!isScreenVisible(id)) return;
+      items.push({ id: `b-nav-${id}`, category: 'navigation', title, subtitle, icon, perform: () => { onClose(); setActiveScreen(id); } });
+    };
+    go('dashboard', 'Go to Home', "Today's sales, cash and what needs attention", Home);
+    go('bills', 'Go to Bills', 'Every bill, paid and unpaid', FileText);
+    go('daily', 'Go to Daily Sheet', 'One day on one page', CalendarDays);
+    go('customers', 'Go to Customers', 'Who they are and what they owe', Users);
+    go('suppliers', 'Go to Suppliers', 'What you owe, stock received, returns', Layers);
+    go('products', 'Go to Items & Prices', 'Price list and stock', Tag);
+    go('money', 'Go to Money', 'Cash, bank, who owes you and who you owe', Coins);
+    if (can('view_finance')) go('accounts', 'Go to Accounts', 'Trial balance, profit & loss, profit by item', BookOpen);
+    if (can('admin_screen') || can('system:admin_screen')) go('admin', 'Go to Admin', 'Users, settings, backups, audit log', ShieldCheck);
+
+    items.push({ id: 'action-lock-terminal', category: 'actions', title: 'Lock the app', subtitle: 'The PIN is needed to open it again', icon: Lock, perform: () => { onClose(); lockAdmin(); } });
+    items.push({ id: 'action-theme-toggle', category: 'actions', title: `Change theme (now: ${themeMode})`, subtitle: 'Auto, light or dark', icon: themeMode === 'dark' ? Moon : themeMode === 'light' ? Sun : Sparkles, perform: () => { cycleTheme(); onClose(); } });
+
+    customers.forEach((c) =>
+      items.push({ id: `customer-${c.id}`, category: 'customers', title: c.name, subtitle: `Customer • ${c.phone || 'no phone'}`, badge: c.totalDue > 0 ? `Owes ${formatCurrency(c.totalDue)}` : 'Clear', badgeType: c.totalDue > 0 ? 'warning' : 'success', icon: Users, perform: () => { onClose(); onOpenCustomer(c.id); } })
+    );
+    suppliers.forEach((s) =>
+      items.push({ id: `supplier-${s.id}`, category: 'suppliers', title: s.company || s.name, subtitle: `Supplier • ${s.phone || 'no phone'}`, badge: s.totalOwed > 0 ? `You owe ${formatCurrency(s.totalOwed)}` : 'Clear', badgeType: s.totalOwed > 0 ? 'warning' : 'default', icon: Layers, perform: () => { onClose(); onOpenSupplier(s.id); } })
+    );
+    products.forEach((p) =>
+      items.push({ id: `product-${p.id}`, category: 'products', title: p.name, subtitle: `Item • ${formatCurrency(p.unitPricePerKg)} per ${p.unit || 'pcs'} • tap for stock history`, badge: `Stock ${p.stockKg.toLocaleString()} ${p.unit || 'pcs'}`, badgeType: p.minThresholdKg > 0 && p.stockKg <= p.minThresholdKg ? 'warning' : 'info', icon: Package, perform: () => { onClose(); stockUI.itemHistory(p.id); } })
+    );
+    return items;
+  };
+
   // Build searchable items
   const allItems: CommandItem[] = useMemo(() => {
     const items: CommandItem[] = [];
+    if (isBilling) return billingItems();
 
     // Quick Actions
     items.push({
@@ -368,6 +433,11 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     onOpenWhatsAppDrawer,
     setActiveScreen,
     cycleTheme,
+    isBilling,
+    billingUI,
+    stockUI,
+    can,
+    isScreenVisible,
   ]);
 
   // Filter items by query
@@ -445,7 +515,8 @@ export const CommandBar: React.FC<CommandBarProps> = ({
                 setSelectedIndex(0);
               }}
               onKeyDown={handleKeyDown}
-              placeholder="Search customers, suppliers, commodities, orders, or actions (e.g. 'Coal', 'Acme', 'Dispatch')..."
+              placeholder={isBilling ? "Search customers, suppliers, items or actions (e.g. 'new bill', 'expense')" : "Search customers, suppliers, commodities, orders, or actions (e.g. 'Coal', 'Acme', 'Dispatch')..."}
+              aria-label="Search" 
               className="flex-1 bg-transparent text-sm sm:text-base font-sans text-[#111827] dark:text-white placeholder-[#8E9299] dark:placeholder-[#64748B] focus:outline-hidden"
             />
             {query ? (
@@ -488,17 +559,19 @@ export const CommandBar: React.FC<CommandBarProps> = ({
               Suppliers ({suppliers.length})
             </button>
             <button
-              onClick={() => setQuery('product')}
+              onClick={() => setQuery(isBilling ? 'item' : 'product')}
               className="px-2.5 py-1 rounded-full hover:bg-[#E5E5E1] dark:hover:bg-[#1E2E40] transition-colors"
             >
-              Commodities ({products.length})
+              {isBilling ? 'Items' : 'Commodities'} ({products.length})
             </button>
-            <button
-              onClick={() => setQuery('order')}
-              className="px-2.5 py-1 rounded-full hover:bg-[#E5E5E1] dark:hover:bg-[#1E2E40] transition-colors"
-            >
-              Bookings ({bookings.length})
-            </button>
+            {!isBilling && (
+              <button
+                onClick={() => setQuery('order')}
+                className="px-2.5 py-1 rounded-full hover:bg-[#E5E5E1] dark:hover:bg-[#1E2E40] transition-colors"
+              >
+                Bookings ({bookings.length})
+              </button>
+            )}
           </div>
 
           {/* Results List */}

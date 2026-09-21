@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Phone, FilePlus2, HandCoins, Printer, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, Phone, FilePlus2, HandCoins, Printer, Pencil, Trash2, Clock } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
+import { useStockUI } from '../../components/billing/StockUI';
 import { Modal, cardCls, inputCls, primaryBtn, secondaryBtn, dangerBtn, rs } from '../../components/billing/ui';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { billsOnly } from '../../utils/billing';
@@ -14,6 +15,7 @@ import { OverLimitBadge, CreditUsageBar } from '../../components/billing/CreditL
 export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd }) => {
   const { customers, invoices, ledger, setEditRequest, deleteCustomer, setPrintRequest, can } = useTrading();
   const ui = useBillingUI();
+  const stockUI = useStockUI();
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Customer | null>(null);
@@ -35,7 +37,10 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
           <h1 className="text-2xl font-bold text-[#111827] dark:text-white">Customers</h1>
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{customers.length} customer{customers.length === 1 ? '' : 's'}{owed > 0 ? ` • they owe you ${rs(owed)}` : ''}</p>
         </div>
-        <button type="button" onClick={onAdd} className={primaryBtn}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add customer</button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => stockUI.aging('customers')} className={secondaryBtn}><Clock className="w-4 h-4 text-amber-600" /> Who owes for how long</button>
+          <button type="button" onClick={onAdd} className={primaryBtn}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add customer</button>
+        </div>
       </div>
       <div className="relative">
         <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />

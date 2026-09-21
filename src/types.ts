@@ -701,9 +701,13 @@ export interface StockReturn {
   date: string;
   createdAt: string;
   createdBy?: string;
+  /** Billing purchase returns: godown and batches the goods left from, and the item's unit. */
+  godownId?: string | null;
+  batches?: BatchAllocation[];
+  unit?: string;
 }
 
-export type AdjustmentReason = 'count' | 'wastage' | 'moisture' | 'damage' | 'theft' | 'other' | 'received';
+export type AdjustmentReason = 'count' | 'wastage' | 'moisture' | 'damage' | 'theft' | 'other' | 'received' | 'leaked' | 'expired' | 'free';
 export const ADJUSTMENT_REASONS: { id: AdjustmentReason; label: string }[] = [
   { id: 'count', label: 'Physical count correction' },
   { id: 'wastage', label: 'Handling wastage' },
@@ -712,7 +716,23 @@ export const ADJUSTMENT_REASONS: { id: AdjustmentReason; label: string }[] = [
   { id: 'theft', label: 'Shortage / theft' },
   { id: 'other', label: 'Other' },
   { id: 'received', label: 'Stock received (no supplier bill)' },
+  { id: 'leaked', label: 'Leaked' },
+  { id: 'expired', label: 'Expired' },
+  { id: 'free', label: 'Received free' },
 ];
+
+/** The reasons offered on the simple (billing) stock adjustment form. */
+export const BILLING_ADJUST_REASONS: { id: AdjustmentReason; label: string; direction: 'out' | 'in' | 'either' }[] = [
+  { id: 'leaked', label: 'Leaked', direction: 'out' },
+  { id: 'damage', label: 'Damaged', direction: 'out' },
+  { id: 'expired', label: 'Expired', direction: 'out' },
+  { id: 'count', label: 'Count correction', direction: 'either' },
+  { id: 'free', label: 'Received free', direction: 'in' },
+  { id: 'other', label: 'Other', direction: 'either' },
+];
+
+export const adjustmentReasonLabel = (reason: string): string =>
+  BILLING_ADJUST_REASONS.find((r) => r.id === reason)?.label || ADJUSTMENT_REASONS.find((r) => r.id === reason)?.label || reason;
 
 export interface StockAdjustment {
   id: string;
@@ -725,6 +745,10 @@ export interface StockAdjustment {
   date: string;
   createdAt: string;
   createdBy?: string;
+  /** Godown / batch the adjustment was made in (absent = plain stock in the main godown). */
+  godownId?: string | null;
+  batchId?: string | null;
+  batchNo?: string;
 }
 
 export type TaskLinkType = 'customer' | 'supplier' | 'booking' | 'product' | 'truck';

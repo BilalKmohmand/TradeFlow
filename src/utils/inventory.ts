@@ -383,3 +383,62 @@ export const batchLines = (line: { batches?: BatchAllocation[]; unit?: string })
   const list = line.batches || [];
   return list.map((b) => `Batch ${b.batchNo}${b.expiryDate ? ` · Exp ${fmtExpiry(b.expiryDate)}` : ''}${list.length > 1 ? ` × ${b.qty}` : ''}`);
 };
+
+/** Add plain (non-batch) stock to a godown's rows; main-godown plain stock is implied and needs no row. */
+export const addLooseRow = (rows: StockBatch[], godowns: Godown[], productId: string, godownId: string, qty: number, onDate: string): StockBatch[] =>
+  godownId === mainGodownId(godowns) ? rows : addLoose(rows, productId, godownId, qty, onDate);
+
+export interface TakePlan {
+  ok: boolean;
+  message?: string;
+  /** qty change per StockBatch row id (negative = taken). */
+  deltas: Record<string, number>;
+  batches: BatchAllocation[];
+}
+
+/**
+ * Take stock of one item out of one godown (a loss, a stock count down, goods sent back to the
+ * supplier). With a batch id only that batch is used; otherwise good batches first (earliest expiry),
+ * then plain stock, then expired batches. Never takes more than the godown holds.
+ */
+export const planTakeFromGodown = (
+  product: Product,
+  rows: StockBatch[],
+  godowns: Godown[],
+  godownId: string | undefined,
+  qty: number,
+  onDate: string,
+  batchId?: string | null
+): TakePlan => {
+  const unit = product.unit || 'pcs';
+  if (!(qty > 0)) return { ok: false, message: 'Enter a quantity greater than zero.', deltas: {}, batches: [] };
+  if (batchId) {
+    const row = rows.find((r) => r.id === batchId && r.productId === product.id);
+    if (!row) return { ok: false, message: 'That batch was not found.', deltas: {}, batches: [] };
+    if (qty > row.qty + EPS) return { ok: false, message: `Only ${round2(row.qty)} ${unit} left in ${row.batchNo ? `batch ${row.batchNo}` : 'that stock'}.`, deltas: {}, batches: [] };
+    return { ok: true, deltas: { [row.id]: -round2(qty) }, batches: row.batchNo ? [{ batchId: row.id, batchNo: row.batchNo, expiryDate: row.expiryDate, qty: round2(qty), godownId: row.godownId }] : [] };
+  }
+  const all = withMainGodown(godowns);
+  const mainId = all[0].id;
+  const gid = godownId && all.some((g) => g.id === godownId) ? godownId : mainId;
+  const sources = sourcesFor(product.id, rows, gid, mainId, mainLooseQty(product, rows), onDate, true);
+  const available = round2(sources.reduce((a, s) => a + s.avail, 0));
+  if (qty > available + EPS) {
+    const where = all.length > 1 ? ` in ${godownName(godowns, gid)}` : '';
+    return { ok: false, message: `Only ${Math.max(0, available)} ${unit} of ${product.name}${where}.`, deltas: {}, batches: [] };
+  }
+  let need = round2(qty);
+  const deltas: Record<string, number> = {};
+  const batches: BatchAllocation[] = [];
+  for (const s of sources) {
+    if (need <= EPS) break;
+    const take = round2(Math.min(need, s.avail));
+    if (take <= 0) continue;
+    need = round2(need - take);
+    if (s.row) {
+      deltas[s.row.id] = round2((deltas[s.row.id] || 0) - take);
+      if (s.row.batchNo) batches.push({ batchId: s.row.id, batchNo: s.row.batchNo, expiryDate: s.row.expiryDate, qty: take, godownId: s.row.godownId });
+    }
+  }
+  return { ok: true, deltas, batches };
+};

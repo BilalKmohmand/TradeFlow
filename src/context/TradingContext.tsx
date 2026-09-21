@@ -82,6 +82,7 @@ import {
 } from '../lib/database';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { useInventoryStore, InventoryApi, INVENTORY_STORAGE_KEYS } from './inventoryStore';
+import { createStockActions, StockActionsApi } from './stockActions';
 import { Account, JournalEntry, mergeAccounts, validateEntry, validateAccount, booksLockedFor } from '../utils/accounting';
 import {
   initialCustomers,
@@ -93,7 +94,7 @@ import {
   initialWhatsAppMessages,
 } from '../data/initialData';
 
-interface TradingContextType extends InventoryApi {
+interface TradingContextType extends InventoryApi, StockActionsApi {
   customers: Customer[];
   suppliers: Supplier[];
   products: Product[];
@@ -402,7 +403,12 @@ export type PrintRequestLike =
   | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number }
   | { type: 'trial_balance'; asOf: string }
   | { type: 'profit_loss'; from: string; to: string }
-  | { type: 'balance_sheet'; asOf: string };
+  | { type: 'balance_sheet'; asOf: string }
+  | { type: 'billing_report'; report: 'aging'; side: 'customers' | 'suppliers'; asOf: string }
+  | { type: 'billing_report'; report: 'purchase_register'; from: string; to: string; supplierId?: string; productId?: string }
+  | { type: 'billing_report'; report: 'profit'; from: string; to: string }
+  | { type: 'billing_report'; report: 'item_history'; productId: string }
+  | { type: 'debit_note'; returnId: string };
 
 /** Collision-safe id generator (Date.now() alone repeats when called in a tight loop). */
 let idCounter = 0;
@@ -4009,11 +4015,21 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     recordAdjustment: (a) => setAdjustments((prev) => [{ ...a, id: uid('adj'), createdAt: todayISO(), createdBy: currentUser?.name }, ...prev]),
     can: (p) => can(p as Permission),
   });
+  // Billing-mode stock adjustments and purchase returns (godown / batch aware), see stockActions.ts.
+  const stockActions = createStockActions({
+    products, setProducts, suppliers, setSuppliers, purchases, adjustments, setAdjustments, returns, setReturns, ledger, setLedger,
+    godowns: inventory.storedGodowns, stockBatches: inventory.api.stockBatches, updateRows: inventory.updateRows,
+    can: (p) => can(p as Permission),
+    lockedFor: (d) => booksLockedFor(settings, d),
+    logAuditEvent: (a, dt, sev) => logAuditEvent(a, dt, sev),
+    removeRemote, uid, userName: currentUser?.name, today: todayISO,
+  });
 
   return (
     <TradingContext.Provider
       value={{
         ...inventory.api,
+        ...stockActions,
         customers,
         suppliers,
         products,
