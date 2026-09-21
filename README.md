@@ -75,7 +75,7 @@ Logic lives in `src/utils/accounting.ts` (pure, unit-tested); run `supabase/migr
 - **Supabase-backed** real-time data sync.
 - **PKR Currency** formatting and localised `en-PK` numbers.
 - **Light / Dark mode** with automatic time-based switching.
-- **Admin Control Center** (PIN-protected) — change the master PIN, delete any customer / supplier / product / booking / dispatch / ledger row, purge whole tables, export & import JSON backups, factory reset, and review the audit log.
+- **Admin Control Center** (owner and admins) — staff accounts and temporary passwords, delete any customer / supplier / product / booking / dispatch / ledger row, purge whole tables, export & import JSON backups, factory reset, and review the audit log.
 
 ## Units
 
@@ -93,7 +93,7 @@ Logic lives in `src/utils/accounting.ts` (pure, unit-tested); run `supabase/migr
 
 ## Enterprise Features
 
-- **Users & roles**: Admin → Users & Roles. Each person gets a name, role and PIN and picks their name on the lock screen. The master PIN always signs in as Administrator. Roles: **admin** (everything), **manager** (everything except purging data and managing users), **operator** (day-to-day transactions only: no deletes, no price changes, no finance, no admin). The audit log records who did what.
+- **Users & roles**: Admin → User Accounts & Auth. Each person gets a name, a username, a role and a temporary password (see *Signing in*). Roles: **admin** (everything), **manager** (everything except purging data and managing users), **operator** (day-to-day transactions only: no deletes, no price changes, no finance, no admin). The audit log records who did what.
 - **Editing & lifecycle**: pencil icons on every customer, supplier, product and booking card and in the detail modals. Bookings can be edited (quantity never below what is dispatched; amounts recalculated) and cancelled with a reason.
 - **Credit control**: a booking shows the customer's projected exposure (outstanding + committed active bookings + this contract) against their credit limit and is blocked when over it. Managers and admins can tick an override, which is written to the audit log.
 - **Receive Stock / purchases**, **Stock Flow log** and **Price History** are described above.
@@ -142,7 +142,7 @@ npm run check     # build + type-check + unit tests + e2e (what CI should run)
 
 `e2e/inventory.spec.ts` turns on batch tracking, receives two batches with different expiry dates (one on credit from a supplier), checks the expiring-soon alert on Home, makes a bill that uses the earlier-expiring batch and prints it, adds a second godown, moves stock there and bills from it — on desktop and a 390px phone. Run e2e on your own port with `E2E_PORT=4192 npx playwright test` when several checkouts share a machine.
 
-The billing suite (`e2e/billing.spec.ts`) makes the client's sample invoice, a credit bill with an inline new customer and an edited price, takes part payments, adds an expense from the daily sheet, prints the bill and the daily sheet, moves cash to the bank, checks the money position, adds an item, switches app mode and reloads — on desktop and on a 390px phone. The trading suite (`e2e/app.spec.ts`) unlocks the app, factory-resets, creates a user, supplier, product, customer and vehicle, books, dispatches with a fleet vehicle, receives stock, records an expense, checks the dashboard, P&L, aging, stock flow, invoice preview, price history and monthly sales, then signs in as an operator to verify hidden admin/delete controls, and checks the mobile layout. Screenshots land in `e2e/screenshots/`.
+The billing suite (`e2e/billing.spec.ts`) makes the client's sample invoice, a credit bill with an inline new customer and an edited price, takes part payments, adds an expense from the daily sheet, prints the bill and the daily sheet, moves cash to the bank, checks the money position, adds an item, switches app mode and reloads — on desktop and on a 390px phone. `e2e/auth.spec.ts` covers creating the owner account on an empty device, sign-in with a wrong and a right password, the one-time PIN → password move, the owner adding staff who then set their own password, lock/unlock, switch user and log out, and the sign-in screens at 390px in light and dark mode. The trading suite (`e2e/app.spec.ts`) signs in, factory-resets, creates a user, supplier, product, customer and vehicle, books, dispatches with a fleet vehicle, receives stock, records an expense, checks the dashboard, P&L, aging, stock flow, invoice preview, price history and monthly sales, then signs in as an operator to verify hidden admin/delete controls, and checks the mobile layout. Screenshots land in `e2e/screenshots/`.
 
 Unit and integration tests live in `src/__tests__/` and cover the finance maths (cost basis, P&L, aging, credit exposure), stock-flow grouping, price-history comparisons, alerts, and an integration suite that drives the real `TradingProvider` through bookings, dispatches, purchases, payments, cascading deletes with reversals, booking edits/cancellation, roles and permissions, plus App-level tests for navigation, the print preview and Escape handling.
 
@@ -172,6 +172,7 @@ Run these in this order only if you want to apply them one at a time — `setup.
 9. `migrate_v10_accounting.sql` (once) — double-entry accounts: manual journal entries, custom accounts, period lock in settings.
 10. `migrate_v11_inventory.sql` (once) — godowns, stock batches with expiry, stock transfers, and the item's `trackBatches` flag. Existing data needs no conversion. Run it before turning on batch tracking on a cloud-synced shop (the products sync needs the new column).
 11. `migrate_v12_credit_bankrec.sql` (once) — `invoices.creditOverride`, `bank_statement_lines` and `bank_reconciliations` tables (RLS disabled). Both tables are optional: without them bank reconciliation stays on the device.
+12. `migrate_v16_passwords.sql` (once, **run it after `setup.sql`** — it is not folded into `setup.sql` yet) — username + password sign-in: `username`, `roles`, `status`, `passwordHash`, `passwordSalt`, `passwordIter`, `mustChangePassword`, lockout and `updatedAt` columns on `users`, and `pin` no longer NOT NULL. Without it the users table cannot hold the password hashes, so the owner can only sign in on the device where the account was made.
 
 `schema.sql` alone creates every table for a brand-new project, but it cannot add a missing column to a table you already have — that is why `setup.sql` runs both halves.
 
@@ -179,17 +180,29 @@ Run these in this order only if you want to apply them one at a time — `setup.
 
 ## Signing in
 
-The lock screen lists active users by role. Pick your name, enter your PIN and press **Unlock Terminal**. On a fresh install with no users the app seeds demo accounts (a super admin with PIN `7860` plus a manager, an operator and a viewer); replace them under **Admin → Users** before going live. Repeated wrong PINs lock the account for a cooling-off period.
+Everyone signs in with a **username and password** (the old PIN keypad is gone).
+
+- **First time on a device with no account** (nothing on the device and nothing in the cloud `users` table): the app shows **Create your account** — shop name, your name, username and password (at least 8 characters, typed twice, with a show/hide eye). This makes you the owner (super admin) and sets the shop name on bills if none was set. There is no public sign-up after that: staff are added by the owner.
+- **Sign in**: username (not case-sensitive, spaces ignored) and password. **Keep me signed in on this device** (on by default) keeps you signed in for 30 days; untick it on a shared computer and the session ends when the browser closes. Wrong passwords count per user; after the limit in *Admin → Security Policies* (default 5) the account is locked for the set time (default 15 minutes) or until an admin unlocks it.
+- **Lock** (header button, or the account menu → *Lock screen*, or ⌘K) hides the app until the same person types their password again; *Not you? Switch user* goes back to the sign-in form. A reload does not get past the lock. **Log out** is in the account menu (top right), next to **My account**, where you can change your own password.
+- **Staff**: *Admin → User Accounts & Auth → Add staff* — name, username, role and a temporary password (a random one is suggested). The person must choose their own password the first time they sign in. The key icon on a row sets a new temporary password (same forced change); the unlock icon lifts a lockout. Only roles with the user-management permissions can do this.
+- **Moving from PINs**: existing users get a username made from their first name in small letters (Bilal Khan Mohmand → `bilal`, Rashid Minhas → `rashid`, Zahid … → `zahid`; a number is added if two people share a first name). The username is shown under *Admin → User Accounts & Auth*. Each person signs in **once** with their username and their **old PIN as the password**, then must choose a new password, and the PIN is deleted. The owner can also use the old master PIN that one time; once the owner has a password the master PIN is forgotten on every device.
+- **How passwords are kept**: never in plain text. The browser hashes them with PBKDF2-SHA256 (WebCrypto, a random 16-byte salt per password, 210,000 iterations) and only the hash, salt and iteration count are stored and synced (`users.passwordHash`, `passwordSalt`, `passwordIter`), so the owner can sign in on another device once `migrate_v16_passwords.sql` has been run. WebCrypto needs https or localhost.
+- Sign-ins, failed attempts, lockouts, lock/unlock, logouts, password changes and resets are written to the audit log.
+
+> **Security note**: this is sign-in for a local-first app, enforced in the browser. With RLS disabled, anyone holding the Supabase anon key can read or change every table, including the password hashes. True database security would additionally need **Supabase Auth + Row Level Security** policies (not implemented). Keep the Supabase URL/key private and restrict who can open the deployed URL.
+
+**Tests**: the e2e specs sign in through `e2e/helpers/login.ts` — `await signIn(page)` seeds the standard test users and signs in as the owner (`bilal` / `Sarmaya@2026`); `signIn(page, OPERATOR)` signs in as `zahid`; `seedUsers(page)` + `login(page, username, password)` do the two steps separately. The accounts (`bilal` super admin, `rashid` manager, `zahid` operator, `ayesha` viewer, all with password `Sarmaya@2026`) are defined once in `e2e/helpers/users.ts`, which unit tests also use through `src/__tests__/helpers/auth.ts` (`seedTestUsers()` + `await signIn(() => hook.result.current)`).
 
 ## Optional backend
 
-`server.ts` carries an Express API for credential login, 2FA, password reset and role management. It only runs under `npm run dev`. The production build on Vercel is static and local-first, so those calls are skipped there; PIN sign-in, roles and permissions work fully without it. Nothing needs configuring.
+`server.ts` carries an older demo Express API (credential login, 2FA, role management). It only runs under `npm run dev` and the app no longer calls its sign-in routes: username + password sign-in, roles and permissions work fully in the browser. Nothing needs configuring.
 
 ## Admin Access
 
-This app is for internal use only, so every unlocked session has full admin rights.
+The Admin screen is open to the owner (super admin) and roles with the admin permission.
 
-- **Master PIN**: the default PIN is `7860`. Change it from the lock screen or from **Admin → Master PIN & Session**. The PIN is 4–6 digits. Named users with their own PINs are managed under **Admin → Users & Roles**.
+- **Accounts**: the owner account is created on first start; staff accounts and temporary passwords are managed under **Admin → User Accounts & Auth** (see *Signing in*). The old master PIN no longer exists.
 - **Deleting records**: every card and detail modal has a trash icon. Deletes cascade and reverse their side-effects:
   - Deleting a **dispatch** returns its tonnage to warehouse stock and the booking's remaining balance, removes its ledger rows and WhatsApp alert, and reduces the customer's due if the dispatch was unpaid.
   - Deleting a **booking** deletes all of its dispatches (with the reversal above), then the booking itself.
@@ -200,7 +213,7 @@ This app is for internal use only, so every unlocked session has full admin righ
 - **Purge table / Factory reset / Load sample data** live on the Admin screen and require typing a confirmation word. They do **not** cascade.
 - Deletes are applied locally and, when Supabase is configured, to the cloud database. Every action is written to the audit log.
 
-> **Security note**: the PIN gate is a client-side convenience only. With RLS disabled in `supabase/schema.sql`, anyone holding the anon key can read and write every table. Keep the Supabase URL/key out of public repos and restrict who can open the deployed URL.
+> **Security note**: sign-in is enforced in the browser only. With RLS disabled in `supabase/schema.sql`, anyone holding the anon key can read and write every table; real protection needs Supabase Auth + RLS. Keep the Supabase URL/key out of public repos and restrict who can open the deployed URL.
 
 ## Run Locally
 

@@ -29,7 +29,6 @@ type PendingAction =
   | { kind: 'purge'; table: TableName; label: string; count: number }
   | { kind: 'factory' }
   | { kind: 'sample' }
-  | { kind: 'resetPin' }
   | null;
 
 const inputCls =
@@ -59,9 +58,9 @@ export const SystemDataTab: React.FC = () => {
     whatsappMessages,
     settings,
     updateSettings,
-    changeAdminPin,
-    resetAdminPinToDefault,
-    lockAdmin,
+    lockScreen,
+    logout,
+    currentUser,
     exportSystemBackup,
     importSystemBackup,
     factoryResetAllData,
@@ -72,10 +71,6 @@ export const SystemDataTab: React.FC = () => {
     stockTransfers,
   } = useTrading();
 
-  const [currentPin, setCurrentPin] = useState('');
-  const [newPin, setNewPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
-  const [pinFeedback, setPinFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const [importFeedback, setImportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -120,22 +115,6 @@ export const SystemDataTab: React.FC = () => {
     });
     setCompanySaved(true);
     setTimeout(() => setCompanySaved(false), 1500);
-  };
-
-  const handleChangePin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPinFeedback(null);
-    if (newPin !== confirmPin) {
-      setPinFeedback({ type: 'error', message: 'New PIN and confirmation do not match.' });
-      return;
-    }
-    const res = changeAdminPin(currentPin, newPin);
-    setPinFeedback({ type: res.success ? 'success' : 'error', message: res.message });
-    if (res.success) {
-      setCurrentPin('');
-      setNewPin('');
-      setConfirmPin('');
-    }
   };
 
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -234,10 +213,6 @@ export const SystemDataTab: React.FC = () => {
       case 'sample':
         resetToSampleData();
         break;
-      case 'resetPin':
-        resetAdminPinToDefault();
-        setPinFeedback({ type: 'success', message: 'Master PIN reset to default (7860).' });
-        break;
     }
     setPending(null);
   };
@@ -245,97 +220,40 @@ export const SystemDataTab: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Master PIN */}
+        {/* Sign-in & session (the old master PIN is gone: everyone signs in with username + password) */}
         <div className={cardCls}>
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-900">
               <KeyRound className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-[#111827] dark:text-white">Master Terminal PIN</h3>
-              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Quick keypad access to unlock the terminal.</p>
+              <h3 className="text-base font-bold text-[#111827] dark:text-white">Sign-in &amp; session</h3>
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Everyone signs in with their own username and password.</p>
             </div>
           </div>
-
-          <form onSubmit={handleChangePin} className="space-y-3">
-            <div>
-              <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Current PIN</label>
-              <input
-                type="password"
-                inputMode="numeric"
-                maxLength={6}
-                value={currentPin}
-                onChange={(e) => setCurrentPin(e.target.value)}
-                className={inputCls}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">New PIN</label>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={newPin}
-                  onChange={(e) => setNewPin(e.target.value)}
-                  className={inputCls}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Confirm PIN</label>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={confirmPin}
-                  onChange={(e) => setConfirmPin(e.target.value)}
-                  className={inputCls}
-                  required
-                />
-              </div>
-            </div>
-
-            {pinFeedback && (
-              <div
-                className={`p-3 rounded-2xl text-xs font-medium flex items-center gap-2 ${
-                  pinFeedback.type === 'success'
-                    ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800'
-                    : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                }`}
-              >
-                {pinFeedback.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
-                <span>{pinFeedback.message}</span>
-              </div>
-            )}
-
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <button
-                type="submit"
-                className="px-5 py-2.5 rounded-2xl bg-[#111827] dark:bg-white text-white dark:text-[#111827] text-xs font-bold shadow-xs hover:bg-black dark:hover:bg-slate-100 transition-all active:scale-95 flex items-center gap-1.5"
-              >
-                <KeyRound className="w-3.5 h-3.5 text-teal-400 dark:text-teal-700" />
-                <span>Save New PIN</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPending({ kind: 'resetPin' })}
-                className="px-4 py-2.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] flex items-center gap-1.5"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset to Default</span>
-              </button>
-              <button
-                type="button"
-                onClick={lockAdmin}
-                className="px-4 py-2.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 flex items-center gap-1.5 ml-auto"
-              >
-                <Lock className="w-3.5 h-3.5 text-amber-600" />
-                <span>Lock Now</span>
-              </button>
-            </div>
-          </form>
+          <p className="text-xs text-[#4B5563] dark:text-[#CBD5E1] leading-relaxed">
+            Signed in as <span className="font-bold">{currentUser?.name}</span> <span className="font-mono">@{currentUser?.username}</span>. Change your own
+            password from the account menu (top right → My account). Staff accounts and temporary passwords are managed under{' '}
+            <span className="font-semibold">User Accounts &amp; Auth</span>.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={lockScreen}
+              className="px-4 py-2.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 flex items-center gap-1.5"
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-600" />
+              <span>Lock Now</span>
+            </button>
+            <button
+              type="button"
+              onClick={logout}
+              className="px-4 py-2.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 flex items-center gap-1.5"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Log out</span>
+            </button>
+          </div>
         </div>
 
         {/* Backup & Restore */}
@@ -550,27 +468,21 @@ export const SystemDataTab: React.FC = () => {
               ? `Empty the ${pending.label} table?`
               : pending.kind === 'factory'
               ? 'Factory reset all data?'
-              : pending.kind === 'sample'
-              ? 'Replace data with sample dataset?'
-              : 'Reset master PIN to default (7860)?'
+              : 'Replace data with sample dataset?'
           }
           message={
             pending.kind === 'purge'
               ? `All ${pending.count} row(s) will be permanently cleared.`
               : pending.kind === 'factory'
               ? 'Every customer, supplier, product, dispatch, and ledger record will be permanently deleted.'
-              : pending.kind === 'sample'
-              ? 'Current state will be overwritten by the demo catalog and customers.'
-              : 'Master PIN will be reset to 7860.'
+              : 'Current state will be overwritten by the demo catalog and customers.'
           }
           confirmLabel={
             pending.kind === 'purge'
               ? `Purge ${pending.label}`
               : pending.kind === 'factory'
               ? 'Wipe Everything'
-              : pending.kind === 'sample'
-              ? 'Load Sample'
-              : 'Reset PIN'
+              : 'Load Sample'
           }
           requireText={
             pending.kind === 'purge' ? 'PURGE' : pending.kind === 'factory' ? 'DELETE ALL' : undefined

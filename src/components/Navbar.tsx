@@ -23,7 +23,10 @@ import {
   Coins,
   Tag,
   BookOpen,
+  LogOut,
+  KeyRound,
 } from 'lucide-react';
+import { MyAccountDialog } from './MyAccountDialog';
 import { useMemo } from 'react';
 import { computeAlerts } from '../utils/alerts';
 import { useTrading } from '../context/TradingContext';
@@ -41,7 +44,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     activeScreen,
     setActiveScreen,
     openOps,
-    lockAdmin,
+    lockScreen,
+    logout,
+    roles,
     can,
     isScreenVisible,
     currentUser,
@@ -67,6 +72,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [isBellOpen, setIsBellOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isMyAccountOpen, setIsMyAccountOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const alerts = useMemo(
     () => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders }, new Date().toISOString().split('T')[0]).slice(0, 6),
     [products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders]
@@ -81,6 +89,9 @@ export const Navbar: React.FC<NavbarProps> = ({
       }
       if (bellRef.current && !bellRef.current.contains(event.target as Node)) {
         setIsBellOpen(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -304,32 +315,60 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
 
-            {/* Signed-in user */}
+            {/* Signed-in user: menu with My account, Lock screen and Log out */}
             {currentUser && (
-              <div
-                title={`Signed in as ${currentUser.name} (${currentUser.roles?.join(', ') || currentUser.role})`}
-                className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] max-w-64"
-              >
-                <div className="w-6 h-6 rounded-full bg-teal-600 dark:bg-teal-500 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                  {currentUser.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-semibold text-[#111827] dark:text-white truncate">{currentUser.name}</div>
-                  <div className="text-[9px] uppercase tracking-wider text-teal-700 dark:text-teal-300 font-bold truncate">
-                    {currentUser.role.replace('_', ' ')}
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsUserMenuOpen((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={isUserMenuOpen}
+                  aria-label={`Account menu for ${currentUser.name}`}
+                  title={`Signed in as ${currentUser.name} (@${currentUser.username})`}
+                  className="flex items-center gap-2 p-1 xl:px-2.5 xl:py-1.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] max-w-64 transition-colors"
+                >
+                  <span className="w-6 h-6 rounded-full bg-teal-600 dark:bg-teal-500 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                    {currentUser.name.charAt(0).toUpperCase()}
+                  </span>
+                  <span className="hidden xl:block min-w-0 text-left">
+                    <span className="block text-xs font-semibold text-[#111827] dark:text-white truncate">{currentUser.name}</span>
+                    <span className="block text-[9px] uppercase tracking-wider text-teal-700 dark:text-teal-300 font-bold truncate">
+                      {currentUser.role.replace('_', ' ')}
+                    </span>
+                  </span>
+                  <ChevronDown className="w-3 h-3 text-[#8E9299] hidden xl:block" />
+                </button>
+                {isUserMenuOpen && (
+                  <div role="menu" className="absolute right-0 mt-2 w-60 bg-white dark:bg-[#101A26] rounded-2xl shadow-xl border border-[#E5E5E1] dark:border-[#203248] py-2 z-50 text-xs animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3.5 pb-2 mb-1 border-b border-[#E5E5E1] dark:border-[#203248]">
+                      <div className="font-bold text-sm text-[#111827] dark:text-white truncate">{currentUser.name}</div>
+                      <div className="text-[11px] text-[#6B7280] dark:text-[#94A3B8] truncate">
+                        <span className="font-mono">@{currentUser.username}</span> · {roles.find((r) => r.id === currentUser.role)?.name || currentUser.role}
+                      </div>
+                    </div>
+                    <button role="menuitem" type="button" onClick={() => { setIsUserMenuOpen(false); setIsMyAccountOpen(true); }} className="w-full px-3.5 py-2 text-left flex items-center gap-2.5 hover:bg-[#FAF9F6] dark:hover:bg-[#162436] text-[#111827] dark:text-[#F1F5F9] font-semibold">
+                      <KeyRound className="w-4 h-4 text-teal-600 dark:text-teal-400" /> My account &amp; password
+                    </button>
+                    <button role="menuitem" type="button" onClick={() => { setIsUserMenuOpen(false); lockScreen(); }} className="w-full px-3.5 py-2 text-left flex items-center gap-2.5 hover:bg-[#FAF9F6] dark:hover:bg-[#162436] text-[#111827] dark:text-[#F1F5F9] font-semibold">
+                      <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400" /> Lock screen
+                    </button>
+                    <button role="menuitem" type="button" onClick={() => { setIsUserMenuOpen(false); logout(); }} className="w-full px-3.5 py-2 text-left flex items-center gap-2.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-semibold">
+                      <LogOut className="w-4 h-4" /> Log out
+                    </button>
                   </div>
-                </div>
+                )}
               </div>
             )}
 
-            {/* Lock Terminal Button */}
+            {/* Lock screen button: asks for the same user's password to open again */}
             <button
-              onClick={() => lockAdmin()}
-              title="Lock the app (PIN needed to open again)"
-              className="flex items-center gap-1.5 px-2.5 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#E5E5E1] dark:border-[#203248] hover:border-rose-200 dark:hover:border-rose-900/60 text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600 dark:hover:text-rose-400 transition-all shadow-2xs active:scale-95"
+              onClick={() => lockScreen()}
+              title="Lock screen (your password is needed to open again)"
+              aria-label="Lock screen"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#E5E5E1] dark:border-[#203248] hover:border-rose-200 dark:hover:border-rose-900/60 text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600 dark:hover:text-rose-400 transition-all shadow-2xs active:scale-95"
             >
               <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-              <span className="hidden sm:inline">Lock</span>
+              <span>Lock</span>
             </button>
 
           </div>
@@ -365,6 +404,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           })}
         </nav>
       </div>
+      <MyAccountDialog isOpen={isMyAccountOpen} onClose={() => setIsMyAccountOpen(false)} />
     </header>
   );
 };

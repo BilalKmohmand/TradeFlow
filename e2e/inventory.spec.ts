@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { signIn } from './helpers/login';
 
 /** Billing shop selling oil cans and tins: one plain item (tins) and one that will track batches (cans). */
 const seedInventory = () => {
@@ -24,10 +25,7 @@ const iso = (days: number) => new Date(Date.now() + days * 86_400_000).toISOStri
 const dmy = (s: string) => s.split('-').reverse().join('-');
 
 async function unlock(page: Page) {
-  await page.goto('/');
-  await expect(page.getByRole('button', { name: /^Unlock/ })).toBeVisible();
-  for (const d of '7860') await page.getByRole('button', { name: d, exact: true }).click();
-  await page.getByRole('button', { name: /^Unlock/ }).click();
+  await signIn(page); // owner "bilal" / Sarmaya@2026 (see e2e/helpers/users.ts)
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible({ timeout: 10_000 });
 }
 
@@ -153,8 +151,8 @@ async function batchesGodownsAndBills(page: Page) {
   await expect(page.getByRole('cell', { name: '41 tin', exact: true })).toBeVisible();
 
   // Survives a reload (local-first).
-  await page.reload();
-  await unlock(page);
+  await page.reload(); // still signed in ("Keep me signed in")
+  await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible({ timeout: 10_000 });
   await goItems(page);
   await expect(page.locator('[data-testid="stock-details-p2"]:visible')).toContainText('Batkhela godown: 6');
   await expect(page.locator('[data-testid="stock-details-p1"]:visible')).toContainText('LATE-7');
@@ -192,8 +190,7 @@ test.describe('Receive a supplier delivery with several items', () => {
   test('supplier "Receive stock" takes more than one item and adds both to what you owe', async ({ page }) => {
     await unlock(page);
     await page.getByRole('button', { name: 'Suppliers', exact: true }).first().click();
-    await page.getByRole('heading', { name: 'Ahmed' }).click();
-    await page.getByRole('button', { name: 'Receive Stock' }).click();
+    await page.getByRole('button', { name: 'Receive stock from Dalda Foods' }).click();
 
     const rcv = page.getByRole('dialog', { name: 'Receive stock' });
     await expect(rcv.getByLabel('Supplier (optional)', { exact: true })).toHaveValue('s1');

@@ -6,10 +6,11 @@ import { collectCashMovements, accountBalancesOn, positionSummary } from '../uti
 import { buildDailySheet, daySummary, filterBills } from '../utils/billing';
 import { todayISO, shiftDate } from '../utils/stockFlow';
 import { Invoice } from '../types';
+import { seedTestUsers, signIn, OPERATOR } from './helpers/auth';
 
 const wrapper = ({ children }: { children: React.ReactNode }) => <TradingProvider>{children}</TradingProvider>;
 
-const setup = () => {
+const setup = async () => {
   localStorage.setItem('tradeflow_customers_v2', JSON.stringify([{ id: 'c1', name: 'Zaman & Co', company: 'Zaman & Co', phone: '0344', email: '', address: '', totalDue: 0, creditLimit: 0, createdAt: '2026-01-01' }]));
   localStorage.setItem('tradeflow_products_v2', JSON.stringify([
     { id: 'p1', name: '5 kg Can', category: 'General', unit: 'can', unitPricePerKg: 2065, stockKg: 500, minThresholdKg: 50 },
@@ -19,10 +20,9 @@ const setup = () => {
   localStorage.setItem('tradeflow_ledger_v2', '[]');
   localStorage.setItem('tradeflow_expenses_v2', '[]');
   localStorage.setItem('tradeflow_cash_v2', '[]');
+  seedTestUsers();
   const hook = renderHook(() => useTrading(), { wrapper });
-  act(() => {
-    hook.result.current.unlockAdmin('7860');
-  });
+  await signIn(() => hook.result.current);
   act(() => {
     hook.result.current.updateSettings({ cashOpeningBalance: 10000, openingBankBalance: 50000, cashOpeningDate: '2026-01-01', taxRatePct: 0 });
   });
@@ -32,15 +32,15 @@ const setup = () => {
 beforeEach(() => localStorage.clear());
 
 describe('bill numbers', () => {
-  it('continue from the highest existing number', () => {
+  it('continue from the highest existing number', async () => {
     expect(nextBillNumber([])).toBe('INV-1');
     expect(nextBillNumber([{ invoiceNumber: 'INV-57' } as Invoice, { invoiceNumber: 'INV-2026-003' } as Invoice])).toBe('INV-58');
   });
 });
 
 describe('createBill', () => {
-  it('matches the client sample: qty × price per line, subtotal, total; takes stock; credit goes on the customer', () => {
-    const { result } = setup();
+  it('matches the client sample: qty × price per line, subtotal, total; takes stock; credit goes on the customer', async () => {
+    const { result } = await setup();
     let r: ReturnType<typeof result.current.createBill> | undefined;
     act(() => {
       r = result.current.createBill({
@@ -70,8 +70,8 @@ describe('createBill', () => {
     expect(bill.referenceId).toBe('INV-1');
   });
 
-  it('applies discount, records cash paid now into the cash book, and second bill gets the next number', () => {
-    const { result } = setup();
+  it('applies discount, records cash paid now into the cash book, and second bill gets the next number', async () => {
+    const { result } = await setup();
     act(() => {
       result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: '5 kg Can', qty: 10, unitPrice: 2000 }], discount: 500, paidNow: 19500, paymentMethod: 'Cash' });
     });
@@ -97,8 +97,8 @@ describe('createBill', () => {
     expect(accountBalancesOn(mv2, result.current.settings, todayISO()).bank).toBe(56535);
   });
 
-  it('rejects an empty bill or an unknown customer', () => {
-    const { result } = setup();
+  it('rejects an empty bill or an unknown customer', async () => {
+    const { result } = await setup();
     let r1: any;
     let r2: any;
     act(() => {
@@ -112,8 +112,8 @@ describe('createBill', () => {
 });
 
 describe('payBill / deleteBill', () => {
-  it('partial payments reduce the balance and the customer due; overpaying is refused; delete reverses everything', () => {
-    const { result } = setup();
+  it('partial payments reduce the balance and the customer due; overpaying is refused; delete reverses everything', async () => {
+    const { result } = await setup();
     act(() => {
       result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: '5 kg Can', qty: 5, unitPrice: 2000 }] });
     });
@@ -144,8 +144,8 @@ describe('payBill / deleteBill', () => {
     expect(result.current.customers[0].totalDue).toBe(0);
   });
 
-  it('deleting an unpaid bill takes the credit back off the customer', () => {
-    const { result } = setup();
+  it('deleting an unpaid bill takes the credit back off the customer', async () => {
+    const { result } = await setup();
     act(() => {
       result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'Can', qty: 2, unitPrice: 1000 }] });
     });
@@ -158,8 +158,8 @@ describe('payBill / deleteBill', () => {
 });
 
 describe('cash ↔ bank transfers and the daily sheet', () => {
-  it('a deposit moves money from cash to bank without changing the total', () => {
-    const { result } = setup();
+  it('a deposit moves money from cash to bank without changing the total', async () => {
+    const { result } = await setup();
     act(() => {
       expect(result.current.addCashTransfer({ amount: 4000, from: 'cash', note: 'HBL' }).success).toBe(true);
     });
@@ -173,8 +173,8 @@ describe('cash ↔ bank transfers and the daily sheet', () => {
     });
   });
 
-  it('daily sheet: opening/closing, bills, receipts, expenses by category, position', () => {
-    const { result } = setup();
+  it('daily sheet: opening/closing, bills, receipts, expenses by category, position', async () => {
+    const { result } = await setup();
     const today = todayISO();
     act(() => {
       result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'Can', qty: 3, unitPrice: 1000 }], paidNow: 1000, paymentMethod: 'Cash' });
@@ -208,7 +208,7 @@ describe('cash ↔ bank transfers and the daily sheet', () => {
     expect(daySummary(result.current.invoices, mv, shiftDate(today, -1)).sales).toBe(0);
   });
 
-  it('filterBills searches by customer, number and item and honours the period', () => {
+  it('filterBills searches by customer, number and item and honours the period', async () => {
     const today = todayISO();
     const mk = (n: number, date: string, cust: string, bal = 0): Invoice => ({ id: `i${n}`, invoiceNumber: `INV-${n}`, customerId: 'c', customerName: cust, issueDate: date, dueDate: date, status: 'issued', paymentStatus: 'unpaid', billKind: 'credit', items: [{ id: 'x', productId: 'p', productName: 'Tin', kg: 1, ratePerKg: 1, amount: 1 }], subtotal: 1, taxRatePct: 0, taxAmount: 0, totalAmount: 1, paidAmount: 0, balanceDue: bal, createdAt: date });
     const rows = [mk(1, today, 'Ali'), mk(2, shiftDate(today, -3), 'Zaman', 5), mk(3, shiftDate(today, -40), 'Ali')];
@@ -222,8 +222,8 @@ describe('cash ↔ bank transfers and the daily sheet', () => {
 });
 
 describe('integrity rules', () => {
-  it('a transfer is deleted as a pair, and deleting a customer removes their bills', () => {
-    const { result } = setup();
+  it('a transfer is deleted as a pair, and deleting a customer removes their bills', async () => {
+    const { result } = await setup();
     act(() => {
       result.current.addCashTransfer({ amount: 4000, from: 'cash' });
     });
@@ -242,8 +242,8 @@ describe('integrity rules', () => {
     expect(result.current.ledger.length).toBe(0);
   });
 
-  it('cash book reads the method column, and subtotal equals the sum of printed line amounts', () => {
-    const { result } = setup();
+  it('cash book reads the method column, and subtotal equals the sum of printed line amounts', async () => {
+    const { result } = await setup();
     act(() => {
       result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'x', qty: 3, unitPrice: 0.335 }, { productId: 'p1', name: 'y', qty: 3, unitPrice: 0.335 }, { productId: 'p1', name: 'z', qty: 3, unitPrice: 0.335 }], paidNow: 3.03, paymentMethod: 'Cheque' });
     });
@@ -266,8 +266,8 @@ describe('integrity rules', () => {
 });
 
 describe('QA rules', () => {
-  it('refuses negative prices, zero totals and future dates; reuses an inline customer with the same name', () => {
-    const { result } = setup();
+  it('refuses negative prices, zero totals and future dates; reuses an inline customer with the same name', async () => {
+    const { result } = await setup();
     let a: any, b: any, c: any, d: any;
     act(() => {
       a = result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'x', qty: 2, unitPrice: -100 }] });
@@ -282,8 +282,8 @@ describe('QA rules', () => {
     expect(result.current.customers.length).toBe(1);
     expect(d.invoice.customerId).toBe('c1');
   });
-  it('a refused bill with an inline new customer does not leave that customer behind', () => {
-    const { result } = setup();
+  it('a refused bill with an inline new customer does not leave that customer behind', async () => {
+    const { result } = await setup();
     let r: any;
     act(() => {
       r = result.current.createBill({ customerId: '', newCustomer: { name: 'Brand New Buyer', phone: '0300 9999999' }, items: [{ productId: 'p1', name: 'x', qty: 1, unitPrice: 100 }], date: '2099-01-01' });
@@ -297,8 +297,8 @@ describe('QA rules', () => {
     expect(result.current.customers.filter((c) => c.name === 'Brand New Buyer').length).toBe(1);
     expect(r.invoice.customerId).toBe(result.current.customers.find((c) => c.name === 'Brand New Buyer')!.id);
   });
-  it('two bills created in the same tick get different numbers', () => {
-    const { result } = setup();
+  it('two bills created in the same tick get different numbers', async () => {
+    const { result } = await setup();
     act(() => {
       result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'x', qty: 1, unitPrice: 10 }] });
       result.current.createBill({ customerId: 'c1', items: [{ productId: 'p1', name: 'x', qty: 1, unitPrice: 10 }] });

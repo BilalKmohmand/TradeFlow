@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { signIn } from './helpers/login';
 
 /** Billing shop: tins bought from Dalda, one bill this week and an old unpaid bill from 75 days ago. */
 const seedShop = () => {
@@ -31,9 +32,7 @@ const seedShop = () => {
 };
 
 async function unlock(page: Page) {
-  await page.goto('/');
-  for (const d of '7860') await page.getByRole('button', { name: d, exact: true }).click();
-  await page.getByRole('button', { name: /^Unlock/ }).click();
+  await signIn(page); // owner "bilal" / Sarmaya@2026 (see e2e/helpers/users.ts)
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible({ timeout: 10_000 });
 }
 

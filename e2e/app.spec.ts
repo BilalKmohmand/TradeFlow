@@ -1,13 +1,11 @@
 import { test, expect, Page } from '@playwright/test';
+import { signIn, OPERATOR } from './helpers/login';
 
 const SHOTS = process.env.SHOT_DIR || 'e2e/screenshots';
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
 
 async function unlock(page: Page) {
-  await page.goto('/');
-  await expect(page.getByRole('button', { name: /^Unlock/ })).toBeVisible();
-  for (const d of '7860') await page.getByRole('button', { name: d, exact: true }).click();
-  await page.getByRole('button', { name: /^Unlock/ }).click();
+  await signIn(page); // owner "bilal" / Sarmaya@2026 (see e2e/helpers/users.ts)
   await expect(page.getByRole('heading', { name: 'Trading Overview' })).toBeVisible({ timeout: 10_000 });
 }
 
@@ -23,10 +21,6 @@ test.describe.serial('Sarmaya end-to-end', () => {
     await page.addInitScript(() => {
       localStorage.setItem('tradeflow_settings_v2', JSON.stringify({ appMode: 'trading' }));
       localStorage.setItem('tradeflow_settings_v2', JSON.stringify({ appMode: 'trading' }));
-      localStorage.setItem('tradeflow_users_v2', JSON.stringify([
-        { id: 'u-admin', name: 'Bilal Khan Mohmand', username: 'superadmin', role: 'super_admin', roles: ['super_admin'], pin: '7860', active: true, status: 'active', createdAt: '2026-09-04' },
-        { id: 'u1', name: 'Bilal', username: 'bilal', role: 'operator', roles: ['operator'], pin: '1234', active: true, status: 'active', createdAt: '2026-09-04' },
-      ]));
     });
     page.on('response', (r) => { if (r.status() >= 400) console.log('HTTP', r.status(), r.url()); });
 
@@ -43,7 +37,7 @@ test.describe.serial('Sarmaya end-to-end', () => {
     await page.setViewportSize({ width: 1360, height: 900 });
     await shot(page, '01-dashboard-empty');
 
-    // Users are seeded via localStorage (the new user-management UI needs username/email/password).
+    // Test users (owner bilal, rashid, zahid, ayesha) are seeded by signIn(); see e2e/helpers/users.ts.
 
     // Supplier
     await page.getByRole('button', { name: 'Suppliers' }).first().click();
@@ -175,13 +169,9 @@ test.describe.serial('Sarmaya end-to-end', () => {
     await page.addInitScript(() => {
       localStorage.setItem('tradeflow_settings_v2', JSON.stringify({ appMode: 'trading' }));
       localStorage.setItem('tradeflow_settings_v2', JSON.stringify({ appMode: 'trading' }));
-      localStorage.setItem('tradeflow_users_v2', JSON.stringify([{ id: 'u1', name: 'Bilal', role: 'operator', pin: '1234', active: true, createdAt: '2026-09-04' }]));
       localStorage.setItem('tradeflow_customers_v2', JSON.stringify([{ id: 'c1', name: 'Ali Raza', company: 'Raza Traders', phone: '+92 300 2222222', email: '', address: '', totalDue: 0, creditLimit: 100000, createdAt: '2026-09-04' }]));
     });
-    await page.goto('/');
-    await page.getByRole('combobox').first().selectOption({ label: /Bilal/ } as any).catch(() => {});
-    for (const d of '1234') await page.getByRole('button', { name: d, exact: true }).click();
-    await page.getByRole('button', { name: /^Unlock/ }).click();
+    await signIn(page, OPERATOR); // "zahid" / Sarmaya@2026
     await expect(page.getByRole('heading', { name: 'Trading Overview' })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'Admin' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Customers' }).first().click();

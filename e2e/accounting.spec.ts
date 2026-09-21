@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { signIn } from './helpers/login';
 
 const SHOTS = process.env.SHOT_DIR || 'e2e/screenshots';
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
@@ -35,10 +36,7 @@ const seedBooks = () => {
 };
 
 async function unlock(page: Page) {
-  await page.goto('/');
-  await expect(page.getByRole('button', { name: /^Unlock/ })).toBeVisible();
-  for (const d of '7860') await page.getByRole('button', { name: d, exact: true }).click();
-  await page.getByRole('button', { name: /^Unlock/ }).click();
+  await signIn(page); // owner "bilal" / Sarmaya@2026 (see e2e/helpers/users.ts)
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible({ timeout: 10_000 });
 }
 
@@ -171,8 +169,8 @@ test.describe('Accounts (double-entry)', () => {
     await page.keyboard.press('Escape');
 
     // Books survive a reload
-    await page.reload();
-    await unlock(page);
+    await page.reload(); // still signed in ("Keep me signed in")
+    await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: 'Accounts', exact: true }).first().click();
     await openTab(page, 'Journal');
     await page.getByLabel('Show', { exact: true }).selectOption('manual');

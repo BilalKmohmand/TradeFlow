@@ -7,6 +7,7 @@ const shot = async (page: Page, name: string) => {
 };
 
 import { seed } from './seed';
+import { seedUsers, login, OWNER } from './helpers/login';
 
 
 test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
@@ -42,10 +43,12 @@ const noOverflow = async (page: Page, label: string) => {
 
 test('every screen and modal on a phone', async ({ page }) => {
   await page.addInitScript(seed);
+  await seedUsers(page);
   await page.goto('/');
+  await expect(page.getByTestId('login-form')).toBeVisible();
+  await noOverflow(page, 'sign-in');
   await shot(page, '00-lock');
-  for (const d of '7860') await page.getByRole('button', { name: d, exact: true }).click();
-  await page.getByRole('button', { name: /^Unlock/ }).click();
+  await login(page, OWNER.username, OWNER.password, { goto: false });
   await expect(page.getByRole('heading', { name: 'Trading Overview' })).toBeVisible({ timeout: 10_000 });
   await page.keyboard.press('Escape');
   await noOverflow(page, 'dashboard');

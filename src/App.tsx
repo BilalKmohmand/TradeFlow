@@ -29,7 +29,7 @@ import { ProductsScreen } from './screens/ProductsScreen';
 import { BookingsScreen } from './screens/BookingsScreen';
 import { ReportsScreen } from './screens/ReportsScreen';
 import { AdminScreen } from './screens/AdminScreen';
-import { AppStartPinGate } from './components/AppStartPinGate';
+import { AuthGate } from './components/AuthGate';
 import { BillingUIProvider } from './components/billing/BillingUI';
 import { BillingHomeScreen } from './screens/billing/BillingHomeScreen';
 import { BillsScreen } from './screens/billing/BillsScreen';
@@ -131,9 +131,9 @@ function MainApp() {
     setIsPaymentModalOpen(true);
   };
 
-  // Master PIN Gate on start of web app
+  // Sign-up / sign-in / lock screen / forced password change until a user is signed in.
   if (!isAdminUnlocked) {
-    return <AppStartPinGate />;
+    return <AuthGate />;
   }
 
   return (

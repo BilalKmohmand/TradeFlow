@@ -16,6 +16,7 @@ import {
 } from '../utils/bankRec';
 import { parseCsv } from '../components/admin/DataImportTab';
 import { AppSettings, BankStatementLine, DEFAULT_SETTINGS } from '../types';
+import { seedTestUsers, signIn, OPERATOR } from './helpers/auth';
 
 const mv = (id: string, date: string, direction: 'in' | 'out', amount: number, method = 'Bank Transfer'): CashMovement => ({
   id, date, direction, amount, method, description: id, source: 'manual', sourceId: id,
@@ -26,7 +27,7 @@ const line = (id: string, date: string, amount: number, extra: Partial<BankState
 const settings: AppSettings = { ...DEFAULT_SETTINGS, cashOpeningBalance: 1000, openingBankBalance: 100000, cashOpeningDate: '2026-01-01' };
 
 describe('statement parsing', () => {
-  it('reads dd/mm/yyyy, yyyy-mm-dd and friends', () => {
+  it('reads dd/mm/yyyy, yyyy-mm-dd and friends', async () => {
     expect(parseStatementDate('05/03/2026')).toBe('2026-03-05');
     expect(parseStatementDate('2026-03-05')).toBe('2026-03-05');
     expect(parseStatementDate('5-3-26')).toBe('2026-03-05');
@@ -35,7 +36,7 @@ describe('statement parsing', () => {
     expect(parseStatementDate('31/02/2026')).toBeNull();
     expect(parseStatementDate('Opening balance')).toBeNull();
   });
-  it('reads amounts with commas, brackets, DR/CR and currency', () => {
+  it('reads amounts with commas, brackets, DR/CR and currency', async () => {
     expect(parseAmount('1,250.50')).toBe(1250.5);
     expect(parseAmount('Rs. 1,000')).toBe(1000);
     expect(parseAmount('(500)')).toBe(-500);
@@ -45,7 +46,7 @@ describe('statement parsing', () => {
     expect(parseAmount('')).toBeNull();
     expect(parseAmount('abc')).toBeNull();
   });
-  it('maps a single amount column', () => {
+  it('maps a single amount column', async () => {
     const rows = parseCsv('Date,Description,Amount\n05/03/2026,Deposit,"30,000"\n2026-03-06,Charges,-250\n,Closing balance,\n');
     expect(looksLikeHeader(rows[0])).toBe(true);
     const m = guessMapping(rows[0]);
@@ -57,7 +58,7 @@ describe('statement parsing', () => {
       { date: '2026-03-06', description: 'Charges', amount: -250, reference: undefined },
     ]);
   });
-  it('maps separate debit / credit columns (debit = money out)', () => {
+  it('maps separate debit / credit columns (debit = money out)', async () => {
     const rows = parseCsv('Txn Date,Narration,Chq No,Withdrawal,Deposit,Balance\n01-03-2026,ATM,,"2,000",,98000\n02-03-2026,IBFT in,123,,5000,103000\nxx,bad row,,1,,\n');
     const m = guessMapping(rows[0]);
     expect(m).toMatchObject({ date: 0, description: 1, reference: 2, debit: 3, credit: 4, amount: -1 });
@@ -66,7 +67,7 @@ describe('statement parsing', () => {
     expect(lines[1].reference).toBe('123');
     expect(errors).toHaveLength(1);
   });
-  it('skips lines already imported, but keeps genuine same-day duplicates within a statement', () => {
+  it('skips lines already imported, but keeps genuine same-day duplicates within a statement', async () => {
     const existing = [line('a', '2026-03-05', -50, { description: 'SMS charges' })];
     const incoming = [
       { date: '2026-03-05', description: 'SMS charges', amount: -50 },
@@ -79,20 +80,20 @@ describe('statement parsing', () => {
 });
 
 describe('autoMatch', () => {
-  it('matches exact amount on the same day with "exact" confidence', () => {
+  it('matches exact amount on the same day with "exact" confidence', async () => {
     const r = autoMatch([line('l1', '2026-03-05', 30000)], [mv('m1', '2026-03-05', 'in', 30000)]);
     expect(r).toEqual([{ lineId: 'l1', movementId: 'm1', daysApart: 0, confidence: 'exact' }]);
   });
-  it('allows ±3 days, not 4, and never matches a different amount', () => {
+  it('allows ±3 days, not 4, and never matches a different amount', async () => {
     const moves = [mv('m1', '2026-03-02', 'in', 1000), mv('m2', '2026-03-10', 'in', 2000), mv('m3', '2026-03-05', 'in', 2999.99)];
     const r = autoMatch([line('l1', '2026-03-05', 1000), line('l2', '2026-03-06', 2000), line('l3', '2026-03-05', 3000)], moves);
     expect(r).toEqual([{ lineId: 'l1', movementId: 'm1', daysApart: 3, confidence: 'medium' }]);
   });
-  it('respects the sign: money out on the statement only matches money out in the books', () => {
+  it('respects the sign: money out on the statement only matches money out in the books', async () => {
     const r = autoMatch([line('l1', '2026-03-05', -5000)], [mv('in', '2026-03-05', 'in', 5000), mv('out', '2026-03-06', 'out', 5000)]);
     expect(r).toEqual([{ lineId: 'l1', movementId: 'out', daysApart: 1, confidence: 'high' }]);
   });
-  it('uses each movement once, pairing the closest dates first', () => {
+  it('uses each movement once, pairing the closest dates first', async () => {
     const moves = [mv('m1', '2026-03-01', 'out', 500), mv('m2', '2026-03-04', 'out', 500)];
     const lines = [line('l1', '2026-03-02', -500), line('l2', '2026-03-04', -500), line('l3', '2026-03-03', -500)];
     const r = autoMatch(lines, moves);
@@ -101,12 +102,12 @@ describe('autoMatch', () => {
     expect(r).toContainEqual({ lineId: 'l1', movementId: 'm1', daysApart: 1, confidence: 'high' });
     expect(new Set(r.map((p) => p.movementId)).size).toBe(2);
   });
-  it('ignores cash movements and movements already matched to another line', () => {
+  it('ignores cash movements and movements already matched to another line', async () => {
     const moves = [mv('cash', '2026-03-05', 'in', 100, 'Cash'), mv('used', '2026-03-05', 'in', 100)];
     const lines = [line('done', '2026-03-05', 100, { status: 'matched', matchedMovementIds: ['used'] }), line('l1', '2026-03-05', 100)];
     expect(autoMatch(lines, moves)).toEqual([]);
   });
-  it('matches the bank side of a cash ↔ bank transfer (both directions)', () => {
+  it('matches the bank side of a cash ↔ bank transfer (both directions)', async () => {
     const movements = collectCashMovements([], [], [
       { id: 'dep-c', date: '2026-03-05', direction: 'out', amount: 30000, description: 'Deposited cash to bank', method: 'Cash', createdAt: '', pairId: 'x1' },
       { id: 'dep-b', date: '2026-03-05', direction: 'in', amount: 30000, description: 'Deposited cash to bank', method: 'Bank Transfer', createdAt: '', pairId: 'x1' },
@@ -137,7 +138,7 @@ describe('reconciliationSummary', () => {
     line('l5', '2026-03-05', -99999, { status: 'ignored' }),
   ];
 
-  it('explains the difference between books and statement', () => {
+  it('explains the difference between books and statement', async () => {
     const s = reconciliationSummary({ movements: moves, settings, lines, statementDate: '2026-03-31', closingBalance: 139750, clearedMovementIds: [] });
     expect(s.bookBalance).toBe(132000);
     expect(s.outstandingPayments.map((m) => m.id)).toEqual(['chq-out']);
@@ -151,7 +152,7 @@ describe('reconciliationSummary', () => {
     expect(s.clearedCount).toBe(3);
   });
 
-  it('is not reconciled when the closing balance is off, and ticking cleared items changes the maths', () => {
+  it('is not reconciled when the closing balance is off, and ticking cleared items changes the maths', async () => {
     const off = reconciliationSummary({ movements: moves, settings, lines, statementDate: '2026-03-31', closingBalance: 131750, clearedMovementIds: [] });
     expect(off.reconciled).toBe(false);
     expect(off.difference).toBe(-8000);
@@ -161,7 +162,7 @@ describe('reconciliationSummary', () => {
     expect(ticked.reconciled).toBe(true);
   });
 
-  it('only counts items up to the statement date', () => {
+  it('only counts items up to the statement date', async () => {
     const s = reconciliationSummary({ movements: moves, settings, lines, statementDate: '2026-03-03', closingBalance: 0, clearedMovementIds: [] });
     expect(s.bookBalance).toBe(145000);
     expect(s.unrecorded).toHaveLength(0);
@@ -179,9 +180,10 @@ describe('bank reconciliation in the app', () => {
     localStorage.setItem('tradeflow_cash_entries_v2', '[]');
   });
 
-  it('imports, auto-matches, creates the missing expense, and saves a reconciliation', () => {
+  it('imports, auto-matches, creates the missing expense, and saves a reconciliation', async () => {
+    seedTestUsers();
     const { result } = renderHook(() => useTrading(), { wrapper });
-    act(() => { result.current.unlockAdmin('7860'); });
+    await signIn(() => result.current);
     act(() => { result.current.updateSettings({ cashOpeningBalance: 0, openingBankBalance: 100000, cashOpeningDate: '2026-01-01' }); });
     act(() => { result.current.addCashTransfer({ amount: 30000, from: 'cash', date: '2026-03-02' }); });
     let r: ReturnType<typeof result.current.addBankStatementLines> | undefined;
@@ -235,7 +237,7 @@ describe('bank reconciliation in the app', () => {
 });
 
 describe('review fixes: cut-off at the statement date, deleted records', () => {
-  it('a cheque written before month-end that clears after it is still outstanding at month-end', () => {
+  it('a cheque written before month-end that clears after it is still outstanding at month-end', async () => {
     // Opening bank 100,000. Cheque 100 written Sep 29, reaches the bank Oct 2 (matched).
     const moves = [mv('chq', '2026-09-29', 'out', 100)];
     const lines = [line('l1', '2026-10-02', -100, { status: 'matched', matchedMovementIds: ['chq'] })];
@@ -246,14 +248,14 @@ describe('review fixes: cut-off at the statement date, deleted records', () => {
     expect(oct.outstandingPayments).toEqual([]);
     expect(oct.reconciled).toBe(true);
   });
-  it('a statement line before the cut-off matched to a book entry dated after it counts as not yet in the books', () => {
+  it('a statement line before the cut-off matched to a book entry dated after it counts as not yet in the books', async () => {
     const moves = [mv('dep', '2026-10-01', 'in', 500)];
     const lines = [line('l1', '2026-09-30', 500, { status: 'matched', matchedMovementIds: ['dep'] })];
     const s = reconciliationSummary({ movements: moves, settings, lines, statementDate: '2026-09-30', closingBalance: 100500, clearedMovementIds: [] });
     expect(s.unrecorded.map((l) => l.id)).toEqual(['l1']);
     expect(s.reconciled).toBe(true);
   });
-  it('lines matched to records that were later deleted are treated as unmatched again', () => {
+  it('lines matched to records that were later deleted are treated as unmatched again', async () => {
     const lines = [line('l1', '2026-03-10', -250, { status: 'matched', matchedMovementIds: ['gone'] })];
     const s = reconciliationSummary({ movements: [], settings, lines, statementDate: '2026-03-31', closingBalance: 99750, clearedMovementIds: [] });
     expect(s.unrecorded.map((l) => l.id)).toEqual(['l1']);
@@ -262,7 +264,7 @@ describe('review fixes: cut-off at the statement date, deleted records', () => {
     const again = autoMatch(lines, [mv('new', '2026-03-10', 'out', 250)]);
     expect(again.map((p) => `${p.lineId}->${p.movementId}`)).toEqual(['l1->new']);
   });
-  it('statement lines dated before the counting-from date are left out of the reconciliation', () => {
+  it('statement lines dated before the counting-from date are left out of the reconciliation', async () => {
     const lines = [line('old', '2025-12-20', -999)];
     const s = reconciliationSummary({ movements: [], settings, lines, statementDate: '2026-01-31', closingBalance: 100000, clearedMovementIds: [] });
     expect(s.unrecorded).toEqual([]);
@@ -270,7 +272,7 @@ describe('review fixes: cut-off at the statement date, deleted records', () => {
 });
 
 describe('statement separators', () => {
-  it('reads semicolon and tab separated bank exports as well as commas', () => {
+  it('reads semicolon and tab separated bank exports as well as commas', async () => {
     const semi = parseCsv('Txn Date;Narration;Withdrawal;Deposit;Balance\n01-03-2026;ATM;2,000;;98000\n02-03-2026;IBFT Ali;;5,000;103000\n');
     expect(semi[0]).toEqual(['Txn Date', 'Narration', 'Withdrawal', 'Deposit', 'Balance']);
     expect(semi[1]).toEqual(['01-03-2026', 'ATM', '2,000', '', '98000']);

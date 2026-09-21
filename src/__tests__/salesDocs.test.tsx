@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import React from 'react';
 import { renderHook, act } from '@testing-library/react';
+import { seedTestUsers, signIn, OWNER, OPERATOR } from './helpers/auth';
 import { TradingProvider, useTrading } from '../context/TradingContext';
 import { buildJournal, trialBalance, accountTotals, DEFAULT_ACCOUNTS, ACC } from '../utils/accounting';
 import { collectCashMovements, accountBalancesOn } from '../utils/finance';
@@ -13,7 +14,7 @@ import { Invoice, Quotation } from '../types';
 const wrapper = ({ children }: { children: React.ReactNode }) => <TradingProvider>{children}</TradingProvider>;
 const today = todayISO();
 
-const setup = (opts: { taxRatePct?: number } = {}) => {
+const setup = async (opts: { taxRatePct?: number } = {}) => {
   localStorage.setItem('tradeflow_customers_v2', JSON.stringify([{ id: 'c1', name: 'Zaman & Co', company: 'Zaman & Co', phone: '0344', email: '', address: '', totalDue: 0, creditLimit: 0, createdAt: '2026-01-01' }]));
   localStorage.setItem('tradeflow_suppliers_v2', JSON.stringify([{ id: 's1', name: 'Ahmed', company: 'Dalda Foods', phone: '0300', email: '', materialCategory: 'Oil', address: '', totalOwed: 0, createdAt: '2026-01-01' }]));
   localStorage.setItem('tradeflow_products_v2', JSON.stringify([
@@ -22,16 +23,15 @@ const setup = (opts: { taxRatePct?: number } = {}) => {
     { id: 'p3', name: 'Ghee 1 kg', category: 'General', unit: 'pack', unitPricePerKg: 500, stockKg: 0, minThresholdKg: 0, trackBatches: true },
   ]));
   ['tradeflow_invoices_v1', 'tradeflow_ledger_v2', 'tradeflow_expenses_v2', 'tradeflow_cash_entries_v2', 'tradeflow_purchases_v2', 'tradeflow_returns_v2', 'tradeflow_quotations_v2', 'tradeflow_agreed_rates_v1'].forEach((k) => localStorage.setItem(k, '[]'));
+  seedTestUsers();
   const hook = renderHook(() => useTrading(), { wrapper });
-  act(() => {
-    hook.result.current.unlockAdmin('7860');
-  });
+  await signIn(() => hook.result.current);
   act(() => {
     hook.result.current.updateSettings({ cashOpeningBalance: 10000, openingBankBalance: 50000, cashOpeningDate: '2026-01-01', taxRatePct: opts.taxRatePct ?? 0 });
   });
   return hook;
 };
-type Hook = ReturnType<typeof setup>;
+type Hook = Awaited<ReturnType<typeof setup>>;
 
 const books = (h: Hook) => {
   const t = h.result.current;
@@ -63,7 +63,7 @@ beforeEach(() => {
 });
 
 describe('line discounts', () => {
-  it('works out Rs. and % discounts and never more than the line', () => {
+  it('works out Rs. and % discounts and never more than the line', async () => {
     expect(lineDiscountAmount(10, 2000, 'rs', 500)).toBe(500);
     expect(lineDiscountAmount(10, 2000, 'pct', 5)).toBe(1000);
     expect(lineDiscountAmount(1, 100, 'rs', 500)).toBe(100);
@@ -71,8 +71,8 @@ describe('line discounts', () => {
     expect(lineDiscountAmount(1, 100, 'pct', 0)).toBe(0);
   });
 
-  it('bill totals, line amounts and the journal (Sales gross, Discounts 4010 = line + bill discounts) agree', () => {
-    const h = setup();
+  it('bill totals, line amounts and the journal (Sales gross, Discounts 4010 = line + bill discounts) agree', async () => {
+    const h = await setup();
     const inv = makeBill(h, {
       items: [
         { productId: 'p1', name: '5 kg Can', qty: 10, unitPrice: 2000, discountType: 'pct', discountValue: 5 },
@@ -96,8 +96,8 @@ describe('line discounts', () => {
 });
 
 describe('sales returns against a bill', () => {
-  it('credit return: stock back, customer owes less, bill shows returned amount, journal balanced', () => {
-    const h = setup();
+  it('credit return: stock back, customer owes less, bill shows returned amount, journal balanced', async () => {
+    const h = await setup();
     const inv = makeBill(h, { items: [{ productId: 'p1', name: '5 kg Can', qty: 10, unitPrice: 2000 }, { productId: 'p2', name: '16 kg Tin', qty: 2, unitPrice: 6000 }] });
     expect(stock(h, 'p1')).toBe(90);
     const line1 = bill(h, inv.id).items[0];
@@ -139,8 +139,8 @@ describe('sales returns against a bill', () => {
     balanced(h);
   });
 
-  it('refund return on a cash bill: money goes out of cash, customer balance unchanged, journal Cr Cash', () => {
-    const h = setup();
+  it('refund return on a cash bill: money goes out of cash, customer balance unchanged, journal Cr Cash', async () => {
+    const h = await setup();
     const inv = makeBill(h, { paidNow: 20000, paymentMethod: 'Cash' });
     expect(cash(h)).toBe(30000);
     let r: any;
@@ -169,8 +169,8 @@ describe('sales returns against a bill', () => {
     balanced(h);
   });
 
-  it('refund is refused on an unpaid bill; partly paid bill refunds only what is over the new total', () => {
-    const h = setup();
+  it('refund is refused on an unpaid bill; partly paid bill refunds only what is over the new total', async () => {
+    const h = await setup();
     const unpaid = makeBill(h);
     let r: any;
     act(() => { r = h.result.current.returnBillItems({ invoiceId: unpaid.id, lines: [{ billLineId: unpaid.items[0].id, qty: 1 }], settle: 'refund' }); });
@@ -185,8 +185,8 @@ describe('sales returns against a bill', () => {
     balanced(h);
   });
 
-  it('shares out the bill discount and reverses tax to Sales tax payable; returning everything clears the bill exactly', () => {
-    const h = setup({ taxRatePct: 17 });
+  it('shares out the bill discount and reverses tax to Sales tax payable; returning everything clears the bill exactly', async () => {
+    const h = await setup({ taxRatePct: 17 });
     const inv = makeBill(h, { items: [{ productId: 'p1', name: '5 kg Can', qty: 3, unitPrice: 1000, discountType: 'rs', discountValue: 100 }], discount: 100 });
     const b0 = bill(h, inv.id);
     // subtotal 2,900, bill discount 100 → 2,800 + 17% = 3,276
@@ -208,8 +208,8 @@ describe('sales returns against a bill', () => {
     balanced(h);
   });
 
-  it('batch items go back into the batch they were sold from', () => {
-    const h = setup();
+  it('batch items go back into the batch they were sold from', async () => {
+    const h = await setup();
     act(() => { h.result.current.receiveStock({ productId: 'p3', qty: 10, batchNo: 'OLD', expiryDate: shiftDate(today, 30) }); });
     act(() => { h.result.current.receiveStock({ productId: 'p3', qty: 10, batchNo: 'NEW', expiryDate: shiftDate(today, 300) }); });
     const inv = makeBill(h, { items: [{ productId: 'p3', name: 'Ghee 1 kg', qty: 12, unitPrice: 500 }] });
@@ -227,8 +227,8 @@ describe('sales returns against a bill', () => {
     expect(stock(h, 'p3')).toBe(8);
   });
 
-  it('refuses a return dated inside a closed period', () => {
-    const h = setup();
+  it('refuses a return dated inside a closed period', async () => {
+    const h = await setup();
     const inv = makeBill(h, { date: shiftDate(today, -10) });
     act(() => { h.result.current.updateSettings({ booksLockedUntil: shiftDate(today, -5) }); });
     let r: any;
@@ -241,8 +241,8 @@ describe('sales returns against a bill', () => {
 });
 
 describe('quotations', () => {
-  it('saves a multi-item quote, converts to a bill, and deleting the bill frees the quote again', () => {
-    const h = setup();
+  it('saves a multi-item quote, converts to a bill, and deleting the bill frees the quote again', async () => {
+    const h = await setup();
     let q: any;
     act(() => {
       q = h.result.current.saveBillQuotation({ customerId: 'c1', items: [{ productId: 'p1', productName: '5 kg Can', qty: 20, unitPrice: 1950, unit: 'can' }, { productId: 'p2', productName: '16 kg Tin', qty: 5, unitPrice: 5900, unit: 'tin' }], validUntil: shiftDate(today, 7) });
@@ -264,7 +264,7 @@ describe('quotations', () => {
     expect(bad.success).toBe(false);
   });
 
-  it('older single-item quotes read as one line; past valid-until shows as expired', () => {
+  it('older single-item quotes read as one line; past valid-until shows as expired', async () => {
     const old = { id: 'q', quoteNumber: 'QT-2026-1', customerId: 'c1', productId: 'p1', kg: 5, pricePerKg: 10, amount: 50, validUntil: '2026-01-01', status: 'sent', createdAt: '2026-01-01' } as Quotation;
     expect(quotationLines(old, () => 'Can')).toEqual([{ productId: 'p1', productName: 'Can', qty: 5, unitPrice: 10 }]);
     expect(quotationStatusOn(old, '2026-02-01')).toBe('expired');
@@ -273,8 +273,8 @@ describe('quotations', () => {
 });
 
 describe('customer rates', () => {
-  it('stores one rate per customer and item, editable, and marks bill lines made at that rate', () => {
-    const h = setup();
+  it('stores one rate per customer and item, editable, and marks bill lines made at that rate', async () => {
+    const h = await setup();
     act(() => { h.result.current.setCustomerAgreedRate('c1', 'p1', 1900); });
     act(() => { h.result.current.setCustomerAgreedRate('c1', 'p1', 1880); });
     expect(h.result.current.customerAgreedRates.filter((r) => r.customerId === 'c1')).toHaveLength(1);

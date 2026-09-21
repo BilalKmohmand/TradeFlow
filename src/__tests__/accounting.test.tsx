@@ -24,6 +24,7 @@ import {
 } from '../utils/accounting';
 import { todayISO } from '../utils/stockFlow';
 import { AppSettings, DEFAULT_SETTINGS, EXPENSE_CATEGORIES, LedgerEntry } from '../types';
+import { seedTestUsers, signIn, OPERATOR } from './helpers/auth';
 
 const settings: AppSettings = { ...DEFAULT_SETTINGS, cashOpeningBalance: 10000, openingBankBalance: 50000, cashOpeningDate: '2026-01-01', taxRatePct: 0 };
 
@@ -96,14 +97,14 @@ const dataset = (): JournalSources => {
 const lineOf = (e: JournalEntry, code: string) => e.lines.find((l) => l.accountCode === code);
 
 describe('chart of accounts', () => {
-  it('has unique codes, maps every expense category, and drawings go to equity', () => {
+  it('has unique codes, maps every expense category, and drawings go to equity', async () => {
     const codes = DEFAULT_ACCOUNTS.map((a) => a.code);
     expect(new Set(codes).size).toBe(codes.length);
     EXPENSE_CATEGORIES.forEach((c) => expect(codes).toContain(EXPENSE_ACCOUNT[c.id]));
     expect(DEFAULT_ACCOUNTS.find((a) => a.code === EXPENSE_ACCOUNT.drawings)!.type).toBe('equity');
     expect(DEFAULT_ACCOUNTS.every((a) => a.system)).toBe(true);
   });
-  it('merges custom accounts without letting them replace system ones', () => {
+  it('merges custom accounts without letting them replace system ones', async () => {
     const merged = mergeAccounts([{ code: '1000', name: 'Hijack', type: 'expense' }, { code: '1020', name: 'Meezan Bank', type: 'asset' }]);
     expect(merged.find((a) => a.code === '1000')!.name).toBe('Cash in hand');
     expect(merged.find((a) => a.code === '1020')!.system).toBe(false);
@@ -111,7 +112,7 @@ describe('chart of accounts', () => {
 });
 
 describe('validateEntry', () => {
-  it('accepts a balanced entry and rejects the rest', () => {
+  it('accepts a balanced entry and rejects the rest', async () => {
     const ok = validateEntry({ date: '2026-02-01', lines: [{ accountCode: '6070', debit: 100, credit: 0 }, { accountCode: '1000', debit: 0, credit: 100 }] });
     expect(ok.ok).toBe(true);
     expect(validateEntry({ date: '2026-02-01', lines: [{ accountCode: '6070', debit: 100, credit: 0 }, { accountCode: '1000', debit: 0, credit: 90 }] }).ok).toBe(false);
@@ -127,7 +128,7 @@ describe('buildJournal on a realistic dataset', () => {
   const journal = buildJournal(src);
   const asOf = '2026-12-31';
 
-  it('every automatic entry is balanced, has two or more lines and no negative amounts', () => {
+  it('every automatic entry is balanced, has two or more lines and no negative amounts', async () => {
     expect(journal.length).toBeGreaterThan(15);
     journal.forEach((e) => {
       expect(e.source).toBe('auto');
@@ -136,11 +137,11 @@ describe('buildJournal on a realistic dataset', () => {
     });
   });
 
-  it('entry ids are unique', () => {
+  it('entry ids are unique', async () => {
     expect(new Set(journal.map((e) => e.id)).size).toBe(journal.length);
   });
 
-  it('total debits equal total credits and the trial balance balances', () => {
+  it('total debits equal total credits and the trial balance balances', async () => {
     const all = journal.flatMap((e) => e.lines);
     expect(entryTotals(all).debit).toBe(entryTotals(all).credit);
     const tb = trialBalance(journal, DEFAULT_ACCOUNTS, asOf);
@@ -148,7 +149,7 @@ describe('buildJournal on a realistic dataset', () => {
     expect(tb.totalDebit).toBe(tb.totalCredit);
   });
 
-  it('a bill posts receivable, sales, discount, tax and cost of goods; its payment is posted once, from the ledger', () => {
+  it('a bill posts receivable, sales, discount, tax and cost of goods; its payment is posted once, from the ledger', async () => {
     const bill = journal.find((e) => e.id === 'auto-led-l3')!;
     expect(bill.billId).toBe('i2');
     expect(lineOf(bill, ACC.RECEIVABLE)!.debit).toBe(2223);
@@ -164,7 +165,7 @@ describe('buildJournal on a realistic dataset', () => {
     expect(journal.some((e) => e.ref === 'INV-2026-9999')).toBe(false);
   });
 
-  it('dispatch billing splits goods, freight and tax, with cost of goods at purchase cost', () => {
+  it('dispatch billing splits goods, freight and tax, with cost of goods at purchase cost', async () => {
     const d = journal.find((e) => e.id === 'auto-led-l10')!;
     expect(lineOf(d, ACC.SALES)!.credit).toBe(3000);
     expect(lineOf(d, ACC.FREIGHT_INCOME)!.credit).toBe(200);
@@ -172,7 +173,7 @@ describe('buildJournal on a realistic dataset', () => {
     expect(lineOf(d, ACC.COGS)!.debit).toBe(5000);
   });
 
-  it('expenses: category account, drawings to equity, credit expenses to unpaid expenses', () => {
+  it('expenses: category account, drawings to equity, credit expenses to unpaid expenses', async () => {
     expect(lineOf(journal.find((e) => e.id === 'auto-exp-e1')!, '6040')!.debit).toBe(800);
     expect(lineOf(journal.find((e) => e.id === 'auto-exp-e2')!, ACC.BANK)!.credit).toBe(5000);
     expect(lineOf(journal.find((e) => e.id === 'auto-exp-e3')!, ACC.UNPAID_EXPENSES)!.credit).toBe(1200);
@@ -180,7 +181,7 @@ describe('buildJournal on a realistic dataset', () => {
     expect(lineOf(journal.find((e) => e.id === 'auto-exp-e5')!, ACC.BANK_CHARGES)!.debit).toBe(50);
   });
 
-  it('a cash to bank transfer is one entry; capital and unclassified cash entries are posted sensibly', () => {
+  it('a cash to bank transfer is one entry; capital and unclassified cash entries are posted sensibly', async () => {
     const xfers = journal.filter((e) => e.sourceType === 'transfer');
     expect(xfers).toHaveLength(1);
     expect(lineOf(xfers[0], ACC.BANK)!.debit).toBe(4000);
@@ -189,7 +190,7 @@ describe('buildJournal on a realistic dataset', () => {
     expect(lineOf(journal.find((e) => e.id === 'auto-cash-x4')!, ACC.SUSPENSE)!.debit).toBe(300);
   });
 
-  it('cash and bank in the ledger equal the Money screen (accountBalancesOn)', () => {
+  it('cash and bank in the ledger equal the Money screen (accountBalancesOn)', async () => {
     const moves = collectCashMovements(src.ledger, src.expenses, src.cashEntries, src.customers, src.suppliers);
     for (const day of ['2026-01-01', '2026-02-05', '2026-02-15', asOf]) {
       const money = accountBalancesOn(moves, settings, day);
@@ -198,13 +199,13 @@ describe('buildJournal on a realistic dataset', () => {
     }
   });
 
-  it('receivable equals what customers owe and payable equals what suppliers are owed', () => {
+  it('receivable equals what customers owe and payable equals what suppliers are owed', async () => {
     expect(accountBalance(journal, ACC.RECEIVABLE)).toBe(src.customers.reduce((a, c) => a + c.totalDue, 0));
     expect(-accountBalance(journal, ACC.PAYABLE)).toBe(src.suppliers.reduce((a, s) => a + s.totalOwed, 0));
     expect(-accountBalance(journal, ACC.UNPAID_EXPENSES)).toBe(1200);
   });
 
-  it('profit & loss and balance sheet agree, and the balance sheet balances', () => {
+  it('profit & loss and balance sheet agree, and the balance sheet balances', async () => {
     const pnl = profitAndLoss(journal, '2026-01-01', asOf);
     // Sales 1000 + 2000 + 3000 - discount 100 - returns 200 + freight 200
     expect(pnl.totalIncome).toBe(5900);
@@ -217,7 +218,7 @@ describe('buildJournal on a realistic dataset', () => {
     expect(bs.profitToDate).toBe(profitAndLoss(journal, '1900-01-01', asOf).netProfit);
   });
 
-  it('general ledger gives opening, running and closing balances for an account', () => {
+  it('general ledger gives opening, running and closing balances for an account', async () => {
     const gl = generalLedger(journal, ACC.CASH, '2026-02-02', '2026-02-28');
     expect(gl.opening).toBe(accountBalance(journal, ACC.CASH, '2026-02-01'));
     expect(gl.closing).toBe(accountBalance(journal, ACC.CASH, '2026-02-28'));
@@ -227,7 +228,7 @@ describe('buildJournal on a realistic dataset', () => {
     expect(round(gl.opening + gl.totalDebit - gl.totalCredit)).toBe(gl.closing);
   });
 
-  it('opening stock is today\'s stock with recorded movements undone, at cost', () => {
+  it('opening stock is today\'s stock with recorded movements undone, at cost', async () => {
     // p1: 70 on hand + 30 sold on bills − 2 returned + 2 written off = 100 × 60
     expect(lineOf(journal.find((e) => e.id === 'auto-open-stock-p1')!, ACC.INVENTORY)!.debit).toBe(6000);
     // p2: everything bought was dispatched, nothing was there before
@@ -235,13 +236,13 @@ describe('buildJournal on a realistic dataset', () => {
     expect(lineOf(journal.find((e) => e.id === 'auto-adj-a1')!, ACC.STOCK_LOSSES)!.debit).toBe(120);
   });
 
-  it('pre-opening money movements hit opening equity, not cash', () => {
+  it('pre-opening money movements hit opening equity, not cash', async () => {
     const old = journal.find((e) => e.id === 'auto-led-l12')!;
     expect(lineOf(old, ACC.OPENING_EQUITY)!.debit).toBe(700);
     expect(lineOf(old, ACC.CASH)).toBeUndefined();
   });
 
-  it('manual entries join the books and keep them balanced', () => {
+  it('manual entries join the books and keep them balanced', async () => {
     const manual: JournalEntry = { id: 'm1', date: '2026-02-20', ref: 'JV-1', memo: 'Tea was actually staff food', source: 'manual', lines: [{ accountCode: '6020', debit: 300, credit: 0 }, { accountCode: ACC.SUSPENSE, debit: 0, credit: 300 }] };
     const books = combineJournal(journal, [manual]);
     expect(accountBalance(books, ACC.SUSPENSE)).toBe(0);
@@ -249,7 +250,7 @@ describe('buildJournal on a realistic dataset', () => {
     expect(balanceSheet(books, asOf).balanced).toBe(true);
   });
 
-  it('deleting a bill removes its postings', () => {
+  it('deleting a bill removes its postings', async () => {
     const without = { ...src, ledger: src.ledger.filter((l) => l.sourceId !== 'i2'), invoices: src.invoices!.filter((i) => i.id !== 'i2'), customers: src.customers.map((c) => (c.id === 'c1' ? { ...c, totalDue: 0 } : c)) };
     const j2 = buildJournal(without);
     expect(j2.some((e) => e.billId === 'i2')).toBe(false);
@@ -266,7 +267,7 @@ const round = (n: number) => Math.round(n * 100) / 100;
 // ---------------------------------------------------------------------------
 const wrapper = ({ children }: { children: React.ReactNode }) => <TradingProvider>{children}</TradingProvider>;
 
-const setupApp = () => {
+const setupApp = async () => {
   localStorage.setItem('tradeflow_customers_v2', JSON.stringify([
     { id: 'c1', name: 'Zaman & Co', company: 'Zaman & Co', phone: '0344', email: '', address: '', totalDue: 0, creditLimit: 0, createdAt: '2026-01-01' },
     { id: 'c2', name: 'Haji Karim', company: 'Karim Store', phone: '0300', email: '', address: '', totalDue: 7000, creditLimit: 0, createdAt: '2026-01-01' },
@@ -277,10 +278,9 @@ const setupApp = () => {
     { id: 'p2', name: '15.7 kg Tin', category: 'General', unit: 'tin', unitPricePerKg: 6535, stockKg: 100, minThresholdKg: 10 },
   ]));
   ['tradeflow_invoices_v1', 'tradeflow_ledger_v2', 'tradeflow_expenses_v2', 'tradeflow_cash_entries_v2', 'tradeflow_purchases_v2', 'tradeflow_dispatches_v2', 'tradeflow_bookings_v2'].forEach((k) => localStorage.setItem(k, '[]'));
+  seedTestUsers();
   const hook = renderHook(() => ({ t: useTrading(), books: useAccounting() }), { wrapper });
-  act(() => {
-    hook.result.current.t.unlockAdmin('7860');
-  });
+  await signIn(() => hook.result.current.t);
   act(() => {
     hook.result.current.t.updateSettings({ cashOpeningBalance: 10000, openingBankBalance: 50000, cashOpeningDate: '2026-01-01', taxRatePct: 0 });
   });
@@ -290,8 +290,8 @@ const setupApp = () => {
 beforeEach(() => localStorage.clear());
 
 describe('automatic posting from app actions', () => {
-  it('bills, payments, expenses, purchases and transfers keep the books balanced and in step with the app', () => {
-    const { result } = setupApp();
+  it('bills, payments, expenses, purchases and transfers keep the books balanced and in step with the app', async () => {
+    const { result } = await setupApp();
     const t = () => result.current.t;
     let billId = '';
     act(() => { billId = t().createBill({ customerId: 'c1', items: [{ productId: 'p1', qty: 10, unitPrice: 2065 }], discount: 650, paidNow: 5000, paymentMethod: 'Cash' }).invoice!.id; });
@@ -330,8 +330,8 @@ describe('automatic posting from app actions', () => {
     expect(accountBalance(after, ACC.RECEIVABLE, today)).toBe(round(t().customers.reduce((a, c) => a + c.totalDue, 0)));
   });
 
-  it('manual journals: balanced ones save, unbalanced and locked-period ones are refused; accounts can be added, system ones not deleted', () => {
-    const { result } = setupApp();
+  it('manual journals: balanced ones save, unbalanced and locked-period ones are refused; accounts can be added, system ones not deleted', async () => {
+    const { result } = await setupApp();
     const t = () => result.current.t;
     let r: { success: boolean; message: string } = { success: false, message: '' };
     act(() => { r = t().addManualJournal({ date: '2026-03-01', memo: 'Unbalanced', lines: [{ accountCode: '6070', debit: 100, credit: 0 }, { accountCode: '1000', debit: 0, credit: 90 }] }); });
@@ -366,8 +366,8 @@ describe('automatic posting from app actions', () => {
     expect(r.success).toBe(true);
   });
 
-  it('journals and accounts survive a backup round trip', () => {
-    const { result } = setupApp();
+  it('journals and accounts survive a backup round trip', async () => {
+    const { result } = await setupApp();
     act(() => { result.current.t.addAccount({ code: '7000', name: 'Donations', type: 'expense' }); });
     act(() => { result.current.t.addManualJournal({ date: '2026-03-01', memo: 'Zakat', lines: [{ accountCode: '7000', debit: 100, credit: 0 }, { accountCode: '1000', debit: 0, credit: 100 }] }); });
     let json = '';

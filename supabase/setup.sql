@@ -914,6 +914,199 @@ ALTER TABLE bank_reconciliations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE cash_entries ADD COLUMN IF NOT EXISTS "accountCode" TEXT;
 
 
+-- ----------------------- from migrate_v13_sales_docs.sql -----------------------
+-- Migration v13: sales documents in billing mode.
+--   * sales returns / credit notes linked to a bill (money back now, or off what the customer owes)
+--   * line discounts on bills (stored inside invoices.items JSONB: discountType, discountValue, discountAmount)
+--   * customer-specific item rates
+--   * multi-item quotations that convert into a bill
+--   * delivery challans are printed from the bill (nothing stored)
+-- Run ONCE after the earlier migrations. Safe to re-run.
+
+-- Returns against a bill: which bill, the returned lines (qty, value, cost, batches), the tax part,
+-- and how much was paid back in money now.
+ALTER TABLE returns ADD COLUMN IF NOT EXISTS "invoiceId" TEXT;
+ALTER TABLE returns ADD COLUMN IF NOT EXISTS items JSONB;
+ALTER TABLE returns ADD COLUMN IF NOT EXISTS "taxAmount" NUMERIC DEFAULT 0;
+ALTER TABLE returns ADD COLUMN IF NOT EXISTS "refundAmount" NUMERIC DEFAULT 0;
+ALTER TABLE returns ADD COLUMN IF NOT EXISTS "refundMethod" TEXT;
+CREATE INDEX IF NOT EXISTS returns_invoice_idx ON returns ("invoiceId");
+
+-- Bills: value returned (incl. tax), money refunded, and the quotation the bill was made from.
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS "returnedAmount" NUMERIC DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS "refundedAmount" NUMERIC DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS "quotationId" TEXT;
+
+-- Quotations: several items per quote, and the bill it became.
+ALTER TABLE quotations ADD COLUMN IF NOT EXISTS items JSONB;
+ALTER TABLE quotations ADD COLUMN IF NOT EXISTS "invoiceId" TEXT;
+
+-- Customer-specific rates: one agreed price per customer and item.
+CREATE TABLE IF NOT EXISTS customer_agreed_rates (
+  id TEXT PRIMARY KEY,
+  "customerId" TEXT NOT NULL,
+  "productId" TEXT NOT NULL,
+  "agreedRatePerKg" NUMERIC NOT NULL DEFAULT 0,   -- price per the item's own unit (can, tin, ...)
+  "effectiveDate" TEXT,
+  notes TEXT,
+  "createdAt" TEXT,
+  "updatedAt" TEXT
+);
+CREATE INDEX IF NOT EXISTS customer_agreed_rates_customer_idx ON customer_agreed_rates ("customerId");
+
+-- Internal tool: RLS disabled so the anon key can read/write (same as every other table).
+ALTER TABLE customer_agreed_rates DISABLE ROW LEVEL SECURITY;
+
+-- Ledger rows of type 'refund_paid' (money handed back for a return) use the existing columns.
+
+
+
+-- ----------------------- from migrate_v14_cheques.sql -----------------------
+-- Migration v14: post-dated cheque (PDC) register.
+-- Run ONCE after setup.sql (or the earlier migrations). Safe to re-run: it only creates what is missing.
+--
+-- Nothing else changes in the database: cheque postings use the existing ledger table (new "type"
+-- values cheque_received / cheque_issued / cheque_returned / cheque_charge), cash_entries (a cleared
+-- cheque is a bank entry with "accountCode" 1150 or 2050) and expenses (bank charge on a bounce).
+
+CREATE TABLE IF NOT EXISTS cheques (
+  id TEXT PRIMARY KEY,
+  direction TEXT NOT NULL DEFAULT 'received',   -- received (from a customer) | issued (to a supplier)
+  "customerId" TEXT,
+  "supplierId" TEXT,
+  "partyName" TEXT,
+  "bankName" TEXT,
+  "chequeNumber" TEXT,
+  amount NUMERIC NOT NULL DEFAULT 0,
+  "chequeDate" TEXT,                              -- date written on the cheque (may be in the future)
+  "entryDate" TEXT,                               -- day it was received / given
+  "invoiceId" TEXT,
+  status TEXT DEFAULT 'in_hand',                  -- in_hand | deposited | issued | cleared | bounced | cancelled
+  "depositedDate" TEXT,
+  "clearedDate" TEXT,
+  "returnedDate" TEXT,                            -- bounced / cancelled on
+  "returnReason" TEXT,
+  "bankCharge" NUMERIC,
+  "chargeTo" TEXT,                                -- customer | shop
+  note TEXT,
+  "ledgerId" TEXT,
+  "reversalLedgerId" TEXT,
+  "clearedEntryId" TEXT,
+  "chargeExpenseId" TEXT,
+  "chargeLedgerId" TEXT,
+  "createdAt" TEXT,
+  "createdBy" TEXT,
+  "updatedAt" TEXT
+);
+
+-- Older partial copies of the table get any column they are missing.
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS direction TEXT DEFAULT 'received';
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "customerId" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "supplierId" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "partyName" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "bankName" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "chequeNumber" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS amount NUMERIC DEFAULT 0;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "chequeDate" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "entryDate" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "invoiceId" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'in_hand';
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "depositedDate" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "clearedDate" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "returnedDate" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "returnReason" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "bankCharge" NUMERIC;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "chargeTo" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS note TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "ledgerId" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "reversalLedgerId" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "clearedEntryId" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "chargeExpenseId" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "chargeLedgerId" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "createdAt" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "createdBy" TEXT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS "updatedAt" TEXT;
+
+CREATE INDEX IF NOT EXISTS cheques_status_date_idx ON cheques (status, "chequeDate");
+CREATE INDEX IF NOT EXISTS cheques_customer_idx ON cheques ("customerId");
+CREATE INDEX IF NOT EXISTS cheques_supplier_idx ON cheques ("supplierId");
+
+-- Internal tool: RLS disabled so the anon key can read/write (same as every other table).
+ALTER TABLE cheques DISABLE ROW LEVEL SECURITY;
+
+
+
+-- ----------------------- from migrate_v15_stock_reports.sql -----------------------
+-- Migration v15: stock adjustments per godown / batch, and purchase returns (debit notes) in billing mode.
+-- Run ONCE after setup.sql (or after v12 on an older database). Safe to re-run.
+
+-- Stock adjustments (leaked, damaged, expired, count correction, received free...) remember the
+-- godown and batch they were made in, so undoing one puts the stock back in the same place.
+ALTER TABLE stock_adjustments ADD COLUMN IF NOT EXISTS "costPerKg" NUMERIC;
+ALTER TABLE stock_adjustments ADD COLUMN IF NOT EXISTS "godownId" TEXT;
+ALTER TABLE stock_adjustments ADD COLUMN IF NOT EXISTS "batchId" TEXT;
+ALTER TABLE stock_adjustments ADD COLUMN IF NOT EXISTS "batchNo" TEXT;
+
+-- Goods sent back to a supplier: which godown and batches they left from, and the item's unit
+-- (bag, tin, can...) printed on the debit note.
+ALTER TABLE returns ADD COLUMN IF NOT EXISTS "godownId" TEXT;
+ALTER TABLE returns ADD COLUMN IF NOT EXISTS batches JSONB;
+ALTER TABLE returns ADD COLUMN IF NOT EXISTS unit TEXT;
+
+-- Item history and the purchase register look records up by item and date.
+CREATE INDEX IF NOT EXISTS stock_adjustments_product_idx ON stock_adjustments ("productId");
+CREATE INDEX IF NOT EXISTS returns_product_idx ON returns ("productId");
+CREATE INDEX IF NOT EXISTS purchases_date_idx ON purchases (date);
+
+
+
+-- ----------------------- from migrate_v16_passwords.sql -----------------------
+-- Migration v16: username + password sign-in (replaces PIN sign-in).
+-- Run ONCE after the earlier migrations. Safe to re-run (every statement is idempotent).
+--
+-- The app hashes passwords in the browser with PBKDF2-SHA256 (WebCrypto, random 16-byte salt,
+-- 210,000 iterations) and stores only passwordHash / passwordSalt / passwordIter here, so the
+-- owner can sign in on another device. Plain-text passwords are never stored.
+--
+-- SECURITY NOTE: like every other table, users has RLS disabled and is reachable with the anon
+-- key, so anyone holding that key can read or change these rows (including the hashes). Real
+-- database security would additionally need Supabase Auth + Row Level Security policies; that is
+-- not part of this migration.
+
+-- Sign-in identity
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS roles JSONB;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+
+-- Password (PBKDF2) and the forced "choose a new password" flag
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "passwordHash" TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "passwordSalt" TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "passwordIter" INTEGER;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "mustChangePassword" BOOLEAN DEFAULT FALSE;
+
+-- Legacy PIN hash (cleared once each user sets a password)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "pinHash" TEXT;
+
+-- Failed-attempt lockout and bookkeeping
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "failedAttempts" INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "lockedUntil" TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "lastLoginAt" TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "twoFactorEnabled" BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS "updatedAt" TEXT;
+
+-- Users without a PIN (new accounts) are allowed; the old column stays for the one-time PIN sign-in.
+ALTER TABLE users ALTER COLUMN pin DROP NOT NULL;
+
+CREATE INDEX IF NOT EXISTS users_username_idx ON users (lower(username));
+
+-- The old shared master PIN is no longer used for sign-in; the app clears it once the owner has a password.
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS "masterPin" TEXT;
+
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+
+
+
 -- ----------------------- from migrate_v17_party_codes.sql -----------------------
 -- Sarmaya v17: the shop's own customer / supplier IDs (codes from their old books or department).
 -- Run ONCE after the earlier migrations (or just run setup.sql). Safe to re-run.

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { renderHook, act } from '@testing-library/react';
+import { seedTestUsers, signIn, OWNER, OPERATOR } from './helpers/auth';
 import { TradingProvider, useTrading } from '../context/TradingContext';
 import { todayISO, shiftDate } from '../utils/stockFlow';
 import { stockByGodown } from '../utils/inventory';
@@ -11,7 +12,7 @@ import { Customer, LedgerEntry } from '../types';
 const wrapper = ({ children }: { children: React.ReactNode }) => <TradingProvider>{children}</TradingProvider>;
 const today = todayISO();
 
-const setup = () => {
+const setup = async () => {
   localStorage.setItem('tradeflow_settings_v2', JSON.stringify({ id: 'default', appMode: 'billing', cashOpeningBalance: 0, cashOpeningDate: '2026-01-01', openingBankBalance: 0 }));
   localStorage.setItem('tradeflow_customers_v2', JSON.stringify([
     { id: 'c1', name: 'Zaman & Co', company: 'Zaman & Co', phone: '0344', email: '', address: '', totalDue: 0, creditLimit: 0, createdAt: '2026-01-01' },
@@ -23,13 +24,12 @@ const setup = () => {
     { id: 'p2', name: '15.7 kgs Tin', category: 'General', unit: 'tin', unitPricePerKg: 6535, stockKg: 0, minThresholdKg: 10 },
   ]));
   ['tradeflow_invoices_v1', 'tradeflow_ledger_v2', 'tradeflow_expenses_v2', 'tradeflow_cash_entries_v2', 'tradeflow_purchases_v2'].forEach((k) => localStorage.setItem(k, '[]'));
+  seedTestUsers();
   const hook = renderHook(() => useTrading(), { wrapper });
-  act(() => {
-    hook.result.current.unlockAdmin('7860');
-  });
+  await signIn(() => hook.result.current);
   return hook;
 };
-type Hook = ReturnType<typeof setup>;
+type Hook = Awaited<ReturnType<typeof setup>>;
 const product = (h: Hook, id: string) => h.result.current.products.find((p) => p.id === id)!;
 const journalOf = (h: Hook) => {
   const t = h.result.current;
@@ -59,8 +59,8 @@ beforeEach(() => {
 });
 
 describe('stock adjustment with a reason (godown / batch aware)', () => {
-  it('a leak taken from one batch lowers that batch and the total, and posts a stock loss at the batch cost', () => {
-    const h = setup();
+  it('a leak taken from one batch lowers that batch and the total, and posts a stock loss at the batch cost', async () => {
+    const h = await setup();
     receiveBatches(h);
     const early = h.result.current.stockBatches.find((b) => b.batchNo === 'EARLY')!;
     let r: any;
@@ -76,8 +76,8 @@ describe('stock adjustment with a reason (godown / batch aware)', () => {
     expectConsistent(h);
   });
 
-  it('count correction up in a second godown adds plain stock there; received free posts to other income', () => {
-    const h = setup();
+  it('count correction up in a second godown adds plain stock there; received free posts to other income', async () => {
+    const h = await setup();
     receiveBatches(h);
     let gid = '';
     act(() => { gid = h.result.current.addGodown('Batkhela')!.godown!.id; });
@@ -92,8 +92,8 @@ describe('stock adjustment with a reason (godown / batch aware)', () => {
     expectConsistent(h);
   });
 
-  it('refuses taking more than the godown holds, and dates in a closed period', () => {
-    const h = setup();
+  it('refuses taking more than the godown holds, and dates in a closed period', async () => {
+    const h = await setup();
     receiveBatches(h);
     let r: any;
     act(() => { r = h.result.current.adjustStockBy({ productId: 'p2', deltaQty: -41, reason: 'damage' }); });
@@ -106,8 +106,8 @@ describe('stock adjustment with a reason (godown / batch aware)', () => {
     expect(product(h, 'p2').stockKg).toBe(40);
   });
 
-  it('undo puts the stock back into the same batch', () => {
-    const h = setup();
+  it('undo puts the stock back into the same batch', async () => {
+    const h = await setup();
     receiveBatches(h);
     const late = h.result.current.stockBatches.find((b) => b.batchNo === 'LATE')!;
     act(() => { h.result.current.adjustStockBy({ productId: 'p1', deltaQty: -5, reason: 'expired', batchId: late.id }); });
@@ -123,8 +123,8 @@ describe('stock adjustment with a reason (godown / batch aware)', () => {
 });
 
 describe('purchase return (debit note)', () => {
-  it('takes stock out of the batch, lowers what you owe the supplier and posts Dr Payable / Cr Inventory', () => {
-    const h = setup();
+  it('takes stock out of the batch, lowers what you owe the supplier and posts Dr Payable / Cr Inventory', async () => {
+    const h = await setup();
     receiveBatches(h);
     const owedBefore = h.result.current.suppliers[0].totalOwed;
     const early = h.result.current.stockBatches.find((b) => b.batchNo === 'EARLY')!;
@@ -153,8 +153,8 @@ describe('purchase return (debit note)', () => {
     expectConsistent(h);
   });
 
-  it('refuses to send back more than is in stock', () => {
-    const h = setup();
+  it('refuses to send back more than is in stock', async () => {
+    const h = await setup();
     receiveBatches(h);
     let r: any;
     act(() => { r = h.result.current.returnToSupplier({ supplierId: 's1', productId: 'p2', qty: 50, rate: 6000, reason: 'wrong item' }); });
@@ -194,8 +194,8 @@ describe('item history, purchase register and profit from bills', () => {
     act(() => { h.result.current.transferStock({ productId: 'p2', fromGodownId: h.result.current.godowns[0].id, toGodownId: gid, qty: 4 }); });
   };
 
-  it('item history lists receipts, bill sales, adjustments, returns and moves with a running balance ending at the stock', () => {
-    const h = setup();
+  it('item history lists receipts, bill sales, adjustments, returns and moves with a running balance ending at the stock', async () => {
+    const h = await setup();
     sellAndMove(h);
     const t = h.result.current;
     const hist = itemHistory('p2', { products: t.products, customers: t.customers, suppliers: t.suppliers, invoices: t.invoices, purchases: t.purchases, returns: t.returns, adjustments: t.adjustments, stockTransfers: t.stockTransfers, dispatches: t.dispatches, godowns: t.godowns });
@@ -211,16 +211,16 @@ describe('item history, purchase register and profit from bills', () => {
     expect(hist.opening).toBe(0);
   });
 
-  it('shows stock the records cannot explain as an opening line', () => {
-    const h = setup();
+  it('shows stock the records cannot explain as an opening line', async () => {
+    const h = await setup();
     act(() => { h.result.current.updateProduct('p2', { stockKg: 12 }); });
     const t = h.result.current;
     const hist = itemHistory('p2', { products: t.products, customers: t.customers, suppliers: t.suppliers, invoices: t.invoices, purchases: t.purchases, returns: t.returns, adjustments: t.adjustments, stockTransfers: t.stockTransfers, godowns: t.godowns });
     expect(hist.rows[0]).toMatchObject({ kind: 'opening', balance: 12 });
   });
 
-  it('purchase register lists receipts and returns with filters and totals', () => {
-    const h = setup();
+  it('purchase register lists receipts and returns with filters and totals', async () => {
+    const h = await setup();
     sellAndMove(h);
     const t = h.result.current;
     const all = purchaseRegister(t, { from: today, to: today });
@@ -232,8 +232,8 @@ describe('item history, purchase register and profit from bills', () => {
     expect(purchaseRegister(t, { from: shiftDate(today, 1), to: shiftDate(today, 2) }).rows).toHaveLength(0);
   });
 
-  it('profit by item and by customer uses the same cost as the journal (COGS) and shares the bill discount', () => {
-    const h = setup();
+  it('profit by item and by customer uses the same cost as the journal (COGS) and shares the bill discount', async () => {
+    const h = await setup();
     sellAndMove(h);
     const t = h.result.current;
     const rep = profitFromBills(t, today, today);
@@ -259,7 +259,7 @@ describe('aging in billing mode', () => {
   const led = (over: Partial<LedgerEntry>): LedgerEntry => ({ id: Math.random().toString(36), entityType: 'customer', entityId: 'c1', type: 'bill_issued', referenceId: 'INV', date: today, description: '', debit: 0, credit: 0, balanceAfter: 0, ...over });
   const cust = (over: Partial<Customer>): Customer => ({ id: 'c1', name: 'Zaman', company: '', phone: '', email: '', address: '', totalDue: 0, creditLimit: 0, createdAt: '2026-01-01', ...over });
 
-  it('buckets bills by age with payments clearing the oldest first, and ages an opening balance from the day the account was made', () => {
+  it('buckets bills by age with payments clearing the oldest first, and ages an opening balance from the day the account was made', async () => {
     const asOf = '2026-09-21';
     const ledger = [
       led({ date: '2026-06-01', debit: 1000 }), // 112 days
@@ -272,7 +272,7 @@ describe('aging in billing mode', () => {
     expect(rows[0]).toMatchObject({ d90plus: 500, d31_60: 500, current: 300, total: 1300 });
   });
 
-  it('flags customers with money owed for over 60 days, or over their credit limit', () => {
+  it('flags customers with money owed for over 60 days, or over their credit limit', async () => {
     const asOf = '2026-09-21';
     const customers = [cust({ id: 'c1', totalDue: 1000 }), cust({ id: 'c2', name: 'Khan', totalDue: 500, creditLimit: 400 }), cust({ id: 'c3', name: 'New', totalDue: 300 })];
     const ledger = [led({ entityId: 'c1', date: '2026-07-01', debit: 1000 }), led({ entityId: 'c2', date: '2026-09-10', debit: 500 }), led({ entityId: 'c3', date: '2026-09-01', debit: 300 })];

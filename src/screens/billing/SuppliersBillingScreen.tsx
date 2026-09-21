@@ -29,7 +29,7 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return suppliers
-      .filter((s) => !q || s.name.toLowerCase().includes(q) || (s.company || '').toLowerCase().includes(q) || (s.phone || '').includes(q))
+      .filter((s) => !q || s.name.toLowerCase().includes(q) || (s.company || '').toLowerCase().includes(q) || (s.phone || '').includes(q) || (s.code || '').toLowerCase().includes(q))
       .sort((a, b) => b.totalOwed - a.totalOwed || (a.company || a.name).localeCompare(b.company || b.name));
   }, [suppliers, query]);
   const owed = suppliers.reduce((a, s) => a + Math.max(0, s.totalOwed), 0);
@@ -73,7 +73,7 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
         <>
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name or phone" className={`${inputCls} pl-10`} aria-label="Search suppliers" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, phone or ID" className={`${inputCls} pl-10`} aria-label="Search suppliers" />
           </div>
           <div className={`${cardCls} overflow-hidden`}>
             {rows.length === 0 ? (
@@ -83,7 +83,7 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
                 {rows.map((s) => (
                   <li key={s.id} className="flex items-center gap-2 px-3 sm:px-5 py-3 hover:bg-[#FAF9F6] dark:hover:bg-[#162436]">
                     <button type="button" onClick={() => setOpenId(s.id)} className="flex-1 min-w-0 text-left">
-                      <div className="font-semibold text-sm text-[#111827] dark:text-white truncate">{s.company || s.name}</div>
+                      <div className="font-semibold text-sm text-[#111827] dark:text-white truncate">{s.code && <span className="font-mono text-[11px] font-bold text-teal-700 dark:text-teal-300 mr-1.5">{s.code}</span>}{s.company || s.name}</div>
                       <div className="text-[11px] text-[#8E9299] flex items-center gap-1 truncate"><Phone className="w-3 h-3" /> {s.phone || 'no phone'}{s.company && s.name !== s.company ? ` • ${s.name}` : ''}</div>
                     </button>
                     <div className="text-right shrink-0">

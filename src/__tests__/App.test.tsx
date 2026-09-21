@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
 import App from '../App';
+import { OWNER, seedTestUsers } from './helpers/auth';
 
 const seedLocal = () => {
   const set = (k: string, v: unknown) => localStorage.setItem(k, JSON.stringify(v));
@@ -12,25 +13,26 @@ const seedLocal = () => {
   set('tradeflow_dispatches_v2', [{ id: 'd1', dispatchNumber: 'DSP-2026-521', bookingId: 'b1', customerId: 'c1', productId: 'p1', kg: 20000, amount: 500000, truckNumber: 'LES-8921', date: '2026-09-04', whatsappSent: false }]);
 };
 
+/** Sign in through the real form: username + password. */
 const unlock = async () => {
-  for (const d of '7860') {
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: d }));
-    });
-  }
+  const form = await screen.findByTestId('login-form');
+  expect(form).toBeTruthy();
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /^Unlock/ }));
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: OWNER.username } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: OWNER.password } });
   });
   await act(async () => {
-    await new Promise((r) => setTimeout(r, 600));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
   });
-  expect(screen.getByRole('heading', { name: 'Trading Overview' })).toBeTruthy();
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Trading Overview' })).toBeTruthy(), { timeout: 5000 });
 };
 
 describe('App integration', () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     seedLocal();
+    seedTestUsers();
   });
 
   it('unlocks, opens a booking, prints its invoice while keeping the booking open, and Escape closes only the preview', async () => {
@@ -64,7 +66,7 @@ describe('App integration', () => {
     expect(screen.queryByText(/Dispatches.*\(1\)/)).toBeNull();
   });
 
-  it('Admin nav opens the admin screen for the master PIN user', async () => {
+  it('Admin nav opens the admin screen for the owner', async () => {
     render(<App />);
     await unlock();
     await act(async () => {

@@ -34,6 +34,7 @@ export default defineConfig(() => {
           // Data comes from localStorage + a direct Supabase fetch, never cached here — only the
           // app shell (JS/CSS/fonts) is precached, so the app itself still opens with no signal.
           globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           navigateFallback: '/index.html',
           runtimeCaching: [
             {
@@ -45,6 +46,23 @@ export default defineConfig(() => {
         },
       }),
     ],
+    build: {
+      rollupOptions: {
+        output: {
+          // Libraries in their own files: smaller downloads on phones, and each file stays under the
+          // offline-cache size limit, so the whole app still opens without signal.
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('recharts') || id.includes('d3-') || id.includes('victory')) return 'charts';
+            if (id.includes('@supabase')) return 'supabase';
+            if (id.includes('motion') || id.includes('framer')) return 'motion';
+            if (id.includes('lucide-react')) return 'icons';
+            if (id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) return 'react';
+            return 'vendor';
+          },
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

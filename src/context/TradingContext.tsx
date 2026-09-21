@@ -62,17 +62,12 @@ import {
   DEFAULT_ROLES,
   DEFAULT_VISIBILITY_SETTINGS,
   DEFAULT_SECURITY_POLICY,
-  INITIAL_DEMO_USERS,
   hasPermission,
   isScreenVisibleForRoles,
   isFieldVisibleForRoles,
-  hashPassword,
-  verifyPassword,
-  hashPin,
-  verifyPin,
-  verifyTOTP,
-  generateResetToken,
 } from '../lib/auth';
+import { mergeUsers, migrateLegacyUsers, toUserRow, isOwnerAccount } from '../lib/password';
+import { useAuthStore, AuthApi } from './authStore';
 import { formatCurrency } from '../utils/formatters';
 import {
   loadAllData,
@@ -99,7 +94,7 @@ import {
   initialWhatsAppMessages,
 } from '../data/initialData';
 
-interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi {
+interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, AuthApi {
   customers: Customer[];
   suppliers: Supplier[];
   products: Product[];
@@ -190,12 +185,9 @@ interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi {
   addTruck: (data: Omit<Truck, 'id' | 'createdAt'>) => Truck;
   updateTruck: (id: string, data: Partial<Truck>) => void;
   deleteTruck: (id: string) => void;
-  addUser: (data: { name: string; role: UserRole; pin: string; roles?: UserRole[]; email?: string; username?: string }) => { success: boolean; message: string };
   updateUser: (id: string, data: Partial<Omit<AppUser, 'id' | 'createdAt'>>) => { success: boolean; message: string };
   deleteUser: (id: string) => void;
-  currentUser: SessionUser | null;
   can: (permission: Permission) => boolean;
-  unlockAsUser: (userId: string, pin: string) => { success: boolean; error?: string; remainingMinutes?: number; attemptsLeft?: number; isLocked?: boolean };
   cancelBooking: (id: string, reason?: string) => void;
   cashEntries: CashEntry[];
   addCashEntry: (data: Omit<CashEntry, 'id' | 'createdAt' | 'createdBy'>) => CashEntry;
@@ -318,13 +310,7 @@ interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi {
   recentWhatsAppAlert: WhatsAppMessage | null;
   clearRecentAlert: () => void;
 
-  // Admin PIN, Authentication & Security
-  isAdminUnlocked: boolean;
-  unlockAdmin: (pin: string) => boolean;
-  lockAdmin: () => void;
-  adminPin: string;
-  changeAdminPin: (oldPin: string, newPin: string) => { success: boolean; message: string };
-  resetAdminPinToDefault: () => void;
+  // Audit & backups (sign-in lives in AuthApi, see ./authStore.ts)
   auditLogs: AuditLogEntry[];
   logAuditEvent: (action: string, details: string, severity?: 'info' | 'warning' | 'danger', category?: AuditCategory, ip?: string) => void;
   clearAuditLogs: () => void;
@@ -348,10 +334,6 @@ interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi {
   // Security Policies & Credentials Authentication
   securityPolicy: SecurityPolicySettings;
   updateSecurityPolicy: (policy: Partial<SecurityPolicySettings>) => void;
-  loginWithCredentials: (identifier: string, password: string, otpCode?: string) => Promise<{ success: boolean; require2FA?: boolean; tempToken?: string; error?: string; remainingMinutes?: number; attemptsLeft?: number }>;
-  verify2FACode: (tempToken: string, otpCode: string) => Promise<{ success: boolean; error?: string }>;
-  requestPasswordReset: (emailOrUsername: string) => Promise<{ success: boolean; message: string; previewToken?: string; previewUrl?: string }>;
-  resetPasswordWithToken: (token: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
   unlockUserAccount: (id: string) => void;
   forceLogoutUser: (id: string) => void;
 
@@ -508,14 +490,12 @@ const safeParse = <T,>(raw: string | null, fallback: T): T => {
   }
 };
 
-const DEFAULT_ADMIN_PIN = '7860';
-
 const initialAuditLogs: AuditLogEntry[] = [
   {
     id: 'log-init-1',
     timestamp: new Date(Date.now() - 3600000 * 4).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
     action: 'System Security Armed',
-    details: 'Sarmaya Bulk Trading Engine initialized with Master PIN protection active.',
+    details: 'Sarmaya initialized with username and password sign-in.',
     severity: 'info',
   },
   {
@@ -675,13 +655,10 @@ const STORAGE_KEYS = {
   TASKS: 'tradeflow_tasks_v2',
   LEDGER: 'tradeflow_ledger_v2',
   MESSAGES: 'tradeflow_whatsapp_v2',
-  ADMIN_PIN: 'sarmaya_admin_pin_v1',
   AUDIT_LOGS: 'sarmaya_audit_logs_v1',
   ROLES: 'tradeflow_roles_v2',
   VISIBILITY: 'tradeflow_visibility_v2',
   SECURITY_POLICY: 'tradeflow_security_policy_v1',
-  AUTH_TOKEN: 'sarmaya_jwt_token_v1',
-  SESSION_USER: 'sarmaya_current_user_v1',
   INVOICES: 'tradeflow_invoices_v1',
   AGREED_RATES: 'tradeflow_agreed_rates_v1',
   BANK_LINES: 'tradeflow_bank_statement_lines_v1',
@@ -713,13 +690,6 @@ const readCachedSettings = (): Partial<AppSettings> =>
 const missingCloudColumns: Record<string, Set<string>> = {};
 
 export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [adminPin, setAdminPin] = useState<string>(() => {
-    const localPin = localStorage.getItem(STORAGE_KEYS.ADMIN_PIN)?.trim();
-    if (localPin) return localPin;
-    const settingsPin = readCachedSettings().masterPin?.trim();
-    return settingsPin || DEFAULT_ADMIN_PIN;
-  });
-  const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(false);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() =>
     safeParse(localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS), initialAuditLogs)
   );
@@ -732,10 +702,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>(() => loadLocal(STORAGE_KEYS.PRICE_HISTORY, []));
   const [expenses, setExpenses] = useState<Expense[]>(() => loadLocal(STORAGE_KEYS.EXPENSES, []));
   const [trucks, setTrucks] = useState<Truck[]>(() => loadLocal(STORAGE_KEYS.TRUCKS, []));
-  const [users, setUsers] = useState<AppUser[]>(() => {
-    const loaded = loadLocal<AppUser>(STORAGE_KEYS.USERS, []);
-    return loaded.length > 0 ? loaded : INITIAL_DEMO_USERS;
-  });
+  // No built-in demo users: an empty device shows "Create your account" (see authStore.ts).
+  const [users, setUsers] = useState<AppUser[]>(() => migrateLegacyUsers(loadLocal<AppUser>(STORAGE_KEYS.USERS, [])));
   const [roles, setRoles] = useState<RoleDefinition[]>(() =>
     safeParse(localStorage.getItem(STORAGE_KEYS.ROLES), DEFAULT_ROLES)
   );
@@ -756,10 +724,20 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     ...readCachedSettings(),
     id: 'default',
   }));
-  const [currentUser, setCurrentUser] = useState<SessionUser | null>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.SESSION_USER);
-    return safeParse<SessionUser | null>(saved, null);
+  // Sign-in state. The audit logger is defined further down, so it is reached through a ref.
+  const [cloudSettled, setCloudSettled] = useState<boolean>(!isSupabaseConfigured);
+  const auditLogRef = useRef<(action: string, details: string, severity?: 'info' | 'warning' | 'danger', category?: AuditCategory) => void>(() => {});
+  const auth = useAuthStore({
+    users,
+    setUsers,
+    roles,
+    securityPolicy,
+    settings,
+    setSettings,
+    cloudSettled,
+    log: (...args) => auditLogRef.current(...args),
   });
+  const currentUser = auth.currentUser;
   const [ledger, setLedger] = useState<LedgerEntry[]>(() => loadLocal(STORAGE_KEYS.LEDGER, initialLedgerEntries, normalizeLedger));
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>(() =>
     loadLocal(STORAGE_KEYS.MESSAGES, initialWhatsAppMessages)
@@ -783,6 +761,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [cheques, setCheques] = useState<Cheque[]>(() => loadLocal(STORAGE_KEYS.CHEQUES, []));
 
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>('dashboard');
+  // A different person signing in starts on the home screen (not on whatever the last user had open).
+  const lastSignedInId = useRef<string | null>(currentUser?.id ?? null);
+  useEffect(() => {
+    if (!currentUser) return;
+    if (lastSignedInId.current && lastSignedInId.current !== currentUser.id) setActiveScreen('dashboard');
+    lastSignedInId.current = currentUser.id;
+  }, [currentUser?.id]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
@@ -839,7 +824,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setPriceHistory(data.priceHistory);
         setExpenses(data.expenses);
         setTrucks(data.trucks);
-        setUsers(data.users);
+        // Same id -> the newer copy wins; users only on this device are kept and uploaded.
+        setUsers((prev) => migrateLegacyUsers(mergeUsers(prev, data.users || [])));
         setCashEntries(data.cashEntries);
         setQuotations(data.quotations);
         setPurchaseOrders(data.purchaseOrders);
@@ -848,10 +834,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setTasks(data.tasks);
         if (data.settings) {
           const mergedSettings = { ...DEFAULT_SETTINGS, ...data.settings, id: 'default' as const };
-          setSettings((prev) => ({ ...DEFAULT_SETTINGS, ...prev, ...data.settings, id: 'default' }));
-          if (mergedSettings.masterPin?.trim()) {
-            setAdminPin(mergedSettings.masterPin.trim());
-          }
+          setSettings((prev) => ({ ...DEFAULT_SETTINGS, ...prev, ...mergedSettings, id: 'default' }));
         }
         setLedger(data.ledger);
         setWhatsappMessages(data.whatsappMessages);
@@ -873,9 +856,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // Customer rates: only when the cloud table exists (migration v13).
         if (data.customerAgreedRates) setCustomerAgreedRates(cloudOrLocal(data.customerAgreedRates));
         setIsCloudSyncReady(true);
+        setCloudSettled(true);
       })
       .catch((err) => {
         console.warn('Supabase load failed; running in local-only mode:', err?.message || err);
+        setCloudSettled(true);
       });
     return () => {
       cancelled = true;
@@ -930,22 +915,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   }, [settings]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ADMIN_PIN, adminPin);
-  }, [adminPin]);
-  useEffect(() => {
-    if (!isCloudSyncReady) return;
-    const settingsPin = settings.masterPin?.trim();
-    const currentPin = adminPin.trim();
-    // Prefer the shared cloud PIN when available; otherwise seed cloud once from a custom local PIN.
-    if (settingsPin && settingsPin !== currentPin) {
-      setAdminPin(settingsPin);
-      return;
-    }
-    if (!settingsPin && currentPin && currentPin !== DEFAULT_ADMIN_PIN) {
-      setSettings((prev) => ({ ...prev, id: 'default', masterPin: currentPin }));
-    }
-  }, [isCloudSyncReady, settings.masterPin, adminPin]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.QUOTES, JSON.stringify(quotations)); }, [quotations]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.POS, JSON.stringify(purchaseOrders)); }, [purchaseOrders]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.RETURNS, JSON.stringify(returns)); }, [returns]);
@@ -1005,7 +974,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { void syncToSupabase('expenses', expenses); }, [expenses, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('trucks', trucks); }, [trucks, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('invoices', invoices); }, [invoices, isCloudSyncReady]);
-  useEffect(() => { void syncToSupabase('users', users); }, [users, isCloudSyncReady]);
+  // Only the table's columns are sent (password hash/salt/iterations included, so the owner can sign in on another device).
+  useEffect(() => { void syncToSupabase('users', users.map(toUserRow)); }, [users, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('cash_entries', cashEntries); }, [cashEntries, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('settings', [settings]); }, [settings, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('quotations', quotations); }, [quotations, isCloudSyncReady]);
@@ -2224,13 +2194,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
   }, [users]);
 
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem(STORAGE_KEYS.SESSION_USER, JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.SESSION_USER);
-    }
-  }, [currentUser]);
 
   const logAuditEvent = (
     action: string,
@@ -2251,161 +2214,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
     setAuditLogs((prev) => [newEntry, ...prev.slice(0, 199)]);
   };
+  auditLogRef.current = logAuditEvent;
 
   const clearAuditLogs = () => {
     setAuditLogs([]);
     localStorage.removeItem(STORAGE_KEYS.AUDIT_LOGS);
-  };
-
-  const unlockAdmin = (pin: string): boolean => {
-    if (pin.trim() === adminPin.trim()) {
-      const adminSession: SessionUser = {
-        id: 'master',
-        name: 'Administrator',
-        username: 'superadmin',
-        email: 'admin@sarmaya.pk',
-        role: 'super_admin',
-        roles: ['super_admin', 'admin'],
-      };
-      setCurrentUser(adminSession);
-      setIsAdminUnlocked(true);
-      logAuditEvent('Session Unlocked', 'Master PIN verified (Administrator).', 'info', 'auth');
-      return true;
-    }
-    logAuditEvent('Invalid PIN Attempt', 'Unsuccessful master PIN entry attempt.', 'warning', 'auth');
-    return false;
-  };
-
-  const unlockAsUser = (
-    userId: string,
-    pin: string
-  ): { success: boolean; error?: string; remainingMinutes?: number; attemptsLeft?: number; isLocked?: boolean } => {
-    const user = users.find((u) => u.id === userId);
-    if (!user) {
-      logAuditEvent('Login Failed', 'Attempted PIN entry on non-existent user account.', 'warning', 'auth');
-      return { success: false, error: 'User account not found.' };
-    }
-
-    if (!user.active || user.status === 'inactive' || user.status === 'suspended') {
-      logAuditEvent('Login Blocked', `Suspended or inactive user ${user.name} attempted login.`, 'warning', 'auth');
-      return { success: false, error: 'User account is inactive. Please contact Administrator.' };
-    }
-
-    // Check lockout
-    if (user.status === 'locked' && user.lockedUntil) {
-      const lockExpiry = new Date(user.lockedUntil).getTime();
-      const now = Date.now();
-      if (now < lockExpiry) {
-        const remainingMinutes = Math.ceil((lockExpiry - now) / 60000);
-        logAuditEvent('Locked Account Attempt', `User ${user.name} attempted PIN sign-in while locked out. ${remainingMinutes}m remaining.`, 'warning', 'auth');
-        return {
-          success: false,
-          error: `Account is temporarily locked due to repeated failed attempts. Please try again in ${remainingMinutes} minute(s).`,
-          isLocked: true,
-          remainingMinutes,
-        };
-      } else {
-        // Lockout expired
-        user.lockedUntil = undefined;
-        user.failedAttempts = 0;
-        user.status = 'active';
-      }
-    }
-
-    const cleanPin = pin.trim();
-    const isMatch = verifyPin(cleanPin, user.pinHash || user.pin);
-
-    if (!isMatch) {
-      const newFailedAttempts = (user.failedAttempts || 0) + 1;
-      const maxAttempts = securityPolicy.maxFailedAttempts || 5;
-      const attemptsLeft = Math.max(0, maxAttempts - newFailedAttempts);
-      const lockoutMinutes = securityPolicy.lockoutDurationMinutes || 15;
-      const isNowLocked = newFailedAttempts >= maxAttempts;
-
-      setUsers((prev) =>
-        prev.map((u) => {
-          if (u.id !== userId) return u;
-          if (isNowLocked) {
-            return {
-              ...u,
-              failedAttempts: newFailedAttempts,
-              status: 'locked',
-              lockedUntil: new Date(Date.now() + lockoutMinutes * 60000).toISOString(),
-            };
-          }
-          return { ...u, failedAttempts: newFailedAttempts };
-        })
-      );
-
-      if (isNowLocked) {
-        logAuditEvent(
-          'Account Locked Out',
-          `User ${user.name} exceeded ${maxAttempts} failed PIN attempts and is locked out for ${lockoutMinutes} minutes.`,
-          'danger',
-          'auth'
-        );
-        return {
-          success: false,
-          error: `Too many failed attempts. Account has been locked for ${lockoutMinutes} minutes.`,
-          isLocked: true,
-          remainingMinutes: lockoutMinutes,
-        };
-      }
-
-      logAuditEvent(
-        'Invalid PIN Attempt',
-        `Unsuccessful PIN attempt for user ${user.name}. ${attemptsLeft} attempt(s) remaining.`,
-        'warning',
-        'auth'
-      );
-      return {
-        success: false,
-        error: `Incorrect PIN. ${attemptsLeft} attempt(s) remaining before account lockout.`,
-        attemptsLeft,
-      };
-    }
-
-    // Success! Update user hash if needed, clear lockouts
-    const pinH = user.pinHash || hashPin(cleanPin);
-    setUsers((prev) =>
-      prev.map((u) =>
-        u.id === userId
-          ? {
-              ...u,
-              pinHash: pinH,
-              failedAttempts: 0,
-              lockedUntil: undefined,
-              status: 'active',
-              lastLogin: new Date().toISOString(),
-            }
-          : u
-      )
-    );
-
-    const userRoles = user.roles && user.roles.length > 0 ? user.roles : [user.role];
-    const sessionUser: SessionUser = {
-      id: user.id,
-      name: user.name,
-      username: user.username || user.name.toLowerCase().replace(/\s+/g, '_'),
-      email: user.email,
-      role: user.role,
-      roles: userRoles,
-    };
-
-    const simulatedToken = `jwt_${user.id}_${Date.now()}`;
-    localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, simulatedToken);
-    setCurrentUser(sessionUser);
-    setIsAdminUnlocked(true);
-    logAuditEvent('User Login', `${user.name} signed in successfully via PIN (${user.role}).`, 'info', 'auth');
-
-    // Notify backend if online
-    apiFetch('/api/auth/pin-login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, pin: cleanPin }),
-    }).catch(() => {});
-
-    return { success: true };
   };
 
   const can = (permission: Permission): boolean => {
@@ -2423,338 +2236,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!currentUser) return true;
     const userRoles = currentUser.roles && currentUser.roles.length > 0 ? currentUser.roles : [currentUser.role];
     return isFieldVisibleForRoles(userRoles, field, visibilitySettings);
-  };
-
-  const lockAdmin = () => {
-    logAuditEvent('Session Locked', `${currentUser?.name || 'Session'} locked the terminal.`, 'info', 'auth');
-    setIsAdminUnlocked(false);
-    setCurrentUser(null);
-    localStorage.removeItem(STORAGE_KEYS.SESSION_USER);
-    localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-  };
-
-  // ---------------------------------------------------------------------------
-  // Credential-Based Authentication & 2FA
-  // ---------------------------------------------------------------------------
-  const loginWithCredentials = async (
-    identifier: string,
-    pass: string,
-    otpCode?: string
-  ): Promise<{ success: boolean; require2FA?: boolean; tempToken?: string; error?: string; remainingMinutes?: number; attemptsLeft?: number }> => {
-    const trimmedId = identifier.trim();
-    if (!trimmedId || !pass) {
-      return { success: false, error: 'Username/Email and Password are required.' };
-    }
-
-    // Attempt backend API first
-    try {
-      const res = await apiFetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: trimmedId, password: pass, otpCode }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        if (data.require2FA) {
-          return { success: false, require2FA: true, tempToken: data.tempToken };
-        }
-        if (data.token && data.user) {
-          localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, data.token);
-          const sessionUser: SessionUser = {
-            id: data.user.id,
-            name: data.user.name,
-            username: data.user.username,
-            email: data.user.email,
-            role: data.user.role,
-            roles: data.user.roles || [data.user.role],
-          };
-          setCurrentUser(sessionUser);
-          setIsAdminUnlocked(true);
-          logAuditEvent('User Login', `${sessionUser.name} signed in via password.`, 'info', 'auth');
-          return { success: true };
-        }
-      } else if (res.status === 401 || res.status === 403) {
-        logAuditEvent('Login Failed', `Failed login attempt for ${trimmedId}: ${data.error}`, 'warning', 'auth');
-        return {
-          success: false,
-          error: data.error,
-          remainingMinutes: data.remainingMinutes,
-          attemptsLeft: data.attemptsLeft,
-        };
-      }
-    } catch {
-      // Backend not running in this environment, seamlessly perform resilient client-side auth
-    }
-
-    // Client-side authentication fallback
-    const userIndex = users.findIndex(
-      (u) =>
-        u.username?.toLowerCase() === trimmedId.toLowerCase() ||
-        u.email?.toLowerCase() === trimmedId.toLowerCase() ||
-        u.name?.toLowerCase() === trimmedId.toLowerCase()
-    );
-
-    if (userIndex === -1) {
-      logAuditEvent('Login Failed', `Unknown user attempted login: ${trimmedId}`, 'warning', 'auth');
-      return { success: false, error: 'Invalid username/email or password.' };
-    }
-
-    const user = users[userIndex];
-
-    // Check account status and lockouts
-    if (user.status === 'locked' && user.lockedUntil) {
-      const lockExpiry = new Date(user.lockedUntil).getTime();
-      const now = Date.now();
-      if (now < lockExpiry) {
-        const remainingMinutes = Math.ceil((lockExpiry - now) / 60000);
-        logAuditEvent('Login Blocked', `Account locked for ${user.username || user.name}`, 'warning', 'auth');
-        return {
-          success: false,
-          error: `Account is temporarily locked due to repeated failed attempts. Please try again in ${remainingMinutes} minute(s).`,
-          remainingMinutes,
-        };
-      } else {
-        // Unlock expired lockout
-        user.status = 'active';
-        user.failedAttempts = 0;
-        user.lockedUntil = undefined;
-      }
-    }
-
-    // Verify Password
-    let passwordMatches = false;
-    if (user.passwordHash) {
-      passwordMatches = verifyPassword(pass, user.passwordHash);
-    } else if (user.pin) {
-      // Backward compatibility if only PIN was set
-      passwordMatches = pass.trim() === user.pin.trim();
-    }
-
-    if (!passwordMatches) {
-      const updatedAttempts = (user.failedAttempts || 0) + 1;
-      const maxAllowed = securityPolicy.maxFailedAttempts || 5;
-      const updatedUsers = [...users];
-
-      if (updatedAttempts >= maxAllowed) {
-        const lockDuration = securityPolicy.lockoutDurationMinutes || 15;
-        const lockUntil = new Date(Date.now() + lockDuration * 60000).toISOString();
-        updatedUsers[userIndex] = {
-          ...user,
-          failedAttempts: updatedAttempts,
-          status: 'locked',
-          lockedUntil: lockUntil,
-        };
-        setUsers(updatedUsers);
-        logAuditEvent('Account Locked', `User ${user.username || user.name} locked out after ${updatedAttempts} failed attempts.`, 'danger', 'auth');
-        return {
-          success: false,
-          error: `Too many failed attempts. Account has been locked for ${lockDuration} minutes.`,
-          remainingMinutes: lockDuration,
-        };
-      } else {
-        updatedUsers[userIndex] = { ...user, failedAttempts: updatedAttempts };
-        setUsers(updatedUsers);
-        const attemptsLeft = maxAllowed - updatedAttempts;
-        logAuditEvent('Login Failed', `Incorrect password for ${user.username || user.name}. Attempts left: ${attemptsLeft}`, 'warning', 'auth');
-        return {
-          success: false,
-          error: `Invalid credentials. ${attemptsLeft} attempt(s) remaining before account lockout.`,
-          attemptsLeft,
-        };
-      }
-    }
-
-    // 2FA check
-    if (user.twoFactorEnabled && user.twoFactorSecret) {
-      if (!otpCode) {
-        const tempToken = `temp_2fa_${user.id}_${Date.now()}`;
-        return { success: false, require2FA: true, tempToken };
-      }
-      const otpValid = verifyTOTP(user.twoFactorSecret, otpCode);
-      if (!otpValid) {
-        logAuditEvent('2FA Failed', `Invalid OTP submitted for ${user.username || user.name}`, 'warning', 'auth');
-        return { success: false, error: 'Invalid 2FA Authenticator code.' };
-      }
-    }
-
-    // Success: reset failed attempts
-    const updatedUsers = [...users];
-    updatedUsers[userIndex] = {
-      ...user,
-      failedAttempts: 0,
-      lockedUntil: undefined,
-      lastLogin: new Date().toISOString(),
-    };
-    setUsers(updatedUsers);
-
-    const userRoles = user.roles && user.roles.length > 0 ? user.roles : [user.role];
-    const sessionUser: SessionUser = {
-      id: user.id,
-      name: user.name,
-      username: user.username || user.name.toLowerCase().replace(/\s+/g, '_'),
-      email: user.email,
-      role: user.role,
-      roles: userRoles,
-    };
-
-    const simulatedToken = `jwt_${user.id}_${Date.now()}`;
-    localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, simulatedToken);
-    setCurrentUser(sessionUser);
-    setIsAdminUnlocked(true);
-    logAuditEvent('User Login', `${sessionUser.name} signed in successfully.`, 'info', 'auth');
-    return { success: true };
-  };
-
-  const verify2FACode = async (tempToken: string, otpCode: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const res = await apiFetch('/api/auth/verify-2fa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tempToken, otpCode }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, data.token);
-        const sessionUser: SessionUser = {
-          id: data.user.id,
-          name: data.user.name,
-          username: data.user.username,
-          email: data.user.email,
-          role: data.user.role,
-          roles: data.user.roles || [data.user.role],
-        };
-        setCurrentUser(sessionUser);
-        setIsAdminUnlocked(true);
-        logAuditEvent('2FA Verified', `${sessionUser.name} completed 2FA challenge.`, 'info', 'auth');
-        return { success: true };
-      }
-      return { success: false, error: data.error || 'Invalid 2FA code.' };
-    } catch {
-      // Offline fallback
-      const parts = tempToken.split('_');
-      const userId = parts[2];
-      const user = users.find((u) => u.id === userId);
-      if (!user || !user.twoFactorSecret) {
-        return { success: false, error: 'User or 2FA configuration not found.' };
-      }
-      if (verifyTOTP(user.twoFactorSecret, otpCode)) {
-        const userRoles = user.roles && user.roles.length > 0 ? user.roles : [user.role];
-        const sessionUser: SessionUser = {
-          id: user.id,
-          name: user.name,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          roles: userRoles,
-        };
-        setCurrentUser(sessionUser);
-        setIsAdminUnlocked(true);
-        logAuditEvent('2FA Verified', `${sessionUser.name} completed 2FA challenge.`, 'info', 'auth');
-        return { success: true };
-      }
-      return { success: false, error: 'Invalid 2FA Authenticator code.' };
-    }
-  };
-
-  const requestPasswordReset = async (
-    emailOrUsername: string
-  ): Promise<{ success: boolean; message: string; previewToken?: string; previewUrl?: string }> => {
-    const clean = emailOrUsername.trim().toLowerCase();
-    if (!clean) return { success: false, message: 'Please enter your username or registered email.' };
-
-    try {
-      const res = await apiFetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: clean }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        logAuditEvent('Password Reset Requested', `Reset requested for ${clean}`, 'info', 'auth');
-        return {
-          success: true,
-          message: data.message,
-          previewToken: data.previewToken,
-          previewUrl: data.previewUrl,
-        };
-      }
-    } catch {
-      // Client-side fallback
-    }
-
-    const user = users.find(
-      (u) => u.email?.toLowerCase() === clean || u.username?.toLowerCase() === clean
-    );
-    if (!user) {
-      // Do not reveal non-existence for security
-      return {
-        success: true,
-        message: 'If an account matches that email or username, password reset instructions have been generated.',
-      };
-    }
-
-    const resetToken = generateResetToken();
-    const tokenExpiry = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-    setUsers((prev) =>
-      prev.map((u) => (u.id === user.id ? { ...u, resetPasswordToken: resetToken, resetPasswordExpires: tokenExpiry } : u))
-    );
-
-    logAuditEvent('Password Reset Requested', `Reset generated for ${user.username || user.name}`, 'info', 'auth');
-    return {
-      success: true,
-      message: 'Password reset link and security verification token generated successfully.',
-      previewToken: resetToken,
-      previewUrl: `${window.location.origin}/#reset-token=${resetToken}`,
-    };
-  };
-
-  const resetPasswordWithToken = async (
-    token: string,
-    newPass: string
-  ): Promise<{ success: boolean; message: string }> => {
-    if (!token.trim()) return { success: false, message: 'Reset token is required.' };
-    if (!newPass || newPass.length < 6) return { success: false, message: 'New password must be at least 6 characters.' };
-
-    try {
-      const res = await apiFetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, newPassword: newPass }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        logAuditEvent('Password Changed', 'Password successfully reset via verification token.', 'warning', 'auth');
-        return { success: true, message: data.message };
-      }
-    } catch {
-      // Client-side fallback
-    }
-
-    const user = users.find(
-      (u) => u.resetPasswordToken === token.trim() && u.resetPasswordExpires && new Date(u.resetPasswordExpires).getTime() > Date.now()
-    );
-    if (!user) {
-      return { success: false, message: 'Invalid or expired password reset token.' };
-    }
-
-    const newHash = hashPassword(newPass);
-    setUsers((prev) =>
-      prev.map((u) =>
-        u.id === user.id
-          ? {
-              ...u,
-              passwordHash: newHash,
-              resetPasswordToken: undefined,
-              resetPasswordExpires: undefined,
-              failedAttempts: 0,
-              status: 'active',
-            }
-          : u
-      )
-    );
-
-    logAuditEvent('Password Reset', `Password reset completed for ${user.username || user.name}`, 'warning', 'auth');
-    return { success: true, message: 'Password has been successfully reset. You can now log in with your new password.' };
   };
 
   // ---------------------------------------------------------------------------
@@ -2893,67 +2374,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // ---------------------------------------------------------------------------
   // Users Management
   // ---------------------------------------------------------------------------
-  const validPin = (pin: string) => /^\d{4,6}$/.test(pin.trim());
-
-  const addUser = (data: {
-    name: string;
-    role: UserRole;
-    roles?: string[];
-    pin?: string;
-    email?: string;
-    username?: string;
-    password?: string;
-    twoFactorEnabled?: boolean;
-  }): { success: boolean; message: string } => {
-    const cleanName = data.name.trim();
-    if (!cleanName) return { success: false, message: 'User display name is required.' };
-
-    const cleanPin = (data.pin || '1234').trim();
-    if (!validPin(cleanPin)) {
-      return { success: false, message: 'PIN must be 4 to 6 numeric digits.' };
-    }
-
-    const cleanUsername = (data.username || cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_')).trim();
-    if (users.some((u) => u.username?.toLowerCase() === cleanUsername.toLowerCase())) {
-      return { success: false, message: 'Username is already taken.' };
-    }
-
-    if (data.email && users.some((u) => u.email?.toLowerCase() === data.email!.trim().toLowerCase())) {
-      return { success: false, message: 'An account with this email address already exists.' };
-    }
-
-    const assignedRoles = data.roles && data.roles.length > 0 ? data.roles : [data.role];
-    const pinH = hashPin(cleanPin);
-
-    const newUser: AppUser = {
-      id: uid('user'),
-      name: cleanName,
-      username: cleanUsername,
-      email: data.email?.trim() || `${cleanUsername}@sarmaya.pk`,
-      role: data.role,
-      roles: assignedRoles,
-      pin: cleanPin,
-      pinHash: pinH,
-      passwordHash: hashPassword(data.password || 'Sarmaya@2026'),
-      twoFactorEnabled: !!data.twoFactorEnabled,
-      status: 'active',
-      active: true,
-      failedAttempts: 0,
-      createdAt: todayISO(),
-    };
-
-    setUsers((prev) => [newUser, ...prev]);
-    logAuditEvent('User Created', `Administrator created user "${cleanName}" with role [${assignedRoles.join(', ')}] and secure PIN.`, 'warning', 'users');
-
-    apiFetch('/api/users/invite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newUser),
-    }).catch(() => {});
-
-    return { success: true, message: `User "${cleanName}" successfully created.` };
-  };
-
   const updateUser = (
     id: string,
     data: Partial<Omit<AppUser, 'id' | 'createdAt'>> & { newPassword?: string }
@@ -2961,22 +2381,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const existing = users.find((u) => u.id === id);
     if (!existing) return { success: false, message: 'User not found.' };
 
-    const updatePayload: Partial<AppUser> = { ...data };
-
-    if (data.pin != null && data.pin.trim() !== '') {
-      if (!validPin(data.pin)) {
-        return { success: false, message: 'PIN must be 4 to 6 numeric digits.' };
-      }
-      const cleanP = data.pin.trim();
-      updatePayload.pin = cleanP;
-      updatePayload.pinHash = hashPin(cleanP);
-      updatePayload.failedAttempts = 0;
-      updatePayload.lockedUntil = undefined;
-      logAuditEvent('PIN Reset', `Administrator reset/updated the PIN for user "${existing.name}".`, 'warning', 'auth');
+    // Passwords are only ever set through changePassword / resetUserPassword (hashed there).
+    const { newPassword: _ignored, pin: _pin, pinHash: _pinHash, passwordHash: _hash, passwordSalt: _salt, passwordIter: _iter, ...rest } = data as any;
+    const updatePayload: Partial<AppUser> = { ...rest, updatedAt: new Date().toISOString() };
+    if (rest.username !== undefined) {
+      const uname = String(rest.username).trim().toLowerCase();
+      if (!/^[a-z0-9][a-z0-9._-]{1,31}$/.test(uname)) return { success: false, message: 'Username must be 2 to 32 letters, numbers, dot, dash or underscore (no spaces).' };
+      if (users.some((u) => u.id !== id && (u.username || '').trim().toLowerCase() === uname)) return { success: false, message: `The username "${uname}" is already taken.` };
+      updatePayload.username = uname;
     }
-
-    if (data.newPassword) {
-      updatePayload.passwordHash = hashPassword(data.newPassword);
+    const ownersLeft = users.filter((u) => u.id !== id && isOwnerAccount(u) && u.active !== false).length;
+    const staysOwner = isOwnerAccount({ role: (updatePayload.role || existing.role) as UserRole, roles: updatePayload.roles || existing.roles }) && updatePayload.active !== false;
+    if (isOwnerAccount(existing) && !staysOwner && ownersLeft === 0) {
+      return { success: false, message: 'This is the only owner (super admin) account. Make someone else owner first.' };
     }
 
     if (data.roles && data.roles.length > 0) {
@@ -3003,8 +2420,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const deleteUser = (id: string) => {
     const existing = users.find((u) => u.id === id);
     if (!existing) return;
-    if (existing.username === 'superadmin' || existing.id === 'user-super-admin') {
-      logAuditEvent('Action Denied', 'Attempted deletion of the primary Super Admin was blocked.', 'danger', 'system');
+    const otherOwners = users.filter((u) => u.id !== id && isOwnerAccount(u) && u.active !== false).length;
+    if (existing.id === currentUser?.id || (isOwnerAccount(existing) && otherOwners === 0)) {
+      logAuditEvent('Action Denied', `Deleting ${existing.name} was blocked (your own account or the only owner).`, 'danger', 'system');
       return;
     }
     setUsers((prev) => prev.filter((u) => u.id !== id));
@@ -3018,7 +2436,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setUsers((prev) =>
       prev.map((u) =>
         u.id === id
-          ? { ...u, status: 'active', failedAttempts: 0, lockedUntil: undefined }
+          ? { ...u, status: 'active', failedAttempts: 0, lockedUntil: null, updatedAt: new Date().toISOString() }
           : u
       )
     );
@@ -3029,37 +2447,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const forceLogoutUser = (id: string) => {
     if (currentUser?.id === id) {
-      lockAdmin();
+      auth.logout();
     }
     logAuditEvent('Force Logout', `Session terminated for user ID ${id}.`, 'warning', 'auth');
-  };
-
-  const resetUserPin = (userId: string, newPin: string): { success: boolean; message: string } => {
-    const clean = newPin.trim();
-    if (!validPin(clean)) {
-      return { success: false, message: 'PIN must be 4 to 6 numeric digits.' };
-    }
-    const user = users.find((u) => u.id === userId);
-    if (!user) return { success: false, message: 'User not found.' };
-
-    const pinH = hashPin(clean);
-    setUsers((prev) =>
-      prev.map((u) =>
-        u.id === userId
-          ? {
-              ...u,
-              pin: clean,
-              pinHash: pinH,
-              failedAttempts: 0,
-              lockedUntil: undefined,
-              status: u.status === 'locked' ? 'active' : u.status,
-            }
-          : u
-      )
-    );
-
-    logAuditEvent('PIN Reset', `Administrator reset PIN for user "${user.name}".`, 'warning', 'auth');
-    return { success: true, message: `PIN for "${user.name}" has been successfully reset.` };
   };
 
   // ---------------------------------------------------------------------------
@@ -3954,27 +3344,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     logAuditEvent('Booking Cancelled', `${booking.bookingNumber} cancelled${reason ? `: ${reason}` : ''}. ${booking.remainingKg.toLocaleString()} kg undispatched.`, 'warning');
   };
 
-  const changeAdminPin = (oldPin: string, newPin: string): { success: boolean; message: string } => {
-    if (oldPin.trim() !== adminPin.trim()) {
-      logAuditEvent('PIN Change Rejected', 'Provided existing PIN did not match.', 'warning');
-      return { success: false, message: 'Current PIN is incorrect.' };
-    }
-    const clean = newPin.trim();
-    if (!/^\d{4,6}$/.test(clean)) {
-      return { success: false, message: 'New PIN must be exactly 4 to 6 numeric digits.' };
-    }
-    setAdminPin(clean);
-    setSettings((prev) => ({ ...prev, id: 'default', masterPin: clean }));
-    logAuditEvent('Master PIN Updated', 'Administrator established a new master PIN.', 'warning');
-    return { success: true, message: 'Master PIN successfully updated.' };
-  };
-
-  const resetAdminPinToDefault = () => {
-    setAdminPin(DEFAULT_ADMIN_PIN);
-    setSettings((prev) => ({ ...prev, id: 'default', masterPin: DEFAULT_ADMIN_PIN }));
-    logAuditEvent('Master PIN Reset', 'Master PIN restored to factory default (7860).', 'warning');
-  };
-
   const bankRec = createBankRecApi({
     lines: bankStatementLines,
     setLines: setBankStatementLines,
@@ -4166,15 +3535,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (Array.isArray(data.adjustments)) setAdjustments(data.adjustments);
       if (Array.isArray(data.tasks)) setTasks(data.tasks);
       if (data.settings && typeof data.settings === 'object') {
-        setSettings({ ...data.settings, id: 'default' });
-        const importedPin = (data.settings as Partial<AppSettings>).masterPin;
-        if (typeof importedPin === 'string' && /^\d{4,6}$/.test(importedPin.trim())) {
-          setAdminPin(importedPin.trim());
-        }
-      } else if (typeof data.adminPin === 'string' && /^\d{4,6}$/.test(data.adminPin.trim())) {
-        const importedPin = data.adminPin.trim();
-        setAdminPin(importedPin);
-        setSettings((prev) => ({ ...prev, id: 'default', masterPin: importedPin }));
+        // An old backup's master PIN is not restored: sign-in is by username + password now.
+        setSettings({ ...data.settings, masterPin: null, id: 'default' });
       }
       if (Array.isArray(data.ledger)) setLedger(data.ledger.map(normalizeLedger));
       if (Array.isArray(data.whatsappMessages)) setWhatsappMessages(data.whatsappMessages);
@@ -4268,6 +3630,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ...inventory.api,
         ...stockActions,
         ...chequeApi,
+        ...auth,
         customers,
         suppliers,
         products,
@@ -4332,12 +3695,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         addTruck,
         updateTruck,
         deleteTruck,
-        addUser,
         updateUser,
         deleteUser,
-        currentUser,
         can,
-        unlockAsUser,
         cancelBooking,
         markDelivered,
         reopenDispatch,
@@ -4375,12 +3735,6 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         resetToSampleData,
         recentWhatsAppAlert,
         clearRecentAlert,
-        isAdminUnlocked,
-        unlockAdmin,
-        lockAdmin,
-        adminPin,
-        changeAdminPin,
-        resetAdminPinToDefault,
         auditLogs,
         logAuditEvent,
         clearAuditLogs,
@@ -4398,13 +3752,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         isFieldVisible,
         securityPolicy,
         updateSecurityPolicy,
-        loginWithCredentials,
-        verify2FACode,
-        requestPasswordReset,
-        resetPasswordWithToken,
         unlockUserAccount,
         forceLogoutUser,
-        resetUserPin,
         invoices,
         addInvoice,
         updateInvoice,

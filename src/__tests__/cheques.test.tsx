@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import React from 'react';
 import { renderHook, act } from '@testing-library/react';
+import { seedTestUsers, signIn, OWNER, OPERATOR } from './helpers/auth';
 import { TradingProvider, useTrading } from '../context/TradingContext';
 import { ACC, DEFAULT_ACCOUNTS, accountBalance, buildJournal, trialBalance } from '../utils/accounting';
 import { collectCashMovements, accountBalancesOn } from '../utils/finance';
@@ -15,7 +16,7 @@ const today = todayISO();
 const ago = (n: number) => shiftDate(today, -n);
 
 /** Customer c1 owes 100,000 (one bill INV-1 of 60,000 + 40,000 old dues); supplier s1 is owed 80,000. */
-const setup = (as: 'admin' | 'operator' = 'admin') => {
+const setup = async (as: 'admin' | 'operator' = 'admin') => {
   const set = (k: string, v: unknown) => localStorage.setItem(k, JSON.stringify(v));
   set('tradeflow_settings_v2', { appMode: 'billing', cashOpeningBalance: 10000, openingBankBalance: 50000, cashOpeningDate: '2026-01-01', taxRatePct: 0 });
   set('tradeflow_customers_v2', [{ id: 'c1', name: 'Haji Karim', company: 'Karim Store', phone: '0300', email: '', address: '', totalDue: 100000, creditLimit: 0, createdAt: '2026-01-01' }]);
@@ -31,15 +32,13 @@ const setup = (as: 'admin' | 'operator' = 'admin') => {
   ]);
   set('tradeflow_expenses_v2', []);
   set('tradeflow_cash_entries_v2', []);
+  seedTestUsers();
   const hook = renderHook(() => useTrading(), { wrapper });
-  act(() => {
-    if (as === 'admin') hook.result.current.unlockAdmin('7860');
-    else expect(hook.result.current.unlockAsUser('user-operator', '9876').success).toBe(true);
-  });
+  await signIn(() => hook.result.current, as === 'admin' ? OWNER : OPERATOR);
   return hook;
 };
 
-type Hook = ReturnType<typeof setup>;
+type Hook = Awaited<ReturnType<typeof setup>>;
 const books = (h: Hook) => {
   const s = h.result.current;
   return buildJournal({ settings: s.settings, customers: s.customers, suppliers: s.suppliers, ledger: s.ledger, invoices: s.invoices, expenses: s.expenses, cashEntries: s.cashEntries, products: s.products });
@@ -61,8 +60,8 @@ const receive = (h: Hook, extra: Partial<Parameters<Hook['result']['current']['r
 beforeEach(() => localStorage.clear());
 
 describe('cheques received from customers', () => {
-  it('in hand: customer balance goes down, the money sits in Cheques in hand (not the bank), books balance', () => {
-    const h = setup();
+  it('in hand: customer balance goes down, the money sits in Cheques in hand (not the bank), books balance', async () => {
+    const h = await setup();
     const bankBefore = bank(h);
     const r = receive(h);
     expect(r.success).toBe(true);
@@ -79,8 +78,8 @@ describe('cheques received from customers', () => {
     expect(DEFAULT_ACCOUNTS.find((a) => a.code === '1150')!.name).toBe('Cheques in hand');
   });
 
-  it('refuses bad input and duplicates', () => {
-    const h = setup();
+  it('refuses bad input and duplicates', async () => {
+    const h = await setup();
     expect(receive(h, { chequeNumber: ' ' }).message).toMatch(/cheque number/);
     expect(receive(h, { amount: 0 }).message).toMatch(/amount/);
     expect(receive(h, { date: shiftDate(today, 2) }).message).toMatch(/future/);
@@ -89,16 +88,16 @@ describe('cheques received from customers', () => {
     expect(receive(h, { invoiceId: 'inv1', chequeNumber: '9', amount: 70000 }).message).toMatch(/Only Rs/);
   });
 
-  it('a post-dated cheque cannot be deposited or cleared before its date', () => {
-    const h = setup();
+  it('a post-dated cheque cannot be deposited or cleared before its date', async () => {
+    const h = await setup();
     const r = receive(h, { chequeDate: shiftDate(today, 5), date: today });
     expect(r.success).toBe(true);
     expect(run(() => h.result.current.depositCheque(r.cheque!.id)).message).toMatch(/won't take it before/);
     expect(chequesDueThisWeek(h.result.current.cheques, today)).toHaveLength(1);
   });
 
-  it('deposit → clear: money moves from Cheques in hand to the bank, as a bank entry bank reconciliation can match', () => {
-    const h = setup();
+  it('deposit → clear: money moves from Cheques in hand to the bank, as a bank entry bank reconciliation can match', async () => {
+    const h = await setup();
     const bankBefore = bank(h);
     const r = receive(h);
     expect(run(() => h.result.current.depositCheque(r.cheque!.id, ago(2))).success).toBe(true);
@@ -125,8 +124,8 @@ describe('cheques received from customers', () => {
     expect(run(() => h.result.current.bounceCheque(c.id, { reason: 'x' })).success).toBe(false);
   });
 
-  it('bounce with the bank charge passed to the customer: owes the cheque + charge again, shop bears nothing', () => {
-    const h = setup();
+  it('bounce with the bank charge passed to the customer: owes the cheque + charge again, shop bears nothing', async () => {
+    const h = await setup();
     const bankBefore = bank(h);
     const r = receive(h);
     act(() => { h.result.current.depositCheque(r.cheque!.id, ago(2)); });
@@ -154,8 +153,8 @@ describe('cheques received from customers', () => {
     expect(h.result.current.isChequeRecord(exp.id)).toBe(true);
   });
 
-  it('bounce with the charge kept by the shop is a bank-charges expense', () => {
-    const h = setup();
+  it('bounce with the charge kept by the shop is a bank-charges expense', async () => {
+    const h = await setup();
     const r = receive(h);
     act(() => { h.result.current.bounceCheque(r.cheque!.id, { reason: 'Signature differs', bankCharge: 300, chargeTo: 'shop' }); });
     expect(cust(h).totalDue).toBe(100000);
@@ -164,8 +163,8 @@ describe('cheques received from customers', () => {
     expect(trialBalance(j, DEFAULT_ACCOUNTS, today).balanced).toBe(true);
   });
 
-  it('a cheque against a bill pays the bill while in hand; a bounce makes the bill due again', () => {
-    const h = setup();
+  it('a cheque against a bill pays the bill while in hand; a bounce makes the bill due again', async () => {
+    const h = await setup();
     const r = receive(h, { invoiceId: 'inv1', amount: 60000 });
     expect(r.success).toBe(true);
     let inv = h.result.current.invoices.find((i) => i.id === 'inv1')!;
@@ -180,8 +179,8 @@ describe('cheques received from customers', () => {
     expect(cust(h).totalDue).toBe(100000);
   });
 
-  it('returned to the customer while in hand (cancel)', () => {
-    const h = setup();
+  it('returned to the customer while in hand (cancel)', async () => {
+    const h = await setup();
     const r = receive(h);
     const x = run(() => h.result.current.cancelCheque(r.cheque!.id, { reason: 'Customer paid cash instead' }));
     expect(x.success).toBe(true);
@@ -194,8 +193,8 @@ describe('cheques received from customers', () => {
 });
 
 describe('cheques issued to suppliers', () => {
-  it('issue → clear / cancel: supplier balance, Cheques issued liability, then the bank', () => {
-    const h = setup();
+  it('issue → clear / cancel: supplier balance, Cheques issued liability, then the bank', async () => {
+    const h = await setup();
     const bankBefore = bank(h);
     const a = run(() => h.result.current.issueCheque({ supplierId: 's1', amount: 30000, bankName: 'MCB', chequeNumber: '555', chequeDate: ago(2), date: ago(5) }));
     const b = run(() => h.result.current.issueCheque({ supplierId: 's1', amount: 20000, bankName: 'MCB', chequeNumber: '556', chequeDate: shiftDate(today, 10), date: today }));
@@ -218,8 +217,8 @@ describe('cheques issued to suppliers', () => {
 });
 
 describe('permissions and closed periods', () => {
-  it('operators record and deposit cheques; clearing, bouncing and cancelling need a manager', () => {
-    const h = setup('operator');
+  it('operators record and deposit cheques; clearing, bouncing and cancelling need a manager', async () => {
+    const h = await setup('operator');
     const r = receive(h);
     expect(r.success).toBe(true);
     expect(run(() => h.result.current.depositCheque(r.cheque!.id, ago(2))).success).toBe(true);
@@ -228,8 +227,8 @@ describe('permissions and closed periods', () => {
     expect(run(() => h.result.current.cancelCheque(r.cheque!.id)).message).toMatch(/permission/);
   });
 
-  it('dates inside a closed period are refused', () => {
-    const h = setup();
+  it('dates inside a closed period are refused', async () => {
+    const h = await setup();
     const r = receive(h);
     act(() => h.result.current.updateSettings({ booksLockedUntil: ago(4) }));
     expect(receive(h, { chequeNumber: '777', date: ago(6) }).message).toMatch(/books are closed/);
@@ -248,7 +247,7 @@ describe('register helpers and daily sheet', () => {
     mk('e', { status: 'bounced', returnedDate: today }),
     mk('f', { status: 'cleared', clearedDate: ago(1), entryDate: ago(5) }),
   ];
-  it('due this week, lists and totals', () => {
+  it('due this week, lists and totals', async () => {
     expect(chequesDueThisWeek(list, today).map((c) => c.id)).toEqual(['c', 'd', 'a']);
     const t = chequeTotals(list, today);
     expect(t.dueThisWeek).toEqual({ count: 3, amount: 2400, received: 2000, issued: 400 });
@@ -260,8 +259,8 @@ describe('register helpers and daily sheet', () => {
     expect(chequeEventsOn(list, today).map((e) => `${e.cheque.id}:${e.kind}`).sort()).toEqual(['a:received', 'b:received', 'c:deposited', 'c:received', 'd:issued', 'e:bounced', 'e:received']);
   });
 
-  it('the daily sheet lists cheques received and cleared on the day, and the cleared one counts as bank in', () => {
-    const h = setup();
+  it('the daily sheet lists cheques received and cleared on the day, and the cleared one counts as bank in', async () => {
+    const h = await setup();
     const r = receive(h, { date: ago(1), chequeDate: ago(1) });
     act(() => { h.result.current.clearCheque(r.cheque!.id, today); });
     const s = h.result.current;
