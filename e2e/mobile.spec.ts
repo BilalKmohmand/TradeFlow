@@ -42,6 +42,7 @@ const noOverflow = async (page: Page, label: string) => {
 };
 
 test('every screen and modal on a phone', async ({ page }) => {
+  test.setTimeout(150_000); // walks every screen and takes many full-page screenshots
   await page.addInitScript(seed);
   await seedUsers(page);
   await page.goto('/');

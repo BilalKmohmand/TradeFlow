@@ -11,6 +11,7 @@ const shot = async (page: Page, name: string) => {
 test.use({ viewport: { width: 1366, height: 900 } });
 
 test('desktop screens with data', async ({ page }) => {
+  test.setTimeout(150_000); // walks every screen and takes many full-page screenshots
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
