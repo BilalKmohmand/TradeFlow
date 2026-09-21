@@ -86,63 +86,83 @@ export const ExpiryAttention: React.FC<{ onOpen: () => void }> = ({ onOpen }) =>
   );
 };
 
-/** Receive stock into a godown, as a batch with expiry for batch-tracked items. */
-export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void; productId?: string | null }> = ({ isOpen, onClose, productId }) => {
+interface ReceiveLine { key: number; pid: string; qty: string; cost: string; batchNo: string; expiry: string }
+let lineSeq = 0;
+const blankLine = (pid = ''): ReceiveLine => ({ key: ++lineSeq, pid, qty: '', cost: '', batchNo: '', expiry: '' });
+
+/**
+ * Receive stock into a godown: one or more items in one go (e.g. a supplier's whole delivery).
+ * Batch-tracked items take a batch number and expiry per line.
+ */
+export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void; productId?: string | null; supplierId?: string | null }> = ({ isOpen, onClose, productId, supplierId: presetSupplier }) => {
   const { products, suppliers, godowns, receiveStock } = useTrading();
   const sorted = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name)), [products]);
-  const [pid, setPid] = useState(productId || '');
+  const [lines, setLines] = useState<ReceiveLine[]>(() => [blankLine(productId || '')]);
   const [godownId, setGodownId] = useState(godowns[0]?.id || '');
-  const [qty, setQty] = useState('');
-  const [batchNo, setBatchNo] = useState('');
-  const [expiry, setExpiry] = useState('');
-  const [cost, setCost] = useState('');
-  const [supplierId, setSupplierId] = useState('');
+  const [supplierId, setSupplierId] = useState(presetSupplier || '');
   const [date, setDate] = useState(todayISO());
   const [error, setError] = useState('');
   const busy = useRef(false);
-  const product = products.find((p) => p.id === pid);
+  const supplier = suppliers.find((x) => x.id === supplierId);
+
+  const setLine = (key: number, patch: Partial<ReceiveLine>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const used = lines.filter((l) => l.pid || l.qty.trim());
+  const total = used.reduce((a, l) => a + (parseFloat(l.qty) || 0) * (parseFloat(l.cost) || 0), 0);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (busy.current) return;
+    setError('');
+    if (used.length === 0) return setError('Pick an item.');
+    if (date > todayISO()) return setError('The date cannot be in the future.');
+    // Check every line before saving anything, so a delivery is never half-saved.
+    for (const [i, l] of used.entries()) {
+      const p = products.find((x) => x.id === l.pid);
+      const where = used.length > 1 ? `Line ${i + 1}: ` : '';
+      if (!p) return setError(`${where}pick an item.`);
+      if (!(parseFloat(l.qty) > 0)) return setError(`${where}enter the quantity of ${p.name}.`);
+      if (supplierId && !(parseFloat(l.cost) > 0)) {
+        return setError(`${where}enter the cost per ${p.unit || 'unit'} of ${p.name} so it is added to what you owe ${supplier?.company || supplier?.name || 'the supplier'} — or leave the supplier empty.`);
+      }
+      if (p.trackBatches && l.expiry && l.expiry < date) return setError(`${where}the expiry date of ${p.name} is before the date received.`);
+    }
     busy.current = true;
     setTimeout(() => { busy.current = false; }, 800);
-    setError('');
-    if (!product) return setError('Pick an item.');
-    if (supplierId && !(parseFloat(cost) > 0)) {
-      return setError(`Enter the cost per ${products.find((p) => p.id === productId)?.unit || 'unit'} so this is added to what you owe ${suppliers.find((x) => x.id === supplierId)?.company || 'the supplier'} — or leave the supplier empty.`);
+    let owed = supplier?.totalOwed ?? 0;
+    for (const l of used) {
+      const p = products.find((x) => x.id === l.pid)!;
+      const qty = parseFloat(l.qty) || 0;
+      const cost = l.cost.trim() ? parseFloat(l.cost) : undefined;
+      const r = receiveStock({
+        productId: l.pid,
+        godownId,
+        qty,
+        batchNo: p.trackBatches ? l.batchNo : undefined,
+        expiryDate: p.trackBatches ? l.expiry || undefined : undefined,
+        costPrice: cost,
+        supplierId: supplierId || null,
+        date,
+        owedBefore: supplierId ? owed : undefined,
+      });
+      if (!r.success) return setError(r.message);
+      if (supplierId && cost) owed += qty * cost;
     }
-    const r = receiveStock({
-      productId: pid,
-      godownId,
-      qty: parseFloat(qty) || 0,
-      batchNo: product.trackBatches ? batchNo : undefined,
-      expiryDate: product.trackBatches ? expiry || undefined : undefined,
-      costPrice: cost.trim() ? parseFloat(cost) : undefined,
-      supplierId: supplierId || null,
-      date,
-    });
-    if (!r.success) return setError(r.message);
     onClose();
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Receive stock" subtitle="Add stock you bought or brought in. With a supplier and cost, it is also added to what you owe them.">
+    <Modal isOpen={isOpen} onClose={onClose} title="Receive stock" subtitle="Add stock you bought or brought in — one item or a whole delivery. With a supplier and cost, it is also added to what you owe them.">
       <form onSubmit={submit} className="space-y-4" id="receive-stock-form">
         {error && <Notice kind="error">{error}</Notice>}
-        <div>
-          <label className={labelCls} htmlFor="rs-item">Item</label>
-          <select id="rs-item" value={pid} onChange={(e) => setPid(e.target.value)} className={inputCls}>
-            <option value="">Select item…</option>
-            {sorted.map((p) => <option key={p.id} value={p.id}>{p.name}{p.trackBatches ? ' (batches)' : ''}</option>)}
-          </select>
-        </div>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelCls} htmlFor="rs-qty">Quantity{product ? ` (${product.unit || 'pcs'})` : ''}</label>
-            <input id="rs-qty" type="number" inputMode="decimal" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} className={`${inputCls} font-mono`} placeholder="0" />
+          <div className="col-span-2 sm:col-span-1">
+            <label className={labelCls} htmlFor="rs-supplier">Supplier (optional)</label>
+            <select id="rs-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={inputCls}>
+              <option value="">None</option>
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}{s.company && s.company !== s.name ? ` • ${s.company}` : ''}</option>)}
+            </select>
           </div>
-          <div>
+          <div className="col-span-2 sm:col-span-1">
             <label className={labelCls} htmlFor="rs-date">Date received</label>
             <input id="rs-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
           </div>
@@ -154,37 +174,71 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
               </select>
             </div>
           )}
-          {product?.trackBatches && (
-            <>
-              <div>
-                <label className={labelCls} htmlFor="rs-batch">Batch no.</label>
-                <input id="rs-batch" value={batchNo} onChange={(e) => setBatchNo(e.target.value)} className={inputCls} placeholder="auto if empty" />
-              </div>
-              <div>
-                <label className={labelCls} htmlFor="rs-expiry">Expiry date</label>
-                <input id="rs-expiry" type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} className={inputCls} />
-              </div>
-            </>
-          )}
-          <div>
-            <label className={labelCls} htmlFor="rs-cost">Cost per {product?.unit || 'unit'} (optional)</label>
-            <input id="rs-cost" type="number" inputMode="decimal" min="0" step="any" value={cost} onChange={(e) => setCost(e.target.value)} className={`${inputCls} font-mono`} placeholder="Rs." />
-          </div>
-          <div>
-            <label className={labelCls} htmlFor="rs-supplier">Supplier (optional)</label>
-            <select id="rs-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={inputCls}>
-              <option value="">None</option>
-              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}{s.company && s.company !== s.name ? ` • ${s.company}` : ''}</option>)}
-            </select>
-          </div>
         </div>
-        {supplierId && cost.trim() && parseFloat(qty) > 0 && (
-          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Rs. {num((parseFloat(qty) || 0) * (parseFloat(cost) || 0))} will be added to what you owe this supplier.</p>
+
+        <div className="space-y-3">
+          {lines.map((l, i) => {
+            const p = products.find((x) => x.id === l.pid);
+            const unit = p?.unit || 'unit';
+            const id = (f: string) => (i === 0 ? `rs-${f}` : `rs-${f}-${i + 1}`);
+            const amount = (parseFloat(l.qty) || 0) * (parseFloat(l.cost) || 0);
+            return (
+              <div key={l.key} className={`${cardCls} p-3 space-y-3`} data-testid="receive-line">
+                <div className="flex items-end gap-2">
+                  <div className="flex-1 min-w-0">
+                    <label className={labelCls} htmlFor={id('item')}>{lines.length > 1 ? `Item ${i + 1}` : 'Item'}</label>
+                    <select id={id('item')} value={l.pid} onChange={(e) => setLine(l.key, { pid: e.target.value })} className={inputCls}>
+                      <option value="">Select item…</option>
+                      {sorted.map((x) => <option key={x.id} value={x.id}>{x.name}{x.trackBatches ? ' (batches)' : ''}</option>)}
+                    </select>
+                  </div>
+                  {lines.length > 1 && (
+                    <button type="button" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} className="h-11 w-11 shrink-0 inline-flex items-center justify-center rounded-2xl text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40" aria-label={`Remove item ${i + 1}`}>
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls} htmlFor={id('qty')}>Quantity{p ? ` (${unit})` : ''}</label>
+                    <input id={id('qty')} type="number" inputMode="decimal" min="0" step="any" value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} className={`${inputCls} font-mono`} placeholder="0" />
+                  </div>
+                  <div>
+                    <label className={labelCls} htmlFor={id('cost')}>Cost per {unit}{supplierId ? '' : ' (optional)'}</label>
+                    <input id={id('cost')} type="number" inputMode="decimal" min="0" step="any" value={l.cost} onChange={(e) => setLine(l.key, { cost: e.target.value })} className={`${inputCls} font-mono`} placeholder="Rs." />
+                  </div>
+                  {p?.trackBatches && (
+                    <>
+                      <div>
+                        <label className={labelCls} htmlFor={id('batch')}>Batch no.</label>
+                        <input id={id('batch')} value={l.batchNo} onChange={(e) => setLine(l.key, { batchNo: e.target.value })} className={inputCls} placeholder="auto if empty" />
+                      </div>
+                      <div>
+                        <label className={labelCls} htmlFor={id('expiry')}>Expiry date</label>
+                        <input id={id('expiry')} type="date" value={l.expiry} onChange={(e) => setLine(l.key, { expiry: e.target.value })} className={inputCls} />
+                      </div>
+                    </>
+                  )}
+                </div>
+                {amount > 0 && <p className="text-xs text-right text-[#6B7280] dark:text-[#94A3B8]">Amount <strong className="font-mono text-[#111827] dark:text-white">Rs. {num(amount)}</strong></p>}
+              </div>
+            );
+          })}
+          <button type="button" onClick={() => setLines((ls) => [...ls, blankLine()])} className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-400 hover:underline">
+            <Plus className="w-4 h-4" /> Add another item
+          </button>
+        </div>
+
+        {supplierId && total > 0 && (
+          <p className="text-sm text-[#374151] dark:text-[#CBD5E1]">Total <strong className="font-mono">Rs. {num(total)}</strong> will be added to what you owe {supplier?.company || supplier?.name}.</p>
         )}
-        {product && !product.trackBatches && <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Want batch numbers and expiry dates? Edit the item and turn on “Track batch &amp; expiry”.</p>}
+        {!supplierId && total > 0 && <p className="text-sm text-[#374151] dark:text-[#CBD5E1]">Total value <strong className="font-mono">Rs. {num(total)}</strong></p>}
+        {used.some((l) => { const p = products.find((x) => x.id === l.pid); return p && !p.trackBatches; }) && lines.length === 1 && (
+          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Want batch numbers and expiry dates? Edit the item and turn on “Track batch &amp; expiry”.</p>
+        )}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className={secondaryBtn}>Cancel</button>
-          <button type="submit" className={primaryBtn}>Receive stock</button>
+          <button type="submit" className={primaryBtn}>{used.length > 1 ? `Receive ${used.length} items` : 'Receive stock'}</button>
         </div>
       </form>
     </Modal>

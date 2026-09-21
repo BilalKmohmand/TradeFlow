@@ -182,3 +182,54 @@ test.describe('Batches, expiry and godowns on a phone', () => {
     await batchesGodownsAndBills(page);
   });
 });
+
+test.describe('Receive a supplier delivery with several items', () => {
+  test.beforeEach(async ({ page }) => {
+    page.on('pageerror', (e) => { throw e; });
+    await page.addInitScript(seedInventory);
+  });
+
+  test('supplier "Receive stock" takes more than one item and adds both to what you owe', async ({ page }) => {
+    await unlock(page);
+    await page.getByRole('button', { name: 'Suppliers', exact: true }).first().click();
+    await page.getByRole('heading', { name: 'Ahmed' }).click();
+    await page.getByRole('button', { name: 'Receive Stock' }).click();
+
+    const rcv = page.getByRole('dialog', { name: 'Receive stock' });
+    await expect(rcv.getByLabel('Supplier (optional)', { exact: true })).toHaveValue('s1');
+    await rcv.getByLabel('Item', { exact: true }).selectOption('p1');
+    await rcv.getByLabel(/^Quantity/).fill('10');
+    await rcv.getByLabel(/^Cost per/).fill('1800');
+    await rcv.getByRole('button', { name: 'Add another item' }).click();
+    await rcv.getByLabel('Item 2', { exact: true }).selectOption('p2');
+    await rcv.locator('#rs-qty-2').fill('5');
+    await rcv.locator('#rs-cost-2').fill('6000');
+    await expect(rcv).toContainText('48,000'); // 10 × 1,800 + 5 × 6,000
+    await rcv.getByRole('button', { name: 'Receive 2 items' }).click();
+    await expect(rcv).toBeHidden();
+
+    await expect.poll(() => page.evaluate(() => {
+      const sup = JSON.parse(localStorage.getItem('tradeflow_suppliers_v2') || '[]')[0];
+      const prods = JSON.parse(localStorage.getItem('tradeflow_products_v2') || '[]');
+      const purchases = JSON.parse(localStorage.getItem('tradeflow_purchases_v2') || '[]');
+      return { owed: sup.totalOwed, p1: prods.find((p: { id: string }) => p.id === 'p1').stockKg, p2: prods.find((p: { id: string }) => p.id === 'p2').stockKg, n: purchases.length };
+    })).toEqual({ owed: 48000, p1: 10, p2: 50, n: 2 });
+  });
+
+  test('a half-filled second line stops the save and nothing is received', async ({ page }) => {
+    await unlock(page);
+    await goItems(page);
+    await page.getByRole('button', { name: 'Receive stock', exact: true }).first().click();
+    const rcv = page.getByRole('dialog', { name: 'Receive stock' });
+    await rcv.getByLabel('Supplier (optional)', { exact: true }).selectOption('s1');
+    await rcv.getByLabel('Item', { exact: true }).selectOption('p1');
+    await rcv.getByLabel(/^Quantity/).fill('10');
+    await rcv.getByLabel(/^Cost per/).fill('1800');
+    await rcv.getByRole('button', { name: 'Add another item' }).click();
+    await rcv.getByLabel('Item 2', { exact: true }).selectOption('p2');
+    await rcv.getByRole('button', { name: 'Receive 2 items' }).click();
+    await expect(rcv.getByText(/Line 2: enter the quantity/)).toBeVisible();
+    const stock = await page.evaluate(() => JSON.parse(localStorage.getItem('tradeflow_products_v2') || '[]').find((p: { id: string }) => p.id === 'p1').stockKg);
+    expect(stock).toBe(0);
+  });
+});

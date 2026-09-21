@@ -34,6 +34,7 @@ import { BillingUIProvider } from './components/billing/BillingUI';
 import { BillingHomeScreen } from './screens/billing/BillingHomeScreen';
 import { BillsScreen } from './screens/billing/BillsScreen';
 import { ItemsScreen } from './screens/billing/ItemsScreen';
+import { ReceiveStockModal } from './components/billing/InventoryUI';
 import { DailySheetScreen } from './screens/billing/DailySheetScreen';
 import { MoneyScreen } from './screens/billing/MoneyScreen';
 import { CustomersBillingScreen } from './screens/billing/CustomersBillingScreen';
@@ -83,11 +84,14 @@ function MainApp() {
   const [purchaseSupplierId, setPurchaseSupplierId] = useState<string | null>(null);
   const [purchaseProductId, setPurchaseProductId] = useState<string | null>(null);
   const [purchaseOrderId, setPurchaseOrderId] = useState<string | null>(null);
+  // Simple billing uses the multi-item Receive stock form; purchase orders keep the goods-receipt form.
+  const [receiveUI, setReceiveUI] = useState<{ n: number; open: boolean }>({ n: 0, open: false });
   const handleOpenPurchase = (opts?: { supplierId?: string | null; productId?: string | null; purchaseOrderId?: string | null }) => {
     setPurchaseSupplierId(opts?.supplierId ?? null);
     setPurchaseProductId(opts?.productId ?? null);
     setPurchaseOrderId(opts?.purchaseOrderId ?? null);
-    setIsPurchaseModalOpen(true);
+    if (isBilling && !opts?.purchaseOrderId) setReceiveUI((r) => ({ n: r.n + 1, open: true }));
+    else setIsPurchaseModalOpen(true);
   };
 
   // Global keydown listener for CMD+K / Ctrl+K
@@ -293,6 +297,13 @@ function MainApp() {
       />
 
       {/* Receive Stock (incoming purchase) */}
+      <ReceiveStockModal
+        key={`rcv-${receiveUI.n}`}
+        isOpen={receiveUI.open}
+        onClose={() => setReceiveUI((r) => ({ ...r, open: false }))}
+        supplierId={purchaseSupplierId}
+        productId={purchaseProductId}
+      />
       <PurchaseModal
         isOpen={isPurchaseModalOpen}
         onClose={() => setIsPurchaseModalOpen(false)}

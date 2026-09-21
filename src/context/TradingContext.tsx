@@ -1090,6 +1090,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     grossKg = null,
     tareKg = null,
     purchaseOrderId = null,
+    owedBefore,
   }: {
     supplierId: string;
     productId: string;
@@ -1102,6 +1103,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     grossKg?: number | null;
     tareKg?: number | null;
     purchaseOrderId?: string | null;
+    /** What the supplier was owed before this receipt, when several receipts are saved at once
+     *  (the supplier list in this render does not include the earlier ones yet). */
+    owedBefore?: number;
   }): Purchase => {
     const supplier = suppliers.find((s) => s.id === supplierId);
     const product = products.find((p) => p.id === productId);
@@ -1109,7 +1113,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const onDate = date || todayISO();
     const amount = round2(kg * pricePerKg);
-    const receiptNumber = `GRN-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+    const receiptNumber = `GRN-${new Date().getFullYear()}-${Date.now().toString(36).slice(-4).toUpperCase()}${Math.floor(10 + Math.random() * 90)}`;
     const purchase: Purchase = {
       id: uid('pur'),
       receiptNumber,
@@ -1142,8 +1146,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, stockKg: round2(p.stockKg + kg) } : p)));
 
     // 2. Supplier payable
-    const newOwed = paymentMadeImmediately ? supplier.totalOwed : round2(supplier.totalOwed + amount);
-    setSuppliers((prev) => prev.map((s) => (s.id === supplierId ? { ...s, totalOwed: newOwed } : s)));
+    const base = owedBefore ?? supplier.totalOwed;
+    if (!paymentMadeImmediately) {
+      // Add to the latest balance so several receipts saved together all count.
+      setSuppliers((prev) => prev.map((s) => (s.id === supplierId ? { ...s, totalOwed: round2(s.totalOwed + amount) } : s)));
+    }
 
     // 3. Ledger
     const entries: LedgerEntry[] = [
@@ -1157,7 +1164,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         description: `Stock received ${receiptNumber}: ${kg.toLocaleString()} kg ${product.name}`,
         debit: amount,
         credit: 0,
-        balanceAfter: round2(supplier.totalOwed + amount),
+        balanceAfter: round2(base + amount),
         kg,
       },
     ];
@@ -1172,7 +1179,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         description: `Paid on receipt for ${receiptNumber}`,
         debit: 0,
         credit: amount,
-        balanceAfter: supplier.totalOwed,
+        balanceAfter: base,
       });
     }
     setLedger((prev) => [...entries, ...prev]);
