@@ -35,6 +35,10 @@ import {
 } from '../types';
 import type { Account, JournalEntry } from '../utils/accounting';
 
+/** Finance tables (migration v21): fixed assets, depreciation runs, staff, advances, salary sheets, budgets, cost centres, year closes. */
+export const FINANCE_TABLE_NAMES = ['fixed_assets', 'depreciation_runs', 'staff', 'staff_advances', 'salary_runs', 'budgets', 'cost_centres', 'year_closes'] as const;
+export type FinanceTableName = (typeof FINANCE_TABLE_NAMES)[number];
+
 export interface AppData {
   customers: Customer[];
   suppliers: Supplier[];
@@ -78,6 +82,8 @@ export interface AppData {
   /** Supplier bills and claims; null when the tables do not exist yet (migration v20 not run). */
   supplierBills: SupplierBill[] | null;
   supplierClaims: SupplierClaim[] | null;
+  /** Finance rows by table; a table missing in the cloud (migration v21 not run) is left out. */
+  finance: Partial<Record<FinanceTableName, unknown[]>>;
 }
 
 export type TableName =
@@ -114,7 +120,8 @@ export type TableName =
   | 'areas'
   | 'schemes'
   | 'supplier_bills'
-  | 'supplier_claims';
+  | 'supplier_claims'
+  | FinanceTableName;
 
 export const ALL_TABLES: TableName[] = [
   'customers',
@@ -151,6 +158,7 @@ export const ALL_TABLES: TableName[] = [
   'schemes',
   'supplier_bills',
   'supplier_claims',
+  ...FINANCE_TABLE_NAMES,
 ];
 
 // ---------------------------------------------------------------------------
@@ -223,7 +231,7 @@ const stripLegacy = <T,>(rows: T[]): T[] =>
   });
 
 /** Tables that may be missing on a project that has not run the migration yet. */
-const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'bank_statement_lines', 'bank_reconciliations', 'godowns', 'stock_batches', 'stock_transfers', 'journal_entries', 'accounts', 'customer_agreed_rates', 'cheques', 'salesmen', 'areas', 'schemes', 'supplier_bills', 'supplier_claims'];
+const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'bank_statement_lines', 'bank_reconciliations', 'godowns', 'stock_batches', 'stock_transfers', 'journal_entries', 'accounts', 'customer_agreed_rates', 'cheques', 'salesmen', 'areas', 'schemes', 'supplier_bills', 'supplier_claims', ...FINANCE_TABLE_NAMES];
 
 /** Read a whole table in pages (PostgREST caps a single select at 1000 rows). */
 const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { message: string } | null }> => {
@@ -322,6 +330,15 @@ export const loadAllData = async (): Promise<AppData> => {
   maybeThrow(supplierBills, 'supplier_bills');
   maybeThrow(supplierClaims, 'supplier_claims');
 
+  // Finance tables are all optional: a missing table just keeps this device's rows.
+  const financeResults = await Promise.all(FINANCE_TABLE_NAMES.map((t) => fetchAll(t)));
+  const finance: Partial<Record<FinanceTableName, unknown[]>> = {};
+  FINANCE_TABLE_NAMES.forEach((t, i) => {
+    const r = financeResults[i];
+    if (r.error) console.warn(`Supabase table "${t}" unavailable (run supabase/migrate_v21_finance.sql):`, r.error.message);
+    else finance[t] = r.data || [];
+  });
+
   return {
     customers: (customers.data || []) as Customer[],
     suppliers: (suppliers.data || []) as Supplier[],
@@ -361,6 +378,7 @@ export const loadAllData = async (): Promise<AppData> => {
     supplierClaims: supplierClaims.error
       ? null
       : ((supplierClaims.data || []).map((r: any) => ({ ...r, qty: num(r.qty), rate: num(r.rate), amount: num(r.amount), acceptedAmount: r.acceptedAmount == null ? undefined : num(r.acceptedAmount) })) as SupplierClaim[]),
+    finance,
   };
 };
 

@@ -368,6 +368,8 @@ export interface Invoice {
   /** Salesman who made the sale and the area / route it went to (default: the customer's). */
   salesmanId?: string | null;
   areaId?: string | null;
+  /** Optional cost / profit centre tag (branch, area, vehicle) for the P&L by cost centre. */
+  costCentreId?: string | null;
 }
 
 export type AuditCategory = 'auth' | 'roles' | 'users' | 'visibility' | 'data' | 'system' | 'billing';
@@ -441,6 +443,8 @@ export interface Expense {
   referenceId?: string;
   createdAt: string;
   createdBy?: string;
+  /** Optional cost / profit centre tag (branch, area, vehicle) for the P&L by cost centre. */
+  costCentreId?: string | null;
 }
 
 export type TruckStatus = 'available' | 'on_trip' | 'maintenance' | 'inactive';
@@ -720,6 +724,10 @@ export interface AppSettings {
   billFooter?: string;
   /** Print the customer's balance before this bill and the total owed after it. */
   showPrevBalanceOnBill?: boolean;
+  /** First day of the financial year as "MM-DD" (default "07-01": 1 July, Pakistan). */
+  financialYearStart?: string;
+  /** Where each field is printed on the shop's bank cheque (see utils/chequePrint.ts). */
+  chequeLayout?: ChequeLayout;
 }
 
 export type BillPrintSize = 'a4' | 'a5' | 'thermal80';
@@ -1227,4 +1235,200 @@ export interface Scheme {
   createdAt: string;
   createdBy?: string;
   updatedAt?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Finance: fixed assets, staff & salaries, budgets, cost centres, year-end close, cheque printing.
+// The journal postings for all of these are derived in utils/financeBooks.ts (see the notes there).
+// ---------------------------------------------------------------------------
+export type AssetCategory = 'vehicle' | 'generator' | 'fittings' | 'equipment' | 'computer' | 'building' | 'other';
+export const ASSET_CATEGORIES: { id: AssetCategory; label: string }[] = [
+  { id: 'vehicle', label: 'Vehicle' },
+  { id: 'generator', label: 'Generator / UPS' },
+  { id: 'fittings', label: 'Shop fittings & furniture' },
+  { id: 'equipment', label: 'Equipment / machinery' },
+  { id: 'computer', label: 'Computer / phone' },
+  { id: 'building', label: 'Building / shop' },
+  { id: 'other', label: 'Other' },
+];
+
+export type DepreciationMethod = 'straight_line' | 'reducing_balance';
+
+/** How a fixed asset was paid for. 'owned' = already owned when the books started (opening balance). */
+export type AssetPaidFrom = 'cash' | 'bank' | 'credit' | 'owned';
+
+export interface AssetPayment {
+  id: string;
+  date: string;
+  amount: number;
+  method: string;
+  /** Cash-book entry (accountCode 2060) that paid the creditor. */
+  cashEntryId: string;
+}
+
+export interface FixedAsset {
+  id: string;
+  name: string;
+  category: AssetCategory;
+  purchaseDate: string;
+  cost: number;
+  paidFrom: AssetPaidFrom;
+  /** Seller, for an asset bought on credit. */
+  vendor?: string;
+  usefulLifeYears: number;
+  residualValue: number;
+  method: DepreciationMethod;
+  /** Reducing balance: % per year (default 2 ÷ life). */
+  ratePct?: number;
+  /** Depreciation already charged before the app (owned assets only). */
+  openingAccumulated?: number;
+  costCentreId?: string | null;
+  note?: string;
+  /** Cash-book entry (accountCode 1500) that paid for it (cash / bank purchases). */
+  purchaseEntryId?: string | null;
+  /** Payments made later to the seller of an asset bought on credit. */
+  payments?: AssetPayment[];
+  status: 'in_use' | 'disposed';
+  disposalDate?: string | null;
+  disposalProceeds?: number;
+  disposalMethod?: 'cash' | 'bank' | null;
+  disposalEntryId?: string | null;
+  disposalNote?: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export interface DepreciationLine {
+  assetId: string;
+  amount: number;
+  /** Months (YYYY-MM) this line charges. */
+  months: string[];
+}
+
+/** One "Run depreciation" for a month or a financial year. A month is never charged twice for an asset. */
+export interface DepreciationRun {
+  id: string;
+  /** "2026-03" for a month, "FY 2025-26" for a year. */
+  period: string;
+  months: string[];
+  date: string;
+  lines: DepreciationLine[];
+  total: number;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export interface StaffMember {
+  id: string;
+  name: string;
+  role: string;
+  monthlySalary: number;
+  phone?: string;
+  joinDate: string;
+  active: boolean;
+  cnic?: string;
+  createdAt: string;
+}
+
+/** Money lent to a staff member (a receivable, account 1160), recovered through the salary sheet. */
+export interface StaffAdvance {
+  id: string;
+  staffId: string;
+  date: string;
+  amount: number;
+  method: string;
+  note?: string;
+  /** Cash-book entry (accountCode 1160) that paid it out. */
+  cashEntryId: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export interface SalaryLine {
+  staffId: string;
+  name: string;
+  role?: string;
+  salary: number;
+  bonus: number;
+  deductions: number;
+  /** Part of the staff member's advance recovered from this salary. */
+  advanceDeducted: number;
+  /** salary + bonus − deductions − advanceDeducted: what is handed over. */
+  net: number;
+  note?: string;
+}
+
+/** One month's salary sheet, paid. */
+export interface SalaryRun {
+  id: string;
+  /** YYYY-MM */
+  month: string;
+  /** Day the salaries were paid (the books date). */
+  date: string;
+  method: string;
+  lines: SalaryLine[];
+  /** salary + bonus − deductions for everyone: the salary expense. */
+  totalGross: number;
+  totalAdvance: number;
+  totalNet: number;
+  /** Expense row (category salaries) that paid the net amount; null when nothing was paid in money. */
+  expenseId?: string | null;
+  createdAt: string;
+  createdBy?: string;
+}
+
+/** Budget for one income / expense account in one month. */
+export interface Budget {
+  id: string;
+  /** YYYY-MM */
+  month: string;
+  accountCode: string;
+  amount: number;
+}
+
+export type CostCentreKind = 'branch' | 'area' | 'vehicle' | 'other';
+export interface CostCentre {
+  id: string;
+  name: string;
+  kind: CostCentreKind;
+  active: boolean;
+  createdAt: string;
+}
+
+/** A closed financial year: profit carried to retained earnings / capital and books locked. */
+export interface YearClose {
+  id: string;
+  label: string;
+  start: string;
+  end: string;
+  profit: number;
+  /** Equity account the profit went to (3200 retained earnings or 3000 capital). */
+  toAccount: string;
+  journalId: string;
+  /** Lock date before this close (restored if the close is undone). */
+  previousLock?: string | null;
+  createdAt: string;
+  createdBy?: string;
+}
+
+/** A field position on the cheque, in mm from the top-left corner of the cheque leaf. */
+export interface ChequeFieldPos {
+  x: number;
+  y: number;
+}
+
+export interface ChequeLayout {
+  widthMm: number;
+  heightMm: number;
+  fontSizePt: number;
+  date: ChequeFieldPos;
+  /** Gap between date digits in mm (for cheques with DDMMYYYY boxes; 0 = print "21-09-2026"). */
+  dateDigitGapMm: number;
+  payee: ChequeFieldPos;
+  words: ChequeFieldPos;
+  /** Width of the amount-in-words line (wraps to a second line after this). */
+  wordsWidthMm: number;
+  figures: ChequeFieldPos;
+  /** Print "A/C Payee Only" across the top-left corner. */
+  acPayee: boolean;
 }

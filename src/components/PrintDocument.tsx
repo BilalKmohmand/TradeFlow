@@ -18,6 +18,7 @@ import { BillingPrintRequest, isBillingPrint, useBillingReportPrint } from './bi
 import { isSalesExtrasPrint, useSalesExtrasPrint } from './billing/SalesExtrasPrint';
 import type { SalesExtrasPrintRequest } from '../context/salesExtrasActions';
 import { PurchasingPrintRequest, isPurchasingPrint, usePurchasingPrint } from './billing/purchasing/PurchasingPrint';
+import { FinancePrintRequest, isFinancePrint, useFinancePrint } from './finance/FinancePrint';
 import { lineDiscountLabel, lineGross, billNetTotal, returnsForBill, returnedQtyByLine, quotationLines, quotationTotal } from '../utils/salesDocs';
 
 export type PrintRequest =
@@ -40,7 +41,8 @@ export type PrintRequest =
   | BillingPrintRequest
   | { type: 'cheque_register'; view?: string }
   | SalesExtrasPrintRequest
-  | PurchasingPrintRequest;
+  | PurchasingPrintRequest
+  | FinancePrintRequest;
 
 /** One line of a thermal receipt: text on the left, amount on the right. */
 const ThermalRow: React.FC<{ left: string; right: string; bold?: boolean }> = ({ left, right, bold }) => (
@@ -109,6 +111,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
   const billingReport = useBillingReportPrint(request);
   const salesExtrasReport = useSalesExtrasPrint(request);
   const purchasingDoc = usePurchasingPrint(request);
+  const financeDoc = useFinancePrint(request);
 
   const content = useMemo(() => {
     if (!request) return null;
@@ -116,6 +119,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
     if (isBillingPrint(request)) return billingReport;
     if (isSalesExtrasPrint(request)) return salesExtrasReport;
     if (isPurchasingPrint(request)) return purchasingDoc;
+    if (isFinancePrint(request)) return financeDoc;
 
     if (request.type === 'bill') {
       const inv = invoices.find((i) => i.id === request.invoiceId);
@@ -912,7 +916,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       };
     }
     return null;
-  }, [request, paper, books, billingReport, salesExtrasReport, purchasingDoc, salesmen, areas, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques]);
+  }, [request, paper, books, billingReport, salesExtrasReport, purchasingDoc, financeDoc, salesmen, areas, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques]);
 
   if (!request) return null;
 
@@ -920,6 +924,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 overflow-y-auto print:static print:p-0 print:block print:overflow-visible">
       <div onClick={onClose} className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs print:hidden" />
       {sizedDoc && paperCss(paper) && <style data-testid="print-paper" data-paper={paper}>{paperCss(paper)}</style>}
+      {content && (content as { pageCss?: string }).pageCss && <style data-testid="print-page">{(content as { pageCss?: string }).pageCss}</style>}
       <div className={`relative z-10 w-full ${sizedDoc && paper === 'thermal80' ? 'max-w-sm' : sizedDoc && paper === 'a5' ? 'max-w-xl' : 'max-w-3xl'} my-6 print:my-0 print:max-w-none`}>
         <div className="flex items-center justify-between mb-3 print:hidden">
           <span className="text-xs text-white/80">Preview • use "Print / Save PDF" to print or export.</span>
@@ -929,8 +934,8 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
           </div>
         </div>
 
-        <div id="print-root" data-paper={sizedDoc ? paper : undefined} className={`bg-white text-gray-900 rounded-2xl print:rounded-none shadow-2xl print:shadow-none ${content && (content as { thermal?: boolean }).thermal ? 'p-3' : sizedDoc && paper === 'a5' ? 'p-4 sm:p-6' : 'p-4 sm:p-10'} overflow-x-auto`}>
-          {content && (content as { thermal?: boolean }).thermal ? (
+        <div id="print-root" data-paper={sizedDoc ? paper : undefined} className={`bg-white text-gray-900 rounded-2xl print:rounded-none shadow-2xl print:shadow-none ${content && (content as { raw?: boolean }).raw ? 'p-0 w-fit mx-auto' : content && (content as { thermal?: boolean }).thermal ? 'p-3' : sizedDoc && paper === 'a5' ? 'p-4 sm:p-6' : 'p-4 sm:p-10'} overflow-x-auto`}>
+          {content && ((content as { thermal?: boolean }).thermal || (content as { raw?: boolean }).raw) ? (
             content.body
           ) : content ? (
             <>
@@ -953,7 +958,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               <div className="mt-6">{content.body}</div>
               <div className="mt-10 pt-3 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-500">
                 <span>Generated by {COMPANY.name} on {formatDate(todayISO())}{currentUser ? ` by ${currentUser.name}` : ''}</span>
-                <span>{request.type === 'bill' || request.type === 'bill_challan' || (request.type === 'note' && returns.find((x) => x.id === request.returnId)?.items?.length) || (request.type === 'quotation' && quotations.find((x) => x.id === request.quotationId)?.items?.length) || request.type === 'daily_sheet' || request.type === 'bank_reconciliation' || request.type === 'cheque_register' || isAccountingPrint(request) || isBillingPrint(request) || isSalesExtrasPrint(request) || isPurchasingPrint(request) ? 'All amounts in PKR (Rs.)' : 'All quantities in kg • amounts in PKR'}</span>
+                <span>{request.type === 'bill' || request.type === 'bill_challan' || (request.type === 'note' && returns.find((x) => x.id === request.returnId)?.items?.length) || (request.type === 'quotation' && quotations.find((x) => x.id === request.quotationId)?.items?.length) || request.type === 'daily_sheet' || request.type === 'bank_reconciliation' || request.type === 'cheque_register' || isAccountingPrint(request) || isBillingPrint(request) || isSalesExtrasPrint(request) || isPurchasingPrint(request) || isFinancePrint(request) ? 'All amounts in PKR (Rs.)' : 'All quantities in kg • amounts in PKR'}</span>
               </div>
             </>
           ) : (

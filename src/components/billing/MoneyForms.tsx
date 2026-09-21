@@ -7,13 +7,14 @@ import { collectCashMovements, accountBalancesOn } from '../../utils/finance';
 import { rs } from './ui';
 import { booksLockedFor } from '../../utils/accounting';
 import { ChequeFieldsInput, emptyChequeFields } from './ChequeForms';
+import { CostCentreSelect } from '../finance/common';
 
 const EXPENSE_PAID_VIA = ['Cash', 'Bank Transfer', 'Easypaisa / JazzCash', 'Card', 'Credit (unpaid)'];
 
 /** Record an expense: what, how much, which sheet (category) it belongs to, and how it was paid. */
 export const ExpenseModal: React.FC<{ isOpen: boolean; onClose: () => void; date?: string; category?: ExpenseCategory }> = ({ isOpen, onClose, date, category }) => {
   const { addExpense, settings } = useTrading();
-  const [form, setForm] = useState({ date: date || todayISO(), category: (category || 'daily') as ExpenseCategory, amount: '', description: '', paidVia: 'Cash' });
+  const [form, setForm] = useState({ date: date || todayISO(), category: (category || 'daily') as ExpenseCategory, amount: '', description: '', paidVia: 'Cash', costCentreId: '' });
   const [error, setError] = useState('');
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +23,7 @@ export const ExpenseModal: React.FC<{ isOpen: boolean; onClose: () => void; date
     if (!form.description.trim()) return setError('Write what this expense was for.');
     const closed = booksLockedFor(settings, form.date);
     if (closed) return setError(closed);
-    addExpense({ date: form.date, category: form.category, amount, description: form.description.trim(), paidVia: form.paidVia, truckId: null, dispatchId: null });
+    addExpense({ date: form.date, category: form.category, amount, description: form.description.trim(), paidVia: form.paidVia, truckId: null, dispatchId: null, ...(form.costCentreId ? { costCentreId: form.costCentreId } : {}) });
     onClose();
   };
   return (
@@ -50,6 +51,7 @@ export const ExpenseModal: React.FC<{ isOpen: boolean; onClose: () => void; date
             <label className={labelCls} htmlFor="exp-via">Paid from</label>
             <select id="exp-via" value={form.paidVia} onChange={(e) => setForm({ ...form, paidVia: e.target.value })} className={inputCls}>{EXPENSE_PAID_VIA.map((v) => <option key={v}>{v}</option>)}</select>
           </div>
+          <div className="col-span-2 empty:hidden"><CostCentreSelect id="exp-centre" value={form.costCentreId} onChange={(v) => setForm({ ...form, costCentreId: v })} /></div>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className={secondaryBtn}>Cancel</button>

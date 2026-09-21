@@ -4,14 +4,16 @@ import { useTrading } from '../../context/TradingContext';
 import { Modal, Notice, inputCls, labelCls, primaryBtn, secondaryBtn, rs } from '../billing/ui';
 import { Account, validateEntry } from '../../utils/accounting';
 import { todayISO } from '../../utils/stockFlow';
+import { CostCentreSelect } from '../finance/common';
 
 interface DraftLine {
   accountCode: string;
   debit: string;
   credit: string;
+  costCentreId?: string;
 }
 
-const emptyLine = (): DraftLine => ({ accountCode: '', debit: '', credit: '' });
+const emptyLine = (): DraftLine => ({ accountCode: '', debit: '', credit: '', costCentreId: '' });
 const num = (v: string) => {
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : 0;
@@ -26,7 +28,7 @@ export const JournalEntryModal: React.FC<{ isOpen: boolean; onClose: () => void;
   const [lines, setLines] = useState<DraftLine[]>([emptyLine(), emptyLine()]);
   const [error, setError] = useState('');
 
-  const parsed = useMemo(() => lines.map((l) => ({ accountCode: l.accountCode, debit: num(l.debit), credit: num(l.credit) })), [lines]);
+  const parsed = useMemo(() => lines.map((l) => ({ accountCode: l.accountCode, debit: num(l.debit), credit: num(l.credit), ...(l.costCentreId ? { costCentreId: l.costCentreId } : {}) })), [lines]);
   const totalDebit = Math.round(parsed.reduce((a, l) => a + l.debit, 0) * 100) / 100;
   const totalCredit = Math.round(parsed.reduce((a, l) => a + l.credit, 0) * 100) / 100;
   const difference = Math.round((totalDebit - totalCredit) * 100) / 100;
@@ -131,6 +133,11 @@ export const JournalEntryModal: React.FC<{ isOpen: boolean; onClose: () => void;
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
+              {['income', 'expense'].includes(accounts.find((a) => a.code === l.accountCode)?.type || '') && (
+                <div className="col-span-12 sm:col-span-6 empty:hidden">
+                  <CostCentreSelect id={`je-centre-${i}`} compact label={`Cost centre ${i + 1}`} value={l.costCentreId || ''} onChange={(v) => setLine(i, { costCentreId: v })} />
+                </div>
+              )}
             </div>
           ))}
           <button type="button" onClick={() => setLines((prev) => [...prev, emptyLine()])} className={secondaryBtn}><Plus className="w-4 h-4" /> Add line</button>
