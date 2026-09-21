@@ -12,6 +12,7 @@ import { customerSnapshot, lastRateFor, resolveBillPayments, PaymentPart } from 
 import { hasPack, formatPackQty, plural, baseToPacks } from '../../utils/packUnits';
 import { QuickSelect, PickOption } from './QuickPick';
 import { ChequeFieldsInput, ChequeFields, emptyChequeFields } from './ChequeForms';
+import { isPendingApproval } from '../../context/controlActions';
 
 interface Row {
   key: string;
@@ -52,7 +53,9 @@ interface Props {
  * customer lists can be searched by typing a name or code.
  */
 export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quotationId }) => {
-  const { customers, products, settings, createBill, setPrintRequest, can, godowns, stockBatches, quotations, getCustomerAgreedRate, invoices, ledger } = useTrading();
+  const { customers, products, settings, createBill, setPrintRequest, can, godowns, stockBatches, quotations, getCustomerAgreedRate, invoices, ledger, billApprovalReasons, approvalRules, canApprove } = useTrading();
+  // Set once the bill was sent to a manager (approval rules): nothing is posted until approved.
+  const [sentForApproval, setSentForApproval] = useState('');
   const quote = quotationId ? quotations.find((q) => q.id === quotationId) : undefined;
   const [godownId, setGodownId] = useState(godowns[0]?.id || '');
   const [customer, setCustomer] = useState(quote?.customerId || customerId || '');
@@ -213,10 +216,21 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const selected = newCustomer ? typedMatch : customers.find((c) => c.id === customer);
   const credit = creditCheck(newCustomer ? typedMatch || null : selected, balance);
   const canOverride = can('override_credit');
-  const creditBlocked = credit.over && !(canOverride && allowOver && overReason.trim());
+  // Approval rule "bill over credit limit": staff who can't allow it send the bill to a manager instead.
+  const creditToApproval = Boolean(approvalRules.creditLimit) && !canOverride && !canApprove;
+  const creditBlocked = credit.over && !creditToApproval && !(canOverride && allowOver && overReason.trim());
+  const approvalWhy = billApprovalReasons({
+    customerId: newCustomer ? '' : customer,
+    newCustomer: newCustomer || undefined,
+    items: lines.filter((l) => l.productId && l.qty > 0).map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: l.price, ...(l.lineDisc > 0 ? { discountType: l.discType, discountValue: l.discValue } : {}) })),
+    discount: disc,
+    payments: payment.parts,
+    ...(hasCheque ? { cheque: { amount: chequeAmount, ...cheque } } : {}),
+    date,
+  });
   // Stock the bill can't be made from (short stock, batches, expired stock, another godown): Save waits until it is fixed.
   const stockBlocked = lines.some((l, idx) => stockNote(l, idx)?.block);
-  const saveBlocked = creditBlocked || stockBlocked;
+  const saveBlocked = creditBlocked || stockBlocked || Boolean(sentForApproval);
   const blockedWhy = stockBlocked ? 'Not enough stock for this bill' : creditBlocked ? 'Over the credit limit' : undefined;
   const snapshot = useMemo(() => (selected ? customerSnapshot(selected.id, invoices, ledger) : null), [selected, invoices, ledger]);
   // Any change to the bill clears an old error message.
@@ -234,8 +248,8 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     if (payment.error) return setError(payment.error);
     if (hasCheque && (!cheque.chequeNumber.trim() || !cheque.bankName.trim())) return setError('Enter the cheque number and bank.');
     if (stockBlocked) return setError(lines.map((l, i) => stockNote(l, i)).find((n) => n?.block)?.text || 'Not enough stock.');
-    if (credit.over && !(canOverride && allowOver)) return setError(canOverride ? 'This bill is over the credit limit. Tick "Allow over limit" and give a reason, or take more payment now.' : 'This bill is over the customer\'s credit limit. Take more payment now, or ask a manager to allow it.');
-    if (credit.over && !overReason.trim()) return setError('Write a short reason for allowing this bill over the credit limit.');
+    if (credit.over && !creditToApproval && !(canOverride && allowOver)) return setError(canOverride ? 'This bill is over the credit limit. Tick "Allow over limit" and give a reason, or take more payment now.' : 'This bill is over the customer\'s credit limit. Take more payment now, or ask a manager to allow it.');
+    if (credit.over && !creditToApproval && !overReason.trim()) return setError('Write a short reason for allowing this bill over the credit limit.');
     busy.current = true; // held until the dialog closes; released at once if the bill is refused
     const result = createBill({
       customerId: newCustomer ? '' : customer,
@@ -257,13 +271,15 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
       ...(hasCheque ? { cheque: { amount: chequeAmount, ...cheque } } : {}),
       notes,
       date,
-      ...(credit.over ? { allowOverLimit: allowOver, overrideReason: overReason } : {}),
+      ...(credit.over ? { allowOverLimit: allowOver, overrideReason: overReason } : approvalWhy && overReason.trim() ? { overrideReason: overReason } : {}),
       godownId: godowns.length > 1 ? godownId : undefined,
     });
     if (!result.success) {
       busy.current = false;
       return setError(result.message);
     }
+    // Waiting for approval: say so and keep the dialog (Save stays off, so it can't be sent twice).
+    if (isPendingApproval(result)) return setSentForApproval(result.message);
     onClose();
     if (print && result.invoice) setPrintRequest({ type: 'bill', invoiceId: result.invoice.id });
   };
@@ -326,6 +342,14 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     <Modal isOpen={isOpen} onClose={onClose} title="New Bill" subtitle={quote ? `From quotation ${quote.quoteNumber} — check the items and prices, then save.` : 'Pick the customer, add items, enter what was paid.'} wide footer={footer}>
       <div className="space-y-5" ref={box} onKeyDown={onKeys}>
         {error && <Notice kind="error">{error}</Notice>}
+        {sentForApproval && <div data-testid="bill-sent-for-approval"><Notice kind="ok">{sentForApproval}</Notice></div>}
+        {!sentForApproval && approvalWhy && (
+          <div data-testid="bill-needs-approval" className="rounded-2xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3.5 py-2.5 text-xs space-y-2">
+            <p className="font-bold text-amber-900 dark:text-amber-200">Needs a manager’s approval: {approvalWhy.join('; ')}.</p>
+            <p className="text-amber-900/80 dark:text-amber-200/80">Saving sends the bill to Approvals. Nothing goes to the books or the stock until a manager approves it.</p>
+            {(!credit.over || !canOverride) && <input aria-label="Note for the manager" value={overReason} onChange={(e) => setOverReason(e.target.value)} className={inputCls} placeholder="Note for the manager (optional)" />}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="sm:col-span-2">

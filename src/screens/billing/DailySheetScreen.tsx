@@ -11,10 +11,15 @@ import { formatDate } from '../../utils/formatters';
 import { booksLockedFor } from '../../utils/accounting';
 import { EXPENSE_CATEGORIES } from '../../types';
 import { CHEQUE_EVENT_LABEL } from '../../utils/cheques';
+import { useBranchScoped } from '../../hooks/useBranchScoped';
+import { BranchFilter } from '../../components/control/BranchFilter';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 /** One day on one page: bills, money in, money out (by category), cash & bank opening/closing. */
 export const DailySheetScreen: React.FC = () => {
-  const { invoices, ledger, expenses, cashEntries, customers, suppliers, settings, setPrintRequest, deleteExpense, deleteCashEntry, can, cheques, isChequeRecord } = useTrading();
+  const { customers, suppliers, setPrintRequest, deleteExpense, deleteCashEntry, can, cheques, isChequeRecord } = useTrading();
+  const { invoices, ledger, expenses, cashEntries, settings } = useBranchScoped();
+  const [pendingDel, setPendingDel] = useState<{ kind: 'expense' | 'cash'; id: string; label: string } | null>(null);
   const ui = useBillingUI();
   const [date, setDate] = useState(todayISO());
   const sheet = useMemo(() => buildDailySheet({ invoices, ledger, expenses, cashEntries, customers, suppliers, settings, cheques }, date), [invoices, ledger, expenses, cashEntries, customers, suppliers, settings, cheques, date]);
@@ -38,6 +43,7 @@ export const DailySheetScreen: React.FC = () => {
   return (
     <div className="space-y-5">
       <PageHeader title="Daily Sheet" subtitle={`Everything that happened on ${formatDate(date)}${isToday ? ' (today)' : ''}.`}>
+        <BranchFilter />
         <CsvButton fileName={`daily-sheet-${date}.csv`} table={() => dailySheetCsv(sheet)} label="Download daily sheet CSV" />
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
           <button type="button" onClick={() => setDate(shiftDate(date, -1))} aria-label="Previous day" className={`${secondaryBtn} px-2.5 max-sm:min-w-11`}><ChevronLeft className="w-4 h-4" /></button>
@@ -93,7 +99,7 @@ export const DailySheetScreen: React.FC = () => {
                   <div className="flex justify-between text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]"><span>{g.label}</span><span className="tabular-nums whitespace-nowrap">{rs(g.total)}</span></div>
                   <ul className="mt-1 space-y-1">
                     {g.rows.map((e) => (
-                      <li key={e.id} className="flex items-center justify-between gap-2 text-sm"><span className="min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#8E9299]"> • {e.paidVia || 'Cash'}</span></span><span className="flex items-center gap-1 shrink-0"><span className="tabular-nums whitespace-nowrap">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && !isChequeRecord(e.id) && <RowAction label={`Delete expense ${e.description}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => deleteExpense(e.id)} />}</span></li>
+                      <li key={e.id} className="flex items-center justify-between gap-2 text-sm"><span className="min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{e.description}<span className="text-[11px] text-[#8E9299]"> • {e.paidVia || 'Cash'}</span></span><span className="flex items-center gap-1 shrink-0"><span className="tabular-nums whitespace-nowrap">{rs(e.amount)}</span>{canDelete && !booksLockedFor(settings, e.date) && !isChequeRecord(e.id) && <RowAction label={`Delete expense ${e.description}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => setPendingDel({ kind: 'expense', id: e.id, label: `${e.description} (${rs(e.amount)})` })} />}</span></li>
                     ))}
                   </ul>
                 </div>
@@ -112,7 +118,7 @@ export const DailySheetScreen: React.FC = () => {
                 <li key={m.id} className="flex items-center justify-between gap-3 px-4 sm:px-5 py-2.5"><span className="min-w-0"><span className="font-semibold text-sm text-[#111827] dark:text-white">{m.counterparty}</span><span className="block text-[11px] text-[#8E9299]">{m.method || 'Cash'}</span></span><span className="tabular-nums whitespace-nowrap font-bold text-sm text-rose-700 dark:text-rose-300">− {rs(m.amount)}</span></li>
               ))}
               {sheet.other.map((m) => (
-                <li key={m.id} className="flex items-center justify-between gap-3 px-4 sm:px-5 py-2.5"><span className="min-w-0"><span className="block font-semibold text-sm text-[#111827] dark:text-white">{m.description}</span><span className="block text-[11px] text-[#8E9299]">{m.description.startsWith('Deposited') ? 'cash → bank' : m.description.startsWith('Withdrew') ? 'bank → cash' : `${m.direction === 'in' ? 'into' : 'out of'} ${m.method || 'Cash'}`}</span></span><span className="flex items-center gap-1"><span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(m.amount)}</span>{canDelete && !booksLockedFor(settings, m.date) && <RowAction label={`Delete entry ${m.description}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => deleteCashEntry(m.sourceId)} />}</span></li>
+                <li key={m.id} className="flex items-center justify-between gap-3 px-4 sm:px-5 py-2.5"><span className="min-w-0"><span className="block font-semibold text-sm text-[#111827] dark:text-white">{m.description}</span><span className="block text-[11px] text-[#8E9299]">{m.description.startsWith('Deposited') ? 'cash → bank' : m.description.startsWith('Withdrew') ? 'bank → cash' : `${m.direction === 'in' ? 'into' : 'out of'} ${m.method || 'Cash'}`}</span></span><span className="flex items-center gap-1"><span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(m.amount)}</span>{canDelete && !booksLockedFor(settings, m.date) && <RowAction label={`Delete entry ${m.description}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => setPendingDel({ kind: 'cash', id: m.sourceId, label: `${m.description} (${rs(m.amount)})` })} />}</span></li>
               ))}
             </ul>
           )}
@@ -135,6 +141,18 @@ export const DailySheetScreen: React.FC = () => {
           </Section>
         )}
       </div>
+      <ConfirmDialog
+        isOpen={Boolean(pendingDel)}
+        title={pendingDel?.kind === 'cash' ? 'Delete this entry?' : 'Delete this expense?'}
+        message={`${pendingDel?.label || ''} is taken out of the day. A copy is kept in Admin → Deleted records.`}
+        confirmLabel="Delete"
+        onCancel={() => setPendingDel(null)}
+        onConfirm={() => {
+          if (pendingDel?.kind === 'expense') deleteExpense(pendingDel.id);
+          else if (pendingDel) deleteCashEntry(pendingDel.id);
+          setPendingDel(null);
+        }}
+      />
     </div>
   );
 };

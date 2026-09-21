@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Gauge,
   LayoutDashboard,
   Users,
   Layers,
@@ -119,6 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReceiveStock }) => {
   const unpaidBills = invoices.filter((i) => i.balanceDue > 0 && i.status !== 'cancelled').length;
   const billingSections: Section[] = [
     { id: 'dashboard', label: 'Home', icon: Home, group: 'Daily work' },
+    ...(can('finance:view_pnl') ? [{ id: 'owner' as ActiveScreen, label: 'Owner dashboard', icon: Gauge, group: 'Daily work' }] : []),
     { id: 'bills', label: 'Bills', icon: BillIcon, group: 'Daily work', badge: unpaidBills },
     { id: 'daily', label: 'Daily Sheet', icon: CalendarDays, group: 'Daily work' },
     { id: 'customers', label: 'Customers', icon: Users, group: 'People' },

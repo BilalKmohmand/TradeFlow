@@ -14,6 +14,8 @@ import {
   Upload,
   Boxes,
   ChevronRight,
+  Trash2,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { UserManagementTab } from '../components/admin/UserManagementTab';
@@ -23,11 +25,15 @@ import { SecurityPolicyTab } from '../components/admin/SecurityPolicyTab';
 import { SystemDataTab } from '../components/admin/SystemDataTab';
 import { DataImportTab } from '../components/admin/DataImportTab';
 import { AuditLogTab } from '../components/admin/AuditLogTab';
+import { ApprovalsInbox } from '../components/control/Approvals';
+import { DeletedRecordsTab } from '../components/control/DeletedRecords';
+import { ControlSettingsTab } from '../components/control/ControlSettings';
 
-type AdminTab = 'users' | 'roles' | 'visibility' | 'policy' | 'audit' | 'system' | 'import';
+type AdminTab = 'users' | 'roles' | 'visibility' | 'policy' | 'audit' | 'system' | 'import' | 'approvals' | 'deleted' | 'controls';
 
 export const AdminScreen: React.FC = () => {
-  const { currentUser, can, users, roles, auditLogs, settings, updateSettings, setActiveScreen } = useTrading();
+  const { currentUser, can, users, roles, auditLogs, settings, updateSettings, setActiveScreen, approvals, deletedRecords } = useTrading();
+  const waiting = approvals.filter((a) => a.status === 'pending').length;
   const [activeTab, setActiveTab] = useState<AdminTab>('users');
 
   const hasAccess = can('system:admin_screen') || can('admin_screen') || currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
@@ -76,6 +82,23 @@ export const AdminScreen: React.FC = () => {
       label: 'Audit Trail',
       icon: <ScrollText className="w-4 h-4" />,
       badge: auditLogs.length,
+    },
+    {
+      id: 'approvals',
+      label: 'Approvals',
+      icon: <ClipboardCheck className="w-4 h-4" />,
+      badge: waiting || undefined,
+    },
+    {
+      id: 'deleted',
+      label: 'Deleted records',
+      icon: <Trash2 className="w-4 h-4" />,
+      badge: deletedRecords.length || undefined,
+    },
+    {
+      id: 'controls',
+      label: 'Rules, numbers & branches',
+      icon: <Sliders className="w-4 h-4" />,
     },
     {
       id: 'system',
@@ -175,6 +198,9 @@ export const AdminScreen: React.FC = () => {
         {activeTab === 'audit' && <AuditLogTab />}
         {activeTab === 'system' && <SystemDataTab />}
         {activeTab === 'import' && <DataImportTab />}
+        {activeTab === 'approvals' && <ApprovalsInbox />}
+        {activeTab === 'deleted' && <DeletedRecordsTab />}
+        {activeTab === 'controls' && <ControlSettingsTab />}
       </div>
     </div>
   );

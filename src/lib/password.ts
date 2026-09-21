@@ -203,6 +203,7 @@ export const USER_COLUMNS = [
   'id', 'name', 'role', 'pin', 'active', 'createdAt',
   'username', 'email', 'roles', 'status', 'pinHash', 'passwordHash', 'passwordSalt', 'passwordIter', 'mustChangePassword',
   'failedAttempts', 'lockedUntil', 'lastLoginAt', 'twoFactorEnabled', 'updatedAt',
+  'branchId',
 ] as const;
 
 export const toUserRow = (u: AppUser): Record<string, unknown> => {

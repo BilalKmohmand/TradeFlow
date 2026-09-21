@@ -58,6 +58,7 @@ import { creditCheck } from '../utils/credit';
 import { collectCashMovements, costPerKgOn } from '../utils/finance';
 import { BankRecApi, createBankRecApi } from './bankRecActions';
 import { ChequeApi, createChequeApi } from './chequeActions';
+import { ControlApi, createControlApi, useControlStore } from './controlActions';
 import {
   DEFAULT_ROLES,
   DEFAULT_VISIBILITY_SETTINGS,
@@ -97,7 +98,7 @@ import {
   initialWhatsAppMessages,
 } from '../data/initialData';
 
-interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, AuthApi {
+interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, AuthApi, ControlApi {
   customers: Customer[];
   suppliers: Supplier[];
   products: Product[];
@@ -880,6 +881,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (data.accounts) setCustomAccounts(cloudOrLocal(data.accounts));
         // Customer rates: only when the cloud table exists (migration v13).
         if (data.customerAgreedRates) setCustomerAgreedRates(cloudOrLocal(data.customerAgreedRates));
+        // Approvals, deleted records, branches: only when the cloud tables exist (migration v22).
+        controlStore.hydrate({ approvals: data.approvals, deletedRecords: data.deletedRecords, branches: data.branches });
         setIsCloudSyncReady(true);
         setCloudSettled(true);
       })
@@ -1023,6 +1026,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     void deleteRows(table, ids);
   };
 
+  // Approvals, deleted records bin, document numbers, branches, auto-backups (see controlActions.ts).
+  const controlStore = useControlStore({ settings, setSettings, users, currentUserId: currentUser?.id, isCloudSyncReady, syncToSupabase });
+
   const clearRecentAlert = () => setRecentWhatsAppAlert(null);
 
   const resetToSampleData = () => {
@@ -1053,6 +1059,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setManualJournals([]);
     setCustomAccounts([]);
     inventory.reset();
+    controlStore.reset();
     logAuditEvent('Sample Data Loaded', 'All business data replaced with the built-in sample dataset.', 'warning');
   };
 
@@ -1667,6 +1674,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       accounts: () => setCustomAccounts([]),
       customer_agreed_rates: () => setCustomerAgreedRates([]),
       cheques: () => setCheques([]),
+      approvals: () => controlStore.setApprovals([]),
+      deleted_records: () => controlStore.setDeletedRecords([]),
+      branches: () => controlStore.setBranches([]),
     };
     setters[table]();
     if (isCloudSyncReady) void clearTable(table);
@@ -2088,7 +2098,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       prev.map((c) => (c.id === customerId ? { ...c, totalDue: newTotalDue } : c))
     );
 
-    const payRef = `PAY-${Math.floor(1000 + Math.random() * 9000)}`;
+    const payRef = controlStore.nextDocNumber('receipt', today, ledger.filter((l) => l.type === 'payment_received').map((l) => l.referenceId));
     const newLedger: LedgerEntry = {
       id: uid('led'),
       entityType: 'customer',
@@ -2101,6 +2111,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       debit: 0,
       credit: amount,
       balanceAfter: newTotalDue,
+      ...controlStore.branchStamp(),
     };
 
     setLedger((prev) => [newLedger, ...prev]);
@@ -2137,7 +2148,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       prev.map((s) => (s.id === supplierId ? { ...s, totalOwed: newTotalOwed } : s))
     );
 
-    const payRef = `SUP-PAY-${Math.floor(1000 + Math.random() * 9000)}`;
+    const payRef = controlStore.nextDocNumber('supplier_payment', today, ledger.filter((l) => l.type === 'payment_made').map((l) => l.referenceId));
     const newLedger: LedgerEntry = {
       id: uid('led'),
       entityType: 'supplier',
@@ -2149,6 +2160,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       debit: 0,
       credit: amount,
       balanceAfter: newTotalOwed,
+      ...controlStore.branchStamp(),
     };
 
     setLedger((prev) => [newLedger, ...prev]);
@@ -2677,7 +2689,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       creditOverride = { by: currentUser?.name || 'Unknown', reason, at: new Date().toISOString(), limit: credit.limit, dueAfter: credit.after };
     }
     if (pendingNewCustomer) customer = addCustomer({ name: pendingNewCustomer.name, company: pendingNewCustomer.name, phone: pendingNewCustomer.phone, email: '', address: '', creditLimit: 0 });
-    const invoiceNumber = nextBillNumber(invoicesRef.current);
+    const invoiceNumber = controlStore.nextDocNumber('bill', date, invoicesRef.current.map((i) => i.invoiceNumber));
     const invoiceItems: InvoiceItem[] = items.map((it, idx) => {
       const product = products.find((p) => p.id === it.productId);
       // Unit cost at the time of sale: the batches actually used (when they carry a cost), else the
@@ -2744,6 +2756,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdBy: currentUser?.name,
       ...(creditOverride ? { creditOverride } : {}),
       ...(fromQuote ? { quotationId: fromQuote.id } : {}),
+      ...controlStore.branchStamp(),
     };
     invoicesRef.current = [invoice, ...invoicesRef.current];
     if (fromQuote) setQuotations((prev) => prev.map((q) => (q.id === fromQuote.id ? { ...q, status: 'converted', invoiceId: invoice.id } : q)));
@@ -2876,6 +2889,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         debit: 0,
         credit: payAmt,
         balanceAfter: dueAfter,
+        ...controlStore.branchStamp(),
       },
       ...prev,
     ]);
@@ -2934,15 +2948,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const refund = input.settle === 'refund' ? maxRefund(inv, plan.total) : 0;
     if (input.settle === 'refund' && refund <= 0) return { success: false, message: 'The customer has not paid enough on this bill to give money back. Choose "Take it off what they owe" instead.' };
     const method = input.refundMethod || 'Cash';
-    const n = returns.reduce((m, r) => {
-      const hit = /^CN-(\d+)$/.exec(r.returnNumber);
-      return hit ? Math.max(m, parseInt(hit[1], 10)) : m;
-    }, 0);
+    const creditNoteNumber = controlStore.nextDocNumber('credit_note', date, returns.filter((x) => x.kind === 'sales').map((x) => x.returnNumber));
     const qty = round2(plan.lines.reduce((a, l) => a + l.qty, 0));
     const reason = (input.reason || '').trim() || 'Returned by customer';
     const r: StockReturn = {
       id: uid('ret'),
-      returnNumber: `CN-${n + 1}`,
+      returnNumber: creditNoteNumber,
       kind: 'sales',
       customerId: inv.customerId,
       supplierId: null,
@@ -3002,8 +3013,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const label = from === 'cash' ? 'Deposited cash to bank' : 'Withdrew cash from bank';
     const description = `${label}${note ? ` - ${note}` : ''}`;
     const pairId = uid('xfer');
-    const out: CashEntry = { id: uid('cash'), date: when, direction: 'out', amount: amt, description, method: from === 'cash' ? 'Cash' : 'Bank Transfer', createdAt: todayISO(), createdBy: currentUser?.name, pairId };
-    const inn: CashEntry = { id: uid('cash'), date: when, direction: 'in', amount: amt, description, method: to === 'cash' ? 'Cash' : 'Bank Transfer', createdAt: todayISO(), createdBy: currentUser?.name, pairId };
+    const out: CashEntry = { ...controlStore.branchStamp(), id: uid('cash'), date: when, direction: 'out', amount: amt, description, method: from === 'cash' ? 'Cash' : 'Bank Transfer', createdAt: todayISO(), createdBy: currentUser?.name, pairId };
+    const inn: CashEntry = { ...controlStore.branchStamp(), id: uid('cash'), date: when, direction: 'in', amount: amt, description, method: to === 'cash' ? 'Cash' : 'Bank Transfer', createdAt: todayISO(), createdBy: currentUser?.name, pairId };
     setCashEntries((prev) => [inn, out, ...prev]);
     logAuditEvent('Cash Transfer', `${label}: ${formatCurrency(amt)}`, 'info');
     return { success: true, message: `${label}: ${formatCurrency(amt)}.` };
@@ -3113,7 +3124,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Expenses
   // ---------------------------------------------------------------------------
   const addExpense = (data: Omit<Expense, 'id' | 'createdAt' | 'createdBy'>): Expense => {
-    const expense: Expense = { ...data, amount: round2(data.amount), id: uid('exp'), createdAt: todayISO(), createdBy: currentUser?.name };
+    const expense: Expense = { ...controlStore.branchStamp(), ...data, amount: round2(data.amount), id: uid('exp'), createdAt: todayISO(), createdBy: currentUser?.name };
     setExpenses((prev) => [expense, ...prev]);
     logAuditEvent('Expense Recorded', `${data.category}: ${formatCurrency(expense.amount)} — ${data.description}`, 'info');
     return expense;
@@ -3161,7 +3172,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Cash book
   // ---------------------------------------------------------------------------
   const addCashEntry = (data: Omit<CashEntry, 'id' | 'createdAt' | 'createdBy'>): CashEntry => {
-    const entry: CashEntry = { ...data, amount: round2(data.amount), id: uid('cash'), createdAt: todayISO(), createdBy: currentUser?.name };
+    const entry: CashEntry = { ...controlStore.branchStamp(), ...data, amount: round2(data.amount), id: uid('cash'), createdAt: todayISO(), createdBy: currentUser?.name };
     setCashEntries((prev) => [entry, ...prev]);
     logAuditEvent('Cash Entry Recorded', `${data.direction === 'in' ? 'Cash in' : 'Cash out'} ${formatCurrency(entry.amount)} — ${data.description}`, 'info');
     return entry;
@@ -3228,11 +3239,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       logAuditEvent('Quotation Updated', `${existing.quoteNumber}: ${lines.length} item(s), ${formatCurrency(amount)}.`, 'info', 'billing');
       return { success: true, message: `Quotation ${existing.quoteNumber} saved.`, quotation: updated };
     }
-    const n = quotations.reduce((m, q) => {
-      const hit = /^QT-(\d+)$/.exec(q.quoteNumber);
-      return hit ? Math.max(m, parseInt(hit[1], 10)) : m;
-    }, 0);
-    const q: Quotation = { id: uid('quote'), quoteNumber: `QT-${n + 1}`, ...base, status: 'draft', createdAt: todayISO(), createdBy: currentUser?.name, bookingId: null, invoiceId: null };
+    const quoteNumber = controlStore.nextDocNumber('quotation', todayISO(), quotations.map((x) => x.quoteNumber));
+    const q: Quotation = { id: uid('quote'), quoteNumber, ...base, status: 'draft', createdAt: todayISO(), createdBy: currentUser?.name, bookingId: null, invoiceId: null };
     setQuotations((prev) => [q, ...prev]);
     logAuditEvent('Quotation Created', `${q.quoteNumber} for ${customers.find((c) => c.id === q.customerId)?.name || 'customer'}: ${lines.length} item(s), ${formatCurrency(amount)}.`, 'info', 'billing');
     return { success: true, message: `Quotation ${q.quoteNumber} saved.`, quotation: q };
@@ -3268,7 +3276,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const addPurchaseOrder = (data: { supplierId: string; productId: string; kg: number; pricePerKg: number; expectedDate?: string; notes?: string }): PurchaseOrder => {
     const po: PurchaseOrder = {
       id: uid('po'),
-      poNumber: `PO-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      poNumber: controlStore.nextDocNumber('po', todayISO(), purchaseOrders.map((x) => x.poNumber)),
       supplierId: data.supplierId,
       productId: data.productId,
       kg: round2(data.kg),
@@ -3550,7 +3558,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return { success: true, message: `Account ${code} deleted.` };
   };
 
-  const exportSystemBackup = (): string => {
+  /** The full backup as JSON (used by "Download backup" and the automatic daily backups). */
+  const buildSystemBackup = (): string => {
     const backupData = {
       appName: 'Sarmaya - Pakistani Bulk Trading & Logistics',
       exportedAt: new Date().toISOString(),
@@ -3583,8 +3592,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       customAccounts,
       customerAgreedRates,
       auditLogs,
+      ...controlStore.backupData(),
     };
-    const jsonString = JSON.stringify(backupData, null, 2);
+    return JSON.stringify(backupData, null, 2);
+  };
+
+  const exportSystemBackup = (): string => {
+    const jsonString = buildSystemBackup();
     try {
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -3642,6 +3656,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (Array.isArray(data.customAccounts)) setCustomAccounts(data.customAccounts);
       if (Array.isArray(data.customerAgreedRates)) setCustomerAgreedRates(data.customerAgreedRates);
       if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
+      controlStore.restoreFrom(data);
       logAuditEvent('Backup Restored', 'Full system database restored from JSON backup.', 'warning');
       };
       if (isCloudSyncReady) void clearAllTables().then(apply, apply);
@@ -3676,6 +3691,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setBankReconciliations([]);
     setCheques([]);
     inventory.reset();
+    controlStore.reset();
     localStorage.removeItem(STORAGE_KEYS.INVOICES);
     localStorage.removeItem(STORAGE_KEYS.CHEQUES);
     localStorage.removeItem(STORAGE_KEYS.BANK_LINES);
@@ -3715,7 +3731,22 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     lockedFor: (d) => booksLockedFor(settings, d),
     logAuditEvent: (a, dt, sev) => logAuditEvent(a, dt, sev),
     removeRemote, uid, userName: currentUser?.name, today: todayISO,
+    docNumber: (date: string) => controlStore.nextDocNumber('debit_note', date, returns.filter((x) => x.kind === 'purchase').map((x) => x.returnNumber)),
   });
+  // Approval rules, deleted-records bin, number series, branches, backups (see controlActions.ts).
+  const control = createControlApi({
+    store: controlStore, settings, setSettings, currentUser, users, setUsers,
+    can: (p) => can(p as Permission), logAuditEvent, uid,
+    invoices, customers, suppliers, products, purchases, expenses, cashEntries, returns, adjustments, quotations, purchaseOrders, manualJournals, bookings, dispatches, ledger, cheques,
+    stockBatches: inventory.api.stockBatches, godowns: inventory.api.godowns,
+    setCustomers, setSuppliers, setProducts, setExpenses, setCashEntries, setInvoices, setLedger,
+    isChequeRecord: chequeApi.isChequeRecord, planBill: inventory.planBill, importSystemBackup, exportSystemBackup,
+    createBill, recordSupplierPayment, issueCheque: chequeApi.issueCheque, adjustStockBy: stockActions.adjustStockBy,
+    deleteBill, deleteInvoice, deleteCustomer, deleteSupplier, deleteProduct, deleteExpense, deleteCashEntry, deleteReturn,
+    deletePurchaseReturn: stockActions.deletePurchaseReturn, undoStockAdjustment: stockActions.undoStockAdjustment, deleteAdjustment,
+    deleteQuotation, deletePurchaseOrder, deletePurchase, deleteManualJournal, deleteBooking, deleteDispatch, deleteLedgerEntry,
+  });
+  controlStore.backupBuilder.current = buildSystemBackup;
 
   return (
     <TradingContext.Provider
@@ -3870,6 +3901,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         deleteManualJournal,
         addAccount,
         deleteAccount,
+        // Controls last: the rule-checked / bin-keeping versions replace the plain actions above.
+        ...control.api,
+        ...control.overrides,
       }}
     >
       {children}

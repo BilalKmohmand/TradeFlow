@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useTrading } from '../context/TradingContext';
+import { useBranchScoped } from './useBranchScoped';
 import { Account, JournalEntry, buildJournal, combineJournal, mergeAccounts } from '../utils/accounting';
 
 export interface Books {
@@ -15,7 +16,9 @@ export interface Books {
  * (e.g. the print host when no accounting document is open).
  */
 export const useAccounting = (enabled = true): Books => {
-  const { settings, customers, suppliers, ledger, invoices, dispatches, purchases, expenses, cashEntries, products, returns, adjustments, manualJournals, customAccounts } = useTrading();
+  const { customers, suppliers, dispatches, purchases, products, adjustments, manualJournals, customAccounts } = useTrading();
+  // Bills, money rows and opening balances of the branch picked in the branch filter (all while there is one branch).
+  const { settings, ledger, invoices, expenses, cashEntries, returns } = useBranchScoped();
   const accounts = useMemo(() => mergeAccounts(customAccounts), [customAccounts]);
   const auto = useMemo(
     () => (enabled ? buildJournal({ settings, customers, suppliers, ledger, invoices, dispatches, purchases, expenses, cashEntries, products, returns, adjustments }) : []),

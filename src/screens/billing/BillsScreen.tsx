@@ -10,12 +10,16 @@ import { formatDate } from '../../utils/formatters';
 import { downloadCsvFile } from '../../utils/listTools';
 import { billNetTotal } from '../../utils/salesDocs';
 import { ReturnsList, QuotationsList } from '../../components/billing/SalesDocsLists';
+import { useBranchScoped } from '../../hooks/useBranchScoped';
+import { BranchFilter } from '../../components/control/BranchFilter';
+import { ApprovalsTile } from '../../components/control/Approvals';
 
 type Period = 'today' | 'week' | 'month' | 'all';
 
 /** Every bill, newest first, with search and quick period filters. Tap a row to open it. */
 export const BillsScreen: React.FC = () => {
-  const { invoices, setPrintRequest, returns, quotations } = useTrading();
+  const { setPrintRequest, returns, quotations } = useTrading();
+  const { invoices } = useBranchScoped();
   const ui = useBillingUI();
   const wide = useWideLayout();
   const [tab, setTab] = useState<'bills' | 'returns' | 'quotes'>('bills');
@@ -50,6 +54,7 @@ export const BillsScreen: React.FC = () => {
   return (
     <div className="space-y-5">
       <PageHeader title="Bills" subtitle={<>{rows.length} bill{rows.length === 1 ? '' : 's'} • <span className={moneyCls}>{rs(total)}</span>{due > 0 ? <> • <span className={moneyCls}>{rs(due)}</span> still due</> : ''}</>}>
+        <BranchFilter />
         {tab === 'quotes' && <button type="button" onClick={() => ui.newQuote()} className={secondaryBtn}><FileText className="w-4 h-4" /> New Quotation</button>}
         <button type="button" onClick={() => ui.newBill()} className={`${primaryBtn} max-sm:flex-1`}><FilePlus2 className="w-4 h-4 text-teal-400 dark:text-teal-700" /> New Bill</button>
       </PageHeader>
@@ -60,6 +65,7 @@ export const BillsScreen: React.FC = () => {
         ))}
       </div>
 
+      <ApprovalsTile />
       {tab === 'returns' && <ReturnsList />}
       {tab === 'quotes' && <QuotationsList />}
       {tab === 'bills' && (<>

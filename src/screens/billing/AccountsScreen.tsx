@@ -8,6 +8,7 @@ import { Notice, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBt
 import { JournalEntryModal } from '../../components/accounting/JournalEntryModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useAccounting } from '../../hooks/useAccounting';
+import { BranchFilter } from '../../components/control/BranchFilter';
 import { ProfitView } from '../../components/billing/BillingReports';
 import {
   ACCOUNT_TYPES,
@@ -141,6 +142,7 @@ export const AccountsScreen: React.FC = () => {
   return (
     <div className="space-y-5 min-w-0">
       <PageHeader title="Accounts" subtitle="Double-entry books, posted automatically from your bills, payments and expenses.">
+        <BranchFilter />
         {canPost && <button type="button" onClick={() => setNewJournal((n) => n + 1)} className={`${primaryBtn} max-sm:flex-1`}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> New journal entry</button>}
       </PageHeader>
 

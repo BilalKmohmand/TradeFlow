@@ -1,3 +1,4 @@
+import { AutoBackupsPanel } from '../control/AutoBackups';
 import { downloadCsvText } from '../../utils/listTools';
 import React, { useRef, useState } from 'react';
 import {
@@ -211,6 +212,7 @@ export const SystemDataTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <AutoBackupsPanel />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Sign-in & session (the old master PIN is gone: everyone signs in with username + password) */}
         <div className={cardCls}>

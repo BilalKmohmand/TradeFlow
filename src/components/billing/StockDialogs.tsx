@@ -13,6 +13,7 @@ import { costPerKgOn } from '../../utils/finance';
 import { itemHistory, HistoryKind } from '../../utils/stockReports';
 import { booksLockedFor } from '../../utils/accounting';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { isPendingApproval } from '../../context/controlActions';
 
 const num = (n: number) => n.toLocaleString('en-PK', { maximumFractionDigits: 2 });
 
@@ -40,6 +41,8 @@ export const AdjustStockModal: React.FC<{ isOpen: boolean; onClose: () => void; 
   const [note, setNote] = useState('');
   const [date, setDate] = useState(today);
   const [error, setError] = useState('');
+  // Approval rule "stock loss above Rs. Z": the adjustment waits for a manager.
+  const [sent, setSent] = useState('');
   const busy = useRef(false);
 
   const product = products.find((p) => p.id === pid);
@@ -65,7 +68,7 @@ export const AdjustStockModal: React.FC<{ isOpen: boolean; onClose: () => void; 
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (busy.current) return;
+    if (busy.current || sent) return;
     busy.current = true;
     setTimeout(() => { busy.current = false; }, 800);
     setError('');
@@ -75,6 +78,7 @@ export const AdjustStockModal: React.FC<{ isOpen: boolean; onClose: () => void; 
     if (Math.abs(delta) < 0.0001) return setError('The count matches the stock already — nothing to change.');
     const r = adjustStockBy({ productId: product.id, deltaQty: delta, reason, godownId, batchId: batchId || null, note, date });
     if (!r.success) return setError(r.message);
+    if (isPendingApproval(r)) return setSent(r.message);
     onClose();
   };
 
@@ -82,6 +86,7 @@ export const AdjustStockModal: React.FC<{ isOpen: boolean; onClose: () => void; 
     <Modal isOpen={isOpen} onClose={onClose} title="Adjust stock" subtitle="Take off stock that leaked, broke or expired, correct a count, or add stock received free. It is posted to your accounts.">
       <form onSubmit={submit} className="space-y-4" id="adjust-stock-form">
         {error && <Notice kind="error">{error}</Notice>}
+        {sent && <Notice kind="ok">{sent}</Notice>}
         <div>
           <label className={labelCls} htmlFor="adj-item">Item</label>
           <select id="adj-item" value={pid} onChange={(e) => { setPid(e.target.value); setBatchId(''); }} className={inputCls}>

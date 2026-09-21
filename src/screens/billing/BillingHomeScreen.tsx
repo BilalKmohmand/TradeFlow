@@ -13,13 +13,19 @@ import { customersOverLimit } from '../../utils/credit';
 import { ExpiryAttention } from '../../components/billing/InventoryUI';
 import { expiryAlerts } from '../../utils/inventory';
 import { chequeTotals, unclearedChequeTotals } from '../../utils/cheques';
+import { useBranchScoped } from '../../hooks/useBranchScoped';
+import { BranchFilter } from '../../components/control/BranchFilter';
+import { ApprovalsTile } from '../../components/control/Approvals';
+import { BackupReminder } from '../../components/control/AutoBackups';
 
 /** The first screen every morning: today's numbers, the four buttons you press all day, what needs attention, recent bills. */
 export const BillingHomeScreen: React.FC = () => {
-  const { invoices, ledger, expenses, cashEntries, customers, suppliers, products, settings, setActiveScreen, currentUser, stockBatches, cheques } = useTrading();
+  const { ledger, customers, suppliers, products, setActiveScreen, currentUser, stockBatches, cheques } = useTrading();
+  // Bills and money of the branch picked in the branch filter (everything while there is one branch).
+  const { invoices, ledger: branchLedger, expenses, cashEntries, settings } = useBranchScoped();
   const ui = useBillingUI();
   const today = todayISO();
-  const movements = useMemo(() => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), [ledger, expenses, cashEntries, customers, suppliers]);
+  const movements = useMemo(() => collectCashMovements(branchLedger, expenses, cashEntries, customers, suppliers), [branchLedger, expenses, cashEntries, customers, suppliers]);
   const day = useMemo(() => daySummary(invoices, movements, today, expenses), [invoices, movements, today, expenses]);
   const balances = useMemo(() => accountBalancesOn(movements, settings, today), [movements, settings, today]);
   const position = useMemo(() => positionSummary(customers, suppliers, expenses, balances), [customers, suppliers, expenses, balances]);
@@ -44,8 +50,12 @@ export const BillingHomeScreen: React.FC = () => {
   return (
     <div className="space-y-5 sm:space-y-6">
       <PageHeader title="Home" subtitle={`${formatDate(today)}${currentUser ? ` • ${currentUser.name}` : ''}`}>
+        <BranchFilter />
         <button type="button" onClick={() => ui.newBill()} title="New bill (F2)" className={`${primaryBtn} text-base px-6 max-sm:w-full`}><FilePlus2 className="w-5 h-5 text-teal-400 dark:text-teal-700" /> New Bill</button>
       </PageHeader>
+
+      <BackupReminder />
+      <ApprovalsTile />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Tile label="Sales today" value={rs(day.sales)} hint={`${day.billCount} bill${day.billCount === 1 ? '' : 's'}`} onClick={() => setActiveScreen('bills')} />
