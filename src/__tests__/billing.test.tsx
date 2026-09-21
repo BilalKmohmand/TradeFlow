@@ -41,6 +41,8 @@ describe('bill numbers', () => {
 describe('createBill', () => {
   it('matches the client sample: qty × price per line, subtotal, total; takes stock; credit goes on the customer', async () => {
     const { result } = await setup();
+    // This sample sells more cans than are in stock: allowed only with the setting on.
+    act(() => { result.current.updateSettings({ allowNegativeStock: true }); });
     let r: ReturnType<typeof result.current.createBill> | undefined;
     act(() => {
       r = result.current.createBill({

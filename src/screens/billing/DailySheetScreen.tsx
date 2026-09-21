@@ -1,3 +1,5 @@
+import { CsvButton } from '../../components/billing/CsvButton';
+import { dailySheetCsv } from '../../utils/csvReports';
 import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Printer, Receipt, HandCoins, ArrowLeftRight, FilePlus2 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -44,6 +46,7 @@ export const DailySheetScreen: React.FC = () => {
           <button type="button" onClick={() => setDate(shiftDate(date, -1))} aria-label="Previous day" className={`${secondaryBtn} px-2.5`}><ChevronLeft className="w-4 h-4" /></button>
           <input type="date" value={date} max={todayISO()} onChange={(e) => e.target.value && setDate(e.target.value > todayISO() ? todayISO() : e.target.value)} className={`${inputCls} w-auto`} aria-label="Sheet date" />
           <button type="button" onClick={() => setDate(shiftDate(date, 1))} disabled={isToday} aria-label="Next day" className={`${secondaryBtn} px-2.5`}><ChevronRight className="w-4 h-4" /></button>
+          <CsvButton fileName={`daily-sheet-${date}.csv`} table={() => dailySheetCsv(sheet)} label="Download daily sheet CSV" />
           <button type="button" onClick={() => setPrintRequest({ type: 'daily_sheet', date })} className={primaryBtn}><Printer className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Print</button>
         </div>
       </div>

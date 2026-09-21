@@ -1,3 +1,6 @@
+import { hasPack, formatPackQty } from '../../utils/packUnits';
+import { CsvButton } from './CsvButton';
+import { itemHistoryCsv } from '../../utils/csvReports';
 import React, { useMemo, useRef, useState } from 'react';
 import { Printer, PackageMinus, PackagePlus, Scale, Undo2, Truck } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -320,9 +323,10 @@ export const ItemHistoryModal: React.FC<{
   const per = product && godowns.length > 1 ? stockByGodown(product, stockBatches, godowns) : null;
 
   return (
-    <Modal isOpen={Boolean(product)} onClose={onClose} title={product ? `${product.name} — history` : 'History'} subtitle={product ? `In stock now: ${num(product.stockKg)} ${unit}` : undefined} wide
+    <Modal isOpen={Boolean(product)} onClose={onClose} title={product ? `${product.name} — history` : 'History'} subtitle={product ? `In stock now: ${num(product.stockKg)} ${unit}${hasPack(product) && Math.abs(product.stockKg) >= (product.packSize || 0) ? ` (${formatPackQty(product.stockKg, product, 'short')})` : ''}` : undefined} wide
       footer={product && (
         <div className="flex flex-wrap gap-2 justify-end">
+          <CsvButton fileName={`item-history-${product.name.replace(/[^\w.-]+/g, '-')}.csv`} table={() => itemHistoryCsv(hist.rows, hist.opening, unit)} label="Download item history CSV" />
           <button type="button" onClick={() => setPrintRequest({ type: 'billing_report', report: 'item_history', productId: product.id })} className={secondaryBtn}><Printer className="w-4 h-4" /> Print</button>
           {onReceive && (can('products:create') || canAdjust) && <button type="button" onClick={() => onReceive(product.id)} className={secondaryBtn}><PackagePlus className="w-4 h-4 text-teal-700" /> Receive stock</button>}
           {onAdjust && canAdjust && <button type="button" onClick={() => onAdjust(product.id)} className={primaryBtn}><Scale className="w-4 h-4" /> Adjust stock</button>}

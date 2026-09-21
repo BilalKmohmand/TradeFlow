@@ -6,6 +6,7 @@ import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice, cardCls } 
 import { Product } from '../../types';
 import { todayISO } from '../../utils/stockFlow';
 import { expiryAlerts, expiryStatus, fmtExpiry, godownName, liveBatches, stockByGodown } from '../../utils/inventory';
+import { hasPack, formatPackQty } from '../../utils/packUnits';
 
 const num = (n: number) => n.toLocaleString('en-PK', { maximumFractionDigits: 2 });
 
@@ -86,7 +87,7 @@ export const ExpiryAttention: React.FC<{ onOpen: () => void }> = ({ onOpen }) =>
   );
 };
 
-interface ReceiveLine { key: number; pid: string; qty: string; cost: string; batchNo: string; expiry: string }
+interface ReceiveLine { key: number; pid: string; qty: string; cost: string; batchNo: string; expiry: string; /** Qty and cost typed per pack (carton) instead of per base unit. */ inPack?: boolean }
 let lineSeq = 0;
 const blankLine = (pid = ''): ReceiveLine => ({ key: ++lineSeq, pid, qty: '', cost: '', batchNo: '', expiry: '' });
 
@@ -108,6 +109,11 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
   const setLine = (key: number, patch: Partial<ReceiveLine>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const used = lines.filter((l) => l.pid || l.qty.trim());
   const total = used.reduce((a, l) => a + (parseFloat(l.qty) || 0) * (parseFloat(l.cost) || 0), 0);
+  /** Packs typed on a line → base units stored (qty × pack size, cost ÷ pack size). */
+  const packOf = (l: ReceiveLine) => {
+    const p = products.find((x) => x.id === l.pid);
+    return l.inPack && p && hasPack(p) ? p.packSize || 1 : 1;
+  };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,8 +137,9 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
     let owed = supplier?.totalOwed ?? 0;
     for (const l of used) {
       const p = products.find((x) => x.id === l.pid)!;
-      const qty = parseFloat(l.qty) || 0;
-      const cost = l.cost.trim() ? parseFloat(l.cost) : undefined;
+      const pack = packOf(l);
+      const qty = Math.round((parseFloat(l.qty) || 0) * pack * 10000) / 10000;
+      const cost = l.cost.trim() ? parseFloat(l.cost) / pack : undefined;
       const r = receiveStock({
         productId: l.pid,
         godownId,
@@ -179,7 +186,8 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
         <div className="space-y-3">
           {lines.map((l, i) => {
             const p = products.find((x) => x.id === l.pid);
-            const unit = p?.unit || 'unit';
+            const pack = packOf(l);
+            const unit = pack > 1 ? p?.packName || 'pack' : p?.unit || 'unit';
             const id = (f: string) => (i === 0 ? `rs-${f}` : `rs-${f}-${i + 1}`);
             const amount = (parseFloat(l.qty) || 0) * (parseFloat(l.cost) || 0);
             return (
@@ -220,6 +228,18 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
                     </>
                   )}
                 </div>
+                {p && hasPack(p) && (
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#6B7280] dark:text-[#94A3B8]">
+                    <span className="inline-flex rounded-xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden font-bold" role="group" aria-label={`Unit for item ${i + 1}`}>
+                      {[false, true].map((packMode) => (
+                        <button key={String(packMode)} type="button" aria-pressed={Boolean(l.inPack) === packMode} onClick={() => setLine(l.key, { inPack: packMode })} className={`px-2 py-0.5 ${Boolean(l.inPack) === packMode ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : ''}`}>
+                          {packMode ? `${p.packName} (${p.packSize})` : p.unit || 'pcs'}
+                        </button>
+                      ))}
+                    </span>
+                    {pack > 1 && (parseFloat(l.qty) || 0) > 0 && <span className="font-semibold">= {formatPackQty((parseFloat(l.qty) || 0) * pack, p)}{(parseFloat(l.cost) || 0) > 0 ? ` • Rs. ${num((parseFloat(l.cost) || 0) / pack)} per ${p.unit || 'pcs'}` : ''}</span>}
+                  </div>
+                )}
                 {amount > 0 && <p className="text-xs text-right text-[#6B7280] dark:text-[#94A3B8]">Amount <strong className="font-mono text-[#111827] dark:text-white">Rs. {num(amount)}</strong></p>}
               </div>
             );

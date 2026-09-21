@@ -42,7 +42,7 @@ export const BillingHomeScreen: React.FC = () => {
           <h1 className="text-2xl font-bold text-[#111827] dark:text-white">Home</h1>
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{formatDate(today)}{currentUser ? ` • ${currentUser.name}` : ''}</p>
         </div>
-        <button type="button" onClick={() => ui.newBill()} className={`${primaryBtn} text-base px-6`}><FilePlus2 className="w-5 h-5 text-teal-400 dark:text-teal-700" /> New Bill</button>
+        <button type="button" onClick={() => ui.newBill()} title="New bill (F2)" className={`${primaryBtn} text-base px-6`}><FilePlus2 className="w-5 h-5 text-teal-400 dark:text-teal-700" /> New Bill</button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -53,8 +53,8 @@ export const BillingHomeScreen: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <button type="button" onClick={() => ui.addExpense()} className={`${secondaryBtn} py-3`}><Receipt className="w-4 h-4 text-rose-600" /> Add expense</button>
-        <button type="button" onClick={() => ui.receive()} className={`${secondaryBtn} py-3`}><HandCoins className="w-4 h-4 text-teal-700" /> Receive payment</button>
+        <button type="button" onClick={() => ui.addExpense()} title="Add expense (F4)" className={`${secondaryBtn} py-3`}><Receipt className="w-4 h-4 text-rose-600" /> Add expense</button>
+        <button type="button" onClick={() => ui.receive()} title="Receive payment (F3)" className={`${secondaryBtn} py-3`}><HandCoins className="w-4 h-4 text-teal-700" /> Receive payment</button>
         <button type="button" onClick={() => ui.transfer()} className={`${secondaryBtn} py-3`}><ArrowLeftRight className="w-4 h-4 text-indigo-600" /> Cash ↔ Bank</button>
         <button type="button" onClick={() => setActiveScreen('daily')} className={`${secondaryBtn} py-3`}><Wallet className="w-4 h-4 text-amber-600" /> Daily sheet</button>
       </div>

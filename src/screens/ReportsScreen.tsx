@@ -1,3 +1,4 @@
+import { downloadCsvText } from '../utils/listTools';
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -204,7 +205,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
 
   // Export CSV handler for Local Bookkeeping
   const handleDownloadReport = () => {
-    let csvContent = 'data:text/csv;charset=utf-8,';
+    let csvContent = '';
 
     if (reportTab === 'daily') {
       csvContent += `SARMAYA DAILY TRADING & LOGISTICS REPORT\n`;
@@ -261,16 +262,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ onReceiveStock }) 
       });
     }
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
     const fileName = `Sarmaya_${reportTab.toUpperCase()}_Report_${
       reportTab === 'daily' ? selectedDate : selectedMonth
     }.csv`;
-    link.setAttribute('download', fileName);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsvText(fileName, csvContent);
 
     // Show instant success feedback
     setDownloadSuccessToast(fileName);

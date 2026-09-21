@@ -239,6 +239,7 @@ describe('godowns and transfers', () => {
 describe('plain items and older actions', () => {
   it('non-batch items in a one-godown shop behave exactly as before (can go negative, no rows)', async () => {
     const h = await setup();
+    act(() => { h.result.current.updateSettings({ allowNegativeStock: true }); });
     act(() => {
       h.result.current.createBill({ customerId: 'c1', items: [{ productId: 'p2', name: 'Tin', qty: 120, unitPrice: 1 }], paidNow: 0 });
     });

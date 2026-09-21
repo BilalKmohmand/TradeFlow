@@ -10,6 +10,7 @@ import { ItemStockDetails, ReceiveStockModal, GodownsModal, TransferStockModal }
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Product } from '../../types';
 import { liveBatches } from '../../utils/inventory';
+import { hasPack, formatPackQty } from '../../utils/packUnits';
 
 /** Your price list: every item with its fixed price and how many are left. */
 export const ItemsScreen: React.FC = () => {
@@ -25,7 +26,7 @@ export const ItemsScreen: React.FC = () => {
   const closeStock = () => setStockUI((s) => ({ ...s, kind: null }));
   const canStock = can('products:create') || can('stock:adjust');
   const canGodowns = can('stock:adjust');
-  const rows = useMemo(() => products.filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => a.name.localeCompare(b.name)), [products, query]);
+  const rows = useMemo(() => products.filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase()) || (p.code || '').toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => a.name.localeCompare(b.name)), [products, query]);
   const soldCount = (id: string) => invoices.reduce((a, i) => a + i.items.filter((it) => it.productId === id).reduce((x, it) => x + (it.qty ?? it.kg), 0), 0);
   const canDelete = can('delete_records');
 
@@ -67,11 +68,11 @@ export const ItemsScreen: React.FC = () => {
                     <tr className={`hover:bg-[#FAF9F6] dark:hover:bg-[#162436] ${details ? 'max-sm:border-b-0' : ''}`}>
                       <td className="px-4 py-3">
                         <button type="button" onClick={() => stock.itemHistory(p.id)} className="font-semibold text-left text-[#111827] dark:text-white hover:underline inline-flex items-center gap-1.5" aria-label={`History of ${p.name}`} title="Stock history">{p.name}<History className="w-3.5 h-3.5 text-[#9CA3AF]" /></button>
-                        <div className="text-[11px] text-[#8E9299]">per {p.unit || 'pcs'}{p.costPricePerKg ? ` • cost ${rs(p.costPricePerKg)}` : ''}{p.trackBatches ? ' • batch & expiry' : ''}</div>
+                        <div className="text-[11px] text-[#8E9299]">{p.code ? <span className="font-mono">{p.code} • </span> : null}per {p.unit || 'pcs'}{hasPack(p) ? ` • 1 ${p.packName} = ${p.packSize} ${p.unit || 'pcs'}` : ''}{p.costPricePerKg ? ` • cost ${rs(p.costPricePerKg)}` : ''}{p.trackBatches ? ' • batch & expiry' : ''}</div>
                         <div className="hidden sm:block"><ItemStockDetails product={p} /></div>
                       </td>
                       <td className="px-4 py-3 text-right font-mono font-bold text-[#111827] dark:text-white">{rs(p.unitPricePerKg)}</td>
-                      <td className={`px-4 py-3 text-right font-mono ${low ? 'text-rose-700 dark:text-rose-300 font-bold' : 'text-[#374151] dark:text-[#CBD5E1]'}`}>{low && <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />}{p.stockKg.toLocaleString()} {p.unit || 'pcs'}{(() => {
+                      <td data-testid={`stock-${p.id}`} data-negative={p.stockKg < 0 ? 'true' : undefined} className={`px-4 py-3 text-right font-mono ${low || p.stockKg < 0 ? 'text-rose-700 dark:text-rose-300 font-bold' : 'text-[#374151] dark:text-[#CBD5E1]'}`}>{(low || p.stockKg < 0) && <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />}{hasPack(p) ? formatPackQty(p.stockKg, p, 'short') : `${p.stockKg.toLocaleString()} ${p.unit || 'pcs'}`}{hasPack(p) && Math.abs(p.stockKg) >= (p.packSize || 0) && <span className="block text-[11px] font-sans font-normal text-[#8E9299]">{p.stockKg.toLocaleString()} {p.unit || 'pcs'} in all</span>}{p.stockKg < 0 && <span className="block text-[11px] font-sans font-semibold">oversold — below zero</span>}{(() => {
                         // Expired batches are still counted in stock but can't be sold: say so next to the figure.
                         const expired = stockBatches.filter((b) => b.productId === p.id && b.qty > 0 && isExpired(b, todayISO())).reduce((a, b) => a + b.qty, 0);
                         return expired > 0 ? <span className="block text-[11px] font-sans font-semibold text-rose-700 dark:text-rose-300">{expired.toLocaleString()} expired, can't be sold</span> : null;

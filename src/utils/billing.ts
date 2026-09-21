@@ -131,3 +131,86 @@ export const filterBills = (invoices: Invoice[], query: string, period: 'today' 
     .filter((i) => !q || i.invoiceNumber.toLowerCase().includes(q) || i.customerName.toLowerCase().includes(q) || (i.customerPhone || '').includes(q) || i.items.some((it) => it.productName.toLowerCase().includes(q)))
     .sort((a, b) => (a.issueDate < b.issueDate ? 1 : a.issueDate > b.issueDate ? -1 : b.createdAt.localeCompare(a.createdAt)));
 };
+
+export interface PaymentPart {
+  method: string;
+  amount: number;
+}
+
+export interface ResolvedBillPayment {
+  /** Cash / bank / wallet parts actually booked (cash over the total already taken off as change). */
+  parts: PaymentPart[];
+  /** Part paid by cheque (goes to the cheque register). */
+  cheque: number;
+  /** Everything booked against the bill now (parts + cheque), never more than the total. */
+  paid: number;
+  /** Cash handed back because more cash was given than was due. */
+  change: number;
+  error?: string;
+}
+
+/**
+ * Split "Paid now" across methods. Only cash can be more than what is due (the rest is change);
+ * bank, wallet and cheque parts must fit inside the bill total. A single part on its own (older
+ * callers: paidNow + paymentMethod) is simply capped at the total, as before.
+ */
+export const resolveBillPayments = (total: number, parts: PaymentPart[], chequeAmount = 0): ResolvedBillPayment => {
+  const clean = parts.map((p) => ({ method: p.method || 'Cash', amount: round2(Math.max(0, Number(p.amount) || 0)) })).filter((p) => p.amount > 0);
+  const cheque = round2(Math.max(0, Number(chequeAmount) || 0));
+  const fail = (error: string): ResolvedBillPayment => ({ parts: clean, cheque, paid: 0, change: 0, error });
+  if (cheque > total + 0.005) return fail('The cheque is more than the bill total.');
+  const nonCash = round2(clean.filter((p) => !isCashMethod(p.method)).reduce((a, p) => a + p.amount, 0));
+  const single = clean.length === 1 && cheque === 0;
+  if (!single && round2(nonCash + cheque) > total + 0.005) return fail('Bank and cheque payments come to more than the bill total. Only cash can be more (the change is handed back).');
+  let excess = round2(clean.reduce((a, p) => a + p.amount, 0) + cheque - total);
+  let change = 0;
+  const out = clean.map((p) => ({ ...p }));
+  // Take the excess off cash parts first (that is change), last part first.
+  for (let i = out.length - 1; i >= 0 && excess > 0.005; i--) {
+    if (!isCashMethod(out[i].method) && !single) continue;
+    const cut = Math.min(out[i].amount, excess);
+    out[i].amount = round2(out[i].amount - cut);
+    excess = round2(excess - cut);
+    if (isCashMethod(out[i].method)) change = round2(change + cut);
+  }
+  const kept = out.filter((p) => p.amount > 0);
+  return { parts: kept, cheque, paid: round2(kept.reduce((a, p) => a + p.amount, 0) + cheque), change };
+};
+
+/** "Cash + Bank Transfer + Cheque" (what the bill was paid with). */
+export const paymentMethodLabel = (parts: PaymentPart[], cheque: number, fallback = 'Cash'): string => {
+  const names = Array.from(new Set(parts.map((p) => p.method)));
+  if (cheque > 0) names.push('Cheque');
+  return names.length ? names.join(' + ') : fallback;
+};
+
+/** A customer's recent history for the New Bill side panel: last bills, last payment, last rate per item. */
+export interface CustomerSnapshot {
+  lastBills: Invoice[];
+  lastPayment?: { date: string; amount: number; method?: string };
+}
+
+export const customerSnapshot = (customerId: string, invoices: Invoice[], ledger: LedgerEntry[]): CustomerSnapshot => {
+  const lastBills = billsOnly(invoices)
+    .filter((i) => i.customerId === customerId)
+    .sort((a, b) => (a.issueDate < b.issueDate ? 1 : a.issueDate > b.issueDate ? -1 : b.createdAt.localeCompare(a.createdAt) || b.invoiceNumber.localeCompare(a.invoiceNumber)))
+    .slice(0, 3);
+  const pay = ledger
+    .filter((l) => l.entityType === 'customer' && l.entityId === customerId && (l.type === 'payment_received' || l.type === 'cheque_received') && l.credit > 0)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))[0];
+  return { lastBills, lastPayment: pay ? { date: pay.date, amount: pay.credit, method: pay.method } : undefined };
+};
+
+/** The price per base unit this customer was last billed for an item (newest bill first), with the bill date. */
+export const lastRateFor = (customerId: string, productId: string, invoices: Invoice[]): { rate: number; date: string; invoiceNumber: string } | null => {
+  let best: { rate: number; date: string; invoiceNumber: string; created: string } | null = null;
+  for (const inv of invoices) {
+    if (inv.customerId !== customerId || inv.status === 'cancelled' || !inv.billKind) continue;
+    const line = inv.items.find((it) => it.productId === productId);
+    if (!line) continue;
+    if (!best || inv.issueDate > best.date || (inv.issueDate === best.date && inv.createdAt + inv.invoiceNumber > best.created)) {
+      best = { rate: linePrice(line), date: inv.issueDate, invoiceNumber: inv.invoiceNumber, created: inv.createdAt + inv.invoiceNumber };
+    }
+  }
+  return best ? { rate: best.rate, date: best.date, invoiceNumber: best.invoiceNumber } : null;
+};

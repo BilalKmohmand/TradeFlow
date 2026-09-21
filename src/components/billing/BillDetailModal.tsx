@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { hasPack, formatPackQty, shortPack } from '../../utils/packUnits';
 import { Printer, Trash2, Wallet, MessageCircle, RotateCcw, Truck } from 'lucide-react';
 import { batchLines } from '../../utils/inventory';
 import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
@@ -91,9 +92,9 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
                         {batchLines(it).map((b) => <div key={b} className="text-[11px] font-normal text-[#6B7280] dark:text-[#94A3B8]">{b}</div>)}
                         {it.customerRate && <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Customer rate</div>}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono">{lineQty(it)} {it.unit || ''}</td>
+                      <td className="px-3 py-2 text-right font-mono">{lineQty(it)} {it.unit || ''}{hasPack(it) && Math.abs(lineQty(it)) >= (it.packSize || 0) && <div className="text-[11px] font-sans text-[#6B7280] dark:text-[#94A3B8]" data-testid="line-packs">{formatPackQty(lineQty(it), it)}</div>}</td>
                       {anyBack && <td className="px-3 py-2 text-right font-mono text-amber-700 dark:text-amber-300" data-testid="returned-qty">{backQty.get(it.id) ? backQty.get(it.id) : '—'}</td>}
-                      <td className="px-3 py-2 text-right font-mono">{rs(linePrice(it))}{(it.discountAmount || 0) > 0 && <div className="text-[11px] font-sans text-[#6B7280] dark:text-[#94A3B8]">less {lineDiscountLabel(it)}</div>}</td>
+                      <td className="px-3 py-2 text-right font-mono">{rs(linePrice(it))}{it.packPrice != null && hasPack(it) && <div className="text-[11px] font-sans text-[#6B7280] dark:text-[#94A3B8]">{rs(it.packPrice)}/{shortPack(it.packName || '')}</div>}{(it.discountAmount || 0) > 0 && <div className="text-[11px] font-sans text-[#6B7280] dark:text-[#94A3B8]">less {lineDiscountLabel(it)}</div>}</td>
                       <td className="px-3 py-2 text-right font-mono font-bold">{rs(it.amount)}</td>
                     </tr>
                   ))}

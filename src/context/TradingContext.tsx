@@ -68,7 +68,10 @@ import {
 } from '../lib/auth';
 import { mergeUsers, migrateLegacyUsers, toUserRow, isOwnerAccount } from '../lib/password';
 import { useAuthStore, AuthApi } from './authStore';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, formatDate } from '../utils/formatters';
+import { resolveBillPayments, paymentMethodLabel } from '../utils/billing';
+import { hasPack, formatPackQty } from '../utils/packUnits';
+import { shortStockLines } from '../utils/inventory';
 import {
   loadAllData,
   deleteRows,
@@ -428,6 +431,23 @@ export interface CreateBillItemInput {
   discountValue?: number;
   /** The price is the customer's agreed rate for this item. */
   customerRate?: boolean;
+  /** The line was typed in packs at this price per pack (qty and unitPrice are still per base unit). */
+  packPrice?: number;
+}
+
+/** One part of "Paid now" on a bill (e.g. Rs. 5,000 cash + Rs. 20,000 bank transfer). */
+export interface BillPaymentPart {
+  method: string;
+  amount: number;
+}
+
+/** A customer's cheque taken with the bill: goes into the cheque register (in hand), not the bank. */
+export interface BillChequeInput {
+  amount: number;
+  bankName: string;
+  chequeNumber: string;
+  /** Date written on the cheque (may be in the future). */
+  chequeDate: string;
 }
 
 export interface ReturnBillInput {
@@ -445,8 +465,13 @@ export interface CreateBillInput {
   newCustomer?: { name: string; phone: string };
   items: CreateBillItemInput[];
   discount?: number;
+  /** Paid now in one method (older callers). Ignored when `payments` is given. */
   paidNow?: number;
   paymentMethod?: string;
+  /** Paid now split across methods (cash / bank / wallet). Cash over the total is change handed back. */
+  payments?: BillPaymentPart[];
+  /** Part paid by cheque (recorded in the cheque register, linked to this bill). */
+  cheque?: BillChequeInput;
   notes?: string;
   date?: string;
   /** Allow this bill to take the customer over their credit limit (needs the override_credit permission). */
@@ -2592,6 +2617,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Expiry is judged against today (not the bill date), so a back-dated bill can't sell an expired batch.
     const stockPlan = inventory.planBill(items, input.godownId, todayISO());
     if (!stockPlan.ok) return { success: false, message: stockPlan.message || 'Not enough stock.' };
+    // Stock short: refused unless the shop allows bills to take stock below zero (Settings).
+    if (!settings.allowNegativeStock) {
+      const short = shortStockLines(items, products);
+      if (short.length) return { success: false, message: `${short.map((s) => `${s.name}: only ${formatPackQty(s.have, s.product)} in stock (bill needs ${formatPackQty(s.need, s.product)})`).join('; ')}. Receive the stock first, or turn on "Allow bills when stock is short" in Settings.` };
+    }
     let customer = customers.find((c) => c.id === input.customerId);
     // An inline new customer is only created once every check below has passed, so a refused
     // bill never leaves an orphan customer behind.
@@ -2619,9 +2649,22 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const taxAmount = round2(((subtotal - discount) * taxRatePct) / 100);
     const totalAmount = round2(subtotal - discount + taxAmount);
     if (totalAmount <= 0) return { success: false, message: 'The bill total must be more than zero.' };
-    const paidAmount = round2(Math.min(Math.max(0, input.paidNow || 0), totalAmount));
+    // Paid now: one method (older callers) or split across cash / bank / wallet, plus a cheque.
+    const partsIn: BillPaymentPart[] = input.payments ? input.payments : (input.paidNow || 0) > 0 ? [{ method: input.paymentMethod || 'Cash', amount: input.paidNow || 0 }] : [];
+    const chequeIn = input.cheque && Number(input.cheque.amount) > 0 ? input.cheque : null;
+    const pay = resolveBillPayments(totalAmount, partsIn, chequeIn?.amount || 0);
+    if (pay.error) return { success: false, message: pay.error };
+    if (chequeIn) {
+      if (!can('finance:record_payment')) return { success: false, message: "You don't have permission to record cheques. Ask a manager or admin." };
+      if (!String(chequeIn.chequeNumber || '').trim()) return { success: false, message: 'Enter the cheque number.' };
+      if (!String(chequeIn.bankName || '').trim()) return { success: false, message: 'Enter the bank name of the cheque.' };
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(chequeIn.chequeDate || '')) return { success: false, message: 'Enter the date written on the cheque.' };
+      const dup = cheques.find((c) => c.direction === 'received' && c.status !== 'cancelled' && c.chequeNumber.trim().toLowerCase() === chequeIn.chequeNumber.trim().toLowerCase() && c.bankName.trim().toLowerCase() === chequeIn.bankName.trim().toLowerCase());
+      if (dup) return { success: false, message: `Cheque ${dup.chequeNumber} of ${dup.bankName} is already in the register (${dup.partyName}).` };
+    }
+    const paidAmount = pay.paid;
     const balanceDue = round2(totalAmount - paidAmount);
-    const method = input.paymentMethod || 'Cash';
+    const method = paymentMethodLabel(pay.parts, pay.cheque, input.paymentMethod || 'Cash');
     // Credit limit: the unpaid part of this bill must fit under the customer's limit (0 = no limit).
     const credit = creditCheck(customer, balanceDue);
     let creditOverride: Invoice['creditOverride'];
@@ -2658,11 +2701,20 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         unit: it.unit || product?.unit || 'pcs',
         ...(lineDisc[idx] > 0 ? { discountType: it.discountType === 'pct' ? 'pct' as const : 'rs' as const, discountValue: round2(Number(it.discountValue) || 0), discountAmount: lineDisc[idx] } : {}),
         ...(it.customerRate ? { customerRate: true } : {}),
+        // Pack unit at the time of sale, so the bill can print "2 cartons + 3 tins".
+        ...(hasPack(product) ? { packName: product!.packName, packSize: product!.packSize } : {}),
+        ...(hasPack(product) && it.packPrice != null && it.packPrice >= 0 ? { packPrice: round2(it.packPrice) } : {}),
       };
     });
     const fromQuote = input.quotationId ? quotations.find((q) => q.id === input.quotationId) : undefined;
-    const payments: InvoicePaymentRecord[] =
-      paidAmount > 0 ? [{ id: uid('pay'), date, amount: paidAmount, method: invoiceMethod(method), notes: method, recordedBy: currentUser?.name }] : [];
+    const chequeId = chequeIn ? uid('chq') : '';
+    const chequeLedgerId = chequeIn ? uid('led') : '';
+    const chequeNo = chequeIn ? chequeIn.chequeNumber.trim() : '';
+    const chequeBank = chequeIn ? chequeIn.bankName.trim() : '';
+    const postDated = chequeIn && chequeIn.chequeDate > date ? `, dated ${formatDate(chequeIn.chequeDate)}` : '';
+    const partLedgerIds = pay.parts.map(() => uid('led'));
+    const payments: InvoicePaymentRecord[] = pay.parts.map((p) => ({ id: uid('pay'), date, amount: p.amount, method: invoiceMethod(p.method), notes: p.method, recordedBy: currentUser?.name }));
+    if (chequeIn) payments.push({ id: `pay-${chequeId}`, date, amount: pay.cheque, method: 'cheque', referenceNumber: chequeNo, notes: `Cheque ${chequeNo} (${chequeBank})${postDated} - in hand`, recordedBy: currentUser?.name });
     const invoice: Invoice = {
       id: uid('inv'),
       invoiceNumber,
@@ -2725,22 +2777,63 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         balanceAfter: dueAfterBill,
       },
     ];
-    if (paidAmount > 0) {
+    // One ledger row per method, so cash goes to the drawer and bank money to the bank.
+    let running = dueAfterBill;
+    pay.parts.forEach((p, i) => {
+      running = round2(running - p.amount);
       entries.push({
-        id: uid('led'),
+        id: partLedgerIds[i],
         entityType: 'customer',
-        entityId: customer.id,
+        entityId: customer!.id,
         type: 'payment_received',
         referenceId: invoiceNumber,
         sourceId: invoice.id,
-        method,
+        method: p.method,
         date,
-        description: `Payment received: ${method} - Bill ${invoiceNumber}`,
+        description: `Payment received: ${p.method} - Bill ${invoiceNumber}`,
         debit: 0,
-        credit: paidAmount,
-        balanceAfter: dueAfterPayment,
+        credit: p.amount,
+        balanceAfter: running,
       });
+    });
+    if (chequeIn) {
+      // The cheque is not money yet: it sits in "Cheques in hand" until the bank clears it (Money → Cheques).
+      running = round2(running - pay.cheque);
+      entries.push({
+        id: chequeLedgerId,
+        entityType: 'customer',
+        entityId: customer.id,
+        type: 'cheque_received',
+        referenceId: `CHQ-${chequeNo}`,
+        sourceId: chequeId,
+        method: 'Cheque',
+        date,
+        description: `Cheque received: ${chequeBank} #${chequeNo}${postDated} - Bill ${invoiceNumber}`,
+        debit: 0,
+        credit: pay.cheque,
+        balanceAfter: running,
+      });
+      const cheque: Cheque = {
+        id: chequeId,
+        direction: 'received',
+        customerId: customer.id,
+        supplierId: null,
+        partyName: customer.name,
+        bankName: chequeBank,
+        chequeNumber: chequeNo,
+        amount: pay.cheque,
+        chequeDate: chequeIn.chequeDate,
+        entryDate: date,
+        invoiceId: invoice.id,
+        status: 'in_hand',
+        ledgerId: chequeLedgerId,
+        createdAt: todayISO(),
+        createdBy: currentUser?.name,
+      };
+      setCheques((prev) => [cheque, ...prev]);
+      logAuditEvent('Cheque Received', `Cheque ${chequeNo} (${chequeBank}) from ${customer.name}: ${formatCurrency(pay.cheque)}, dated ${formatDate(chequeIn.chequeDate)} against ${invoiceNumber}.`, 'info', 'billing');
     }
+    void dueAfterPayment;
     setLedger((prev) => [...entries, ...prev]);
     if (creditOverride) logAuditEvent('Credit Limit Overridden', `${invoiceNumber} for ${customer.name}: owes ${formatCurrency(credit.after)} vs limit ${formatCurrency(credit.limit)}. Allowed by ${creditOverride.by}. Reason: ${creditOverride.reason}`, 'warning', 'billing');
     logAuditEvent('Bill Created', `${invoiceNumber} for ${customer.name}: ${formatCurrency(totalAmount)} (${paidAmount > 0 ? `${formatCurrency(paidAmount)} paid by ${method}` : 'on credit'}).`, 'info', 'billing');

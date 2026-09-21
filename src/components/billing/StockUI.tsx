@@ -3,6 +3,8 @@ import { ReceiveStockModal } from './InventoryUI';
 import { AdjustStockModal, ItemHistoryModal, PurchaseReturnModal } from './StockDialogs';
 import { AgingModal } from './BillingReports';
 import { useBillingUI } from './BillingUI';
+import { useTrading } from '../../context/TradingContext';
+import { useBillingShortcuts } from './useBillingShortcuts';
 
 interface StockUI {
   receiveStock: (opts?: { productId?: string | null; supplierId?: string | null }) => void;
@@ -38,6 +40,15 @@ export const StockUIProvider: React.FC<{ children: React.ReactNode }> = ({ child
     purchaseReturn: (opts) => show({ kind: 'return', ...opts }),
     aging: (side = 'customers') => show({ kind: 'aging', side }),
   };
+
+  // Desktop function keys: F2 new bill, F3 receive payment, F4 add expense, F6 receive stock.
+  const { settings, can } = useTrading();
+  useBillingShortcuts((settings.appMode || 'billing') === 'billing', {
+    newBill: () => billing.newBill(),
+    receive: () => billing.receive(),
+    expense: () => billing.addExpense(),
+    receiveStock: can('products:create') || can('stock:adjust') ? () => api.receiveStock() : undefined,
+  });
 
   return (
     <Ctx.Provider value={api}>

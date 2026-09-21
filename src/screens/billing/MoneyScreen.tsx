@@ -1,3 +1,5 @@
+import { CsvButton } from '../../components/billing/CsvButton';
+import { cashBookCsv, expensesCsv } from '../../utils/csvReports';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Banknote, Landmark, ArrowLeftRight, HandCoins, Receipt, Settings2, ChevronRight, Printer } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -149,7 +151,10 @@ export const MoneyScreen: React.FC = () => {
         <div className="flex items-center gap-2">
           <label className="text-xs font-bold text-[#6B7280] dark:text-[#94A3B8]" htmlFor="money-month">Month</label>
           <input id="money-month" type="month" value={month} max={today.slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} className={`${inputCls} w-auto`} />
-          {tab === 'expenses' && <button type="button" onClick={() => ui.addExpense()} className={`${primaryBtn} ml-auto`}><Receipt className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add expense</button>}
+          <span className="ml-auto" />
+          {tab === 'expenses' && <CsvButton fileName={`expenses-${month}.csv`} table={() => expensesCsv(monthExpenses.flatMap((g) => g.rows))} label="Download expenses CSV" />}
+          {tab === 'cashbook' && <CsvButton fileName={`cash-book-${month}.csv`} table={() => cashBookCsv(monthMoves)} label="Download cash book CSV" />}
+          {tab === 'expenses' && <button type="button" onClick={() => ui.addExpense()} className={primaryBtn}><Receipt className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add expense</button>}
         </div>
       )}
 

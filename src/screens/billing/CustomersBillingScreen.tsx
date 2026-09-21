@@ -1,3 +1,4 @@
+import { CsvButton } from '../../components/billing/CsvButton';
 import React, { useMemo, useState } from 'react';
 import { Plus, Search, Phone, FilePlus2, HandCoins, Printer, Pencil, Trash2, Clock, FileText } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -41,6 +42,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => stockUI.aging('customers')} className={secondaryBtn}><Clock className="w-4 h-4 text-amber-600" /> Who owes for how long</button>
+          <CsvButton fileName={`customers-${today}.csv`} table={() => ({ headers: ['Code', 'Name', 'Company', 'Phone', 'Address', 'Balance (Rs.)', 'Credit limit (Rs.)'], rows: rows.map((c) => [c.code || '', c.name, c.company, c.phone, c.address, c.totalDue, c.creditLimit || '']) })} label="Download customers CSV" />
           <button type="button" onClick={onAdd} className={primaryBtn}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add customer</button>
         </div>
       </div>

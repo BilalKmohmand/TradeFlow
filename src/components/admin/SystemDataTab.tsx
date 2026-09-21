@@ -1,3 +1,4 @@
+import { downloadCsvText } from '../../utils/listTools';
 import React, { useRef, useState } from 'react';
 import {
   KeyRound,
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { BillSettingsCard } from '../billing/BillSettings';
 import { TableName } from '../../lib/database';
 
 type PendingAction =
@@ -130,17 +132,7 @@ export const SystemDataTab: React.FC = () => {
     e.target.value = '';
   };
 
-  const downloadCsv = (name: string, csv: string) => {
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  const downloadCsv = (name: string, csv: string) => downloadCsvText(name, csv);
   const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const exportCustomers = () =>
     downloadCsv(
@@ -411,6 +403,9 @@ export const SystemDataTab: React.FC = () => {
           </div>
         </form>
       </div>
+
+      {/* Bills: paper size, footer, previous balance, short stock */}
+      <BillSettingsCard />
 
       {/* CSV Data Exports */}
       <div className={cardCls}>

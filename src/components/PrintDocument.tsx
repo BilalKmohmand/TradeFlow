@@ -4,7 +4,8 @@ import { useTrading } from '../context/TradingContext';
 import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
 import { todayISO } from '../utils/stockFlow';
 import { useEscape } from '../hooks/useEscape';
-import { dispatchBilledTotal, EXPENSE_CATEGORIES } from '../types';
+import { dispatchBilledTotal, EXPENSE_CATEGORIES, BillPrintSize } from '../types';
+import { hasPack, formatPackQty, formatQtyWithPacks, shortPack } from '../utils/packUnits';
 import { buildDailySheet, lineQty, linePrice } from '../utils/billing';
 import { collectCashMovements } from '../utils/finance';
 import { bankRecPrintContent } from './billing/BankRecPrint';
@@ -36,6 +37,44 @@ export type PrintRequest =
   | BillingPrintRequest
   | { type: 'cheque_register'; view?: string };
 
+/** One line of a thermal receipt: text on the left, amount on the right. */
+const ThermalRow: React.FC<{ left: string; right: string; bold?: boolean }> = ({ left, right, bold }) => (
+  <div className={`flex justify-between gap-2 ${bold ? 'font-bold' : ''}`}>
+    <span className="min-w-0 break-words">{left}</span>
+    <span className="shrink-0 text-right">{right}</span>
+  </div>
+);
+const ThermalRule: React.FC = () => <div className="border-t border-dashed border-gray-900 my-1" />;
+
+/** Narrow single-column receipt for 80 mm thermal printers: shop name, the lines, totals, footer, thank-you. */
+const ThermalReceipt: React.FC<{ company: { name: string; address: string; phone: string; taxId: string; logo: string }; title: string; date: string; footer?: string; children: React.ReactNode }> = ({ company, title, date, footer, children }) => (
+  <div data-testid="thermal-receipt" className="font-mono text-[11px] leading-snug text-gray-900">
+    <div className="text-center">
+      {company.logo && <img src={company.logo} alt="" className="mx-auto w-10 h-10 object-contain" />}
+      <div className="font-bold text-[14px]">{company.name}</div>
+      {company.address && <div>{company.address}</div>}
+      {company.phone && <div>{company.phone}</div>}
+      {company.taxId && <div>NTN: {company.taxId}</div>}
+    </div>
+    <ThermalRule />
+    <ThermalRow left={title} right="" bold />
+    <div>{date}</div>
+    <ThermalRule />
+    {children}
+    <ThermalRule />
+    {footer?.trim() && <div className="text-center whitespace-pre-line" data-testid="print-bill-footer">{footer.trim()}</div>}
+    <div className="text-center font-bold pt-1">Thank you for your business!</div>
+  </div>
+);
+
+/** Page size for bills and receipts (other documents stay A4). */
+const paperCss = (paper: BillPrintSize): string =>
+  paper === 'thermal80'
+    ? '@media print { @page { size: 80mm auto; margin: 2mm; } #print-root { width: 76mm !important; max-width: 76mm !important; padding: 0 !important; } }'
+    : paper === 'a5'
+      ? '@media print { @page { size: A5; margin: 8mm; } #print-root { font-size: 92%; } }'
+      : '';
+
 interface PrintDocumentProps {
   request: PrintRequest | null;
   onClose: () => void;
@@ -58,6 +97,9 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
     logo: settings.companyLogo || '',
   };
   useEscape(Boolean(request), onClose, 1); // the preview sits above every dialog
+  // Paper for bills and receipts (Settings): A4, A5 or an 80 mm thermal roll.
+  const paper: BillPrintSize = settings.billPrintSize || 'a4';
+  const sizedDoc = Boolean(request && (request.type === 'bill' || request.type === 'voucher'));
   const books = useAccounting(isAccountingPrint(request));
   const billingReport = useBillingReportPrint(request);
 
@@ -76,11 +118,60 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       const lineDisc = inv.items.reduce((a, it) => a + (it.discountAmount || 0), 0);
       const billRets = returnsForBill(returns, inv.id);
       const refunded = inv.refundedAmount || 0;
+      // "Show previous balance on bill": what they owed before this bill, and in all with what is still due on it.
+      const billRow = ledger.find((l) => l.type === 'bill_issued' && l.entityType === 'customer' && (l.sourceId ? l.sourceId === inv.id : l.referenceId === inv.invoiceNumber && l.entityId === inv.customerId));
+      const prevBalance = settings.showPrevBalanceOnBill && billRow ? Math.round((billRow.balanceAfter - billRow.debit) * 100) / 100 : null;
+      const totalDueWithPrev = prevBalance != null ? Math.round((prevBalance + inv.balanceDue) * 100) / 100 : null;
+      const time = inv.issuedAt ? new Date(inv.issuedAt).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' }) : undefined;
+      const qtyText = (it: (typeof inv.items)[number]) => (hasPack(it) ? formatQtyWithPacks(lineQty(it), it) : `${money(lineQty(it))}${it.unit && it.unit !== 'pcs' ? ` ${it.unit}` : ''}`);
+
+      if (paper === 'thermal80') {
+        return {
+          thermal: true,
+          title: 'INVOICE',
+          number: `Invoice #${inv.invoiceNumber.replace(/^INV-/, '')}`,
+          date: inv.issueDate,
+          body: (
+            <ThermalReceipt company={COMPANY} title={`INVOICE #${inv.invoiceNumber.replace(/^INV-/, '')}`} date={`${formatDate(inv.issueDate)}${time ? ` ${time}` : ''}`} footer={settings.billFooter}>
+              <div data-testid="thermal-customer">
+                <div>Customer: <b>{inv.customerName}</b></div>
+                {(inv.customerPhone || customer?.phone) && <div>Ph: {inv.customerPhone || customer?.phone}</div>}
+              </div>
+              <ThermalRule />
+              {inv.items.map((it) => (
+                <div key={it.id} className="py-0.5">
+                  <div className="font-bold">{it.productName}</div>
+                  <ThermalRow left={`${qtyText(it)} x ${money(it.packPrice != null && hasPack(it) ? it.packPrice : linePrice(it))}${it.packPrice != null && hasPack(it) ? `/${shortPack(it.packName || '')}` : ''}`} right={money(it.amount)} />
+                  {(it.discountAmount || 0) > 0 && <ThermalRow left={`  less ${lineDiscountLabel(it)}`} right="" />}
+                </div>
+              ))}
+              <ThermalRule />
+              <ThermalRow left="Subtotal" right={money(inv.subtotal)} />
+              {(inv.discount || 0) > 0 && <ThermalRow left="Discount" right={`-${money(inv.discount || 0)}`} />}
+              {inv.taxAmount > 0 && <ThermalRow left={`${settings.taxLabel || 'Sales Tax'} ${inv.taxRatePct}%`} right={money(inv.taxAmount)} />}
+              <ThermalRow left="TOTAL" right={`Rs. ${money(inv.totalAmount)}`} bold />
+              {billRets.map((r) => <ThermalRow key={r.id} left={`Returned ${r.returnNumber}`} right={`-${money(r.amount)}`} />)}
+              {inv.paidAmount > 0 && <ThermalRow left={`Paid${inv.paymentMethod ? ` (${inv.paymentMethod})` : ''}`} right={money(inv.paidAmount)} />}
+              {refunded > 0 && <ThermalRow left="Money given back" right={`-${money(refunded)}`} />}
+              <ThermalRow left={inv.balanceDue > 0 ? 'Balance due' : 'PAID IN FULL'} right={inv.balanceDue > 0 ? `Rs. ${money(inv.balanceDue)}` : ''} bold />
+              {prevBalance != null && totalDueWithPrev != null && (
+                <>
+                  <ThermalRule />
+                  <ThermalRow left="Previous balance" right={money(prevBalance)} />
+                  <ThermalRow left="Total balance" right={`Rs. ${money(totalDueWithPrev)}`} bold />
+                </>
+              )}
+              {inv.notes && <div className="pt-1">Note: {inv.notes}</div>}
+            </ThermalReceipt>
+          ),
+        };
+      }
+
       return {
         title: 'INVOICE',
         number: `Invoice #${inv.invoiceNumber.replace(/^INV-/, '')}`,
         date: inv.issueDate,
-        time: inv.issuedAt ? new Date(inv.issuedAt).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' }) : undefined,
+        time,
         body: (
           <>
             <div className="grid grid-cols-2 gap-6 text-xs">
@@ -100,7 +191,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 {customer?.code && <div>Customer ID: <span className="font-mono font-bold">{customer.code}</span></div>}
               </div>
             </div>
-            <table className="w-full text-xs mt-6 border-collapse">
+            <table className={`w-full text-xs ${paper === 'a5' ? 'mt-4' : 'mt-6'} border-collapse`}>
               <thead>
                 <tr className="bg-gray-800 text-white text-[10px] uppercase tracking-widest">
                   <th className="text-left py-2 px-3">Description</th>
@@ -113,14 +204,20 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               <tbody>
                 {inv.items.map((it) => (
                   <tr key={it.id} className="border-b border-gray-200">
-                    <td className="py-3 px-3 font-bold">
+                    <td className={`${paper === 'a5' ? 'py-2' : 'py-3'} px-3 font-bold`}>
                       {it.productName}
                       {batchLines(it).map((b) => <div key={b} className="text-[10px] font-normal text-gray-600">{b}</div>)}
                     </td>
-                    <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(lineQty(it))}{it.unit && it.unit !== 'pcs' ? ` ${it.unit}` : ''}</td>
-                    <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(linePrice(it))}</td>
+                    <td className={`${paper === 'a5' ? 'py-2' : 'py-3'} px-3 text-right font-mono whitespace-nowrap`}>
+                      {money(lineQty(it))}{it.unit && it.unit !== 'pcs' ? ` ${it.unit}` : ''}
+                      {hasPack(it) && Math.abs(lineQty(it)) >= (it.packSize || 0) && <div className="text-[10px] text-gray-600" data-testid="print-line-packs">{formatPackQty(lineQty(it), it)}</div>}
+                    </td>
+                    <td className={`${paper === 'a5' ? 'py-2' : 'py-3'} px-3 text-right font-mono whitespace-nowrap`}>
+                      {money(linePrice(it))}
+                      {it.packPrice != null && hasPack(it) && <div className="text-[10px] text-gray-600">{money(it.packPrice)}/{shortPack(it.packName || '')}</div>}
+                    </td>
                     {hasLineDisc && <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{(it.discountAmount || 0) > 0 ? <>{money(it.discountAmount || 0)}{it.discountType === 'pct' ? <div className="text-[10px] text-gray-500">{lineDiscountLabel(it)}</div> : null}</> : '—'}</td>}
-                    <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap">{money(it.amount)}</td>
+                    <td className={`${paper === 'a5' ? 'py-2' : 'py-3'} px-3 text-right font-mono font-bold whitespace-nowrap`}>{money(it.amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -140,14 +237,22 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 ) : (
                   <tr><td colSpan={span + 1} className="pt-1 text-right text-[11px] text-teal-700 font-bold">{billNetTotal(inv) === 0 ? 'ALL ITEMS RETURNED' : 'PAID IN FULL'}</td></tr>
                 )}
-                {customer && customer.totalDue > 0 && <tr><td colSpan={span + 1} className="pt-3 text-right text-[11px] text-gray-500">Total outstanding on account: Rs. {money(customer.totalDue)}</td></tr>}
+                {prevBalance != null && totalDueWithPrev != null ? (
+                  <>
+                    <tr data-testid="print-prev-balance"><td colSpan={span} className="pt-3 text-right text-[11px] text-gray-600">Previous balance</td><td className="pt-3 text-right font-mono px-3">{money(prevBalance)}</td></tr>
+                    <tr><td colSpan={span} className="pt-1 text-right font-bold text-[11px] text-gray-800">Total balance</td><td className="pt-1 text-right font-mono font-bold px-3 whitespace-nowrap">Rs. {money(totalDueWithPrev)}</td></tr>
+                  </>
+                ) : (
+                  customer && customer.totalDue > 0 && <tr><td colSpan={span + 1} className="pt-3 text-right text-[11px] text-gray-500">Total outstanding on account: Rs. {money(customer.totalDue)}</td></tr>
+                )}
               </tfoot>
             </table>
             {inv.notes && <div className="mt-4 text-[11px] text-gray-600">Note: {inv.notes}</div>}
-            <div className="grid grid-cols-2 gap-10 mt-14 text-xs">
+            <div className={`grid grid-cols-2 gap-10 ${paper === 'a5' ? 'mt-8' : 'mt-14'} text-xs`}>
               <div className="border-t border-gray-900 pt-2">For {COMPANY.name}</div>
               <div className="border-t border-gray-900 pt-2">Received by</div>
             </div>
+            {settings.billFooter?.trim() && <div data-testid="print-bill-footer" className="mt-6 text-[11px] text-gray-600 whitespace-pre-line text-center">{settings.billFooter.trim()}</div>}
           </>
         ),
       };
@@ -657,6 +762,25 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       if (!l || !(l.type === 'payment_received' || l.type === 'payment_made')) return null;
       const isReceipt = l.type === 'payment_received';
       const party = isReceipt ? customers.find((c) => c.id === l.entityId) : suppliers.find((s) => s.id === l.entityId);
+      if (paper === 'thermal80') {
+        return {
+          thermal: true,
+          title: isReceipt ? 'RECEIPT' : 'PAYMENT',
+          number: l.referenceId,
+          date: l.date,
+          body: (
+            <ThermalReceipt company={COMPANY} title={`${isReceipt ? 'RECEIPT' : 'PAYMENT'} ${l.referenceId}`} date={formatDate(l.date)} footer={settings.billFooter}>
+              <div>{isReceipt ? 'Received from' : 'Paid to'}: <b>{party?.company || party?.name}</b></div>
+              {party?.phone && <div>Ph: {party.phone}</div>}
+              <ThermalRule />
+              <div>{l.description}</div>
+              <ThermalRule />
+              <ThermalRow left="AMOUNT" right={`Rs. ${new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(l.credit)}`} bold />
+              <ThermalRow left="Balance after" right={new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(l.balanceAfter)} />
+            </ThermalReceipt>
+          ),
+        };
+      }
       return {
         title: isReceipt ? 'RECEIPT VOUCHER' : 'PAYMENT VOUCHER',
         number: l.referenceId,
@@ -681,6 +805,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               <div className="border-t border-gray-900 pt-2">{isReceipt ? 'Received by' : 'Paid by'} ({COMPANY.name})</div>
               <div className="border-t border-gray-900 pt-2">{isReceipt ? 'Payer signature' : 'Payee signature'}</div>
             </div>
+            {settings.billFooter?.trim() && <div className="mt-6 text-[11px] text-gray-600 whitespace-pre-line text-center">{settings.billFooter.trim()}</div>}
           </>
         ),
       };
@@ -766,14 +891,15 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       };
     }
     return null;
-  }, [request, books, billingReport, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques]);
+  }, [request, paper, books, billingReport, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques]);
 
   if (!request) return null;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 overflow-y-auto print:static print:p-0 print:block print:overflow-visible">
       <div onClick={onClose} className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs print:hidden" />
-      <div className="relative z-10 w-full max-w-3xl my-6 print:my-0 print:max-w-none">
+      {sizedDoc && paperCss(paper) && <style data-testid="print-paper" data-paper={paper}>{paperCss(paper)}</style>}
+      <div className={`relative z-10 w-full ${sizedDoc && paper === 'thermal80' ? 'max-w-sm' : sizedDoc && paper === 'a5' ? 'max-w-xl' : 'max-w-3xl'} my-6 print:my-0 print:max-w-none`}>
         <div className="flex items-center justify-between mb-3 print:hidden">
           <span className="text-xs text-white/80">Preview • use "Print / Save PDF" to print or export.</span>
           <div className="flex items-center gap-2">
@@ -782,8 +908,10 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
           </div>
         </div>
 
-        <div id="print-root" className="bg-white text-gray-900 rounded-2xl print:rounded-none shadow-2xl print:shadow-none p-4 sm:p-10 overflow-x-auto">
-          {content ? (
+        <div id="print-root" data-paper={sizedDoc ? paper : undefined} className={`bg-white text-gray-900 rounded-2xl print:rounded-none shadow-2xl print:shadow-none ${content && (content as { thermal?: boolean }).thermal ? 'p-3' : sizedDoc && paper === 'a5' ? 'p-4 sm:p-6' : 'p-4 sm:p-10'} overflow-x-auto`}>
+          {content && (content as { thermal?: boolean }).thermal ? (
+            content.body
+          ) : content ? (
             <>
               <div className="flex items-start justify-between border-b-2 border-gray-900 pb-4">
                 <div className="flex items-center gap-3">

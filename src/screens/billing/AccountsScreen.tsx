@@ -1,3 +1,5 @@
+import { CsvButton } from '../../components/billing/CsvButton';
+import { trialBalanceCsv, generalLedgerCsv, profitLossCsv, balanceSheetCsv } from '../../utils/csvReports';
 import React, { useMemo, useState } from 'react';
 import { BookOpen, Plus, Printer, Trash2, Lock, Unlock, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -164,6 +166,7 @@ export const AccountsScreen: React.FC = () => {
             <div className="w-44">{dateField('tb-asof', 'As of', asOf, setAsOf)}</div>
             <div className="flex items-center gap-2 flex-wrap">
               {statusPill(tb.balanced, 'Balanced ✓', `Out of balance by ${rs(Math.abs(tb.difference))}`)}
+              <CsvButton fileName={`trial-balance-${asOf}.csv`} table={() => trialBalanceCsv(tb)} label="Download trial balance CSV" />
               {printBtn(() => setPrintRequest({ type: 'trial_balance', asOf }), 'Print trial balance')}
             </div>
           </div>
@@ -201,6 +204,7 @@ export const AccountsScreen: React.FC = () => {
             </div>
             {dateField('gl-from', 'From', from, setFrom)}
             {dateField('gl-to', 'To', to, setTo)}
+            <div className="col-span-2 sm:col-span-4 flex justify-end"><CsvButton fileName={`ledger-${glCode}-${from}-to-${to}.csv`} table={() => generalLedgerCsv(gl, name(glCode))} label="Download ledger CSV" /></div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px]" aria-label="General ledger">
@@ -348,7 +352,7 @@ export const AccountsScreen: React.FC = () => {
         <div className={`${cardCls} overflow-hidden`}>
           <div className="flex flex-wrap items-end justify-between gap-3 px-4 sm:px-5 py-4 border-b border-[#E5E5E1] dark:border-[#203248]">
             <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:min-w-[340px]">{dateField('pnl-from', 'From', from, setFrom)}{dateField('pnl-to', 'To', to, setTo)}</div>
-            {printBtn(() => setPrintRequest({ type: 'profit_loss', from, to }), 'Print profit and loss')}
+            <div className="flex gap-2"><CsvButton fileName={`profit-and-loss-${from}-to-${to}.csv`} table={() => profitLossCsv(pnl)} label="Download profit and loss CSV" />{printBtn(() => setPrintRequest({ type: 'profit_loss', from, to }), 'Print profit and loss')}</div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[320px]" aria-label="Profit and loss">
@@ -374,6 +378,7 @@ export const AccountsScreen: React.FC = () => {
             <div className="w-44">{dateField('bs-asof', 'As of', asOf, setAsOf)}</div>
             <div className="flex items-center gap-2 flex-wrap">
               {statusPill(bs.balanced, 'Balanced ✓', `Out by ${rs(Math.abs(bs.difference))}`)}
+              <CsvButton fileName={`balance-sheet-${asOf}.csv`} table={() => balanceSheetCsv(bs)} label="Download balance sheet CSV" />
               {printBtn(() => setPrintRequest({ type: 'balance_sheet', asOf }), 'Print balance sheet')}
             </div>
           </div>
