@@ -12,6 +12,7 @@ import { customerSnapshot, lastRateFor, resolveBillPayments, PaymentPart } from 
 import { hasPack, formatPackQty, plural, baseToPacks } from '../../utils/packUnits';
 import { QuickSelect, PickOption } from './QuickPick';
 import { ChequeFieldsInput, ChequeFields, emptyChequeFields } from './ChequeForms';
+import { CostCentreSelect } from '../finance/common';
 
 interface Row {
   key: string;
@@ -73,6 +74,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const [splitCheque, setSplitCheque] = useState('');
   const [cheque, setCheque] = useState<ChequeFields>(emptyChequeFields());
   const [notes, setNotes] = useState(quote ? `From quotation ${quote.quoteNumber}` : '');
+  const [costCentre, setCostCentre] = useState('');
   const [error, setError] = useState('');
   const [allowOver, setAllowOver] = useState(false);
   const [overReason, setOverReason] = useState('');
@@ -259,6 +261,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
       date,
       ...(credit.over ? { allowOverLimit: allowOver, overrideReason: overReason } : {}),
       godownId: godowns.length > 1 ? godownId : undefined,
+      ...(costCentre ? { costCentreId: costCentre } : {}),
     });
     if (!result.success) {
       busy.current = false;
@@ -479,6 +482,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               <label className={labelCls} htmlFor="bill-notes">Note (optional)</label>
               <input id="bill-notes" value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} placeholder="e.g. delivered by Rashid" />
             </div>
+            <CostCentreSelect id="bill-centre" value={costCentre} onChange={setCostCentre} />
           </div>
           <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] p-4 space-y-2 text-sm">
             {lineDiscTotal > 0 && (

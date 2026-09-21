@@ -58,6 +58,8 @@ import { creditCheck } from '../utils/credit';
 import { collectCashMovements, costPerKgOn } from '../utils/finance';
 import { BankRecApi, createBankRecApi } from './bankRecActions';
 import { ChequeApi, createChequeApi } from './chequeActions';
+import { FinanceApi, useFinanceStore } from './financeActions';
+import { buildJournal, combineJournal } from '../utils/accounting';
 import {
   DEFAULT_ROLES,
   DEFAULT_VISIBILITY_SETTINGS,
@@ -97,7 +99,7 @@ import {
   initialWhatsAppMessages,
 } from '../data/initialData';
 
-interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, AuthApi {
+interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, FinanceApi, AuthApi {
   customers: Customer[];
   suppliers: Supplier[];
   products: Product[];
@@ -409,7 +411,13 @@ export type PrintRequestLike =
   | { type: 'billing_report'; report: 'profit'; from: string; to: string }
   | { type: 'billing_report'; report: 'item_history'; productId: string }
   | { type: 'debit_note'; returnId: string }
-  | { type: 'cheque_register'; view?: string };
+  | { type: 'cheque_register'; view?: string }
+  | { type: 'asset_register'; asOf: string }
+  | { type: 'salary_sheet'; runId: string }
+  | { type: 'payslip'; runId: string; staffId: string }
+  | { type: 'staff_ledger'; staffId: string }
+  | { type: 'cash_flow'; from: string; to: string }
+  | { type: 'cheque_print'; chequeId: string };
 
 /** Collision-safe id generator (Date.now() alone repeats when called in a tight loop). */
 let idCounter = 0;
@@ -481,6 +489,8 @@ export interface CreateBillInput {
   godownId?: string;
   /** Quotation this bill is made from (marked converted once the bill saves). */
   quotationId?: string | null;
+  /** Optional cost / profit centre (branch, area, vehicle) for the P&L by cost centre. */
+  costCentreId?: string | null;
 }
 
 /** Payment methods offered on bills. Anything starting with "Cash" counts as cash in hand. */
@@ -880,6 +890,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (data.accounts) setCustomAccounts(cloudOrLocal(data.accounts));
         // Customer rates: only when the cloud table exists (migration v13).
         if (data.customerAgreedRates) setCustomerAgreedRates(cloudOrLocal(data.customerAgreedRates));
+        // Finance (assets, staff, budgets, cost centres, year closes): only tables that exist (migration v21).
+        finance.hydrate(data.finance || {}, { keepLocalIfEmpty: true });
         setIsCloudSyncReady(true);
         setCloudSettled(true);
       })
@@ -1053,6 +1065,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setManualJournals([]);
     setCustomAccounts([]);
     inventory.reset();
+    finance.reset();
     logAuditEvent('Sample Data Loaded', 'All business data replaced with the built-in sample dataset.', 'warning');
   };
 
@@ -1667,6 +1680,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       accounts: () => setCustomAccounts([]),
       customer_agreed_rates: () => setCustomerAgreedRates([]),
       cheques: () => setCheques([]),
+      ...finance.purgeSetters,
     };
     setters[table]();
     if (isCloudSyncReady) void clearTable(table);
@@ -2744,6 +2758,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdBy: currentUser?.name,
       ...(creditOverride ? { creditOverride } : {}),
       ...(fromQuote ? { quotationId: fromQuote.id } : {}),
+      ...(input.costCentreId ? { costCentreId: input.costCentreId } : {}),
     };
     invoicesRef.current = [invoice, ...invoicesRef.current];
     if (fromQuote) setQuotations((prev) => prev.map((q) => (q.id === fromQuote.id ? { ...q, status: 'converted', invoiceId: invoice.id } : q)));
@@ -3128,6 +3143,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!existing) return;
     if (booksLockedFor(settings, existing.date)) return; // closed period: the screens hide the delete button too
     if (chequeApi.isChequeRecord(id)) return; // a bounced cheque's bank charge: changed through the cheque, not deleted
+    if (finance.api.isFinanceRecord(id)) return; // a salary payment: undone from Accounts → Staff & salaries
     setExpenses((prev) => prev.filter((e) => e.id !== id));
     removeRemote('expenses', [id]);
     logAuditEvent('Expense Deleted', `${existing.category}: ${formatCurrency(existing.amount)} — ${existing.description}`, 'danger');
@@ -3172,6 +3188,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!existing) return;
     if (booksLockedFor(settings, existing.date)) return; // closed period: the screens hide the delete button too
     if (chequeApi.isChequeRecord(id)) return; // a cleared cheque: part of the cheque register, not a loose cash entry
+    if (finance.api.isFinanceRecord(id)) return; // an asset purchase / sale or staff advance: changed from Accounts
     // A transfer has two legs; remove both so cash and bank stay in step.
     const ids = existing.pairId ? cashEntries.filter((e) => e.pairId === existing.pairId).map((e) => e.id) : [id];
     setCashEntries((prev) => prev.filter((e) => !ids.includes(e.id)));
@@ -3480,7 +3497,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // ---------------------------------------------------------------------------
   const addManualJournal = (input: { date: string; ref?: string; memo: string; lines: JournalEntry['lines'] }): { success: boolean; message: string; entry?: JournalEntry } => {
     const lines = (input.lines || [])
-      .map((l) => ({ accountCode: l.accountCode, debit: round2(Number(l.debit) || 0), credit: round2(Number(l.credit) || 0), ...(l.memo?.trim() ? { memo: l.memo.trim() } : {}) }))
+      .map((l) => ({ accountCode: l.accountCode, debit: round2(Number(l.debit) || 0), credit: round2(Number(l.credit) || 0), ...(l.memo?.trim() ? { memo: l.memo.trim() } : {}), ...(l.costCentreId ? { costCentreId: l.costCentreId } : {}) }))
       .filter((l) => l.accountCode || l.debit || l.credit);
     if (!can('finance:view_pnl')) return { success: false, message: 'Only a manager or admin can post journal entries.' };
     const check = validateEntry({ date: input.date, lines }, mergeAccounts(customAccounts));
@@ -3507,6 +3524,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const deleteManualJournal = (id: string): { success: boolean; message: string } => {
     const target = manualJournals.find((j) => j.id === id);
     if (!target) return { success: false, message: 'Journal entry not found.' };
+    if (target.closing) return { success: false, message: 'This is a year-end closing entry. Reopen the year from Accounts → Year end instead.' };
     if (!can('finance:view_pnl') || !can('delete_records')) return { success: false, message: 'Only a manager or admin can delete journal entries.' };
     const closedDel = booksLockedFor(settings, target.date);
     if (closedDel) return { success: false, message: `This entry is in a closed period. ${closedDel}` };
@@ -3582,6 +3600,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       manualJournals,
       customAccounts,
       customerAgreedRates,
+      ...finance.backupData(),
       auditLogs,
     };
     const jsonString = JSON.stringify(backupData, null, 2);
@@ -3641,6 +3660,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (Array.isArray(data.manualJournals)) setManualJournals(data.manualJournals);
       if (Array.isArray(data.customAccounts)) setCustomAccounts(data.customAccounts);
       if (Array.isArray(data.customerAgreedRates)) setCustomerAgreedRates(data.customerAgreedRates);
+      finance.restoreBackup(data);
       if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
       logAuditEvent('Backup Restored', 'Full system database restored from JSON backup.', 'warning');
       };
@@ -3676,6 +3696,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setBankReconciliations([]);
     setCheques([]);
     inventory.reset();
+    finance.reset();
     localStorage.removeItem(STORAGE_KEYS.INVOICES);
     localStorage.removeItem(STORAGE_KEYS.CHEQUES);
     localStorage.removeItem(STORAGE_KEYS.BANK_LINES);
@@ -3717,12 +3738,35 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     removeRemote, uid, userName: currentUser?.name, today: todayISO,
   });
 
+  // Fixed assets, staff & salaries, budgets, cost centres, year-end close (see financeActions.ts / utils/financeBooks.ts).
+  const finance = useFinanceStore({
+    settings,
+    updateSettings,
+    can: (p) => can(p as Permission),
+    logAuditEvent: (a, dt, sev) => logAuditEvent(a, dt, sev, 'data'),
+    uid,
+    userName: currentUser?.name,
+    today: todayISO,
+    addExpense,
+    addCashEntry,
+    setExpenses,
+    setCashEntries,
+    setManualJournals,
+    getBaseJournal: () => combineJournal(buildJournal({ settings, customers, suppliers, ledger, invoices, dispatches, purchases, expenses, cashEntries, products, returns, adjustments }), manualJournals),
+    accounts: mergeAccounts(customAccounts),
+    isCloudSyncReady,
+    syncToSupabase,
+    removeRemote,
+    centreInUse: (id) => invoices.some((i) => i.costCentreId === id) || expenses.some((e) => e.costCentreId === id) || manualJournals.some((j) => j.costCentreId === id || j.lines.some((l) => l.costCentreId === id)),
+  });
+
   return (
     <TradingContext.Provider
       value={{
         ...inventory.api,
         ...stockActions,
         ...chequeApi,
+        ...finance.api,
         ...auth,
         customers,
         suppliers,

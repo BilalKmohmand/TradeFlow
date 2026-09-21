@@ -23,9 +23,16 @@ import {
   booksLockedFor,
 } from '../../utils/accounting';
 import { todayISO } from '../../utils/stockFlow';
+import { FixedAssetsTab } from '../../components/finance/FixedAssetsTab';
+import { StaffTab } from '../../components/finance/StaffTab';
+import { BudgetTab } from '../../components/finance/BudgetTab';
+import { CostCentresTab } from '../../components/finance/CostCentresTab';
+import { CashFlowTab } from '../../components/finance/CashFlowTab';
+import { YearEndTab } from '../../components/finance/YearEndTab';
+import { useFinancialYears } from '../../components/finance/common';
 import { formatDate } from '../../utils/formatters';
 
-type Tab = 'tb' | 'gl' | 'journal' | 'coa' | 'pnl' | 'bs' | 'profit';
+type Tab = 'tb' | 'gl' | 'journal' | 'coa' | 'pnl' | 'bs' | 'profit' | 'cashflow' | 'assets' | 'staff' | 'budget' | 'centres' | 'year';
 
 const TABS: { id: Tab; label: string; help: string }[] = [
   { id: 'tb', label: 'Trial balance', help: 'The balance of every account on one date. Debits (what the business has or spent) must equal credits (what it owes, the owner put in, or it earned).' },
@@ -35,7 +42,16 @@ const TABS: { id: Tab; label: string; help: string }[] = [
   { id: 'pnl', label: 'Profit & Loss', help: 'Income minus the cost of what was sold and the expenses, for a period: did the business make money?' },
   { id: 'bs', label: 'Balance sheet', help: 'What the business owns (assets) against what it owes (liabilities) and what belongs to the owner (equity), on one date.' },
   { id: 'profit', label: 'Profit by item', help: 'Profit made on each item and from each customer, from your bills: what you sold it for minus what it cost you.' },
+  { id: 'cashflow', label: 'Cash flow & ratios', help: 'Where cash came from and went, and a few numbers that show how healthy the business is.' },
+  { id: 'assets', label: 'Fixed assets', help: 'Vehicles, generators, fittings and other things the shop owns for years, their depreciation and book value.' },
+  { id: 'staff', label: 'Staff & salaries', help: 'Staff list, the monthly salary sheet, advances (loans to staff) and payslips.' },
+  { id: 'budget', label: 'Budgets', help: 'Plan how much to spend and earn each month, then compare with what really happened.' },
+  { id: 'centres', label: 'Cost centres', help: 'Profit and loss by branch, area or vehicle.' },
+  { id: 'year', label: 'Year end', help: 'Financial year setting and closing a finished year.' },
 ];
+
+/** Tabs that take a date or date range: they get the "Financial year" shortcut. */
+const DATED_TABS: Tab[] = ['tb', 'gl', 'journal', 'pnl', 'bs'];
 
 const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
 const thCls = 'px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap';
@@ -65,6 +81,16 @@ export const AccountsScreen: React.FC = () => {
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [acc, setAcc] = useState<{ code: string; name: string; type: AccountType; description: string }>({ code: '', name: '', type: 'expense', description: '' });
   const [lockDate, setLockDate] = useState(settings.booksLockedUntil || '');
+  const { years: fyears } = useFinancialYears();
+  const fyValue = fyears.find((y) => y.start === from && (y.end === to || (y.end > today && to === today)))?.start || '';
+  const pickYear = (start: string) => {
+    const y = fyears.find((x) => x.start === start);
+    if (!y) return;
+    const end = y.end > today ? today : y.end;
+    setFrom(y.start);
+    setTo(end);
+    setAsOf(end);
+  };
 
   const tb = useMemo(() => trialBalance(journal, accounts, asOf), [journal, accounts, asOf]);
   const gl = useMemo(() => generalLedger(journal, glCode, from, to), [journal, glCode, from, to]);
@@ -146,6 +172,15 @@ export const AccountsScreen: React.FC = () => {
 
       <div role="tablist" aria-label="Accounts views" className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">{TABS.filter((t) => t.id !== 'profit' || canPost).map(tabBtn)}</div>
       <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] -mt-2">{current.help}</p>
+      {DATED_TABS.includes(tab) && fyears.length > 0 && (
+        <div className="flex items-center gap-2 -mt-1">
+          <label htmlFor="acc-fy" className="text-xs font-bold text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap">Financial year</label>
+          <select id="acc-fy" value={fyValue} onChange={(e) => pickYear(e.target.value)} className={`${inputCls} !w-auto !py-1.5`}>
+            <option value="">Custom dates</option>
+            {fyears.map((y) => <option key={y.start} value={y.start}>{y.label}</option>)}
+          </select>
+        </div>
+      )}
 
       {settings.booksLockedUntil && (
         <div className="rounded-2xl px-4 py-3 text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900 flex items-center gap-2">
@@ -363,6 +398,13 @@ export const AccountsScreen: React.FC = () => {
           </div>
         </div>
       )}
+
+      {tab === 'cashflow' && <CashFlowTab journal={journal} accounts={accounts} />}
+      {tab === 'assets' && <FixedAssetsTab flash={flash} />}
+      {tab === 'staff' && <StaffTab flash={flash} />}
+      {tab === 'budget' && <BudgetTab journal={journal} accounts={accounts} flash={flash} />}
+      {tab === 'centres' && <CostCentresTab journal={journal} accounts={accounts} flash={flash} />}
+      {tab === 'year' && <YearEndTab journal={journal} accounts={accounts} flash={flash} />}
 
       {/* ---------------- Profit by item / customer (needs finance:view_pnl) ---------------- */}
       {tab === 'profit' && canPost && <ProfitView />}

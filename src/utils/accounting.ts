@@ -42,6 +42,8 @@
  *      issued cheque cleared (cash entry, 2050)   Dr Cheques issued 2050      Cr Bank 1010
  *      issued cheque cancelled (cheque_returned)  Dr Cheques issued 2050      Cr Payable 2000
  *  - Opening stock                     Dr Inventory 1200                   Cr Opening balance equity 3900
+ *  - Fixed assets, staff salaries & advances, depreciation and the year-end closing entry are posted by
+ *    utils/financeBooks.ts `buildFinanceJournal` (the posting rules are listed there).
  *  - Customer / supplier balances that are not explained by their history (opening dues typed in
  *    when the account was created) are posted against Opening balance equity so Receivable and
  *    Payable always equal the balances shown on the Customers and Suppliers screens.
@@ -91,6 +93,8 @@ export interface JournalLine {
   debit: number;
   credit: number;
   memo?: string;
+  /** Optional cost / profit centre of this line (manual journals); overrides the entry's centre. */
+  costCentreId?: string | null;
 }
 
 export interface JournalEntry {
@@ -108,6 +112,10 @@ export interface JournalEntry {
   billId?: string;
   createdAt?: string;
   createdBy?: string;
+  /** Cost / profit centre of the whole entry (from the expense or bill it came from). */
+  costCentreId?: string | null;
+  /** Year-end closing entry: moves the year's profit to equity. Left out of profit & loss figures. */
+  closing?: boolean;
 }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -120,26 +128,34 @@ export const ACC = {
   CASH: '1000',
   BANK: '1010',
   CHEQUES_IN_HAND: '1150',
+  STAFF_ADVANCES: '1160',
+  FIXED_ASSETS: '1500',
+  ACCUM_DEPRECIATION: '1510',
   RECEIVABLE: '1100',
   INVENTORY: '1200',
   PAYABLE: '2000',
   UNPAID_EXPENSES: '2010',
   CHEQUES_ISSUED: '2050',
+  ASSET_CREDITORS: '2060',
   SALES_TAX: '2100',
   LOANS: '2200',
   SUSPENSE: '2900',
   CAPITAL: '3000',
   DRAWINGS: '3100',
+  RETAINED_EARNINGS: '3200',
   OPENING_EQUITY: '3900',
   SALES: '4000',
   SALES_DISCOUNTS: '4010',
   SALES_RETURNS: '4020',
   FREIGHT_INCOME: '4100',
   OTHER_INCOME: '4900',
+  ASSET_SALE_GAIN: '4910',
   COGS: '5000',
   STOCK_LOSSES: '5100',
+  DEPRECIATION: '6130',
   OTHER_EXPENSES: '6800',
   BANK_CHARGES: '6900',
+  ASSET_SALE_LOSS: '6960',
 } as const;
 
 /** Where each expense category is posted. Owner drawings are equity, not an expense. */
@@ -169,21 +185,27 @@ export const DEFAULT_ACCOUNTS: Account[] = [
   sys('1010', 'Bank', 'asset', 'Bank transfers, cheques, cards and mobile wallets (Easypaisa / JazzCash)'),
   sys('1100', 'Accounts receivable (customers)', 'asset', 'What customers owe you'),
   sys('1150', 'Cheques in hand', 'asset', 'Customer cheques received but not yet cleared by the bank (post-dated or deposited)'),
+  sys('1160', 'Staff advances', 'asset', 'Money lent to staff, recovered from their salary'),
   sys('1200', 'Inventory (stock at cost)', 'asset'),
+  sys('1500', 'Fixed assets (at cost)', 'asset', 'Vehicles, generators, fittings and other things the shop owns and uses for years'),
+  sys('1510', 'Accumulated depreciation', 'asset', 'Contra-asset: the part of fixed assets already charged as depreciation'),
   sys('2000', 'Accounts payable (suppliers)', 'liability', 'What you owe suppliers'),
   sys('2010', 'Unpaid expenses', 'liability', 'Expenses recorded as "Credit (unpaid)"'),
   sys('2050', 'Cheques issued (not cleared)', 'liability', 'Cheques given to suppliers that the bank has not paid yet'),
+  sys('2060', 'Creditors for fixed assets', 'liability', 'Fixed assets bought on credit and not paid for yet'),
   sys('2100', 'Sales tax payable', 'liability'),
   sys('2200', 'Loans payable', 'liability'),
   sys('2900', 'Suspense (to be classified)', 'liability', 'Cash entries the app cannot classify; move them with a journal entry'),
   sys('3000', "Owner's capital", 'equity'),
   sys('3100', 'Owner drawings', 'equity', 'Money the owner took out'),
+  sys('3200', 'Retained earnings', 'equity', 'Profits of closed financial years kept in the business'),
   sys('3900', 'Opening balance equity', 'equity', 'Balances brought in when the books started'),
   sys('4000', 'Sales', 'income'),
   sys('4010', 'Sales discounts', 'income', 'Contra-income: reduces sales'),
   sys('4020', 'Sales returns', 'income', 'Contra-income: goods returned by customers'),
   sys('4100', 'Freight & other charges income', 'income'),
   sys('4900', 'Other income', 'income'),
+  sys('4910', 'Gain on sale of fixed assets', 'income'),
   sys('5000', 'Cost of goods sold', 'expense'),
   sys('5100', 'Stock losses & adjustments', 'expense'),
   sys('6000', 'Day-to-day expenses', 'expense'),
@@ -199,8 +221,10 @@ export const DEFAULT_ACCOUNTS: Account[] = [
   sys('6100', 'Vehicle maintenance', 'expense'),
   sys('6110', 'Taxes & duties', 'expense'),
   sys('6120', 'Broker commission', 'expense'),
+  sys('6130', 'Depreciation', 'expense', 'Wear and tear of fixed assets, charged month by month'),
   sys('6800', 'Other expenses', 'expense'),
   sys('6900', 'Bank charges', 'expense'),
+  sys('6960', 'Loss on sale of fixed assets', 'expense'),
 ];
 
 export const ACCOUNT_TYPES: { id: AccountType; label: string }[] = [
@@ -290,7 +314,7 @@ export interface JournalSources {
 }
 
 /** Collects lines for one entry, merging same-account lines and dropping zeros. */
-class EntryBuilder {
+export class EntryBuilder {
   private lines: JournalLine[] = [];
   dr(code: string, amount: number, memo?: string) {
     this.add(code, amount, memo);
@@ -542,7 +566,8 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
         }
       }
     }
-    push({ id: `auto-led-${l.id}`, date: l.date, ref: l.referenceId || l.type, memo, sourceType, sourceId: l.id, billId, builder: b });
+    const centre = billId ? invById.get(billId)?.costCentreId : undefined;
+    push({ id: `auto-led-${l.id}`, date: l.date, ref: l.referenceId || l.type, memo, sourceType, sourceId: l.id, billId, ...(centre ? { costCentreId: centre } : {}), builder: b });
   });
 
   // --- 3. Opening dues not explained by history --------------------------------------------
@@ -579,7 +604,7 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
     const onCredit = e.paidVia === 'Credit (unpaid)';
     const b = new EntryBuilder();
     b.dr(account, amount, e.description).cr(onCredit ? ACC.UNPAID_EXPENSES : moneyAccount(methodOf.get(e.id) ?? e.paidVia, e.date), amount);
-    push({ id: `auto-exp-${e.id}`, date: e.date, ref: e.category === 'drawings' ? 'DRAWINGS' : 'EXPENSE', memo: e.description || e.category, sourceType: 'expense', sourceId: e.id, builder: b });
+    push({ id: `auto-exp-${e.id}`, date: e.date, ref: e.category === 'drawings' ? 'DRAWINGS' : 'EXPENSE', memo: e.description || e.category, sourceType: 'expense', sourceId: e.id, ...(e.costCentreId ? { costCentreId: e.costCentreId } : {}), builder: b });
   });
 
   // --- 5. Cash entries: transfers and other movements --------------------------------------
@@ -793,8 +818,12 @@ export interface ProfitAndLoss {
 /** Cost-of-sales accounts are the 5xxx expense range; operating expenses are the rest. */
 const isCostOfSales = (a: Account) => a.type === 'expense' && a.code.startsWith('5');
 
+/** Entries without year-end closing entries: what profit & loss style reports are built from. */
+export const withoutClosing = (entries: JournalEntry[]) => (entries.some((e) => e.closing) ? entries.filter((e) => !e.closing) : entries);
+
 export const profitAndLoss = (entries: JournalEntry[], from: string, to: string, accounts: Account[] = DEFAULT_ACCOUNTS): ProfitAndLoss => {
-  const totals = accountTotals(entries, { from, to });
+  // The year-end closing entry empties income and expense into equity; the P&L shows the year as traded.
+  const totals = accountTotals(withoutClosing(entries), { from, to });
   const income: StatementRow[] = [];
   const costOfSales: StatementRow[] = [];
   const expenses: StatementRow[] = [];

@@ -1,7 +1,7 @@
 import { CsvButton } from './CsvButton';
 import { chequesCsv } from '../../utils/csvReports';
 import React, { useMemo, useState } from 'react';
-import { Printer, Plus, Search, Send } from 'lucide-react';
+import { Printer, Plus, Search, Send, Ruler } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { Cheque } from '../../types';
 import { cardCls, inputCls, primaryBtn, secondaryBtn, Notice, Tile, rs } from './ui';
@@ -9,6 +9,7 @@ import { ChequeActionModal, ChequeAction, ChequeFormModal } from './ChequeForms'
 import { CHEQUE_VIEWS, ChequeView, chequeStatusLabel, chequeTotals, filterCheques } from '../../utils/cheques';
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
+import { ChequeLayoutModal } from '../finance/ChequeLayoutModal';
 
 const STATUS_TONE: Record<Cheque['status'], string> = {
   in_hand: 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
@@ -28,6 +29,7 @@ export const ChequesTab: React.FC = () => {
   const [form, setForm] = useState<{ direction: 'received' | 'issued'; n: number } | null>(null);
   const [act, setAct] = useState<{ cheque: Cheque; action: ChequeAction; n: number } | null>(null);
   const [msg, setMsg] = useState('');
+  const [layoutOpen, setLayoutOpen] = useState(false);
   const canRecord = can('finance:record_payment');
   const canManage = can('finance:cashbook');
   const totals = useMemo(() => chequeTotals(cheques, today), [cheques, today]);
@@ -42,6 +44,7 @@ export const ChequesTab: React.FC = () => {
     if (c.direction === 'received' && c.status === 'in_hand' && canRecord) out.push(<button key="dep" type="button" onClick={() => open(c, 'deposit')} className={`${btn} text-indigo-700 dark:text-indigo-300`} disabled={c.chequeDate > today} title={c.chequeDate > today ? `Can be deposited from ${formatDate(c.chequeDate)}` : undefined}>{c.chequeDate > today ? `Deposit from ${formatDate(c.chequeDate)}` : 'Deposit'}</button>);
     if ((c.status === 'deposited' || c.status === 'issued') && canManage) out.push(<button key="clr" type="button" onClick={() => open(c, 'clear')} className={`${btn} text-teal-700 dark:text-teal-300`}>Mark cleared</button>);
     if (c.direction === 'received' && (c.status === 'in_hand' || c.status === 'deposited') && canManage) out.push(<button key="bnc" type="button" onClick={() => open(c, 'bounce')} className={`${btn} text-rose-700 dark:text-rose-300`}>Bounced</button>);
+    if (c.direction === 'issued' && c.status !== 'cancelled') out.push(<button key="prt" type="button" onClick={() => setPrintRequest({ type: 'cheque_print', chequeId: c.id })} className={`${btn} text-[#111827] dark:text-white`} aria-label={`Print cheque ${c.chequeNumber}`}>Print cheque</button>);
     if (((c.direction === 'received' && c.status === 'in_hand') || c.status === 'issued') && canManage) out.push(<button key="cnl" type="button" onClick={() => open(c, 'cancel')} className={`${btn} text-[#6B7280]`}>Cancel</button>);
     return out;
   };
@@ -60,6 +63,7 @@ export const ChequesTab: React.FC = () => {
         {canRecord && <button type="button" onClick={() => setForm({ direction: 'issued', n: Date.now() })} className={secondaryBtn}><Send className="w-4 h-4 text-sky-600" /> Give a cheque</button>}
         <span className="sm:ml-auto"><CsvButton fileName={`cheques-${view}-${today}.csv`} table={() => chequesCsv(rows)} label="Download cheques CSV" /></span>
         <button type="button" onClick={() => setPrintRequest({ type: 'cheque_register', view })} className={secondaryBtn}><Printer className="w-4 h-4" /> Print register</button>
+        {canManage && <button type="button" onClick={() => setLayoutOpen(true)} className={secondaryBtn}><Ruler className="w-4 h-4" /> Cheque layout</button>}
       </div>
 
       {msg && <Notice kind="ok">{msg}</Notice>}
@@ -110,6 +114,7 @@ export const ChequesTab: React.FC = () => {
       </div>
 
       {form && <ChequeFormModal key={form.n} isOpen onClose={() => setForm(null)} direction={form.direction} />}
+      {layoutOpen && <ChequeLayoutModal onClose={() => setLayoutOpen(false)} onSaved={setMsg} />}
       {act && <ChequeActionModal key={act.n} cheque={act.cheque} action={act.action} onClose={() => setAct(null)} onDone={setMsg} />}
     </div>
   );
