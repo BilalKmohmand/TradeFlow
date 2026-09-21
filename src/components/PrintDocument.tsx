@@ -11,6 +11,7 @@ import { bankRecPrintContent } from './billing/BankRecPrint';
 import { batchLines } from '../utils/inventory';
 import { useAccounting } from '../hooks/useAccounting';
 import { accountingPrintContent, isAccountingPrint } from './accounting/AccountingPrint';
+import { lineDiscountLabel, lineGross, billNetTotal, returnsForBill, returnedQtyByLine, quotationLines, quotationTotal } from '../utils/salesDocs';
 
 export type PrintRequest =
   | { type: 'voucher'; ledgerId: string }
@@ -23,6 +24,7 @@ export type PrintRequest =
   | { type: 'statement'; customerId: string; from: string; to: string }
   | { type: 'supplier_statement'; supplierId: string; from: string; to: string }
   | { type: 'bill'; invoiceId: string }
+  | { type: 'bill_challan'; invoiceId: string; driver?: string; vehicle?: string }
   | { type: 'daily_sheet'; date: string }
   | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number }
   | { type: 'trial_balance'; asOf: string }
@@ -50,7 +52,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
     email: settings.companyEmail || '',
     logo: settings.companyLogo || '',
   };
-  useEscape(Boolean(request), onClose);
+  useEscape(Boolean(request), onClose, 1); // the preview sits above every dialog
   const books = useAccounting(isAccountingPrint(request));
 
   const content = useMemo(() => {
@@ -62,6 +64,11 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       if (!inv) return null;
       const customer = customers.find((c) => c.id === inv.customerId);
       const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+      const hasLineDisc = inv.items.some((it) => (it.discountAmount || 0) > 0);
+      const span = hasLineDisc ? 4 : 3;
+      const lineDisc = inv.items.reduce((a, it) => a + (it.discountAmount || 0), 0);
+      const billRets = returnsForBill(returns, inv.id);
+      const refunded = inv.refundedAmount || 0;
       return {
         title: 'INVOICE',
         number: `Invoice #${inv.invoiceNumber.replace(/^INV-/, '')}`,
@@ -91,6 +98,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                   <th className="text-left py-2 px-3">Description</th>
                   <th className="text-right py-2 px-3">Qty</th>
                   <th className="text-right py-2 px-3">Price</th>
+                  {hasLineDisc && <th className="text-right py-2 px-3">Disc.</th>}
                   <th className="text-right py-2 px-3">Amount</th>
                 </tr>
               </thead>
@@ -103,28 +111,96 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                     </td>
                     <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(lineQty(it))}{it.unit && it.unit !== 'pcs' ? ` ${it.unit}` : ''}</td>
                     <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(linePrice(it))}</td>
+                    {hasLineDisc && <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{(it.discountAmount || 0) > 0 ? <>{money(it.discountAmount || 0)}{it.discountType === 'pct' ? <div className="text-[10px] text-gray-500">{lineDiscountLabel(it)}</div> : null}</> : '—'}</td>}
                     <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap">{money(it.amount)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr><td colSpan={3} className="pt-4 text-right text-[11px] text-gray-600">Subtotal</td><td className="pt-4 text-right font-mono px-3">{money(inv.subtotal)}</td></tr>
-                {(inv.discount || 0) > 0 && <tr><td colSpan={3} className="pt-1 text-right text-[11px] text-gray-600">Discount</td><td className="pt-1 text-right font-mono px-3">− {money(inv.discount || 0)}</td></tr>}
-                {inv.taxAmount > 0 && <tr><td colSpan={3} className="pt-1 text-right text-[11px] text-gray-600">{settings.taxLabel || 'Sales Tax'} ({inv.taxRatePct}%)</td><td className="pt-1 text-right font-mono px-3">{money(inv.taxAmount)}</td></tr>}
-                <tr><td colSpan={3} className="pt-3 text-right font-bold uppercase tracking-widest text-[10px] text-gray-600">Total</td><td className="pt-3 text-right font-mono font-extrabold text-base px-3 whitespace-nowrap">Rs. {money(inv.totalAmount)}</td></tr>
-                {inv.paidAmount > 0 && <tr><td colSpan={3} className="pt-1 text-right text-[11px] text-gray-600">Paid{inv.paymentMethod ? ` (${inv.paymentMethod})` : ''}</td><td className="pt-1 text-right font-mono px-3">{money(inv.paidAmount)}</td></tr>}
+                {lineDisc > 0 && <tr><td colSpan={span} className="pt-4 text-right text-[11px] text-gray-600">Items before discount</td><td className="pt-4 text-right font-mono px-3">{money(inv.items.reduce((a, it) => a + lineGross(it), 0))}</td></tr>}
+                {lineDisc > 0 && <tr><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">Item discounts</td><td className="pt-1 text-right font-mono px-3">− {money(lineDisc)}</td></tr>}
+                <tr><td colSpan={span} className="pt-4 text-right text-[11px] text-gray-600">Subtotal</td><td className="pt-4 text-right font-mono px-3">{money(inv.subtotal)}</td></tr>
+                {(inv.discount || 0) > 0 && <tr><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">Discount</td><td className="pt-1 text-right font-mono px-3">− {money(inv.discount || 0)}</td></tr>}
+                {inv.taxAmount > 0 && <tr><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">{settings.taxLabel || 'Sales Tax'} ({inv.taxRatePct}%)</td><td className="pt-1 text-right font-mono px-3">{money(inv.taxAmount)}</td></tr>}
+                <tr><td colSpan={span} className="pt-3 text-right font-bold uppercase tracking-widest text-[10px] text-gray-600">Total</td><td className="pt-3 text-right font-mono font-extrabold text-base px-3 whitespace-nowrap">Rs. {money(inv.totalAmount)}</td></tr>
+                {billRets.map((r) => <tr key={r.id}><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">Returned ({r.returnNumber}, {formatDate(r.date)})</td><td className="pt-1 text-right font-mono px-3">− {money(r.amount)}</td></tr>)}
+                {billRets.length > 0 && <tr><td colSpan={span} className="pt-1 text-right font-bold text-[11px] text-gray-800">Net total</td><td className="pt-1 text-right font-mono font-bold px-3 whitespace-nowrap">Rs. {money(billNetTotal(inv))}</td></tr>}
+                {inv.paidAmount > 0 && <tr><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">Paid{inv.paymentMethod ? ` (${inv.paymentMethod})` : ''}</td><td className="pt-1 text-right font-mono px-3">{money(inv.paidAmount)}</td></tr>}
+                {refunded > 0 && <tr><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">Money given back</td><td className="pt-1 text-right font-mono px-3">− {money(refunded)}</td></tr>}
                 {inv.balanceDue > 0 ? (
-                  <tr><td colSpan={3} className="pt-1 text-right font-bold text-[11px] text-gray-800">Balance due</td><td className="pt-1 text-right font-mono font-bold px-3 whitespace-nowrap">Rs. {money(inv.balanceDue)}</td></tr>
+                  <tr><td colSpan={span} className="pt-1 text-right font-bold text-[11px] text-gray-800">Balance due</td><td className="pt-1 text-right font-mono font-bold px-3 whitespace-nowrap">Rs. {money(inv.balanceDue)}</td></tr>
                 ) : (
-                  <tr><td colSpan={4} className="pt-1 text-right text-[11px] text-teal-700 font-bold">PAID IN FULL</td></tr>
+                  <tr><td colSpan={span + 1} className="pt-1 text-right text-[11px] text-teal-700 font-bold">{billNetTotal(inv) === 0 ? 'ALL ITEMS RETURNED' : 'PAID IN FULL'}</td></tr>
                 )}
-                {customer && customer.totalDue > 0 && <tr><td colSpan={4} className="pt-3 text-right text-[11px] text-gray-500">Total outstanding on account: Rs. {money(customer.totalDue)}</td></tr>}
+                {customer && customer.totalDue > 0 && <tr><td colSpan={span + 1} className="pt-3 text-right text-[11px] text-gray-500">Total outstanding on account: Rs. {money(customer.totalDue)}</td></tr>}
               </tfoot>
             </table>
             {inv.notes && <div className="mt-4 text-[11px] text-gray-600">Note: {inv.notes}</div>}
             <div className="grid grid-cols-2 gap-10 mt-14 text-xs">
               <div className="border-t border-gray-900 pt-2">For {COMPANY.name}</div>
               <div className="border-t border-gray-900 pt-2">Received by</div>
+            </div>
+          </>
+        ),
+      };
+    }
+
+    if (request.type === 'bill_challan') {
+      const inv = invoices.find((i) => i.id === request.invoiceId);
+      if (!inv) return null;
+      const customer = customers.find((c) => c.id === inv.customerId);
+      const back = returnedQtyByLine(returns, inv.id);
+      const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+      const rows = inv.items.map((it) => ({ it, qty: Math.max(0, Math.round((lineQty(it) - (back.get(it.id) || 0)) * 100) / 100) })).filter((r) => r.qty > 0);
+      return {
+        title: 'DELIVERY CHALLAN',
+        number: `Challan for Invoice #${inv.invoiceNumber.replace(/^INV-/, '')}`,
+        date: todayISO(),
+        body: (
+          <>
+            <div className="grid grid-cols-2 gap-6 text-xs">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Deliver to</div>
+                <div className="font-bold text-sm">{inv.customerName}</div>
+                {inv.customerCompany && inv.customerCompany !== inv.customerName && <div>{inv.customerCompany}</div>}
+                {(inv.customerAddress || customer?.address) && <div>{inv.customerAddress || customer?.address}</div>}
+                <div className="font-mono">{inv.customerPhone || customer?.phone}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Delivery</div>
+                <div>Bill: <b className="font-mono">{inv.invoiceNumber}</b> ({formatDate(inv.issueDate)})</div>
+                <div>Driver: <b>{request.driver || '____________________'}</b></div>
+                <div>Vehicle no.: <b className="font-mono">{request.vehicle || '____________________'}</b></div>
+              </div>
+            </div>
+            <table className="w-full text-xs mt-6 border-collapse">
+              <thead>
+                <tr className="bg-gray-800 text-white text-[10px] uppercase tracking-widest">
+                  <th className="text-left py-2 px-3 w-10">#</th>
+                  <th className="text-left py-2 px-3">Item</th>
+                  <th className="text-right py-2 px-3">Quantity</th>
+                  <th className="text-right py-2 px-3 w-28">Checked</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(({ it, qty }, i) => (
+                  <tr key={it.id} className="border-b border-gray-200">
+                    <td className="py-3 px-3 font-mono">{i + 1}</td>
+                    <td className="py-3 px-3 font-bold">{it.productName}{batchLines(it).map((b) => <div key={b} className="text-[10px] font-normal text-gray-600">{b}</div>)}</td>
+                    <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap">{money(qty)} {it.unit || ''}</td>
+                    <td className="py-3 px-3 text-right text-gray-400">☐</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr><td colSpan={2} className="pt-3 text-right font-bold uppercase tracking-widest text-[10px] text-gray-600">Total pieces</td><td className="pt-3 text-right font-mono font-extrabold px-3">{money(rows.reduce((a, r) => a + r.qty, 0))}</td><td /></tr>
+              </tfoot>
+            </table>
+            <div className="mt-4 text-[11px] text-gray-600">Goods received in good condition and correct quantity.</div>
+            <div className="grid grid-cols-3 gap-8 mt-14 text-xs">
+              <div className="border-t border-gray-900 pt-2">For {COMPANY.name}</div>
+              <div className="border-t border-gray-900 pt-2">Driver</div>
+              <div className="border-t border-gray-900 pt-2">Received by (name &amp; signature)</div>
             </div>
           </>
         ),
@@ -427,6 +503,60 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       const q = quotations.find((x) => x.id === request.quotationId);
       if (!q) return null;
       const cust = customers.find((c) => c.id === q.customerId);
+      if (q.items?.length) {
+        const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+        const lines = quotationLines(q);
+        return {
+          title: 'QUOTATION',
+          number: q.quoteNumber,
+          date: q.createdAt,
+          body: (
+            <>
+              <div className="grid grid-cols-2 gap-6 text-xs">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Quotation for</div>
+                  <div className="font-bold text-sm">{cust?.name}</div>
+                  {cust?.company && cust.company !== cust.name && <div>{cust.company}</div>}
+                  {cust?.address && <div>{cust.address}</div>}
+                  <div className="font-mono">{cust?.phone}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Valid until</div>
+                  <div className="font-bold text-sm">{formatDate(q.validUntil)}</div>
+                </div>
+              </div>
+              <table className="w-full text-xs mt-6 border-collapse">
+                <thead>
+                  <tr className="bg-gray-800 text-white text-[10px] uppercase tracking-widest">
+                    <th className="text-left py-2 px-3">Item</th>
+                    <th className="text-right py-2 px-3">Qty</th>
+                    <th className="text-right py-2 px-3">Price</th>
+                    <th className="text-right py-2 px-3">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((l, i) => (
+                    <tr key={i} className="border-b border-gray-200">
+                      <td className="py-3 px-3 font-bold">{l.productName}</td>
+                      <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(l.qty)}{l.unit && l.unit !== 'pcs' ? ` ${l.unit}` : ''}</td>
+                      <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(l.unitPrice)}</td>
+                      <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap">{money(l.qty * l.unitPrice)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr><td colSpan={3} className="pt-4 text-right font-bold uppercase tracking-widest text-[10px] text-gray-600">Total</td><td className="pt-4 text-right font-mono font-extrabold text-base px-3 whitespace-nowrap">Rs. {money(quotationTotal(lines))}</td></tr>
+                </tfoot>
+              </table>
+              <div className="mt-4 text-[11px] text-gray-600">Prices are good until <b>{formatDate(q.validUntil)}</b>{settings.taxRatePct ? `; ${settings.taxLabel || 'sales tax'} ${settings.taxRatePct}% is added on the bill` : ''}.{q.notes ? ` ${q.notes}` : ''}</div>
+              <div className="grid grid-cols-2 gap-10 mt-14 text-xs">
+                <div className="border-t border-gray-900 pt-2">For {COMPANY.name}</div>
+                <div className="border-t border-gray-900 pt-2">Accepted by customer</div>
+              </div>
+            </>
+          ),
+        };
+      }
       const prod = products.find((p) => p.id === q.productId);
       return simpleDoc({ title: 'QUOTATION', number: q.quoteNumber, date: q.createdAt, partyLabel: 'Quotation for', party: cust, lines: [{ label: prod?.name || 'Goods', sub: prod?.category, kg: q.kg, rate: q.pricePerKg, amount: q.amount }], footer: <>Valid until <b>{formatDate(q.validUntil)}</b>.{q.notes ? ` ${q.notes}` : ''} Prices exclusive of {settings.taxLabel || 'sales tax'}{settings.taxRatePct ? ` (${settings.taxRatePct}%)` : ''}.</>, signatures: [`For ${COMPANY.name}`, 'Accepted by customer'] });
     }
@@ -440,6 +570,66 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
     if (request.type === 'note') {
       const r = returns.find((x) => x.id === request.returnId);
       if (!r) return null;
+      if (r.kind === 'sales' && r.items?.length) {
+        const inv = invoices.find((i) => i.id === r.invoiceId);
+        const cust = customers.find((c) => c.id === r.customerId);
+        const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+        const tax = r.taxAmount || 0;
+        const refund = r.refundAmount || 0;
+        return {
+          title: 'CREDIT NOTE',
+          number: r.returnNumber,
+          date: r.date,
+          body: (
+            <>
+              <div className="grid grid-cols-2 gap-6 text-xs">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Credit to</div>
+                  <div className="font-bold text-sm">{cust?.name || inv?.customerName}</div>
+                  {cust?.address && <div>{cust.address}</div>}
+                  <div className="font-mono">{cust?.phone || inv?.customerPhone}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Against bill</div>
+                  <div className="font-bold text-sm font-mono">{inv?.invoiceNumber || '—'}</div>
+                  {inv && <div>{formatDate(inv.issueDate)}</div>}
+                </div>
+              </div>
+              <table className="w-full text-xs mt-6 border-collapse">
+                <thead>
+                  <tr className="bg-gray-800 text-white text-[10px] uppercase tracking-widest">
+                    <th className="text-left py-2 px-3">Item returned</th>
+                    <th className="text-right py-2 px-3">Qty</th>
+                    <th className="text-right py-2 px-3">Price</th>
+                    <th className="text-right py-2 px-3">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {r.items.map((l, i) => (
+                    <tr key={i} className="border-b border-gray-200">
+                      <td className="py-3 px-3 font-bold">{l.productName}</td>
+                      <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(l.qty)}{l.unit && l.unit !== 'pcs' ? ` ${l.unit}` : ''}</td>
+                      <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(l.unitPrice)}</td>
+                      <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap">{money(l.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  {tax > 0 && <tr><td colSpan={3} className="pt-4 text-right text-[11px] text-gray-600">{settings.taxLabel || 'Sales Tax'}</td><td className="pt-4 text-right font-mono px-3">{money(tax)}</td></tr>}
+                  <tr><td colSpan={3} className="pt-3 text-right font-bold uppercase tracking-widest text-[10px] text-gray-600">Total credit</td><td className="pt-3 text-right font-mono font-extrabold text-base px-3 whitespace-nowrap">Rs. {money(r.amount)}</td></tr>
+                  {refund > 0 && <tr><td colSpan={3} className="pt-1 text-right text-[11px] text-gray-600">Paid back ({r.refundMethod || 'Cash'})</td><td className="pt-1 text-right font-mono px-3">{money(refund)}</td></tr>}
+                  {r.amount - refund > 0.005 && <tr><td colSpan={3} className="pt-1 text-right text-[11px] text-gray-600">Taken off your account</td><td className="pt-1 text-right font-mono px-3">{money(r.amount - refund)}</td></tr>}
+                </tfoot>
+              </table>
+              {r.reason && <div className="mt-4 text-[11px] text-gray-600">Reason: {r.reason}</div>}
+              <div className="grid grid-cols-2 gap-10 mt-14 text-xs">
+                <div className="border-t border-gray-900 pt-2">For {COMPANY.name}</div>
+                <div className="border-t border-gray-900 pt-2">Customer</div>
+              </div>
+            </>
+          ),
+        };
+      }
       const party = r.kind === 'sales' ? customers.find((c) => c.id === r.customerId) : suppliers.find((s) => s.id === r.supplierId);
       const prod = products.find((p) => p.id === r.productId);
       return simpleDoc({ title: r.kind === 'sales' ? 'CREDIT NOTE' : 'DEBIT NOTE', number: r.returnNumber, date: r.date, partyLabel: r.kind === 'sales' ? 'Credit to customer' : 'Debit against supplier', party: party, lines: [{ label: `${prod?.name || 'Goods'} returned`, sub: r.reason, kg: r.kg, rate: r.pricePerKg, amount: r.amount }], footer: <>{r.kind === 'sales' ? 'This amount has been credited to your account.' : 'This amount has been deducted from the balance payable to you.'}</>, signatures: [`For ${COMPANY.name}`, r.kind === 'sales' ? 'Customer' : 'Supplier'] });
@@ -596,7 +786,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               <div className="mt-6">{content.body}</div>
               <div className="mt-10 pt-3 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-500">
                 <span>Generated by {COMPANY.name} on {formatDate(todayISO())}{currentUser ? ` by ${currentUser.name}` : ''}</span>
-                <span>{request.type === 'bill' || request.type === 'daily_sheet' || request.type === 'bank_reconciliation' || isAccountingPrint(request) ? 'All amounts in PKR (Rs.)' : 'All quantities in kg • amounts in PKR'}</span>
+                <span>{request.type === 'bill' || request.type === 'bill_challan' || (request.type === 'note' && returns.find((x) => x.id === request.returnId)?.items?.length) || (request.type === 'quotation' && quotations.find((x) => x.id === request.quotationId)?.items?.length) || request.type === 'daily_sheet' || request.type === 'bank_reconciliation' || isAccountingPrint(request) ? 'All amounts in PKR (Rs.)' : 'All quantities in kg • amounts in PKR'}</span>
               </div>
             </>
           ) : (

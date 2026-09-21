@@ -354,6 +354,7 @@ const SOURCE_LABEL: Record<CashMovement['source'], string> = {
   supplier_payment: 'Supplier payment',
   expense: 'Expense',
   manual: 'Manual entry',
+  customer_refund: 'Refund to customer',
 };
 
 export const CashBookPanel: React.FC<{ onDownload?: (f: string) => void }> = ({ onDownload }) => {

@@ -101,7 +101,8 @@ export const buildDailySheet = (src: DailySheetSources, date: string): DailyShee
     supplierPayments: todays.filter((m) => m.source === 'supplier_payment'),
     expenses: groupExpenses(src.expenses.filter((e) => e.date === date)),
     // A cash<->bank transfer has two legs; show it once (the "out" leg carries the direction in its text).
-    other: todays.filter((m) => m.source === 'manual').filter((m, _, arr) => {
+    // Refunds for returned goods are listed here too (money out that is not an expense).
+    other: todays.filter((m) => m.source === 'manual' || m.source === 'customer_refund').filter((m, _, arr) => {
       const entry = src.cashEntries.find((c) => c.id === m.sourceId);
       if (!entry?.pairId) return true;
       return m.direction === 'out' || !arr.some((o) => o.direction === 'out' && src.cashEntries.find((c) => c.id === o.sourceId)?.pairId === entry.pairId);

@@ -16,6 +16,9 @@
  *                                      Dr COGS 5000 / Cr Inventory 1200 at weighted purchase cost
  *  - Customer payment                  Dr Cash 1000 or Bank 1010 (by method) Cr Receivable 1100
  *  - Sales return (credit note)        Dr Sales returns 4020               Cr Receivable 1100 (+ stock back at cost)
+ *                                      Dr Sales tax payable 2100 for the tax part of a bill return
+ *  - Refund paid for a return          Dr Receivable 1100                  Cr Cash 1000 / Bank 1010
+ *  - Line discounts on a bill          Dr Sales discounts 4010 (with the bill-level discount)
  *  - Purchase / stock received         Dr Inventory 1200                   Cr Payable 2000
  *  - Supplier payment                  Dr Payable 2000                     Cr Cash / Bank
  *  - Purchase return (debit note)      Dr Payable 2000                     Cr Inventory 1200
@@ -388,7 +391,8 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
           billId = inv?.id || l.sourceId;
           b.dr(ACC.RECEIVABLE, debit, who);
           if (inv) {
-            const discount = Number(inv.discount) || 0;
+            // Bill-level discount plus each line's own discount: sales are posted gross, discounts separately.
+            const discount = (Number(inv.discount) || 0) + inv.items.reduce((a, it) => a + (Number(it.discountAmount) || 0), 0);
             const tax = Number(inv.taxAmount) || 0;
             const charges = (Number(inv.freightCharges) || 0) + (Number(inv.handlingCharges) || 0);
             b.dr(ACC.SALES_DISCOUNTS, discount).cr(ACC.SALES_TAX, tax).cr(ACC.FREIGHT_INCOME, charges);
@@ -418,6 +422,11 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
             b.cr(ACC.SALES, debit);
           }
           memo = `Dispatch ${l.referenceId} billed — ${who}`;
+        } else if (l.type === 'refund_paid') {
+          sourceType = 'customer_refund';
+          if (l.sourceId && invById.has(l.sourceId)) billId = l.sourceId;
+          b.dr(ACC.RECEIVABLE, debit, who).cr(moneyAccount(methodOf.get(l.id) ?? l.method, l.date), debit);
+          memo = `Refund to ${who}${l.referenceId ? ` (${l.referenceId})` : ''}`;
         } else {
           b.dr(ACC.RECEIVABLE, debit, who).cr(ACC.SALES, debit);
           memo = `${l.description || 'Invoice'} — ${who}`;
@@ -431,9 +440,19 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
           if (debit <= 0) memo = `Received from ${who}${l.referenceId ? ` (${l.referenceId})` : ''}`;
         } else if (l.type === 'credit_note') {
           sourceType = 'sales_return';
-          b.dr(ACC.SALES_RETURNS, credit).cr(ACC.RECEIVABLE, credit, who);
           const r = returnByNumber.get(l.referenceId);
-          if (r) {
+          // Tax on a bill return is handed back too: it comes off Sales tax payable, not Sales returns.
+          const tax = r?.items?.length ? Math.min(credit, round2(Number(r.taxAmount) || 0)) : 0;
+          b.dr(ACC.SALES_RETURNS, credit - tax).dr(ACC.SALES_TAX, tax).cr(ACC.RECEIVABLE, credit, who);
+          if (r?.invoiceId) billId = r.invoiceId;
+          if (r?.items?.length) {
+            // Bill return: stock comes back at the cost it left at (captured on the bill line).
+            const value = r.items.reduce((a, it) => {
+              const unitCost = it.costPricePerKg && it.costPricePerKg > 0 ? it.costPricePerKg : productCost(it.productId, r.date);
+              return a + (unitCost ? unitCost * it.qty : 0);
+            }, 0);
+            b.dr(ACC.INVENTORY, value, 'Returned stock at cost').cr(ACC.COGS, value);
+          } else if (r) {
             const cost = productCost(r.productId, r.date);
             if (cost != null) b.dr(ACC.INVENTORY, cost * r.kg, 'Returned stock at cost').cr(ACC.COGS, cost * r.kg);
           }
@@ -559,7 +578,10 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
   // Bills made in the app took stock item by item (trading invoices carry no qty: stock left via dispatches).
   invoices.forEach((i) => i.items.forEach((it) => { if (it.qty != null) move(it.productId, -(it.qty || 0)); }));
   dispatches.forEach((d) => move(d.productId, -d.kg));
-  returns.forEach((r) => move(r.productId, r.kind === 'sales' ? r.kg : -r.kg));
+  returns.forEach((r) => {
+    if (r.items?.length) r.items.forEach((it) => move(it.productId, r.kind === 'sales' ? it.qty : -it.qty));
+    else move(r.productId, r.kind === 'sales' ? r.kg : -r.kg);
+  });
   adjustments.forEach((a) => move(a.productId, a.deltaKg));
   products.forEach((p) => {
     const cost = productCost(p.id, earliest);

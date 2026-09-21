@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Godown, Invoice, Product, Purchase, StockAdjustment, StockBatch, StockTransfer, Supplier } from '../types';
+import { BatchAllocation, Godown, Invoice, Product, Purchase, StockAdjustment, StockBatch, StockTransfer, Supplier } from '../types';
 import {
   BillStockPlan,
   MAIN_GODOWN,
@@ -13,6 +13,7 @@ import {
   reconcileBatches,
   restoreBillRows,
   round2,
+  takeBackReturnRows,
   withMainGodown,
 } from '../utils/inventory';
 
@@ -237,6 +238,19 @@ export const useInventoryStore = (deps: Deps) => {
     setStockBatches((prev) => restoreBillRows(prev, inv.items, storedGodowns, today()));
   };
 
+  // ---- hooks used by sales returns against a bill ----
+  type ReturnRows = { productId: string; qty: number; godownId?: string; batches?: BatchAllocation[] }[];
+  /** Put returned goods back into the batches / godown they were sold from. */
+  const restoreReturn = (lines: ReturnRows) => {
+    if (!lines.some((l) => l.batches?.length || l.godownId)) return;
+    setStockBatches((prev) => restoreBillRows(prev, lines, storedGodowns, today()));
+  };
+  /** A deleted return takes its goods back out of those batches / godown. */
+  const takeBackReturn = (lines: ReturnRows) => {
+    if (!lines.some((l) => l.batches?.length || l.godownId)) return;
+    setStockBatches((prev) => takeBackReturnRows(prev, lines, storedGodowns));
+  };
+
   // ---- load / backup / reset ----
   /**
    * Replace local inventory with loaded data. `keepLocalIfEmpty` (cloud load): an empty cloud table
@@ -274,6 +288,6 @@ export const useInventoryStore = (deps: Deps) => {
   };
 
   const api: InventoryApi = { godowns, stockBatches, stockTransfers, addGodown, updateGodown, deleteGodown, receiveStock, transferStock };
-  return { api, planBill, applyBill, restoreBill, hydrate, backupData, reset, purgeSetters, removePurchaseRows };
+  return { api, planBill, applyBill, restoreBill, restoreReturn, takeBackReturn, hydrate, backupData, reset, purgeSetters, removePurchaseRows };
 };
 

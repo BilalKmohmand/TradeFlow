@@ -25,6 +25,7 @@ import {
   Godown,
   StockBatch,
   StockTransfer,
+  CustomerAgreedRate,
 } from '../types';
 import type { Account, JournalEntry } from '../utils/accounting';
 
@@ -60,6 +61,8 @@ export interface AppData {
   /** Accounts: manual journal entries and custom accounts; null when the table does not exist yet (migration v10 not run). */
   journalEntries: JournalEntry[] | null;
   accounts: Account[] | null;
+  /** Customer-specific item rates; null when the table does not exist yet (migration v13 not run). */
+  customerAgreedRates: CustomerAgreedRate[] | null;
 }
 
 export type TableName =
@@ -89,7 +92,8 @@ export type TableName =
   | 'stock_batches'
   | 'stock_transfers'
   | 'journal_entries'
-  | 'accounts';
+  | 'accounts'
+  | 'customer_agreed_rates';
 
 export const ALL_TABLES: TableName[] = [
   'customers',
@@ -119,6 +123,7 @@ export const ALL_TABLES: TableName[] = [
   'stock_transfers',
   'journal_entries',
   'accounts',
+  'customer_agreed_rates',
 ];
 
 // ---------------------------------------------------------------------------
@@ -191,7 +196,7 @@ const stripLegacy = <T,>(rows: T[]): T[] =>
   });
 
 /** Tables that may be missing on a project that has not run the migration yet. */
-const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'bank_statement_lines', 'bank_reconciliations', 'godowns', 'stock_batches', 'stock_transfers', 'journal_entries', 'accounts'];
+const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'bank_statement_lines', 'bank_reconciliations', 'godowns', 'stock_batches', 'stock_transfers', 'journal_entries', 'accounts', 'customer_agreed_rates'];
 
 /** Read a whole table in pages (PostgREST caps a single select at 1000 rows). */
 const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { message: string } | null }> => {
@@ -207,7 +212,7 @@ const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { m
 };
 
 export const loadAllData = async (): Promise<AppData> => {
-  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, cashEntries, settings, quotations, purchaseOrders, returns, adjustments, tasks, invoices, ledger, whatsappMessages, bankStatementLines, bankReconciliations, godowns, stockBatches, stockTransfers, journalEntries, accounts] =
+  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, cashEntries, settings, quotations, purchaseOrders, returns, adjustments, tasks, invoices, ledger, whatsappMessages, bankStatementLines, bankReconciliations, godowns, stockBatches, stockTransfers, journalEntries, accounts, agreedRates] =
     await Promise.all([
       fetchAll('customers'),
       fetchAll('suppliers'),
@@ -236,6 +241,7 @@ export const loadAllData = async (): Promise<AppData> => {
       fetchAll('stock_transfers'),
       fetchAll('journal_entries'),
       fetchAll('accounts'),
+      fetchAll('customer_agreed_rates'),
     ]);
 
   const maybeThrow = (result: { error?: { message: string } | null }, label: TableName) => {
@@ -275,6 +281,7 @@ export const loadAllData = async (): Promise<AppData> => {
   maybeThrow(stockTransfers, 'stock_transfers');
   maybeThrow(journalEntries, 'journal_entries');
   maybeThrow(accounts, 'accounts');
+  maybeThrow(agreedRates, 'customer_agreed_rates');
 
   return {
     customers: (customers.data || []) as Customer[],
@@ -304,6 +311,7 @@ export const loadAllData = async (): Promise<AppData> => {
     stockTransfers: stockTransfers.error ? null : ((stockTransfers.data || []) as StockTransfer[]),
     journalEntries: journalEntries.error ? null : ((journalEntries.data || []) as JournalEntry[]),
     accounts: accounts.error ? null : ((accounts.data || []) as Account[]),
+    customerAgreedRates: agreedRates.error ? null : ((agreedRates.data || []).map((r: any) => ({ ...r, agreedRatePerKg: num(r.agreedRatePerKg) })) as CustomerAgreedRate[]),
   };
 };
 

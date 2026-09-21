@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { FilePlus2, Search, Printer, Download } from 'lucide-react';
+import { FilePlus2, Search, Printer, Download, FileText } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
 import { cardCls, inputCls, primaryBtn, secondaryBtn, rs } from '../../components/billing/ui';
@@ -7,19 +7,24 @@ import { filterBills } from '../../utils/billing';
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 import { downloadCsvFile } from '../../utils/listTools';
+import { billNetTotal } from '../../utils/salesDocs';
+import { ReturnsList, QuotationsList } from '../../components/billing/SalesDocsLists';
 
 type Period = 'today' | 'week' | 'month' | 'all';
 
 /** Every bill, newest first, with search and quick period filters. Tap a row to open it. */
 export const BillsScreen: React.FC = () => {
-  const { invoices, setPrintRequest } = useTrading();
+  const { invoices, setPrintRequest, returns, quotations } = useTrading();
   const ui = useBillingUI();
+  const [tab, setTab] = useState<'bills' | 'returns' | 'quotes'>('bills');
+  const billReturnCount = returns.filter((r) => r.kind === 'sales' && r.invoiceId).length;
+  const openQuoteCount = quotations.filter((q) => q.items?.length && q.status !== 'converted' && q.status !== 'rejected').length;
   const [query, setQuery] = useState('');
   const [period, setPeriod] = useState<Period>('today');
   const [unpaidOnly, setUnpaidOnly] = useState(false);
   const today = todayISO();
   const rows = useMemo(() => filterBills(invoices, query, period, today, unpaidOnly), [invoices, query, period, today, unpaidOnly]);
-  const total = rows.reduce((a, i) => a + i.totalAmount, 0);
+  const total = rows.reduce((a, i) => a + billNetTotal(i), 0);
   const due = rows.reduce((a, i) => a + i.balanceDue, 0);
 
   const exportCsv = () =>
@@ -43,8 +48,21 @@ export const BillsScreen: React.FC = () => {
           <h1 className="text-2xl font-bold text-[#111827] dark:text-white">Bills</h1>
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{rows.length} bill{rows.length === 1 ? '' : 's'} • {rs(total)}{due > 0 ? ` • ${rs(due)} still due` : ''}</p>
         </div>
-        <button type="button" onClick={() => ui.newBill()} className={primaryBtn}><FilePlus2 className="w-4 h-4 text-teal-400 dark:text-teal-700" /> New Bill</button>
+        <div className="flex gap-2">
+          {tab === 'quotes' && <button type="button" onClick={() => ui.newQuote()} className={secondaryBtn}><FileText className="w-4 h-4" /> New Quotation</button>}
+          <button type="button" onClick={() => ui.newBill()} className={primaryBtn}><FilePlus2 className="w-4 h-4 text-teal-400 dark:text-teal-700" /> New Bill</button>
+        </div>
       </div>
+
+      <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="Bills, returns and quotations">
+        {([['bills', 'Bills'], ['returns', `Returns${billReturnCount ? ` (${billReturnCount})` : ''}`], ['quotes', `Quotations${openQuoteCount ? ` (${openQuoteCount})` : ''}`]] as const).map(([id, label]) => (
+          <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`px-4 py-2 rounded-2xl text-sm font-bold whitespace-nowrap border ${tab === id ? 'bg-teal-700 text-white border-transparent' : 'bg-white dark:bg-[#101A26] border-[#E5E5E1] dark:border-[#203248] text-[#6B7280] dark:text-[#94A3B8]'}`}>{label}</button>
+        ))}
+      </div>
+
+      {tab === 'returns' && <ReturnsList />}
+      {tab === 'quotes' && <QuotationsList />}
+      {tab === 'bills' && (<>
 
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
@@ -74,7 +92,8 @@ export const BillsScreen: React.FC = () => {
                     <div className="text-[11px] text-[#8E9299] truncate"><span className="sm:hidden">{i.invoiceNumber} • </span>{formatDate(i.issueDate)} • {i.items.map((it) => `${it.productName} × ${it.qty ?? it.kg}`).join(', ')}</div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="font-mono font-bold text-sm text-[#111827] dark:text-white">{rs(i.totalAmount)}</div>
+                    <div className="font-mono font-bold text-sm text-[#111827] dark:text-white">{rs(billNetTotal(i))}</div>
+                    {(i.returnedAmount || 0) > 0 && <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300">{rs(i.returnedAmount || 0)} returned</div>}
                     <div className={`text-[11px] font-bold ${i.balanceDue > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{i.balanceDue > 0 ? `${rs(i.balanceDue)} due` : 'Paid'}</div>
                   </div>
                 </button>
@@ -84,6 +103,7 @@ export const BillsScreen: React.FC = () => {
           </ul>
         )}
       </div>
+      </>)}
     </div>
   );
 };
