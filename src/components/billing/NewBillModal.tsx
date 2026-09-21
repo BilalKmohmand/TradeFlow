@@ -11,6 +11,7 @@ import { lineDiscountAmount, quotationLines } from '../../utils/salesDocs';
 import { customerSnapshot, lastRateFor, resolveBillPayments, PaymentPart } from '../../utils/billing';
 import { hasPack, formatPackQty, plural, baseToPacks } from '../../utils/packUnits';
 import { QuickSelect, PickOption } from './QuickPick';
+import { ScanButton } from './purchasing/Barcodes';
 import { ChequeFieldsInput, ChequeFields, emptyChequeFields } from './ChequeForms';
 
 interface Row {
@@ -85,7 +86,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const sortedCustomers = useMemo(() => [...customers].sort((a, b) => a.name.localeCompare(b.name)), [customers]);
   const sortedProducts = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name)), [products]);
   const customerOptions: PickOption[] = useMemo(() => sortedCustomers.map((c) => ({ value: c.id, name: c.name, code: c.code, extra: c.phone })), [sortedCustomers]);
-  const productOptions: PickOption[] = useMemo(() => sortedProducts.map((p) => ({ value: p.id, name: p.name, code: p.code })), [sortedProducts]);
+  const productOptions: PickOption[] = useMemo(() => sortedProducts.map((p) => ({ value: p.id, name: p.name, code: p.code, barcode: p.barcode })), [sortedProducts]);
 
   const setRow = (key: string, patch: Partial<Row>) => setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   /** Price per base unit for an item: the customer's agreed rate when there is one, else the item's list price. */
@@ -138,6 +139,15 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
         };
       })
     );
+  /** A scanned item (camera or USB scanner): one more on its line, else the first empty line, else a new line. */
+  const addScanned = (productId: string) => {
+    const same = rows.find((r) => r.productId === productId);
+    if (same) return setRow(same.key, { qty: num4((parseFloat(same.qty) || 0) + 1) });
+    const empty = rows.find((r) => !r.productId);
+    if (empty) return pickProduct(empty.key, productId);
+    const { base, priceFrom } = priceFor(productId, newCustomer ? '' : customer);
+    setRows((prev) => [...prev, newRow({ productId, price: shownPrice(productId, base, false), priceFrom })]);
+  };
   const removeRow = (key: string) => setRows((prev) => (prev.length > 1 ? prev.filter((r) => r.key !== key) : prev));
   const addRow = () => {
     const row = newRow();
@@ -465,7 +475,10 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               );
             })}
           </div>
-          <button type="button" onClick={addRow} title="Add a line (+ or Alt+N)" className="mt-2 inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-300 hover:underline"><Plus className="w-4 h-4" /> Add another item</button>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <button type="button" onClick={addRow} title="Add a line (+ or Alt+N)" className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-300 hover:underline"><Plus className="w-4 h-4" /> Add another item</button>
+            <ScanButton onPick={(p) => addScanned(p.id)} keepOpen />
+          </div>
           {products.length === 0 && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">No items yet. Add your products with their prices on the Items screen first.</p>}
         </div>
 

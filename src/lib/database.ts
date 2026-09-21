@@ -27,6 +27,8 @@ import {
   StockTransfer,
   CustomerAgreedRate,
   Cheque,
+  SupplierBill,
+  SupplierClaim,
 } from '../types';
 import type { Account, JournalEntry } from '../utils/accounting';
 
@@ -66,6 +68,9 @@ export interface AppData {
   customerAgreedRates: CustomerAgreedRate[] | null;
   /** Post-dated cheque register; null when the table does not exist yet (migration v14 not run). */
   cheques: Cheque[] | null;
+  /** Supplier bills and claims; null when the tables do not exist yet (migration v20 not run). */
+  supplierBills: SupplierBill[] | null;
+  supplierClaims: SupplierClaim[] | null;
 }
 
 export type TableName =
@@ -97,7 +102,9 @@ export type TableName =
   | 'journal_entries'
   | 'accounts'
   | 'customer_agreed_rates'
-  | 'cheques';
+  | 'cheques'
+  | 'supplier_bills'
+  | 'supplier_claims';
 
 export const ALL_TABLES: TableName[] = [
   'customers',
@@ -129,6 +136,8 @@ export const ALL_TABLES: TableName[] = [
   'accounts',
   'customer_agreed_rates',
   'cheques',
+  'supplier_bills',
+  'supplier_claims',
 ];
 
 // ---------------------------------------------------------------------------
@@ -201,7 +210,7 @@ const stripLegacy = <T,>(rows: T[]): T[] =>
   });
 
 /** Tables that may be missing on a project that has not run the migration yet. */
-const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'bank_statement_lines', 'bank_reconciliations', 'godowns', 'stock_batches', 'stock_transfers', 'journal_entries', 'accounts', 'customer_agreed_rates', 'cheques'];
+const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'bank_statement_lines', 'bank_reconciliations', 'godowns', 'stock_batches', 'stock_transfers', 'journal_entries', 'accounts', 'customer_agreed_rates', 'cheques', 'supplier_bills', 'supplier_claims'];
 
 /** Read a whole table in pages (PostgREST caps a single select at 1000 rows). */
 const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { message: string } | null }> => {
@@ -217,7 +226,7 @@ const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { m
 };
 
 export const loadAllData = async (): Promise<AppData> => {
-  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, cashEntries, settings, quotations, purchaseOrders, returns, adjustments, tasks, invoices, ledger, whatsappMessages, bankStatementLines, bankReconciliations, godowns, stockBatches, stockTransfers, journalEntries, accounts, agreedRates, cheques] =
+  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, cashEntries, settings, quotations, purchaseOrders, returns, adjustments, tasks, invoices, ledger, whatsappMessages, bankStatementLines, bankReconciliations, godowns, stockBatches, stockTransfers, journalEntries, accounts, agreedRates, cheques, supplierBills, supplierClaims] =
     await Promise.all([
       fetchAll('customers'),
       fetchAll('suppliers'),
@@ -248,6 +257,8 @@ export const loadAllData = async (): Promise<AppData> => {
       fetchAll('accounts'),
       fetchAll('customer_agreed_rates'),
       fetchAll('cheques'),
+      fetchAll('supplier_bills'),
+      fetchAll('supplier_claims'),
     ]);
 
   const maybeThrow = (result: { error?: { message: string } | null }, label: TableName) => {
@@ -289,6 +300,8 @@ export const loadAllData = async (): Promise<AppData> => {
   maybeThrow(accounts, 'accounts');
   maybeThrow(agreedRates, 'customer_agreed_rates');
   maybeThrow(cheques, 'cheques');
+  maybeThrow(supplierBills, 'supplier_bills');
+  maybeThrow(supplierClaims, 'supplier_claims');
 
   return {
     customers: (customers.data || []) as Customer[],
@@ -320,6 +333,12 @@ export const loadAllData = async (): Promise<AppData> => {
     accounts: accounts.error ? null : ((accounts.data || []) as Account[]),
     customerAgreedRates: agreedRates.error ? null : ((agreedRates.data || []).map((r: any) => ({ ...r, agreedRatePerKg: num(r.agreedRatePerKg) })) as CustomerAgreedRate[]),
     cheques: cheques.error ? null : ((cheques.data || []).map((r: any) => ({ ...r, amount: num(r.amount), bankCharge: r.bankCharge == null ? undefined : num(r.bankCharge) })) as Cheque[]),
+    supplierBills: supplierBills.error
+      ? null
+      : ((supplierBills.data || []).map((r: any) => ({ ...r, amount: num(r.amount), receivedValue: num(r.receivedValue), variance: num(r.variance), otherCharges: r.otherCharges == null ? undefined : num(r.otherCharges), purchaseIds: Array.isArray(r.purchaseIds) ? r.purchaseIds : [], lines: Array.isArray(r.lines) ? r.lines : [] })) as SupplierBill[]),
+    supplierClaims: supplierClaims.error
+      ? null
+      : ((supplierClaims.data || []).map((r: any) => ({ ...r, qty: num(r.qty), rate: num(r.rate), amount: num(r.amount), acceptedAmount: r.acceptedAmount == null ? undefined : num(r.acceptedAmount) })) as SupplierClaim[]),
   };
 };
 

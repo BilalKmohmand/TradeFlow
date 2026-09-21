@@ -41,6 +41,14 @@
  *      cheque issued (ledger cheque_issued)       Dr Payable 2000             Cr Cheques issued 2050
  *      issued cheque cleared (cash entry, 2050)   Dr Cheques issued 2050      Cr Bank 1010
  *      issued cheque cancelled (cheque_returned)  Dr Cheques issued 2050      Cr Payable 2000
+ *  - Supplier bill (three-way match). Stock received is booked at the receipt rate (Dr Inventory /
+ *    Cr Payable, above). When the supplier's own bill is recorded only the difference is posted, so
+ *    the payable ends at exactly the bill amount and nothing is counted twice:
+ *      bill more than goods received (purchase_variance, debit)   Dr Purchase price differences 5150  Cr Payable 2000
+ *      bill less than goods received (purchase_variance, credit)  Dr Payable 2000  Cr Purchase price differences 5150
+ *    Inventory stays at the receipt cost (the cost bills and COGS use); the difference is a cost of sales.
+ *  - Supplier claim accepted (supplier_claim, debit note)  Dr Payable 2000  Cr Stock losses 5100
+ *    (the supplier pays for the leaked / damaged / short goods: a recovery of the stock loss)
  *  - Opening stock                     Dr Inventory 1200                   Cr Opening balance equity 3900
  *  - Customer / supplier balances that are not explained by their history (opening dues typed in
  *    when the account was created) are posted against Opening balance equity so Receivable and
@@ -138,6 +146,7 @@ export const ACC = {
   OTHER_INCOME: '4900',
   COGS: '5000',
   STOCK_LOSSES: '5100',
+  PRICE_DIFFERENCES: '5150',
   OTHER_EXPENSES: '6800',
   BANK_CHARGES: '6900',
 } as const;
@@ -186,6 +195,7 @@ export const DEFAULT_ACCOUNTS: Account[] = [
   sys('4900', 'Other income', 'income'),
   sys('5000', 'Cost of goods sold', 'expense'),
   sys('5100', 'Stock losses & adjustments', 'expense'),
+  sys('5150', 'Purchase price differences', 'expense', 'Supplier bills above (or below) the value of the goods received'),
   sys('6000', 'Day-to-day expenses', 'expense'),
   sys('6010', 'Employee expenses', 'expense'),
   sys('6020', 'Food & refreshments', 'expense'),
@@ -518,6 +528,11 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
           sourceType = 'cheque_cancelled';
           b.dr(ACC.CHEQUES_ISSUED, debit).cr(ACC.PAYABLE, debit, who);
           memo = `${l.description || 'Cheque cancelled'} — ${who}`;
+        } else if (l.type === 'purchase_variance') {
+          // Supplier bill above the goods received (already booked at the receipt rate).
+          sourceType = 'supplier_bill';
+          b.dr(ACC.PRICE_DIFFERENCES, debit, 'Bill above goods received').cr(ACC.PAYABLE, debit, who);
+          memo = `${l.description || 'Supplier bill difference'} — ${who}`;
         } else {
           sourceType = l.type === 'purchase_received' ? 'purchase' : l.type;
           b.dr(ACC.INVENTORY, debit, l.kg ? `${l.kg} received` : undefined).cr(ACC.PAYABLE, debit, who);
@@ -533,6 +548,14 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
           sourceType = 'cheque_issued';
           b.dr(ACC.PAYABLE, credit, who).cr(ACC.CHEQUES_ISSUED, credit);
           memo = `${l.description || 'Cheque issued'} — ${who}`;
+        } else if (l.type === 'purchase_variance') {
+          sourceType = 'supplier_bill';
+          b.dr(ACC.PAYABLE, credit, who).cr(ACC.PRICE_DIFFERENCES, credit, 'Bill below goods received');
+          memo = `${l.description || 'Supplier bill difference'} — ${who}`;
+        } else if (l.type === 'supplier_claim') {
+          sourceType = 'supplier_claim';
+          b.dr(ACC.PAYABLE, credit, who).cr(ACC.STOCK_LOSSES, credit, 'Claim recovered from supplier');
+          memo = `${l.description || 'Supplier claim'} — ${who}`;
         } else if (l.type === 'debit_note') {
           sourceType = 'purchase_return';
           b.dr(ACC.PAYABLE, credit, who).cr(ACC.INVENTORY, credit, 'Stock returned to supplier');

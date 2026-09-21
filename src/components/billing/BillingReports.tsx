@@ -7,6 +7,7 @@ import { formatDate } from '../../utils/formatters';
 import { downloadCsvFile } from '../../utils/listTools';
 import { AgingRow, sumAging } from '../../utils/finance';
 import { billingPayablesAging, billingReceivablesAging, profitFromBills, purchaseRegister, ProfitRow } from '../../utils/stockReports';
+import { profitByAttribute } from '../../utils/purchasing';
 
 const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 0 }).format(Math.round(n));
 const num = (n: number) => n.toLocaleString('en-PK', { maximumFractionDigits: 2 });
@@ -151,10 +152,17 @@ export const PurchaseRegisterView: React.FC<{ supplierId?: string }> = ({ suppli
 // ---------------------------------------------------------------------------
 // Profit by item and by customer (from bills)
 // ---------------------------------------------------------------------------
-const ProfitTable: React.FC<{ rows: ProfitRow[]; kind: 'item' | 'customer'; testId: string }> = ({ rows, kind, testId }) => (
+type ProfitBy = 'item' | 'customer' | 'group' | 'brand';
+const PROFIT_BY: { id: ProfitBy; label: string; col: string; count: string }[] = [
+  { id: 'item', label: 'By item', col: 'Item', count: 'Qty sold' },
+  { id: 'group', label: 'By group', col: 'Group', count: 'Items' },
+  { id: 'brand', label: 'By brand', col: 'Brand', count: 'Items' },
+  { id: 'customer', label: 'By customer', col: 'Customer', count: 'Bills' },
+];
+const ProfitTable: React.FC<{ rows: ProfitRow[]; kind: ProfitBy; testId: string }> = ({ rows, kind, testId }) => (
   <div className="overflow-x-auto">
     <table className="w-full min-w-[560px]" data-testid={testId}>
-      <thead className="bg-[#FAF9F6] dark:bg-[#162436]"><tr><th className={`${th} text-left`}>{kind === 'item' ? 'Item' : 'Customer'}</th><th className={`${th} text-right`}>{kind === 'item' ? 'Qty sold' : 'Bills'}</th><th className={`${th} text-right`}>Sales</th><th className={`${th} text-right`}>Cost</th><th className={`${th} text-right`}>Profit</th><th className={`${th} text-right`}>Margin</th></tr></thead>
+      <thead className="bg-[#FAF9F6] dark:bg-[#162436]"><tr><th className={`${th} text-left`}>{PROFIT_BY.find((x) => x.id === kind)!.col}</th><th className={`${th} text-right`}>{PROFIT_BY.find((x) => x.id === kind)!.count}</th><th className={`${th} text-right`}>Sales</th><th className={`${th} text-right`}>Cost</th><th className={`${th} text-right`}>Profit</th><th className={`${th} text-right`}>Margin</th></tr></thead>
       <tbody className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
         {rows.map((r) => (
           <tr key={r.key}>
@@ -176,11 +184,13 @@ export const ProfitView: React.FC = () => {
   const today = todayISO();
   const [from, setFrom] = useState(`${today.slice(0, 7)}-01`);
   const [to, setTo] = useState(today);
-  const [view, setView] = useState<'item' | 'customer'>('item');
+  const [view, setView] = useState<ProfitBy>('item');
   const report = useMemo(() => profitFromBills({ invoices, returns, purchases, products, customers }, from, to), [invoices, returns, purchases, products, customers, from, to]);
-  const rows = view === 'item' ? report.byItem : report.byCustomer;
+  // Group / brand: the item rows rolled up, so the totals are the same as by item.
+  const rows = view === 'item' ? report.byItem : view === 'customer' ? report.byCustomer : profitByAttribute(report.byItem, products, view);
+  const by = PROFIT_BY.find((x) => x.id === view)!;
   const exportCsv = () =>
-    downloadCsvFile(`sarmaya-profit-by-${view}-${from}-to-${to}.csv`, [view === 'item' ? 'Item' : 'Customer', view === 'item' ? 'Qty sold' : 'Bills', 'Unit', 'Sales', 'Cost', 'Profit', 'Margin %'], rows.map((r) => [r.name, view === 'item' ? r.qty || 0 : r.bills || 0, view === 'item' ? r.unit || '' : '', r.sales, r.cost, r.profit, r.marginPct ?? '']));
+    downloadCsvFile(`sarmaya-profit-by-${view}-${from}-to-${to}.csv`, [by.col, by.count, 'Unit', 'Sales', 'Cost', 'Profit', 'Margin %'], rows.map((r) => [r.name, view === 'item' ? r.qty || 0 : r.bills || 0, view === 'item' ? r.unit || '' : '', r.sales, r.cost, r.profit, r.marginPct ?? '']));
   return (
     <div className="space-y-4" data-testid="profit-report">
       <div className="flex flex-wrap items-end gap-3">
@@ -199,12 +209,11 @@ export const ProfitView: React.FC = () => {
       </div>
       {report.totals.uncosted > 0 && <p className="text-xs text-amber-700 dark:text-amber-300">{report.totals.uncosted} bill line{report.totals.uncosted === 1 ? ' has' : 's have'} no cost (the item was never received with a cost). Profit on those is shown in full; set a cost price on the item to fix it.</p>}
       <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Sales are bill lines less any bill discount (tax and delivery charges are left out). Cost is what the stock cost when it was sold — the same figure your accounts use. Goods customers returned come off both.</p>
-      <div role="tablist" aria-label="Profit by" className="flex gap-1.5">
-        <button type="button" role="tab" aria-selected={view === 'item'} onClick={() => setView('item')} className={chip(view === 'item')}>By item</button>
-        <button type="button" role="tab" aria-selected={view === 'customer'} onClick={() => setView('customer')} className={chip(view === 'customer')}>By customer</button>
+      <div role="tablist" aria-label="Profit by" className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]">
+        {PROFIT_BY.map((x) => <button key={x.id} type="button" role="tab" aria-selected={view === x.id} onClick={() => setView(x.id)} className={chip(view === x.id)}>{x.label}</button>)}
       </div>
       <div className={`${cardCls} overflow-hidden`}>
-        {rows.length === 0 ? <p className="p-8 text-center text-sm text-[#8E9299]">No bills in these dates.</p> : <ProfitTable rows={rows} kind={view} testId={view === 'item' ? 'profit-by-item' : 'profit-by-customer'} />}
+        {rows.length === 0 ? <p className="p-8 text-center text-sm text-[#8E9299]">No bills in these dates.</p> : <ProfitTable rows={rows} kind={view} testId={`profit-by-${view}`} />}
       </div>
     </div>
   );

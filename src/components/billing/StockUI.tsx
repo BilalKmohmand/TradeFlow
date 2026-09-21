@@ -5,9 +5,11 @@ import { AgingModal } from './BillingReports';
 import { useBillingUI } from './BillingUI';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingShortcuts } from './useBillingShortcuts';
+import { PurchasingUIProvider } from './purchasing/PurchasingUI';
 
 interface StockUI {
-  receiveStock: (opts?: { productId?: string | null; supplierId?: string | null }) => void;
+  /** With purchaseOrderId the dialog is filled from the order (what is still to come, at the order rates). */
+  receiveStock: (opts?: { productId?: string | null; supplierId?: string | null; purchaseOrderId?: string | null }) => void;
   adjustStock: (productId?: string | null) => void;
   itemHistory: (productId: string) => void;
   purchaseReturn: (opts?: { supplierId?: string | null; productId?: string | null }) => void;
@@ -17,7 +19,7 @@ interface StockUI {
 const Ctx = createContext<StockUI | null>(null);
 
 type Open =
-  | { kind: 'receive'; productId?: string | null; supplierId?: string | null }
+  | { kind: 'receive'; productId?: string | null; supplierId?: string | null; purchaseOrderId?: string | null }
   | { kind: 'adjust'; productId?: string | null }
   | { kind: 'return'; productId?: string | null; supplierId?: string | null }
   | { kind: 'aging'; side: 'customers' | 'suppliers' }
@@ -52,7 +54,7 @@ export const StockUIProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   return (
     <Ctx.Provider value={api}>
-      {children}
+      <PurchasingUIProvider receiveOrder={(purchaseOrderId) => api.receiveStock({ purchaseOrderId })}>{children}</PurchasingUIProvider>
       <ItemHistoryModal
         key={`hist-${historyId}`}
         productId={historyId}
@@ -61,7 +63,7 @@ export const StockUIProvider: React.FC<{ children: React.ReactNode }> = ({ child
         onReceive={(id) => show({ kind: 'receive', productId: id })}
         onOpenBill={(id) => { setHistoryId(null); billing.openBill(id); }}
       />
-      <ReceiveStockModal key={`srcv-${nonce}`} isOpen={open?.kind === 'receive'} onClose={close} productId={open?.kind === 'receive' ? open.productId : null} supplierId={open?.kind === 'receive' ? open.supplierId : null} />
+      <ReceiveStockModal key={`srcv-${nonce}`} isOpen={open?.kind === 'receive'} onClose={close} productId={open?.kind === 'receive' ? open.productId : null} supplierId={open?.kind === 'receive' ? open.supplierId : null} purchaseOrderId={open?.kind === 'receive' ? open.purchaseOrderId : null} />
       <AdjustStockModal key={`sadj-${nonce}`} isOpen={open?.kind === 'adjust'} onClose={close} productId={open?.kind === 'adjust' ? open.productId : null} />
       <PurchaseReturnModal key={`sret-${nonce}`} isOpen={open?.kind === 'return'} onClose={close} supplierId={open?.kind === 'return' ? open.supplierId : null} productId={open?.kind === 'return' ? open.productId : null} />
       <AgingModal key={`sage-${nonce}`} isOpen={open?.kind === 'aging'} onClose={close} side={open?.kind === 'aging' ? open.side : 'customers'} />

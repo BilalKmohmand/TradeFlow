@@ -9,6 +9,8 @@ export interface PickOption {
   code?: string;
   /** Anything else worth matching (phone number…). */
   extra?: string;
+  /** Barcode on the pack: a USB scanner "types" it (fast digits + Enter) and the exact code wins. */
+  barcode?: string;
 }
 
 /** Best match for what was typed: code first, then name start, word start, then anywhere in the name. */
@@ -20,7 +22,8 @@ export const findOption = (options: PickOption[], typed: string): PickOption | u
     const name = o.name.toLowerCase();
     const code = (o.code || '').toLowerCase();
     let score = 99;
-    if (code && code === q) score = 0;
+    if (o.barcode && o.barcode.trim().toLowerCase() === q) score = -1;
+    else if (code && code === q) score = 0;
     else if (code && code.startsWith(q)) score = 1;
     else if (name.startsWith(q)) score = 2;
     else if (name.split(/[\s\-/.,&()]+/).some((w) => w.startsWith(q))) score = 3;

@@ -58,6 +58,8 @@ import { creditCheck } from '../utils/credit';
 import { collectCashMovements, costPerKgOn } from '../utils/finance';
 import { BankRecApi, createBankRecApi } from './bankRecActions';
 import { ChequeApi, createChequeApi } from './chequeActions';
+import { PurchasingApi, usePurchasingStore } from './purchasingActions';
+import { receiveOnPo, unreceiveOnPo } from '../utils/purchasing';
 import {
   DEFAULT_ROLES,
   DEFAULT_VISIBILITY_SETTINGS,
@@ -97,7 +99,7 @@ import {
   initialWhatsAppMessages,
 } from '../data/initialData';
 
-interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, AuthApi {
+interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, PurchasingApi, AuthApi {
   customers: Customer[];
   suppliers: Supplier[];
   products: Product[];
@@ -409,6 +411,10 @@ export type PrintRequestLike =
   | { type: 'billing_report'; report: 'profit'; from: string; to: string }
   | { type: 'billing_report'; report: 'item_history'; productId: string }
   | { type: 'debit_note'; returnId: string }
+  | { type: 'purchase_order'; purchaseOrderId: string }
+  | { type: 'supplier_bill'; billId: string }
+  | { type: 'supplier_claim'; claimId: string }
+  | { type: 'reorder_report' }
   | { type: 'cheque_register'; view?: string };
 
 /** Collision-safe id generator (Date.now() alone repeats when called in a tight loop). */
@@ -875,6 +881,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (data.cheques) setCheques(cloudOrLocal(data.cheques));
         // Godowns / batches / transfers: only when the cloud tables exist (migration v11).
         inventory.hydrate({ godowns: data.godowns, stockBatches: data.stockBatches, stockTransfers: data.stockTransfers }, { keepLocalIfEmpty: true });
+        // Supplier bills and claims: only when the cloud tables exist (migration v20).
+        purchasing.hydrate({ supplierBills: data.supplierBills, supplierClaims: data.supplierClaims }, { keepLocalIfEmpty: true });
         // Accounts: only when the cloud tables exist (migration v10); otherwise keep local copies.
         if (data.journalEntries) setManualJournals(cloudOrLocal(data.journalEntries));
         if (data.accounts) setCustomAccounts(cloudOrLocal(data.accounts));
@@ -1053,6 +1061,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setManualJournals([]);
     setCustomAccounts([]);
     inventory.reset();
+    purchasing.reset();
     logAuditEvent('Sample Data Loaded', 'All business data replaced with the built-in sample dataset.', 'warning');
   };
 
@@ -1146,6 +1155,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     grossKg = null,
     tareKg = null,
     purchaseOrderId = null,
+    poLineId = null,
     owedBefore,
   }: {
     supplierId: string;
@@ -1159,6 +1169,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     grossKg?: number | null;
     tareKg?: number | null;
     purchaseOrderId?: string | null;
+    /** Line of a multi-line purchase order this receipt is against. */
+    poLineId?: string | null;
     /** What the supplier was owed before this receipt, when several receipts are saved at once
      *  (the supplier list in this render does not include the earlier ones yet). */
     owedBefore?: number;
@@ -1186,16 +1198,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       grossKg,
       tareKg,
       purchaseOrderId,
+      ...(poLineId ? { poLineId } : {}),
     };
 
     if (purchaseOrderId) {
-      setPurchaseOrders((prev) =>
-        prev.map((po) => {
-          if (po.id !== purchaseOrderId) return po;
-          const receivedKg = round2(po.receivedKg + kg);
-          return { ...po, receivedKg, status: receivedKg >= po.kg ? 'received' : 'partial' };
-        })
-      );
+      // Multi-line orders track the received quantity per line (see utils/purchasing.ts).
+      setPurchaseOrders((prev) => prev.map((po) => (po.id === purchaseOrderId ? receiveOnPo(po, productId, kg, poLineId) : po)));
     }
 
     // 1. Stock in
@@ -1249,6 +1257,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const summary = emptySummary();
     const target = purchases.find((p) => p.id === id);
     if (!target) return summary;
+    // A receipt on a supplier bill stays (delete the bill first, or the price difference would be wrong).
+    if (purchasing.api.isBilledReceipt(id)) return summary;
+    if (target.purchaseOrderId) setPurchaseOrders((prev) => prev.map((po) => (po.id === target.purchaseOrderId ? unreceiveOnPo(po, target.productId, target.kg, target.poLineId) : po)));
     const refs = new Set([target.receiptNumber, `PAY-${target.receiptNumber}`]);
     const ledgerIds = ledger.filter((l) => refs.has(l.referenceId)).map((l) => l.id);
 
@@ -1554,6 +1565,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLedger((prev) => prev.filter((l) => !(l.entityType === 'supplier' && l.entityId === id)));
     setWhatsappMessages((prev) => prev.filter((m) => !waIds.includes(m.id)));
     setSuppliers((prev) => prev.filter((s) => s.id !== id));
+    purchasing.removeForSupplier(id);
     const supPoIds = purchaseOrders.filter((p) => p.supplierId === id).map((p) => p.id);
     setPurchaseOrders((prev) => prev.filter((p) => p.supplierId !== id));
     removeRemote('purchase_orders', supPoIds);
@@ -1663,6 +1675,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       bank_statement_lines: () => setBankStatementLines([]),
       bank_reconciliations: () => setBankReconciliations([]),
       ...inventory.purgeSetters,
+      ...purchasing.purgeSetters,
       journal_entries: () => setManualJournals([]),
       accounts: () => setCustomAccounts([]),
       customer_agreed_rates: () => setCustomerAgreedRates([]),
@@ -3579,6 +3592,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       bankReconciliations,
       cheques,
       ...inventory.backupData(),
+      ...purchasing.backupData(),
       manualJournals,
       customAccounts,
       customerAgreedRates,
@@ -3638,6 +3652,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (Array.isArray(data.bankReconciliations)) setBankReconciliations(data.bankReconciliations);
       if (Array.isArray(data.cheques)) setCheques(data.cheques);
       inventory.hydrate({ godowns: data.godowns ?? [], stockBatches: data.stockBatches ?? [], stockTransfers: data.stockTransfers ?? [] });
+      purchasing.hydrate({ supplierBills: data.supplierBills ?? [], supplierClaims: data.supplierClaims ?? [] });
       if (Array.isArray(data.manualJournals)) setManualJournals(data.manualJournals);
       if (Array.isArray(data.customAccounts)) setCustomAccounts(data.customAccounts);
       if (Array.isArray(data.customerAgreedRates)) setCustomerAgreedRates(data.customerAgreedRates);
@@ -3676,6 +3691,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setBankReconciliations([]);
     setCheques([]);
     inventory.reset();
+    purchasing.reset();
     localStorage.removeItem(STORAGE_KEYS.INVOICES);
     localStorage.removeItem(STORAGE_KEYS.CHEQUES);
     localStorage.removeItem(STORAGE_KEYS.BANK_LINES);
@@ -3716,6 +3732,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     logAuditEvent: (a, dt, sev) => logAuditEvent(a, dt, sev),
     removeRemote, uid, userName: currentUser?.name, today: todayISO,
   });
+  // Purchase orders, supplier bills (three-way match) and supplier claims, see purchasingActions.ts.
+  const purchasing = usePurchasingStore({
+    purchaseOrders, setPurchaseOrders, purchases, products, suppliers, setSuppliers, ledger, setLedger, settings,
+    can: (p) => can(p as Permission),
+    logAuditEvent: (a, dt, sev) => logAuditEvent(a, dt, sev),
+    uid, userName: currentUser?.name, today: todayISO, isCloudSyncReady, syncToSupabase, removeRemote,
+  });
 
   return (
     <TradingContext.Provider
@@ -3723,6 +3746,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ...inventory.api,
         ...stockActions,
         ...chequeApi,
+        ...purchasing.api,
         ...auth,
         customers,
         suppliers,

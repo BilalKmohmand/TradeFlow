@@ -10,14 +10,23 @@ import { formatDate } from '../../utils/formatters';
 import { todayISO } from '../../utils/stockFlow';
 import { booksLockedFor } from '../../utils/accounting';
 import { Supplier } from '../../types';
+import { usePurchasingUI } from '../../components/billing/purchasing/PurchasingUI';
+import { PurchaseOrdersView } from '../../components/billing/purchasing/PurchaseOrders';
+import { SupplierBillsView } from '../../components/billing/purchasing/SupplierBills';
+import { SupplierClaimsView } from '../../components/billing/purchasing/SupplierClaims';
+import { ClipboardList, FileText, ShieldAlert } from 'lucide-react';
 
-type Tab = 'suppliers' | 'received' | 'returns';
+type Tab = 'suppliers' | 'orders' | 'received' | 'bills' | 'claims' | 'returns';
 const num = (n: number) => n.toLocaleString('en-PK', { maximumFractionDigits: 2 });
 
 /** Suppliers the simple way: what you owe them, stock received, goods sent back. No bookings or dispatches. */
 export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (supplierId: string) => void }> = ({ onAdd, onPay }) => {
   const { suppliers, purchases, returns, products, ledger, setEditRequest, deleteSupplier, setPrintRequest, can, deletePurchaseReturn, settings } = useTrading();
   const stock = useStockUI();
+  const buy = usePurchasingUI();
+  const { purchaseOrders, supplierClaims } = useTrading();
+  const openOrders = purchaseOrders.filter((p) => p.status === 'open' || p.status === 'partial').length;
+  const openClaims = supplierClaims.filter((c) => c.status === 'open').length;
   const [tab, setTab] = useState<Tab>('suppliers');
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -60,7 +69,10 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
       </PageHeader>
       <div role="tablist" aria-label="Suppliers views" className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">
         {tabBtn('suppliers', 'Suppliers')}
+        {tabBtn('orders', `Orders${openOrders ? ` (${openOrders})` : ''}`)}
         {tabBtn('received', 'Stock received')}
+        {tabBtn('bills', 'Supplier bills')}
+        {tabBtn('claims', `Claims${openClaims ? ` (${openClaims})` : ''}`)}
         {tabBtn('returns', `Returns${debitNotes.length ? ` (${debitNotes.length})` : ''}`)}
       </div>
       {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
@@ -107,7 +119,13 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
         </>
       )}
 
+      {tab === 'orders' && <PurchaseOrdersView onNew={() => buy.newOrder()} onOpen={buy.openOrder} onReceive={(id) => stock.receiveStock({ purchaseOrderId: id })} onReorder={buy.reorder} />}
+
       {tab === 'received' && <PurchaseRegisterView />}
+
+      {tab === 'bills' && <SupplierBillsView onNew={() => buy.recordBill()} />}
+
+      {tab === 'claims' && <SupplierClaimsView onNew={() => buy.newClaim()} />}
 
       {tab === 'returns' && (
         <div className={`${cardCls} overflow-hidden`}>
@@ -136,6 +154,9 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (suppl
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
               {canStock && <button type="button" onClick={() => { const id = open.id; setOpenId(null); stock.receiveStock({ supplierId: id }); }} className={primaryBtn}><PackagePlus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Receive stock</button>}
               <button type="button" onClick={() => { const id = open.id; setOpenId(null); onPay(id); }} className={`${secondaryBtn} ${canStock ? "" : "col-span-2"}`}><HandCoins className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Pay</button>
+              {canStock && <button type="button" onClick={() => { const id = open.id; setOpenId(null); buy.newOrder({ supplierId: id }); }} className={secondaryBtn}><ClipboardList className="w-4 h-4 text-indigo-600 dark:text-indigo-300" /> New order</button>}
+              {can('suppliers:edit') && <button type="button" onClick={() => { const id = open.id; setOpenId(null); buy.recordBill({ supplierId: id }); }} className={secondaryBtn}><FileText className="w-4 h-4" /> Supplier bill</button>}
+              {can('suppliers:edit') && <button type="button" onClick={() => { const id = open.id; setOpenId(null); buy.newClaim({ supplierId: id }); }} className={`${secondaryBtn} col-span-2 sm:col-span-1`}><ShieldAlert className="w-4 h-4 text-amber-600" /> Claim</button>}
               <div className={`col-span-2 grid ${(canDelete ? 1 : 0) + (canStock ? 1 : 0) === 2 ? 'grid-cols-4' : (canDelete || canStock) ? 'grid-cols-3' : 'grid-cols-2'} gap-2 sm:contents`}>
                 {canStock && <button type="button" onClick={() => { const id = open.id; setOpenId(null); stock.purchaseReturn({ supplierId: id }); }} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Undo2 className="w-4 h-4 text-rose-600" /> Return goods</button>}
                 <button type="button" onClick={() => setPrintRequest({ type: 'supplier_statement', supplierId: open.id, from: `${today.slice(0, 4)}-01-01`, to: today })} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Printer className="w-4 h-4" /> Statement</button>
