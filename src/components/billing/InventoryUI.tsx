@@ -7,6 +7,9 @@ import { Product } from '../../types';
 import { todayISO } from '../../utils/stockFlow';
 import { expiryAlerts, expiryStatus, fmtExpiry, godownName, liveBatches, stockByGodown } from '../../utils/inventory';
 import { hasPack, formatPackQty } from '../../utils/packUnits';
+import { QuickSelect, PickOption } from './QuickPick';
+import { ScanButton } from './purchasing/Barcodes';
+import { poOutstanding } from '../../utils/purchasing';
 
 const num = (n: number) => n.toLocaleString('en-PK', { maximumFractionDigits: 2 });
 
@@ -87,7 +90,7 @@ export const ExpiryAttention: React.FC<{ onOpen: () => void }> = ({ onOpen }) =>
   );
 };
 
-interface ReceiveLine { key: number; pid: string; qty: string; cost: string; batchNo: string; expiry: string; /** Qty and cost typed per pack (carton) instead of per base unit. */ inPack?: boolean }
+interface ReceiveLine { key: number; pid: string; qty: string; cost: string; batchNo: string; expiry: string; /** Qty and cost typed per pack (carton) instead of per base unit. */ inPack?: boolean; /** Purchase order line this is received against. */ poLineId?: string }
 let lineSeq = 0;
 const blankLine = (pid = ''): ReceiveLine => ({ key: ++lineSeq, pid, qty: '', cost: '', batchNo: '', expiry: '' });
 
@@ -95,12 +98,30 @@ const blankLine = (pid = ''): ReceiveLine => ({ key: ++lineSeq, pid, qty: '', co
  * Receive stock into a godown: one or more items in one go (e.g. a supplier's whole delivery).
  * Batch-tracked items take a batch number and expiry per line.
  */
-export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void; productId?: string | null; supplierId?: string | null }> = ({ isOpen, onClose, productId, supplierId: presetSupplier }) => {
-  const { products, suppliers, godowns, receiveStock } = useTrading();
+export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void; productId?: string | null; supplierId?: string | null; purchaseOrderId?: string | null }> = ({ isOpen, onClose, productId, supplierId: presetSupplier, purchaseOrderId }) => {
+  const { products, suppliers, godowns, receiveStock, purchaseOrders } = useTrading();
   const sorted = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name)), [products]);
-  const [lines, setLines] = useState<ReceiveLine[]>(() => [blankLine(productId || '')]);
+  const pickOptions: PickOption[] = useMemo(() => sorted.map((p) => ({ value: p.id, name: p.name, code: p.code, barcode: p.barcode })), [sorted]);
+  // Receiving against a purchase order: one line per item still to come, at the order rate.
+  const order = purchaseOrderId ? purchaseOrders.find((o) => o.id === purchaseOrderId) : undefined;
+  const [lines, setLines] = useState<ReceiveLine[]>(() => {
+    if (order) {
+      const due = poOutstanding(order).filter((l) => l.remaining > 0);
+      if (due.length) return due.map((l) => ({ ...blankLine(l.productId), qty: String(l.remaining), cost: String(l.rate), poLineId: l.id }));
+    }
+    return [blankLine(productId || '')];
+  });
   const [godownId, setGodownId] = useState(godowns[0]?.id || '');
-  const [supplierId, setSupplierId] = useState(presetSupplier || '');
+  const [supplierId, setSupplierId] = useState(order?.supplierId || presetSupplier || '');
+  /** A scanned item: add one more to its line, fill an empty line, or add a new line. */
+  const addScanned = (pid: string) =>
+    setLines((ls) => {
+      const same = ls.find((l) => l.pid === pid);
+      if (same) return ls.map((l) => (l === same ? { ...l, qty: String((parseFloat(l.qty) || 0) + 1) } : l));
+      const empty = ls.find((l) => !l.pid);
+      if (empty) return ls.map((l) => (l === empty ? { ...l, pid, qty: l.qty || '1' } : l));
+      return [...ls, { ...blankLine(pid), qty: '1' }];
+    });
   const [date, setDate] = useState(todayISO());
   const [error, setError] = useState('');
   const busy = useRef(false);
@@ -150,6 +171,7 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
         supplierId: supplierId || null,
         date,
         owedBefore: supplierId ? owed : undefined,
+        ...(order && supplierId === order.supplierId ? { purchaseOrderId: order.id, poLineId: l.poLineId || null } : {}),
       });
       if (!r.success) return setError(r.message);
       if (supplierId && cost) owed += qty * cost;
@@ -158,13 +180,13 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Receive stock" subtitle="Add stock you bought or brought in — one item or a whole delivery. With a supplier and cost, it is also added to what you owe them.">
+    <Modal isOpen={isOpen} onClose={onClose} title={order ? `Receive goods for ${order.poNumber}` : 'Receive stock'} subtitle={order ? 'Filled with what is still to come on the order. Change the quantities to what actually arrived.' : 'Add stock you bought or brought in — one item or a whole delivery. With a supplier and cost, it is also added to what you owe them.'}>
       <form onSubmit={submit} className="space-y-4" id="receive-stock-form">
         {error && <Notice kind="error">{error}</Notice>}
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2 sm:col-span-1">
             <label className={labelCls} htmlFor="rs-supplier">Supplier (optional)</label>
-            <select id="rs-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={inputCls}>
+            <select id="rs-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={inputCls} disabled={Boolean(order)}>
               <option value="">None</option>
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.code ? `${s.code} • ` : ''}{s.name}{s.company && s.company !== s.name ? ` • ${s.company}` : ''}</option>)}
             </select>
@@ -195,10 +217,10 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
                 <div className="flex items-end gap-2">
                   <div className="flex-1 min-w-0">
                     <label className={labelCls} htmlFor={id('item')}>{lines.length > 1 ? `Item ${i + 1}` : 'Item'}</label>
-                    <select id={id('item')} value={l.pid} onChange={(e) => setLine(l.key, { pid: e.target.value })} className={inputCls}>
+                    <QuickSelect id={id('item')} value={l.pid} options={pickOptions} onPick={(v) => setLine(l.key, { pid: v })} className={inputCls} title="Type the item name, code or scan its barcode">
                       <option value="">Select item…</option>
                       {sorted.map((x) => <option key={x.id} value={x.id}>{x.name}{x.trackBatches ? ' (batches)' : ''}</option>)}
-                    </select>
+                    </QuickSelect>
                   </div>
                   {lines.length > 1 && (
                     <button type="button" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} className="h-11 w-11 shrink-0 inline-flex items-center justify-center rounded-2xl text-[#8E9299] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40" aria-label={`Remove item ${i + 1}`}>
@@ -244,9 +266,12 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
               </div>
             );
           })}
-          <button type="button" onClick={() => setLines((ls) => [...ls, blankLine()])} className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-400 hover:underline">
-            <Plus className="w-4 h-4" /> Add another item
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => setLines((ls) => [...ls, blankLine()])} className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-400 hover:underline">
+              <Plus className="w-4 h-4" /> Add another item
+            </button>
+            <ScanButton onPick={(p) => addScanned(p.id)} keepOpen />
+          </div>
         </div>
 
         {supplierId && total > 0 && (

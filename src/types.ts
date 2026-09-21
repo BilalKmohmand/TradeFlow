@@ -56,6 +56,17 @@ export interface Product {
   packSize?: number;
   /** The shop's own item code (typed on New Bill to find the item quickly). Optional. */
   code?: string;
+  /** Item group is `category` (e.g. Ghee, Cooking oil). Brand, e.g. Dalda, Habib. Optional. */
+  brand?: string;
+  /** Barcode printed on the pack (EAN/UPC or the shop's own); a scan finds the item. Optional. */
+  barcode?: string;
+  /** Small photo as a JPEG data URL (resized on the device to a few tens of KB). Optional. */
+  photo?: string;
+  /**
+   * Re-order: minThresholdKg is the re-order level (stock at or below it needs buying);
+   * reorderQty is how much is normally ordered then (0 / empty = suggest enough for twice the level).
+   */
+  reorderQty?: number;
 }
 
 export type BookingStatus = 'active' | 'completed' | 'cancelled';
@@ -166,7 +177,14 @@ export type TransactionType =
   | 'cheque_returned'
   | 'cheque_charge'
   /** Late-payment / interest charged on an overdue balance (a debit note to the customer). */
-  | 'interest_charge';
+  | 'interest_charge'
+  /**
+   * Supplier bill differs from the value of the goods received (booked at the receipt rate):
+   * debit = the bill is more (owed more), credit = the bill is less. See purchasingActions.ts.
+   */
+  | 'purchase_variance'
+  /** Accepted supplier claim (leaked / damaged / short goods): takes it off what is owed (debit note). */
+  | 'supplier_claim';
 
 export interface LedgerEntry {
   id: string;
@@ -218,6 +236,8 @@ export interface Purchase {
   grossKg?: number | null;
   tareKg?: number | null;
   purchaseOrderId?: string | null;
+  /** Line of the purchase order this receipt was received against (multi-line orders). */
+  poLineId?: string | null;
 }
 
 export type PriceSource = 'product_created' | 'price_update' | 'manual' | 'booking' | 'purchase';
@@ -766,6 +786,7 @@ export interface PurchaseOrder {
   id: string;
   poNumber: string;
   supplierId: string;
+  /** Single-item orders (trading mode) use these; multi-line orders keep the first line / totals here. */
   productId: string;
   kg: number;
   pricePerKg: number;
@@ -776,6 +797,100 @@ export interface PurchaseOrder {
   notes?: string;
   createdAt: string;
   createdBy?: string;
+  /** Billing mode: several items per order, each with its own rate and received quantity. */
+  items?: PurchaseOrderLine[];
+  /** Date on the order (defaults to createdAt). */
+  orderDate?: string;
+  updatedAt?: string;
+  cancelledAt?: string | null;
+}
+
+/** One line of a multi-line purchase order (quantities and rates in the item's base unit). */
+export interface PurchaseOrderLine {
+  id: string;
+  productId: string;
+  productName?: string;
+  unit?: string;
+  qty: number;
+  rate: number;
+  receivedQty: number;
+}
+
+/** One line of a supplier's invoice as typed from their paper (quantities in the item's base unit). */
+export interface SupplierBillLine {
+  productId: string;
+  productName?: string;
+  unit?: string;
+  qty: number;
+  rate: number;
+  amount: number;
+}
+
+/**
+ * The supplier's own invoice for goods already received (three-way match: order, receipt, bill).
+ * The payable was booked at the receipt; only the difference (amount − receivedValue) is posted,
+ * as a `purchase_variance` ledger row, so the supplier's balance ends at exactly the bill amount.
+ */
+export interface SupplierBill {
+  id: string;
+  /** The supplier's bill / invoice number. */
+  billNumber: string;
+  supplierId: string;
+  date: string;
+  purchaseOrderId?: string | null;
+  /** Stock receipts (Purchase ids) this bill covers. */
+  purchaseIds: string[];
+  lines: SupplierBillLine[];
+  /** Freight, loading or other charges on the bill. */
+  otherCharges?: number;
+  /** Bill total (lines + other charges). */
+  amount: number;
+  /** Value of the covered receipts at the receipt rates (what was already booked). */
+  receivedValue: number;
+  /** amount − receivedValue: posted as a price difference. */
+  variance: number;
+  ledgerId?: string | null;
+  note?: string;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export type SupplierClaimStatus = 'open' | 'accepted' | 'rejected' | 'settled';
+export type SupplierClaimReason = 'leaked' | 'damaged' | 'short' | 'expired' | 'wrong_item' | 'other';
+export const SUPPLIER_CLAIM_REASONS: { id: SupplierClaimReason; label: string }[] = [
+  { id: 'leaked', label: 'Leaked' },
+  { id: 'damaged', label: 'Damaged' },
+  { id: 'short', label: 'Short (less than billed)' },
+  { id: 'expired', label: 'Expired' },
+  { id: 'wrong_item', label: 'Wrong item' },
+  { id: 'other', label: 'Other' },
+];
+
+/** A claim against a supplier for leaked / damaged / short goods from a receipt. */
+export interface SupplierClaim {
+  id: string;
+  claimNumber: string;
+  supplierId: string;
+  /** Stock receipt the goods came on. */
+  purchaseId?: string | null;
+  productId: string;
+  qty: number;
+  rate: number;
+  /** Amount claimed. */
+  amount: number;
+  reason: SupplierClaimReason;
+  note?: string;
+  date: string;
+  status: SupplierClaimStatus;
+  /** Amount the supplier accepted (may be less than claimed); posted as a debit note. */
+  acceptedAmount?: number;
+  decidedDate?: string | null;
+  settledDate?: string | null;
+  decisionNote?: string;
+  ledgerId?: string | null;
+  createdAt: string;
+  createdBy?: string;
+  updatedAt?: string;
 }
 
 export type ReturnKind = 'sales' | 'purchase';

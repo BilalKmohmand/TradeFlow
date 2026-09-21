@@ -30,6 +30,8 @@ import {
   Salesman,
   SalesArea,
   Scheme,
+  SupplierBill,
+  SupplierClaim,
 } from '../types';
 import type { Account, JournalEntry } from '../utils/accounting';
 
@@ -73,6 +75,9 @@ export interface AppData {
   salesmen: Salesman[] | null;
   areas: SalesArea[] | null;
   schemes: Scheme[] | null;
+  /** Supplier bills and claims; null when the tables do not exist yet (migration v20 not run). */
+  supplierBills: SupplierBill[] | null;
+  supplierClaims: SupplierClaim[] | null;
 }
 
 export type TableName =
@@ -107,7 +112,9 @@ export type TableName =
   | 'cheques'
   | 'salesmen'
   | 'areas'
-  | 'schemes';
+  | 'schemes'
+  | 'supplier_bills'
+  | 'supplier_claims';
 
 export const ALL_TABLES: TableName[] = [
   'customers',
@@ -142,6 +149,8 @@ export const ALL_TABLES: TableName[] = [
   'salesmen',
   'areas',
   'schemes',
+  'supplier_bills',
+  'supplier_claims',
 ];
 
 // ---------------------------------------------------------------------------
@@ -214,7 +223,7 @@ const stripLegacy = <T,>(rows: T[]): T[] =>
   });
 
 /** Tables that may be missing on a project that has not run the migration yet. */
-const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'bank_statement_lines', 'bank_reconciliations', 'godowns', 'stock_batches', 'stock_transfers', 'journal_entries', 'accounts', 'customer_agreed_rates', 'cheques', 'salesmen', 'areas', 'schemes'];
+const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'bank_statement_lines', 'bank_reconciliations', 'godowns', 'stock_batches', 'stock_transfers', 'journal_entries', 'accounts', 'customer_agreed_rates', 'cheques', 'salesmen', 'areas', 'schemes', 'supplier_bills', 'supplier_claims'];
 
 /** Read a whole table in pages (PostgREST caps a single select at 1000 rows). */
 const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { message: string } | null }> => {
@@ -230,7 +239,7 @@ const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { m
 };
 
 export const loadAllData = async (): Promise<AppData> => {
-  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, cashEntries, settings, quotations, purchaseOrders, returns, adjustments, tasks, invoices, ledger, whatsappMessages, bankStatementLines, bankReconciliations, godowns, stockBatches, stockTransfers, journalEntries, accounts, agreedRates, cheques, salesmen, areas, schemes] =
+  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, cashEntries, settings, quotations, purchaseOrders, returns, adjustments, tasks, invoices, ledger, whatsappMessages, bankStatementLines, bankReconciliations, godowns, stockBatches, stockTransfers, journalEntries, accounts, agreedRates, cheques, salesmen, areas, schemes, supplierBills, supplierClaims] =
     await Promise.all([
       fetchAll('customers'),
       fetchAll('suppliers'),
@@ -264,6 +273,8 @@ export const loadAllData = async (): Promise<AppData> => {
       fetchAll('salesmen'),
       fetchAll('areas'),
       fetchAll('schemes'),
+      fetchAll('supplier_bills'),
+      fetchAll('supplier_claims'),
     ]);
 
   const maybeThrow = (result: { error?: { message: string } | null }, label: TableName) => {
@@ -308,6 +319,8 @@ export const loadAllData = async (): Promise<AppData> => {
   maybeThrow(salesmen, 'salesmen');
   maybeThrow(areas, 'areas');
   maybeThrow(schemes, 'schemes');
+  maybeThrow(supplierBills, 'supplier_bills');
+  maybeThrow(supplierClaims, 'supplier_claims');
 
   return {
     customers: (customers.data || []) as Customer[],
@@ -342,6 +355,12 @@ export const loadAllData = async (): Promise<AppData> => {
     salesmen: salesmen.error ? null : ((salesmen.data || []).map((r: any) => ({ ...r, commissionPct: r.commissionPct == null ? undefined : num(r.commissionPct) })) as Salesman[]),
     areas: areas.error ? null : ((areas.data || []) as SalesArea[]),
     schemes: schemes.error ? null : ((schemes.data || []).map((r: any) => ({ ...r, buyQty: r.buyQty == null ? undefined : num(r.buyQty), freeQty: r.freeQty == null ? undefined : num(r.freeQty), minQty: r.minQty == null ? undefined : num(r.minQty), pctOff: r.pctOff == null ? undefined : num(r.pctOff) })) as Scheme[]),
+    supplierBills: supplierBills.error
+      ? null
+      : ((supplierBills.data || []).map((r: any) => ({ ...r, amount: num(r.amount), receivedValue: num(r.receivedValue), variance: num(r.variance), otherCharges: r.otherCharges == null ? undefined : num(r.otherCharges), purchaseIds: Array.isArray(r.purchaseIds) ? r.purchaseIds : [], lines: Array.isArray(r.lines) ? r.lines : [] })) as SupplierBill[]),
+    supplierClaims: supplierClaims.error
+      ? null
+      : ((supplierClaims.data || []).map((r: any) => ({ ...r, qty: num(r.qty), rate: num(r.rate), amount: num(r.amount), acceptedAmount: r.acceptedAmount == null ? undefined : num(r.acceptedAmount) })) as SupplierClaim[]),
   };
 };
 

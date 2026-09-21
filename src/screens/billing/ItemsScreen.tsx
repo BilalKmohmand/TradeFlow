@@ -11,11 +11,21 @@ import { ItemStockDetails, ReceiveStockModal, GodownsModal, TransferStockModal }
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Product } from '../../types';
 import { hasPack, formatPackQty } from '../../utils/packUnits';
+import { usePurchasingUI } from '../../components/billing/purchasing/PurchasingUI';
+import { ScanButton } from '../../components/billing/purchasing/Barcodes';
+import { itemBrands, itemGroup, itemGroups, reorderReport } from '../../utils/purchasing';
+import { ClipboardList, Barcode } from 'lucide-react';
 
 /** Your price list: every item with its fixed price and how many are left. */
 export const ItemsScreen: React.FC = () => {
-  const { products, deleteProduct, can, godowns, stockBatches, schemes } = useTrading();
+  const { products, deleteProduct, can, godowns, stockBatches, schemes, purchases, purchaseOrders } = useTrading();
   const ui = useBillingUI();
+  const buy = usePurchasingUI();
+  const [group, setGroup] = useState('');
+  const [brand, setBrand] = useState('');
+  const groups = useMemo(() => itemGroups(products), [products]);
+  const brands = useMemo(() => itemBrands(products), [products]);
+  const toReorder = useMemo(() => reorderReport(products, purchases, purchaseOrders).length, [products, purchases, purchaseOrders]);
   const wide = useWideLayout();
   const stock = useStockUI();
   const canAdjust = can('stock:adjust');
@@ -27,7 +37,16 @@ export const ItemsScreen: React.FC = () => {
   const closeStock = () => setStockUI((s) => ({ ...s, kind: null }));
   const canStock = can('products:create') || can('stock:adjust');
   const canGodowns = can('stock:adjust');
-  const rows = useMemo(() => products.filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase()) || (p.code || '').toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => a.name.localeCompare(b.name)), [products, query]);
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return products
+      .filter((p) => !q || p.name.toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q) || (p.barcode || '').toLowerCase() === q || (p.brand || '').toLowerCase().includes(q))
+      .filter((p) => (!group || itemGroup(p) === group) && (!brand || (p.brand || '') === brand))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [products, query, group, brand]);
+  /** Group, brand and item code under the name. */
+  const meta = (p: Product) => [p.code, itemGroup(p), p.brand].filter(Boolean).join(' • ');
+  const thumb = (p: Product) => (p.photo ? <img src={p.photo} alt="" className="w-10 h-10 rounded-xl object-cover shrink-0 border border-[#E5E5E1] dark:border-[#203248]" /> : null);
   const canDelete = can('delete_records');
   const today = todayISO();
   const isLow = (p: Product) => p.minThresholdKg > 0 && p.stockKg <= p.minThresholdKg;
@@ -53,18 +72,39 @@ export const ItemsScreen: React.FC = () => {
         {godowns.length > 1 && canStock && <button type="button" onClick={() => openStock('move')} className={secondaryBtn}><ArrowRightLeft className="w-4 h-4 text-amber-600 dark:text-amber-300" /> Move stock</button>}
         {canAdjust && <button type="button" onClick={() => stock.adjustStock()} className={secondaryBtn}><Scale className="w-4 h-4 text-rose-600 dark:text-rose-400" /> Adjust stock</button>}
         <button type="button" onClick={() => ui.salesExtras('schemes')} className={secondaryBtn}><Gift className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Schemes{schemes.length ? ` (${schemes.filter((s) => s.active).length})` : ''}</button>
+        <button type="button" onClick={() => buy.reorder()} className={secondaryBtn}><ClipboardList className="w-4 h-4 text-amber-600 dark:text-amber-300" /> Re-order{toReorder ? ` (${toReorder})` : ''}</button>
+        <button type="button" onClick={() => buy.labels(group || brand || query ? rows.map((p) => p.id) : undefined)} className={secondaryBtn}><Barcode className="w-4 h-4" /> Labels</button>
         <button type="button" onClick={() => ui.newItem()} className={primaryBtn}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> New item</button>
       </PageHeader>
-      <div className="relative">
-        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search items" className={`${inputCls} pl-10`} aria-label="Search items" />
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search items, code or barcode" className={`${inputCls} pl-10`} aria-label="Search items" />
+        </div>
+        <ScanButton onPick={(p) => { setGroup(''); setBrand(''); setQuery(p.barcode || p.code || p.name); }} />
       </div>
+      {(groups.length > 0 || brands.length > 0) && (
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          {groups.length > 0 && (
+            <select aria-label="Filter by group" value={group} onChange={(e) => setGroup(e.target.value)} className={`${inputCls} sm:w-auto`}>
+              <option value="">All groups</option>
+              {groups.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+          )}
+          {brands.length > 0 && (
+            <select aria-label="Filter by brand" value={brand} onChange={(e) => setBrand(e.target.value)} className={`${inputCls} sm:w-auto`}>
+              <option value="">All brands</option>
+              {brands.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+          )}
+        </div>
+      )}
       {rows.length === 0 ? (
         <div className={cardCls}>
           <EmptyState
             icon={<Tag className="w-5 h-5" />}
-            text={query ? 'No item matches that search.' : 'No items yet. Add the things you sell with their prices.'}
-            action={!query && <button type="button" onClick={() => ui.newItem()} className={secondaryBtn}><Plus className="w-4 h-4" /> New item</button>}
+ text={query || group || brand ? 'No item matches that search.' : 'No items yet. Add the things you sell with their prices.'}
+            action={!query && !group && !brand && <button type="button" onClick={() => ui.newItem()} className={secondaryBtn}><Plus className="w-4 h-4" /> New item</button>}
           />
         </div>
       ) : (
@@ -77,9 +117,10 @@ export const ItemsScreen: React.FC = () => {
               return (
                 <li key={p.id} className="px-4 py-3">
                   <div className="flex items-start gap-3">
+                    {thumb(p)}
                     <button type="button" onClick={() => stock.itemHistory(p.id)} className="flex-1 min-w-0 text-left" aria-label={`History of ${p.name}`} title="Stock history">
                       <span className="flex items-center gap-1.5 font-semibold text-sm text-[#111827] dark:text-white"><span className="truncate">{p.name}</span><History className="w-3.5 h-3.5 shrink-0 text-[#9CA3AF]" /></span>
-                      <span className="block text-[11px] text-[#6B7280] dark:text-[#8E9299]">{p.code ? `${p.code} • ` : ''}per {p.unit || 'pcs'}{hasPack(p) ? ` • 1 ${p.packName} = ${p.packSize} ${p.unit || 'pcs'}` : ''}{p.costPricePerKg ? ` • cost ${rs(p.costPricePerKg)}` : ''}{p.trackBatches ? ' • batch & expiry' : ''}</span>
+                      <span className="block text-[11px] text-[#6B7280] dark:text-[#8E9299]">{meta(p) ? `${meta(p)} • ` : ''}per {p.unit || 'pcs'}{hasPack(p) ? ` • 1 ${p.packName} = ${p.packSize} ${p.unit || 'pcs'}` : ''}{p.costPricePerKg ? ` • cost ${rs(p.costPricePerKg)}` : ''}{p.trackBatches ? ' • batch & expiry' : ''}</span>
                     </button>
                     <div className={`${moneyCls} font-bold text-sm text-[#111827] dark:text-white shrink-0`}>{rs(p.unitPricePerKg)}</div>
                   </div>
@@ -114,9 +155,11 @@ export const ItemsScreen: React.FC = () => {
                   return (
                     <tr key={p.id} className="hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors align-top">
                       <td className="px-4 py-3">
+                        <div className="flex items-start gap-3">{thumb(p)}<div className="min-w-0">
                         <button type="button" onClick={() => stock.itemHistory(p.id)} className="font-semibold text-left text-[#111827] dark:text-white hover:underline inline-flex items-center gap-1.5" aria-label={`History of ${p.name}`} title="Stock history">{p.name}<History className="w-3.5 h-3.5 text-[#9CA3AF]" /></button>
-                        <div className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">{p.code ? `${p.code} • ` : ''}per {p.unit || 'pcs'}{hasPack(p) ? ` • 1 ${p.packName} = ${p.packSize} ${p.unit || 'pcs'}` : ''}{p.costPricePerKg ? ` • cost ${rs(p.costPricePerKg)}` : ''}{p.trackBatches ? ' • batch & expiry' : ''}</div>
+                        <div className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">{meta(p) ? `${meta(p)} • ` : ''}per {p.unit || 'pcs'}{hasPack(p) ? ` • 1 ${p.packName} = ${p.packSize} ${p.unit || 'pcs'}` : ''}{p.costPricePerKg ? ` • cost ${rs(p.costPricePerKg)}` : ''}{p.trackBatches ? ' • batch & expiry' : ''}</div>
                         <ItemStockDetails product={p} />
+                        </div></div>
                       </td>
                       <td className={`px-4 py-3 text-right font-bold text-[#111827] dark:text-white ${moneyCls}`}>{rs(p.unitPricePerKg)}</td>
                       <td className="px-4 py-3 text-right">

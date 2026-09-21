@@ -38,6 +38,9 @@ export interface ReceiveStockInput {
   note?: string;
   /** Supplier balance before this receipt, when several lines are received together. */
   owedBefore?: number;
+  /** Received against this purchase order (and line): the order's received quantity moves. */
+  purchaseOrderId?: string | null;
+  poLineId?: string | null;
 }
 
 export interface TransferStockInput {
@@ -66,7 +69,7 @@ interface Deps {
   products: Product[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   suppliers: Supplier[];
-  addPurchase: (data: { supplierId: string; productId: string; kg: number; pricePerKg: number; date?: string; notes?: string; owedBefore?: number }) => Purchase;
+  addPurchase: (data: { supplierId: string; productId: string; kg: number; pricePerKg: number; date?: string; notes?: string; owedBefore?: number; purchaseOrderId?: string | null; poLineId?: string | null }) => Purchase;
   logAuditEvent: (action: string, details: string, severity?: 'info' | 'warning' | 'danger', category?: any) => void;
   userName?: string;
   isCloudSyncReady: boolean;
@@ -177,7 +180,7 @@ export const useInventoryStore = (deps: Deps) => {
     if (input.supplierId && cost != null) {
       if (!suppliers.some((s) => s.id === input.supplierId)) return { success: false, message: 'Supplier not found.' };
       // Same path as a trading goods receipt: stock in, supplier payable, ledger row.
-      purchase = addPurchase({ supplierId: input.supplierId, productId: product.id, kg: qty, pricePerKg: cost, date, notes: [input.batchNo && `Batch ${input.batchNo}`, input.note].filter(Boolean).join(' • ') || undefined, owedBefore: input.owedBefore });
+      purchase = addPurchase({ supplierId: input.supplierId, productId: product.id, kg: qty, pricePerKg: cost, date, notes: [input.batchNo && `Batch ${input.batchNo}`, input.note].filter(Boolean).join(' • ') || undefined, owedBefore: input.owedBefore, purchaseOrderId: input.purchaseOrderId || null, poLineId: input.poLineId || null });
     } else {
       setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, stockKg: round2(p.stockKg + qty) } : p)));
       recordAdjustment?.({ productId: product.id, deltaKg: qty, reason: 'received', ...(cost != null ? { costPerKg: cost } : {}), note: [input.batchNo && `Batch ${input.batchNo}`, input.note].filter(Boolean).join(' • ') || 'Stock received', date });
