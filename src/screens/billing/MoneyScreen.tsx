@@ -62,6 +62,7 @@ export const MoneyScreen: React.FC = () => {
   return (
     <div className="space-y-5">
       <PageHeader title="Money" subtitle="How much is in the business, who owes you, and who you owe.">
+        {can('finance:record_payment') && <button type="button" onClick={() => ui.salesExtras('receive_many')} className={secondaryBtn}><HandCoins className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Receive from many</button>}
         <button type="button" onClick={() => ui.receive()} className={`${primaryBtn} max-sm:flex-1`}><HandCoins className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Receive payment</button>
       </PageHeader>
       <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]" aria-label="Money views">{tabBtn('overview', 'Overview')}{tabBtn('expenses', 'Expense sheets')}{tabBtn('cashbook', 'Cash book')}{tabBtn('cheques', 'Cheques')}{canSeeBank && tabBtn('bank', 'Bank reconciliation')}</div>

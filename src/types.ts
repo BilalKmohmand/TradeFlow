@@ -12,6 +12,12 @@ export interface Customer {
   createdAt: string;
   /** The shop's own account code for this customer (e.g. from their old books). Optional, unique. */
   code?: string;
+  /** Route / area the customer is in and the salesman who looks after them (defaults for new bills). */
+  areaId?: string | null;
+  salesmanId?: string | null;
+  /** Late-payment charge: % per month on money overdue more than `interestAfterDays` days (0 / empty = off). */
+  interestPctPerMonth?: number;
+  interestAfterDays?: number;
 }
 
 export interface Supplier {
@@ -158,7 +164,9 @@ export type TransactionType =
   | 'cheque_received'
   | 'cheque_issued'
   | 'cheque_returned'
-  | 'cheque_charge';
+  | 'cheque_charge'
+  /** Late-payment / interest charged on an overdue balance (a debit note to the customer). */
+  | 'interest_charge';
 
 export interface LedgerEntry {
   id: string;
@@ -176,6 +184,8 @@ export interface LedgerEntry {
   sourceId?: string;
   /** Payment method for payment rows; decides cash in hand vs bank. */
   method?: string;
+  /** Salesman / recovery man who collected this payment (for recovery commission). */
+  salesmanId?: string | null;
 }
 
 export interface WhatsAppMessage {
@@ -277,6 +287,10 @@ export interface InvoiceItem {
   packSize?: number;
   /** The line was typed in packs at this price per pack. */
   packPrice?: number;
+  /** Free goods under a scheme (price 0): the stock leaves at cost and is booked as a scheme expense. */
+  free?: boolean;
+  schemeId?: string;
+  schemeName?: string;
 }
 
 export interface InvoicePaymentRecord {
@@ -331,6 +345,9 @@ export interface Invoice {
   refundedAmount?: number;
   /** Quotation this bill was made from. */
   quotationId?: string | null;
+  /** Salesman who made the sale and the area / route it went to (default: the customer's). */
+  salesmanId?: string | null;
+  areaId?: string | null;
 }
 
 export type AuditCategory = 'auth' | 'roles' | 'users' | 'visibility' | 'data' | 'system' | 'billing';
@@ -368,7 +385,8 @@ export type ExpenseCategory =
   | 'food'
   | 'drawings'
   | 'bank_charges'
-  | 'other';
+  | 'other'
+  | 'salesman_commission';
 
 export const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string }[] = [
   { id: 'daily', label: 'Day-to-day' },
@@ -387,6 +405,7 @@ export const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string }[] = [
   { id: 'tax', label: 'Taxes & Duties' },
   { id: 'commission', label: 'Broker Commission' },
   { id: 'other', label: 'Other' },
+  { id: 'salesman_commission', label: 'Salesman commission' },
 ];
 
 export interface Expense {
@@ -1027,6 +1046,69 @@ export interface Cheque {
   clearedEntryId?: string | null;
   chargeExpenseId?: string | null;
   chargeLedgerId?: string | null;
+  createdAt: string;
+  createdBy?: string;
+  updatedAt?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Sales team, routes and trade schemes (see context/salesExtrasActions.ts)
+// ---------------------------------------------------------------------------
+/** What a salesman's commission is worked out on: the bills they made, or the cash they recovered. */
+export type CommissionBasis = 'sales' | 'recovery';
+
+export interface Salesman {
+  id: string;
+  name: string;
+  phone?: string;
+  /** Commission % (0 / empty = no commission). */
+  commissionPct?: number;
+  commissionOn?: CommissionBasis;
+  active: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/** A route / area the shop sells into (e.g. "Saddar", "Korangi route"). */
+export interface SalesArea {
+  id: string;
+  name: string;
+  note?: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/**
+ * free_every: every `buyQty` bought gives `freeQty` free (buy 10 get 1).
+ * free_slab:  the highest slab reached gives its free qty once (50+ → 3 free, 100+ → 7 free).
+ * pct_off:    `pctOff` % off the line when at least `minQty` is bought.
+ */
+export type SchemeKind = 'free_every' | 'free_slab' | 'pct_off';
+
+export interface SchemeSlab {
+  minQty: number;
+  freeQty: number;
+}
+
+export interface Scheme {
+  id: string;
+  name: string;
+  productId: string;
+  kind: SchemeKind;
+  buyQty?: number;
+  freeQty?: number;
+  slabs?: SchemeSlab[];
+  minQty?: number;
+  pctOff?: number;
+  /** Item given free (default: the same item). */
+  freeProductId?: string | null;
+  /** Valid from / to (inclusive); empty = open-ended. */
+  fromDate?: string;
+  toDate?: string;
+  /** Only for these customers (empty = everyone). */
+  customerIds?: string[];
+  active: boolean;
   createdAt: string;
   createdBy?: string;
   updatedAt?: string;

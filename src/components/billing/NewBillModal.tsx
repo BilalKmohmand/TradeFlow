@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, Printer, Save, UserPlus, Percent, SplitSquareHorizontal, Keyboard } from 'lucide-react';
-import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
+import { Plus, Trash2, Printer, Save, UserPlus, Percent, SplitSquareHorizontal, Keyboard, Gift } from 'lucide-react';
+import { useTrading, BILL_PAYMENT_METHODS, CreateBillItemInput } from '../../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice, rs } from './ui';
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
@@ -12,6 +12,7 @@ import { customerSnapshot, lastRateFor, resolveBillPayments, PaymentPart } from 
 import { hasPack, formatPackQty, plural, baseToPacks } from '../../utils/packUnits';
 import { QuickSelect, PickOption } from './QuickPick';
 import { ChequeFieldsInput, ChequeFields, emptyChequeFields } from './ChequeForms';
+import { evaluateSchemes } from '../../utils/salesExtras';
 
 interface Row {
   key: string;
@@ -52,10 +53,17 @@ interface Props {
  * customer lists can be searched by typing a name or code.
  */
 export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quotationId }) => {
-  const { customers, products, settings, createBill, setPrintRequest, can, godowns, stockBatches, quotations, getCustomerAgreedRate, invoices, ledger } = useTrading();
+  const { customers, products, settings, createBill, setPrintRequest, can, godowns, stockBatches, quotations, getCustomerAgreedRate, invoices, ledger, salesmen, areas, schemes } = useTrading();
   const quote = quotationId ? quotations.find((q) => q.id === quotationId) : undefined;
   const [godownId, setGodownId] = useState(godowns[0]?.id || '');
   const [customer, setCustomer] = useState(quote?.customerId || customerId || '');
+  // Salesman and area on the bill start as the customer's defaults (can be changed per bill).
+  const startCust = customers.find((c) => c.id === (quote?.customerId || customerId || ''));
+  const [salesmanId, setSalesmanId] = useState(startCust?.salesmanId || '');
+  const [areaId, setAreaId] = useState(startCust?.areaId || '');
+  const [freight, setFreight] = useState('');
+  // Scheme lines / scheme discounts the shopkeeper took off this bill.
+  const [dropped, setDropped] = useState<Set<string>>(() => new Set());
   const [newCustomer, setNewCustomer] = useState<{ name: string; phone: string } | null>(null);
   const [date, setDate] = useState(todayISO());
   // A quotation fills the lines at the quoted prices; otherwise one empty line.
@@ -114,6 +122,9 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   // Changing the customer re-prices lines the shopkeeper has not typed a price into.
   const pickCustomer = (custId: string) => {
     setCustomer(custId);
+    const c = customers.find((x) => x.id === custId);
+    setSalesmanId(c?.salesmanId || '');
+    setAreaId(c?.areaId || '');
     setRows((prev) => prev.map((r) => {
       if (!r.productId || r.priceFrom === 'typed') return r;
       const { base, priceFrom } = priceFor(r.productId, custId);
@@ -151,7 +162,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     el?.focus();
   }, [rows.length]);
 
-  const lines = rows.map((r) => {
+  const baseLines = rows.map((r) => {
     const p = products.find((x) => x.id === r.productId);
     const pack = r.inPack && hasPack(p) ? p.packSize : 1;
     // What was typed (per pack or per unit) …
@@ -163,8 +174,29 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     const discValue = parseFloat(r.disc) || 0;
     const lineDisc = lineDiscountAmount(typedQty, typedPrice, r.discType, discValue);
     // rawQty / rawPrice are what the fields show; qty / price are per base unit.
-    return { ...r, rawQty: r.qty, rawPrice: r.price, typedQty, typedPrice, pack, qty, price, discValue, lineDisc, amount: Math.round((typedQty * typedPrice - lineDisc) * 100) / 100, product: p };
+    return { ...r, rawQty: r.qty, rawPrice: r.price, typedQty, typedPrice, pack, qty, price, discValue, lineDisc, amount: Math.round((typedQty * typedPrice - lineDisc) * 100) / 100, product: p, schemePct: null as null | { schemeId: string; schemeName: string; pct: number } };
   });
+  // Schemes: free goods and "% off above a quantity", worked out from what is on the bill.
+  const schemeCustomer = newCustomer ? '' : customer;
+  const qtyKey = baseLines.map((l) => `${l.productId}:${l.qty}`).join('|');
+  const schemeResult = useMemo(
+    () => (schemes.length ? evaluateSchemes(schemes, baseLines.map((l) => ({ productId: l.productId, qty: l.qty })), schemeCustomer, date) : { free: [], pct: {} as Record<string, { schemeId: string; schemeName: string; pct: number }> }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [schemes, schemeCustomer, date, qtyKey]
+  );
+  // A % scheme fills the line discount unless the shopkeeper typed their own discount on that line.
+  const lines = baseLines.map((l) => {
+    const sp = l.productId ? schemeResult.pct[l.productId] : undefined;
+    if (!sp || l.discValue > 0 || dropped.has(`pct|${sp.schemeId}|${l.key}`)) return l;
+    const lineDisc = lineDiscountAmount(l.typedQty, l.typedPrice, 'pct', sp.pct);
+    return { ...l, discType: 'pct' as const, discValue: sp.pct, lineDisc, amount: Math.round((l.typedQty * l.typedPrice - lineDisc) * 100) / 100, schemePct: sp };
+  });
+  const freeLines = schemeResult.free
+    .filter((f) => !dropped.has(f.key))
+    .map((f) => ({ ...f, product: products.find((x) => x.id === f.productId) }))
+    .filter((f) => f.product);
+  const droppedCount = schemeResult.free.filter((f) => dropped.has(f.key)).length + baseLines.filter((l) => l.productId && schemeResult.pct[l.productId] && !(l.discValue > 0) && dropped.has(`pct|${schemeResult.pct[l.productId].schemeId}|${l.key}`)).length;
+  const drop = (key: string) => setDropped((prev) => new Set(prev).add(key));
   // Where each line's stock would come from (batch items, or a godown other than the main one).
   // Lines are planned together, in order, so two lines of the same item share the same stock, exactly
   // as saving the bill will. Expiry is judged against today, so a back-dated bill can't sell expired stock.
@@ -194,7 +226,8 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const disc = Math.min(Math.max(0, parseFloat(discount) || 0), subtotal);
   const taxRate = settings.taxRatePct ?? 0;
   const tax = ((subtotal - disc) * taxRate) / 100;
-  const total = Math.round((subtotal - disc + tax) * 100) / 100;
+  const freightAmt = Math.max(0, parseFloat(freight) || 0);
+  const total = Math.round((subtotal - disc + tax + freightAmt) * 100) / 100;
 
   // What was paid now: one method, or split across cash / bank / cheque.
   const amt = (s: string) => Math.max(0, parseFloat(s) || 0);
@@ -215,12 +248,14 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const canOverride = can('override_credit');
   const creditBlocked = credit.over && !(canOverride && allowOver && overReason.trim());
   // Stock the bill can't be made from (short stock, batches, expired stock, another godown): Save waits until it is fixed.
-  const stockBlocked = lines.some((l, idx) => stockNote(l, idx)?.block);
+  // Free goods take stock too: when short stock is not allowed, the bill waits until the free qty fits.
+  const freeShort = !allowNegative ? freeLines.find((f) => lines.filter((l) => l.product?.id === f.productId).reduce((a, l) => a + l.qty, 0) + freeLines.filter((x) => x.productId === f.productId).reduce((a, x) => a + x.qty, 0) > (f.product!.stockKg || 0) + 0.0001) : undefined;
+  const stockBlocked = lines.some((l, idx) => stockNote(l, idx)?.block) || Boolean(freeShort);
   const saveBlocked = creditBlocked || stockBlocked;
   const blockedWhy = stockBlocked ? 'Not enough stock for this bill' : creditBlocked ? 'Over the credit limit' : undefined;
   const snapshot = useMemo(() => (selected ? customerSnapshot(selected.id, invoices, ledger) : null), [selected, invoices, ledger]);
   // Any change to the bill clears an old error message.
-  React.useEffect(() => { setError(''); }, [customer, newCustomer, rows, discount, paidNow, method, godownId, allowOver, overReason, split, splitCash, splitBank, splitCheque, cheque]);
+  React.useEffect(() => { setError(''); }, [customer, newCustomer, rows, discount, paidNow, method, godownId, allowOver, overReason, split, splitCash, splitBank, splitCheque, cheque, freight, salesmanId, areaId, dropped]);
 
   const submit = (print: boolean) => {
     if (busy.current) return; // a double tap must not make two bills
@@ -233,7 +268,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     if (items.length === 0) return setError('Add at least one item with a quantity.');
     if (payment.error) return setError(payment.error);
     if (hasCheque && (!cheque.chequeNumber.trim() || !cheque.bankName.trim())) return setError('Enter the cheque number and bank.');
-    if (stockBlocked) return setError(lines.map((l, i) => stockNote(l, i)).find((n) => n?.block)?.text || 'Not enough stock.');
+    if (stockBlocked) return setError(lines.map((l, i) => stockNote(l, i)).find((n) => n?.block)?.text || (freeShort ? `Not enough ${freeShort.product!.name} in stock for the free goods. Receive the stock first, or remove the free line.` : 'Not enough stock.'));
     if (credit.over && !(canOverride && allowOver)) return setError(canOverride ? 'This bill is over the credit limit. Tick "Allow over limit" and give a reason, or take more payment now.' : 'This bill is over the customer\'s credit limit. Take more payment now, or ask a manager to allow it.');
     if (credit.over && !overReason.trim()) return setError('Write a short reason for allowing this bill over the credit limit.');
     busy.current = true; // held until the dialog closes; released at once if the bill is refused
@@ -249,7 +284,10 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
         ...(l.lineDisc > 0 ? { discountType: l.discType, discountValue: l.discValue } : {}),
         ...(l.priceFrom === 'customer' ? { customerRate: true } : {}),
         ...(l.pack > 1 ? { packPrice: l.typedPrice } : {}),
-      })),
+      } as CreateBillItemInput)).concat(freeLines.map((f) => ({ productId: f.productId, name: f.product!.name, qty: f.qty, unitPrice: 0, unit: f.product!.unit, free: true, schemeId: f.schemeId, schemeName: f.schemeName }))),
+      freightCharges: freightAmt,
+      ...(salesmen.length ? { salesmanId: salesmanId || null } : {}),
+      ...(areas.length ? { areaId: areaId || null } : {}),
       quotationId: quote?.id,
       discount: disc,
       payments: payment.parts,
@@ -384,6 +422,28 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               </select>
             </div>
           )}
+          {(salesmen.length > 0 || areas.length > 0) && (
+            <div className="sm:col-span-3 grid grid-cols-2 gap-3">
+              {salesmen.length > 0 && (
+                <div>
+                  <label className={labelCls} htmlFor="bill-salesman">Salesman</label>
+                  <select id="bill-salesman" value={salesmanId} onChange={(e) => setSalesmanId(e.target.value)} className={inputCls}>
+                    <option value="">No salesman</option>
+                    {salesmen.filter((x) => x.active || x.id === salesmanId).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {areas.length > 0 && (
+                <div>
+                  <label className={labelCls} htmlFor="bill-area">Area</label>
+                  <select id="bill-area" value={areaId} onChange={(e) => setAreaId(e.target.value)} className={inputCls}>
+                    <option value="">No area</option>
+                    {areas.filter((x) => x.active || x.id === areaId).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div>
@@ -444,6 +504,12 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                       )}
                     </div>
                   )}
+                  {l.schemePct && (
+                    <div data-testid={`scheme-pct-${idx + 1}`} className="col-span-12 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-teal-700 dark:text-teal-300">
+                      <Gift className="w-3.5 h-3.5" /> Scheme “{l.schemePct.schemeName}”: {l.schemePct.pct}% off (− {rs(l.lineDisc)})
+                      <button type="button" tabIndex={-1} onClick={() => drop(`pct|${l.schemePct!.schemeId}|${l.key}`)} className="underline text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600" aria-label={`Remove scheme discount on item ${idx + 1}`}>remove</button>
+                    </div>
+                  )}
                   {note && <div data-testid={`stock-note-${idx + 1}`} className={`col-span-12 text-[11px] font-semibold ${note.block ? 'text-rose-700 dark:text-rose-300' : note.warn ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{note.text}</div>}
                   {l.showDisc ? (
                     <div className="col-span-12 flex flex-wrap items-center gap-2">
@@ -467,6 +533,20 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
           </div>
           <button type="button" onClick={addRow} title="Add a line (+ or Alt+N)" className="mt-2 inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-300 hover:underline"><Plus className="w-4 h-4" /> Add another item</button>
           {products.length === 0 && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">No items yet. Add your products with their prices on the Items screen first.</p>}
+          {freeLines.length > 0 && (
+            <div className="mt-3 rounded-2xl border border-teal-200 dark:border-teal-900 bg-teal-50/50 dark:bg-teal-950/20 p-2.5 space-y-1.5" data-testid="bill-free-lines">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-teal-800 dark:text-teal-300 flex items-center gap-1.5"><Gift className="w-3.5 h-3.5" /> Free goods (scheme)</div>
+              {freeLines.map((f) => (
+                <div key={f.key} className="flex items-center gap-2 text-sm">
+                  <span className="flex-1 min-w-0"><span className="font-semibold text-[#111827] dark:text-white">{f.product!.name}</span> <span className="tabular-nums">× {formatPackQty(f.qty, f.product!)}</span><span className="block text-[11px] text-[#6B7280] dark:text-[#94A3B8]">{f.schemeName} • price 0 • stock goes out at cost</span></span>
+                  <span className="text-xs font-bold text-teal-700 dark:text-teal-300">FREE</span>
+                  <button type="button" onClick={() => drop(f.key)} aria-label={`Remove free ${f.product!.name}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              ))}
+              {freeShort && <p className="text-[11px] font-semibold text-rose-700 dark:text-rose-300">Not enough {freeShort.product!.name} in stock for the free goods.</p>}
+            </div>
+          )}
+          {droppedCount > 0 && <button type="button" onClick={() => setDropped(new Set())} className="mt-2 text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:underline">Put back the removed scheme{droppedCount === 1 ? '' : 's'} ({droppedCount})</button>}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -474,6 +554,10 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
             <div>
               <label className={labelCls} htmlFor="bill-discount">Discount (Rs.)</label>
               <input id="bill-discount" type="number" inputMode="decimal" min="0" step="any" value={discount} onChange={(e) => setDiscount(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0 (on the whole bill)" />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="bill-freight">Freight / loading (Rs.)</label>
+              <input id="bill-freight" type="number" inputMode="decimal" min="0" step="any" value={freight} onChange={(e) => setFreight(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0 (cartage / loading charged)" />
             </div>
             <div>
               <label className={labelCls} htmlFor="bill-notes">Note (optional)</label>
@@ -490,6 +574,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
             <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>Subtotal</span><span className="tabular-nums">{rs(subtotal)}</span></div>
             {disc > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>Discount</span><span className="tabular-nums">− {rs(disc)}</span></div>}
             {taxRate > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>{settings.taxLabel || 'Tax'} {taxRate}%</span><span className="tabular-nums">{rs(tax)}</span></div>}
+            {freightAmt > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>Freight / loading</span><span className="tabular-nums">{rs(freightAmt)}</span></div>}
             <div className="flex justify-between font-extrabold text-[#111827] dark:text-white border-t border-[#E5E5E1] dark:border-[#203248] pt-2"><span>Total</span><span className="tabular-nums">{rs(total)}</span></div>
             {split ? (
               <div className="space-y-2 pt-1" data-testid="bill-split">

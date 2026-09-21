@@ -1,0 +1,206 @@
+import React, { useMemo, useState } from 'react';
+import { Printer, Save, Search, Percent } from 'lucide-react';
+import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
+import { Modal, Notice, EmptyState, inputCls, labelCls, primaryBtn, secondaryBtn, rs, moneyCls } from './ui';
+import { todayISO } from '../../utils/stockFlow';
+import { formatDate } from '../../utils/formatters';
+import { booksLockedFor } from '../../utils/accounting';
+
+/** Cheques need their own details and wait in the cheque register, so they are not offered here. */
+const METHODS = BILL_PAYMENT_METHODS.filter((m) => m !== 'Cheque');
+
+interface Line {
+  on: boolean;
+  amount: string;
+  method: string;
+}
+
+/**
+ * Receive from many customers at once (the recovery man's round): tick customers, enter what each
+ * paid, save once. Every customer gets their own payment row; they share one collection-sheet number.
+ */
+export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  const { customers, salesmen, areas, receiveMany, setPrintRequest, settings } = useTrading();
+  const today = todayISO();
+  const [date, setDate] = useState(today);
+  const [salesmanId, setSalesmanId] = useState('');
+  const [areaFilter, setAreaFilter] = useState('all');
+  const [query, setQuery] = useState('');
+  const [note, setNote] = useState('');
+  const [lines, setLines] = useState<Record<string, Line>>({});
+  const [error, setError] = useState('');
+  const [done, setDone] = useState<{ sheetNo: string; message: string } | null>(null);
+
+  const owing = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return customers
+      .filter((c) => c.totalDue > 0.005)
+      .filter((c) => areaFilter === 'all' || (c.areaId || '') === areaFilter)
+      .filter((c) => !q || c.name.toLowerCase().includes(q) || (c.code || '').toLowerCase().includes(q) || c.phone.includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [customers, query, areaFilter]);
+  const line = (id: string): Line => lines[id] || { on: false, amount: '', method: 'Cash' };
+  const setLine = (id: string, patch: Partial<Line>) => { setError(''); setLines((prev) => ({ ...prev, [id]: { ...line(id), ...patch } })); };
+  const ticked = (Object.entries(lines) as [string, Line][]).filter(([, l]) => l.on && (parseFloat(l.amount) || 0) > 0);
+  const total = ticked.reduce((a, [, l]) => a + (parseFloat(l.amount) || 0), 0);
+  const cash = ticked.filter(([, l]) => l.method.toLowerCase().startsWith('cash')).reduce((a, [, l]) => a + (parseFloat(l.amount) || 0), 0);
+
+  const save = (print: boolean) => {
+    setError('');
+    const closed = booksLockedFor(settings, date);
+    if (closed) return setError(closed);
+    const r = receiveMany({ date, salesmanId: salesmanId || null, note, rows: ticked.map(([customerId, l]) => ({ customerId, amount: parseFloat(l.amount) || 0, method: l.method })) });
+    if (!r.success || !r.sheetNo) return setError(r.message);
+    setDone({ sheetNo: r.sheetNo, message: r.message });
+    if (print) setPrintRequest({ type: 'sales_extras', report: 'collection', sheetNo: r.sheetNo });
+  };
+
+  if (done) {
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} title="Money received" subtitle={`Collection sheet ${done.sheetNo}`}>
+        <div className="space-y-4">
+          <Notice kind="ok">{done.message}</Notice>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={() => setPrintRequest({ type: 'sales_extras', report: 'collection', sheetNo: done.sheetNo })} className={secondaryBtn}><Printer className="w-4 h-4" /> Print collection sheet</button>
+            <button type="button" onClick={onClose} className={primaryBtn}>Done</button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
+  const footer = (
+    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+      <div className="flex-1 text-sm">
+        <span className="text-[#6B7280] dark:text-[#94A3B8]">{ticked.length} customer(s) • </span>
+        <span className={`${moneyCls} font-extrabold text-lg`} data-testid="receive-many-total">{rs(total)}</span>
+        {total > 0 && <span className="ml-2 text-[11px] text-[#6B7280] dark:text-[#94A3B8]">cash {rs(cash)} • bank {rs(total - cash)}</span>}
+      </div>
+      <div className="flex gap-2">
+        <button type="button" onClick={() => save(false)} disabled={ticked.length === 0} className={secondaryBtn}><Save className="w-4 h-4" /> Save</button>
+        <button type="button" onClick={() => save(true)} disabled={ticked.length === 0} className={primaryBtn}><Printer className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Save &amp; Print</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Receive from many" subtitle="Tick each customer who paid and enter the amount. One save records them all." wide footer={footer}>
+      <div className="space-y-4">
+        {error && <Notice kind="error">{error}</Notice>}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div>
+            <label className={labelCls} htmlFor="rm-date">Date</label>
+            <input id="rm-date" type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="rm-salesman">Collected by</label>
+            <select id="rm-salesman" value={salesmanId} onChange={(e) => setSalesmanId(e.target.value)} className={inputCls}>
+              <option value="">—</option>
+              {salesmen.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="rm-area">Area</label>
+            <select id="rm-area" value={areaFilter} onChange={(e) => setAreaFilter(e.target.value)} className={inputCls}>
+              <option value="all">All areas</option>
+              {areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              {areas.length > 0 && <option value="">No area</option>}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="rm-note">Note</label>
+            <input id="rm-note" value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} placeholder="optional" />
+          </div>
+        </div>
+        <div className="relative">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a customer" className={`${inputCls} pl-10`} aria-label="Find a customer" />
+        </div>
+        {owing.length === 0 ? <EmptyState compact text="Nobody owes you money here." /> : (
+          <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248]" data-testid="receive-many-list">
+            {owing.map((c) => {
+              const l = line(c.id);
+              return (
+                <li key={c.id} className={`px-3 py-2 ${l.on ? 'bg-teal-50/60 dark:bg-teal-950/20' : ''}`}>
+                  <div className="flex items-center gap-3">
+                    <input type="checkbox" aria-label={`Received from ${c.name}`} checked={l.on} onChange={(e) => setLine(c.id, { on: e.target.checked, amount: e.target.checked && !l.amount ? String(Math.round(c.totalDue * 100) / 100) : l.amount })} className="w-5 h-5 accent-teal-700 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold truncate">{c.code ? `${c.code} • ` : ''}{c.name}</div>
+                      <div className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">owes <span className={moneyCls}>{rs(c.totalDue)}</span>{c.areaId ? ` • ${areas.find((a) => a.id === c.areaId)?.name || ''}` : ''}</div>
+                    </div>
+                  </div>
+                  {l.on && (
+                    <div className="grid grid-cols-2 gap-2 mt-2 pl-8">
+                      <input aria-label={`Amount from ${c.name}`} type="number" inputMode="decimal" min="0" step="any" value={l.amount} onChange={(e) => setLine(c.id, { amount: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="Amount" />
+                      <select aria-label={`Method for ${c.name}`} value={l.method} onChange={(e) => setLine(c.id, { method: e.target.value })} className={inputCls}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <p className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">Got a cheque? Use Receive payment → Cheque, so it waits in the cheque register until the bank clears it.</p>
+      </div>
+    </Modal>
+  );
+};
+
+/** Late-payment interest: preview what each customer would be charged, then post it as debit notes. */
+export const InterestRunModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  const { previewInterest, chargeInterest, customers, can } = useTrading();
+  const today = todayISO();
+  const [asOf, setAsOf] = useState(today);
+  const [skip, setSkip] = useState<Set<string>>(new Set());
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const rows = useMemo(() => (isOpen ? previewInterest(asOf) : []), [isOpen, asOf, previewInterest]);
+  const picked = rows.filter((r) => !skip.has(r.customer.id));
+  const total = picked.reduce((a, r) => a + r.interest, 0);
+  const withRate = customers.filter((c) => (c.interestPctPerMonth || 0) > 0).length;
+  const allowed = can('finance:view_pnl');
+
+  const post = () => {
+    const r = chargeInterest(asOf, picked.map((x) => x.customer.id));
+    setMsg({ kind: r.success ? 'ok' : 'error', text: r.message });
+    if (r.success) setSkip(new Set());
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Charge interest" subtitle="Late-payment charge on overdue money, for customers who have a rate set." wide
+      footer={
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1 text-sm"><span className="text-[#6B7280] dark:text-[#94A3B8]">{picked.length} customer(s) • </span><span className={`${moneyCls} font-extrabold text-lg`}>{rs(total)}</span></div>
+          <button type="button" onClick={post} disabled={!allowed || picked.length === 0} className={primaryBtn}><Percent className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Post interest</button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
+        {!allowed && <Notice kind="error">Only a manager or admin can charge interest.</Notice>}
+        <div className="flex flex-wrap items-end gap-3">
+          <div><label className={labelCls} htmlFor="int-asof">Charge up to</label><input id="int-asof" type="date" value={asOf} max={today} onChange={(e) => e.target.value && setAsOf(e.target.value)} className={`${inputCls} sm:w-auto`} /></div>
+          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] flex-1 min-w-[12rem]">{withRate === 0 ? 'Interest is off for every customer. Set a rate on the customer (Customers → open → Area, salesman & late payment).' : `${withRate} customer(s) have a rate. Each unpaid bill is charged from the day it became overdue (or the last run), pro rata by day.`}</p>
+        </div>
+        {rows.length === 0 ? <EmptyState compact text="No interest to charge on this date." /> : (
+          <ul className="space-y-2" data-testid="interest-preview">
+            {rows.map((r) => (
+              <li key={r.customer.id} className="rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-3">
+                <div className="flex items-center gap-3">
+                  <input type="checkbox" aria-label={`Charge ${r.customer.name}`} checked={!skip.has(r.customer.id)} onChange={(e) => setSkip((prev) => { const n = new Set(prev); if (e.target.checked) n.delete(r.customer.id); else n.add(r.customer.id); return n; })} className="w-5 h-5 accent-teal-700" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold truncate">{r.customer.name}</div>
+                    <div className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">{r.pct}% a month after {r.afterDays} days • overdue <span className={moneyCls}>{rs(r.overdue)}</span>{r.lastChargedOn ? ` • last charged ${formatDate(r.lastChargedOn)}` : ''}</div>
+                  </div>
+                  <span className={`${moneyCls} font-bold`}>{rs(r.interest)}</span>
+                </div>
+                <ul className="mt-1.5 pl-8 text-[11px] text-[#6B7280] dark:text-[#94A3B8] space-y-0.5">
+                  {r.lines.map((l, i) => <li key={i}>{l.ref} ({formatDate(l.date)}): {rs(l.amount)} × {l.days} days from {formatDate(l.from)} = <span className={moneyCls}>{rs(l.interest)}</span></li>)}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Modal>
+  );
+};

@@ -58,6 +58,7 @@ import { creditCheck } from '../utils/credit';
 import { collectCashMovements, costPerKgOn } from '../utils/finance';
 import { BankRecApi, createBankRecApi } from './bankRecActions';
 import { ChequeApi, createChequeApi } from './chequeActions';
+import { SalesExtrasApi, SalesExtrasPrintRequest, useSalesExtrasStore } from './salesExtrasActions';
 import {
   DEFAULT_ROLES,
   DEFAULT_VISIBILITY_SETTINGS,
@@ -97,7 +98,7 @@ import {
   initialWhatsAppMessages,
 } from '../data/initialData';
 
-interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, AuthApi {
+interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, AuthApi, SalesExtrasApi {
   customers: Customer[];
   suppliers: Supplier[];
   products: Product[];
@@ -409,7 +410,8 @@ export type PrintRequestLike =
   | { type: 'billing_report'; report: 'profit'; from: string; to: string }
   | { type: 'billing_report'; report: 'item_history'; productId: string }
   | { type: 'debit_note'; returnId: string }
-  | { type: 'cheque_register'; view?: string };
+  | { type: 'cheque_register'; view?: string }
+  | SalesExtrasPrintRequest;
 
 /** Collision-safe id generator (Date.now() alone repeats when called in a tight loop). */
 let idCounter = 0;
@@ -433,6 +435,10 @@ export interface CreateBillItemInput {
   customerRate?: boolean;
   /** The line was typed in packs at this price per pack (qty and unitPrice are still per base unit). */
   packPrice?: number;
+  /** Free goods under a scheme: always price 0; the stock is booked at cost as a scheme expense. */
+  free?: boolean;
+  schemeId?: string;
+  schemeName?: string;
 }
 
 /** One part of "Paid now" on a bill (e.g. Rs. 5,000 cash + Rs. 20,000 bank transfer). */
@@ -481,6 +487,11 @@ export interface CreateBillInput {
   godownId?: string;
   /** Quotation this bill is made from (marked converted once the bill saves). */
   quotationId?: string | null;
+  /** Freight / cartage / loading charged to the customer on top of the goods (Rs., no tax). */
+  freightCharges?: number;
+  /** Salesman and area on the bill; left out = the customer's defaults, '' / null = none. */
+  salesmanId?: string | null;
+  areaId?: string | null;
 }
 
 /** Payment methods offered on bills. Anything starting with "Cash" counts as cash in hand. */
@@ -873,6 +884,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (data.bankReconciliations) setBankReconciliations(cloudOrLocal(data.bankReconciliations));
         // Cheque register: only when the cloud table exists (migration v14).
         if (data.cheques) setCheques(cloudOrLocal(data.cheques));
+        // Salesmen / areas / schemes: only when the cloud tables exist (migration v19).
+        salesExtras.hydrate({ salesmen: data.salesmen ?? undefined, areas: data.areas ?? undefined, schemes: data.schemes ?? undefined }, { keepLocalIfEmpty: true });
         // Godowns / batches / transfers: only when the cloud tables exist (migration v11).
         inventory.hydrate({ godowns: data.godowns, stockBatches: data.stockBatches, stockTransfers: data.stockTransfers }, { keepLocalIfEmpty: true });
         // Accounts: only when the cloud tables exist (migration v10); otherwise keep local copies.
@@ -1053,6 +1066,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setManualJournals([]);
     setCustomAccounts([]);
     inventory.reset();
+    salesExtras.reset();
     logAuditEvent('Sample Data Loaded', 'All business data replaced with the built-in sample dataset.', 'warning');
   };
 
@@ -1667,6 +1681,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       accounts: () => setCustomAccounts([]),
       customer_agreed_rates: () => setCustomerAgreedRates([]),
       cheques: () => setCheques([]),
+      ...salesExtras.purgeSetters,
     };
     setters[table]();
     if (isCloudSyncReady) void clearTable(table);
@@ -2610,8 +2625,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Simple billing: bills, payments, cash/bank transfers
   // ---------------------------------------------------------------------------
   const createBill = (input: CreateBillInput): { success: boolean; message: string; invoice?: Invoice } => {
-    const items = (input.items || []).filter((it) => it.productId && it.qty > 0);
+    // Free (scheme) lines are always at price 0 with no discount.
+    const items = (input.items || []).filter((it) => it.productId && it.qty > 0).map((it) => (it.free ? { ...it, unitPrice: 0, discountType: undefined, discountValue: undefined, customerRate: undefined, packPrice: undefined } : it));
     if (items.length === 0) return { success: false, message: 'Add at least one item with a quantity.' };
+    if (items.every((it) => it.free)) return { success: false, message: 'A bill needs at least one item that is sold (not only free goods).' };
+    const freight = round2(Number(input.freightCharges) || 0);
+    if (freight < 0) return { success: false, message: 'Freight cannot be negative.' };
     if (items.some((it) => !(it.unitPrice >= 0))) return { success: false, message: 'A price cannot be negative.' };
     // Where the stock comes from (godown, batches first-expiry-first-out). Plain items are unchanged.
     // Expiry is judged against today (not the bill date), so a back-dated bill can't sell an expired batch.
@@ -2647,8 +2666,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const discount = round2(Math.min(Math.max(0, input.discount || 0), subtotal));
     const taxRatePct = settings.taxRatePct ?? 0;
     const taxAmount = round2(((subtotal - discount) * taxRatePct) / 100);
-    const totalAmount = round2(subtotal - discount + taxAmount);
+    const totalAmount = round2(subtotal - discount + taxAmount + freight);
     if (totalAmount <= 0) return { success: false, message: 'The bill total must be more than zero.' };
+    // Salesman / area: as picked on the bill, else the customer's defaults.
+    const salesmanId = input.salesmanId !== undefined ? input.salesmanId || null : customer.salesmanId || null;
+    const areaId = input.areaId !== undefined ? input.areaId || null : customer.areaId || null;
+    if (salesmanId && !salesExtras.api.salesmen.some((s) => s.id === salesmanId)) return { success: false, message: 'The salesman on this bill was not found.' };
+    if (areaId && !salesExtras.api.areas.some((a) => a.id === areaId)) return { success: false, message: 'The area on this bill was not found.' };
     // Paid now: one method (older callers) or split across cash / bank / wallet, plus a cheque.
     const partsIn: BillPaymentPart[] = input.payments ? input.payments : (input.paidNow || 0) > 0 ? [{ method: input.paymentMethod || 'Cash', amount: input.paidNow || 0 }] : [];
     const chequeIn = input.cheque && Number(input.cheque.amount) > 0 ? input.cheque : null;
@@ -2704,6 +2728,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // Pack unit at the time of sale, so the bill can print "2 cartons + 3 tins".
         ...(hasPack(product) ? { packName: product!.packName, packSize: product!.packSize } : {}),
         ...(hasPack(product) && it.packPrice != null && it.packPrice >= 0 ? { packPrice: round2(it.packPrice) } : {}),
+        ...(it.free ? { free: true, ...(it.schemeId ? { schemeId: it.schemeId } : {}), ...(it.schemeName ? { schemeName: it.schemeName } : {}) } : {}),
       };
     });
     const fromQuote = input.quotationId ? quotations.find((q) => q.id === input.quotationId) : undefined;
@@ -2732,6 +2757,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       taxRatePct,
       taxAmount,
       discount,
+      ...(freight > 0 ? { freightCharges: freight } : {}),
       totalAmount,
       paidAmount,
       balanceDue,
@@ -2744,6 +2770,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdBy: currentUser?.name,
       ...(creditOverride ? { creditOverride } : {}),
       ...(fromQuote ? { quotationId: fromQuote.id } : {}),
+      ...(salesmanId ? { salesmanId } : {}),
+      ...(areaId ? { areaId } : {}),
     };
     invoicesRef.current = [invoice, ...invoicesRef.current];
     if (fromQuote) setQuotations((prev) => prev.map((q) => (q.id === fromQuote.id ? { ...q, status: 'converted', invoiceId: invoice.id } : q)));
@@ -2771,7 +2799,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         referenceId: invoiceNumber,
         sourceId: invoice.id,
         date,
-        description: `Bill ${invoiceNumber}: ${invoiceItems.map((it) => `${it.productName} × ${it.qty}`).join(', ')}`,
+        description: `Bill ${invoiceNumber}: ${invoiceItems.map((it) => `${it.productName} × ${it.qty}${it.free ? ' (free)' : ''}`).join(', ')}${freight > 0 ? `, freight ${formatCurrency(freight)}` : ''}`,
         debit: totalAmount,
         credit: 0,
         balanceAfter: dueAfterBill,
@@ -3579,6 +3607,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       bankReconciliations,
       cheques,
       ...inventory.backupData(),
+      ...salesExtras.backupData(),
       manualJournals,
       customAccounts,
       customerAgreedRates,
@@ -3638,6 +3667,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (Array.isArray(data.bankReconciliations)) setBankReconciliations(data.bankReconciliations);
       if (Array.isArray(data.cheques)) setCheques(data.cheques);
       inventory.hydrate({ godowns: data.godowns ?? [], stockBatches: data.stockBatches ?? [], stockTransfers: data.stockTransfers ?? [] });
+      salesExtras.hydrate({ salesmen: data.salesmen ?? [], areas: data.areas ?? [], schemes: data.schemes ?? [] });
       if (Array.isArray(data.manualJournals)) setManualJournals(data.manualJournals);
       if (Array.isArray(data.customAccounts)) setCustomAccounts(data.customAccounts);
       if (Array.isArray(data.customerAgreedRates)) setCustomerAgreedRates(data.customerAgreedRates);
@@ -3676,6 +3706,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setBankReconciliations([]);
     setCheques([]);
     inventory.reset();
+    salesExtras.reset();
     localStorage.removeItem(STORAGE_KEYS.INVOICES);
     localStorage.removeItem(STORAGE_KEYS.CHEQUES);
     localStorage.removeItem(STORAGE_KEYS.BANK_LINES);
@@ -3707,6 +3738,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     recordAdjustment: (a) => setAdjustments((prev) => [{ ...a, id: uid('adj'), createdAt: todayISO(), createdBy: currentUser?.name }, ...prev]),
     can: (p) => can(p as Permission),
   });
+  // Salesmen, areas, schemes, receive-from-many, commission and interest (see salesExtrasActions.ts).
+  const salesExtras = useSalesExtrasStore({
+    customers, setCustomers, invoices, ledger, setLedger, addExpense, settings,
+    can: (p) => can(p as Permission),
+    logAuditEvent: (a, dt, sev) => logAuditEvent(a, dt, sev, 'billing'),
+    uid, userName: currentUser?.name, today: todayISO, isCloudSyncReady, syncToSupabase, removeRemote,
+  });
   // Billing-mode stock adjustments and purchase returns (godown / batch aware), see stockActions.ts.
   const stockActions = createStockActions({
     products, setProducts, suppliers, setSuppliers, purchases, adjustments, setAdjustments, returns, setReturns, ledger, setLedger,
@@ -3723,6 +3761,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ...inventory.api,
         ...stockActions,
         ...chequeApi,
+        ...salesExtras.api,
         ...auth,
         customers,
         suppliers,

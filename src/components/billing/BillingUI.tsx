@@ -6,6 +6,7 @@ import { ExpenseModal, TransferModal, ReceiveModal } from './MoneyForms';
 import { ReturnItemsModal } from './ReturnItemsModal';
 import { QuotationModal } from './QuotationModal';
 import { ExpenseCategory } from '../../types';
+import { SalesExtrasModals, SalesView } from './SalesHub';
 
 interface BillingUI {
   newBill: (customerId?: string | null) => void;
@@ -26,6 +27,8 @@ interface BillingUI {
   openMoneyTab: (tab: 'overview' | 'expenses' | 'cashbook' | 'cheques' | 'bank' | null) => void;
   /** The requested Money tab, if any (the Money screen reads it on mount, then clears it). */
   peekMoneyTab: () => 'overview' | 'expenses' | 'cashbook' | 'cheques' | 'bank' | null;
+  /** Sales & recovery: salesmen / areas, schemes, reports, receive from many, commission, interest ('hub' = the menu). */
+  salesExtras: (view?: SalesView) => void;
 }
 
 const Ctx = createContext<BillingUI | null>(null);
@@ -43,6 +46,7 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Every open bumps the nonce so the dialog remounts with fresh form state (no stale values, no reset race).
   const [nonce, setNonce] = useState(0);
   const bump = () => setNonce((n) => n + 1);
+  const [salesView, setSalesView] = useState<SalesView | null>(null);
   const moneyTab = useRef<ReturnType<BillingUI['peekMoneyTab']>>(null);
 
   const api: BillingUI = {
@@ -59,6 +63,7 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     editItem: (id) => { bump(); setItem({ open: true, editId: id }); },
     openMoneyTab: (tab) => { moneyTab.current = tab; },
     peekMoneyTab: () => moneyTab.current,
+    salesExtras: (view = 'hub') => { bump(); setSalesView(view); },
   };
 
   return (
@@ -71,6 +76,7 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       <ExpenseModal key={`exp-${nonce}`} isOpen={expense.open} onClose={() => setExpense({ open: false })} date={expense.date} category={expense.category} />
       <ReceiveModal key={`rc-${nonce}`} isOpen={receive.open} onClose={() => setReceive({ open: false, customerId: null })} customerId={receive.customerId} />
       <TransferModal key={`tr-${nonce}`} isOpen={transferOpen} onClose={() => setTransferOpen(false)} />
+      <SalesExtrasModals key={`sx-${nonce}`} view={salesView} onView={setSalesView} />
       <ItemModal key={`item-${nonce}`} isOpen={item.open} onClose={() => setItem({ open: false, editId: null })} editId={item.editId} />
     </Ctx.Provider>
   );

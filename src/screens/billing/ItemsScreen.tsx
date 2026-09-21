@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Pencil, Trash2, AlertTriangle, PackagePlus, Warehouse, ArrowRightLeft, Scale, History, Tag } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, AlertTriangle, PackagePlus, Warehouse, ArrowRightLeft, Scale, History, Tag, Gift } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useWideLayout } from '../../hooks/useMediaQuery';
 import { useBillingUI } from '../../components/billing/BillingUI';
@@ -14,7 +14,7 @@ import { hasPack, formatPackQty } from '../../utils/packUnits';
 
 /** Your price list: every item with its fixed price and how many are left. */
 export const ItemsScreen: React.FC = () => {
-  const { products, deleteProduct, can, godowns, stockBatches } = useTrading();
+  const { products, deleteProduct, can, godowns, stockBatches, schemes } = useTrading();
   const ui = useBillingUI();
   const wide = useWideLayout();
   const stock = useStockUI();
@@ -52,6 +52,7 @@ export const ItemsScreen: React.FC = () => {
         {canGodowns && <button type="button" onClick={() => openStock('godowns')} className={secondaryBtn}><Warehouse className="w-4 h-4 text-indigo-600 dark:text-indigo-300" /> Godowns{godowns.length > 1 ? ` (${godowns.length})` : ''}</button>}
         {godowns.length > 1 && canStock && <button type="button" onClick={() => openStock('move')} className={secondaryBtn}><ArrowRightLeft className="w-4 h-4 text-amber-600 dark:text-amber-300" /> Move stock</button>}
         {canAdjust && <button type="button" onClick={() => stock.adjustStock()} className={secondaryBtn}><Scale className="w-4 h-4 text-rose-600 dark:text-rose-400" /> Adjust stock</button>}
+        <button type="button" onClick={() => ui.salesExtras('schemes')} className={secondaryBtn}><Gift className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Schemes{schemes.length ? ` (${schemes.filter((s) => s.active).length})` : ''}</button>
         <button type="button" onClick={() => ui.newItem()} className={primaryBtn}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> New item</button>
       </PageHeader>
       <div className="relative">
