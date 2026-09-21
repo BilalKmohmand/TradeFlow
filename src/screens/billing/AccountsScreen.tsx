@@ -6,6 +6,7 @@ import { Notice, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBt
 import { JournalEntryModal } from '../../components/accounting/JournalEntryModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useAccounting } from '../../hooks/useAccounting';
+import { ProfitView } from '../../components/billing/BillingReports';
 import {
   ACCOUNT_TYPES,
   Account,
@@ -22,7 +23,7 @@ import {
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 
-type Tab = 'tb' | 'gl' | 'journal' | 'coa' | 'pnl' | 'bs';
+type Tab = 'tb' | 'gl' | 'journal' | 'coa' | 'pnl' | 'bs' | 'profit';
 
 const TABS: { id: Tab; label: string; help: string }[] = [
   { id: 'tb', label: 'Trial balance', help: 'The balance of every account on one date. Debits (what the business has or spent) must equal credits (what it owes, the owner put in, or it earned).' },
@@ -31,6 +32,7 @@ const TABS: { id: Tab; label: string; help: string }[] = [
   { id: 'coa', label: 'Chart of accounts', help: 'The list of accounts money is sorted into. System accounts are used by automatic postings; you can add your own.' },
   { id: 'pnl', label: 'Profit & Loss', help: 'Income minus the cost of what was sold and the expenses, for a period: did the business make money?' },
   { id: 'bs', label: 'Balance sheet', help: 'What the business owns (assets) against what it owes (liabilities) and what belongs to the owner (equity), on one date.' },
+  { id: 'profit', label: 'Profit by item', help: 'Profit made on each item and from each customer, from your bills: what you sold it for minus what it cost you.' },
 ];
 
 const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
@@ -144,7 +146,7 @@ export const AccountsScreen: React.FC = () => {
         {canPost && <button type="button" onClick={() => setNewJournal((n) => n + 1)} className={primaryBtn}><Plus className="w-4 h-4" /> New journal entry</button>}
       </div>
 
-      <div role="tablist" aria-label="Accounts views" className="flex flex-wrap gap-1.5">{TABS.map(tabBtn)}</div>
+      <div role="tablist" aria-label="Accounts views" className="flex flex-wrap gap-1.5">{TABS.filter((t) => t.id !== 'profit' || canPost).map(tabBtn)}</div>
       <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] -mt-2">{current.help}</p>
 
       {settings.booksLockedUntil && (
@@ -361,6 +363,9 @@ export const AccountsScreen: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ---------------- Profit by item / customer (needs finance:view_pnl) ---------------- */}
+      {tab === 'profit' && canPost && <ProfitView />}
 
       {/* ---------------- Balance sheet ---------------- */}
       {tab === 'bs' && (

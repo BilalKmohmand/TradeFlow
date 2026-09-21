@@ -1,0 +1,216 @@
+import React, { useMemo, useState } from 'react';
+import { Plus, Search, Phone, PackagePlus, HandCoins, Printer, Pencil, Trash2, Undo2, Clock } from 'lucide-react';
+import { useTrading } from '../../context/TradingContext';
+import { useStockUI } from '../../components/billing/StockUI';
+import { PurchaseRegisterView } from '../../components/billing/BillingReports';
+import { Modal, Notice, cardCls, inputCls, primaryBtn, secondaryBtn, dangerBtn, rs } from '../../components/billing/ui';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { formatDate } from '../../utils/formatters';
+import { todayISO } from '../../utils/stockFlow';
+import { booksLockedFor } from '../../utils/accounting';
+import { Supplier } from '../../types';
+
+type Tab = 'suppliers' | 'received' | 'returns';
+const num = (n: number) => n.toLocaleString('en-PK', { maximumFractionDigits: 2 });
+
+/** Suppliers the simple way: what you owe them, stock received, goods sent back. No bookings or dispatches. */
+export const SuppliersBillingScreen: React.FC<{ onAdd: () => void; onPay: (supplierId: string) => void }> = ({ onAdd, onPay }) => {
+  const { suppliers, purchases, returns, products, ledger, setEditRequest, deleteSupplier, setPrintRequest, can, deletePurchaseReturn, settings } = useTrading();
+  const stock = useStockUI();
+  const [tab, setTab] = useState<Tab>('suppliers');
+  const [query, setQuery] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null);
+  const [pendingReturn, setPendingReturn] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const today = todayISO();
+  const canDelete = can('delete_records');
+  const canStock = can('products:create') || can('stock:adjust');
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return suppliers
+      .filter((s) => !q || s.name.toLowerCase().includes(q) || (s.company || '').toLowerCase().includes(q) || (s.phone || '').includes(q))
+      .sort((a, b) => b.totalOwed - a.totalOwed || (a.company || a.name).localeCompare(b.company || b.name));
+  }, [suppliers, query]);
+  const owed = suppliers.reduce((a, s) => a + Math.max(0, s.totalOwed), 0);
+  const open = suppliers.find((s) => s.id === openId) || null;
+  const productName = (id: string) => products.find((p) => p.id === id)?.name || 'Item';
+  const unitOf = (id: string) => products.find((p) => p.id === id)?.unit || 'pcs';
+  const openPurchases = open ? purchases.filter((p) => p.supplierId === open.id).sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
+  const openPayments = open ? ledger.filter((l) => l.entityType === 'supplier' && l.entityId === open.id && l.type === 'payment_made').sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
+  const debitNotes = useMemo(() => returns.filter((r) => r.kind === 'purchase').sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.returnNumber.localeCompare(a.returnNumber))), [returns]);
+  const openReturns = open ? debitNotes.filter((r) => r.supplierId === open.id) : [];
+  const supName = (id?: string | null) => {
+    const s = suppliers.find((x) => x.id === id);
+    return s ? s.company || s.name : 'Supplier';
+  };
+
+  const tabBtn = (id: Tab, label: string) => (
+    <button type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`px-4 py-2 rounded-2xl text-xs font-bold border whitespace-nowrap ${tab === id ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] border-transparent' : 'bg-white dark:bg-[#101A26] border-[#E5E5E1] dark:border-[#203248] text-[#6B7280] dark:text-[#94A3B8]'}`}>{label}</button>
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-[#111827] dark:text-white">Suppliers</h1>
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{suppliers.length} supplier{suppliers.length === 1 ? '' : 's'}{owed > 0 ? ` • you owe ${rs(owed)}` : ''}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {canStock && <button type="button" onClick={() => stock.purchaseReturn()} className={secondaryBtn}><Undo2 className="w-4 h-4 text-rose-600" /> Return goods</button>}
+          <button type="button" onClick={() => stock.aging('suppliers')} className={secondaryBtn}><Clock className="w-4 h-4 text-amber-600" /> How long owed</button>
+          <button type="button" onClick={onAdd} className={primaryBtn}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add supplier</button>
+        </div>
+      </div>
+      <div role="tablist" aria-label="Suppliers views" className="flex flex-wrap gap-1.5">
+        {tabBtn('suppliers', 'Suppliers')}
+        {tabBtn('received', 'Stock received')}
+        {tabBtn('returns', `Returns${debitNotes.length ? ` (${debitNotes.length})` : ''}`)}
+      </div>
+      {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
+
+      {tab === 'suppliers' && (
+        <>
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name or phone" className={`${inputCls} pl-10`} aria-label="Search suppliers" />
+          </div>
+          <div className={`${cardCls} overflow-hidden`}>
+            {rows.length === 0 ? (
+              <div className="p-10 text-center text-sm text-[#6B7280] dark:text-[#94A3B8]">No suppliers yet. Add the companies you buy stock from.</div>
+            ) : (
+              <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
+                {rows.map((s) => (
+                  <li key={s.id} className="flex items-center gap-2 px-3 sm:px-5 py-3 hover:bg-[#FAF9F6] dark:hover:bg-[#162436]">
+                    <button type="button" onClick={() => setOpenId(s.id)} className="flex-1 min-w-0 text-left">
+                      <div className="font-semibold text-sm text-[#111827] dark:text-white truncate">{s.company || s.name}</div>
+                      <div className="text-[11px] text-[#8E9299] flex items-center gap-1 truncate"><Phone className="w-3 h-3" /> {s.phone || 'no phone'}{s.company && s.name !== s.company ? ` • ${s.name}` : ''}</div>
+                    </button>
+                    <div className="text-right shrink-0">
+                      <div className={`font-mono font-bold text-sm ${s.totalOwed > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#111827] dark:text-white'}`}>{s.totalOwed > 0 ? rs(s.totalOwed) : s.totalOwed < 0 ? rs(-s.totalOwed) : 'Clear'}</div>
+                      {s.totalOwed > 0 && <div className="text-[11px] text-[#8E9299]">you owe</div>}
+                      {s.totalOwed < 0 && <div className="text-[11px] text-teal-700 dark:text-teal-300">they owe you</div>}
+                    </div>
+                    {canStock && <button type="button" onClick={() => stock.receiveStock({ supplierId: s.id })} aria-label={`Receive stock from ${s.company || s.name}`} className="p-2.5 rounded-xl text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/40"><PackagePlus className="w-4 h-4" /></button>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+
+      {tab === 'received' && <PurchaseRegisterView />}
+
+      {tab === 'returns' && (
+        <div className={`${cardCls} overflow-hidden`}>
+          {debitNotes.length === 0 ? (
+            <div className="p-10 text-center text-sm text-[#6B7280] dark:text-[#94A3B8]">No goods sent back yet. Use <strong>Return goods</strong> when you send stock back to a supplier.</div>
+          ) : (
+            <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]" aria-label="Debit notes">
+              {debitNotes.map((r) => (
+                <li key={r.id} className="flex items-center gap-2 px-3 sm:px-5 py-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm text-[#111827] dark:text-white truncate"><span className="font-mono text-xs text-[#8E9299] mr-2">{r.returnNumber}</span>{supName(r.supplierId)}</div>
+                    <div className="text-[11px] text-[#8E9299] truncate">{formatDate(r.date)} • {num(r.kg)} {r.unit || unitOf(r.productId)} {productName(r.productId)} • {r.reason}</div>
+                  </div>
+                  <span className="font-mono font-bold text-sm shrink-0">{rs(r.amount)}</span>
+                  <button type="button" onClick={() => setPrintRequest({ type: 'debit_note', returnId: r.id })} aria-label={`Print debit note ${r.returnNumber}`} className="p-2 text-[#9CA3AF] hover:text-[#111827] dark:hover:text-white"><Printer className="w-4 h-4" /></button>
+                  {canDelete && !booksLockedFor(settings, r.date) && <button type="button" onClick={() => setPendingReturn(r.id)} aria-label={`Delete debit note ${r.returnNumber}`} className="p-2 text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <Modal isOpen={Boolean(open)} onClose={() => setOpenId(null)} title={open ? open.company || open.name : 'Supplier'} subtitle={open ? `${open.phone || 'no phone'}${open.address ? ` • ${open.address}` : ''}` : undefined} wide
+        footer={open && (
+          <div className="flex flex-wrap gap-2 justify-between">
+            <div className="flex flex-wrap gap-2">
+              {canStock && <button type="button" onClick={() => { const id = open.id; setOpenId(null); stock.receiveStock({ supplierId: id }); }} className={primaryBtn}><PackagePlus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Receive stock</button>}
+              <button type="button" onClick={() => { const id = open.id; setOpenId(null); onPay(id); }} className={secondaryBtn}><HandCoins className="w-4 h-4 text-teal-700" /> Pay</button>
+              {canStock && <button type="button" onClick={() => { const id = open.id; setOpenId(null); stock.purchaseReturn({ supplierId: id }); }} className={secondaryBtn}><Undo2 className="w-4 h-4 text-rose-600" /> Return goods</button>}
+              <button type="button" onClick={() => setPrintRequest({ type: 'supplier_statement', supplierId: open.id, from: `${today.slice(0, 4)}-01-01`, to: today })} className={secondaryBtn}><Printer className="w-4 h-4" /> Statement</button>
+              <button type="button" onClick={() => { const id = open.id; setOpenId(null); setEditRequest({ type: 'supplier', id }); }} className={secondaryBtn}><Pencil className="w-4 h-4" /> Edit</button>
+            </div>
+            {canDelete && <button type="button" onClick={() => setPendingDelete(open)} className={dangerBtn}><Trash2 className="w-4 h-4" /> Delete</button>}
+          </div>
+        )}
+      >
+        {open && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-3 gap-2 text-sm">
+              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">{open.totalOwed < 0 ? 'They owe you' : 'You owe'}</div><div className={`font-mono font-extrabold ${open.totalOwed > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#111827] dark:text-white'}`}>{rs(Math.abs(open.totalOwed))}</div></div>
+              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Receipts</div><div className="font-mono font-extrabold text-[#111827] dark:text-white">{openPurchases.length}</div></div>
+              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Bought so far</div><div className="font-mono font-extrabold text-[#111827] dark:text-white">{rs(openPurchases.reduce((a, p) => a + p.amount, 0))}</div></div>
+            </div>
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Stock received</h3>
+              {openPurchases.length === 0 ? <p className="text-sm text-[#8E9299]">Nothing received from this supplier yet.</p> : (
+                <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248]">
+                  {openPurchases.slice(0, 20).map((p) => (
+                    <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+                      <span className="min-w-0"><span className="font-mono text-xs text-[#8E9299] mr-2">{p.receiptNumber}</span>{formatDate(p.date)}<span className="block text-[11px] text-[#8E9299] truncate">{num(p.kg)} {unitOf(p.productId)} {productName(p.productId)} @ {rs(p.pricePerKg)}</span></span>
+                      <span className="font-mono font-bold shrink-0">{rs(p.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {openReturns.length > 0 && (
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Goods sent back</h3>
+                <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-sm">
+                  {openReturns.map((r) => (
+                    <li key={r.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                      <span className="min-w-0"><span className="font-mono text-xs text-[#8E9299] mr-2">{r.returnNumber}</span>{formatDate(r.date)}<span className="block text-[11px] text-[#8E9299] truncate">{num(r.kg)} {r.unit || unitOf(r.productId)} {productName(r.productId)} • {r.reason}</span></span>
+                      <span className="font-mono font-bold text-rose-700 dark:text-rose-300 shrink-0">− {rs(r.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {openPayments.length > 0 && (
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Payments made</h3>
+                <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-sm">
+                  {openPayments.slice(0, 12).map((l) => (
+                    <li key={l.id} className="flex justify-between gap-3 px-3 py-2"><span className="min-w-0 truncate">{formatDate(l.date)} • {l.description}</span><span className="font-mono font-bold shrink-0">{rs(l.credit)}</span></li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+      <ConfirmDialog
+        isOpen={Boolean(pendingDelete)}
+        title={`Delete ${pendingDelete?.company || pendingDelete?.name || ''}?`}
+        message="The supplier and their payment history are removed. Items keep their stock."
+        details={pendingDelete ? [`You owe ${rs(pendingDelete.totalOwed)}`] : []}
+        confirmLabel="Delete supplier"
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (pendingDelete) deleteSupplier(pendingDelete.id);
+          setPendingDelete(null);
+          setOpenId(null);
+        }}
+      />
+      <ConfirmDialog
+        isOpen={Boolean(pendingReturn)}
+        title="Delete this debit note?"
+        message="The goods go back into stock and the amount is added back to what you owe the supplier."
+        confirmLabel="Delete debit note"
+        onCancel={() => setPendingReturn(null)}
+        onConfirm={() => {
+          if (pendingReturn) {
+            const r = deletePurchaseReturn(pendingReturn);
+            setNotice({ kind: r.success ? 'ok' : 'error', text: r.message });
+          }
+          setPendingReturn(null);
+        }}
+      />
+    </div>
+  );
+};

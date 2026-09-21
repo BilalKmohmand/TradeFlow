@@ -1,7 +1,8 @@
 import React, { Fragment, useMemo, useState } from 'react';
-import { Plus, Search, Pencil, Trash2, AlertTriangle, PackagePlus, Warehouse, ArrowRightLeft } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, AlertTriangle, PackagePlus, Warehouse, ArrowRightLeft, Scale, History } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
+import { useStockUI } from '../../components/billing/StockUI';
 import { cardCls, inputCls, primaryBtn, secondaryBtn, rs } from '../../components/billing/ui';
 import { isExpired } from '../../utils/inventory';
 import { todayISO } from '../../utils/stockFlow';
@@ -14,6 +15,8 @@ import { liveBatches } from '../../utils/inventory';
 export const ItemsScreen: React.FC = () => {
   const { products, invoices, deleteProduct, can, godowns, stockBatches } = useTrading();
   const ui = useBillingUI();
+  const stock = useStockUI();
+  const canAdjust = can('stock:adjust');
   const [query, setQuery] = useState('');
   const [pending, setPending] = useState<Product | null>(null);
   // Stock dialogs (receive / godowns / move). The nonce remounts each dialog with fresh fields.
@@ -31,12 +34,13 @@ export const ItemsScreen: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[#111827] dark:text-white">Items</h1>
-          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{products.length} item{products.length === 1 ? '' : 's'} with fixed prices. Prices can still be changed on a bill line.</p>
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">{products.length} item{products.length === 1 ? '' : 's'} with fixed prices. Prices can still be changed on a bill line. Tap an item to see its stock history.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {canStock && <button type="button" onClick={() => openStock('receive')} className={secondaryBtn}><PackagePlus className="w-4 h-4 text-teal-700" /> Receive stock</button>}
           {canGodowns && <button type="button" onClick={() => openStock('godowns')} className={secondaryBtn}><Warehouse className="w-4 h-4 text-indigo-600" /> Godowns{godowns.length > 1 ? ` (${godowns.length})` : ''}</button>}
           {godowns.length > 1 && canStock && <button type="button" onClick={() => openStock('move')} className={secondaryBtn}><ArrowRightLeft className="w-4 h-4 text-amber-600" /> Move stock</button>}
+          {canAdjust && <button type="button" onClick={() => stock.adjustStock()} className={secondaryBtn}><Scale className="w-4 h-4 text-rose-600" /> Adjust stock</button>}
           <button type="button" onClick={() => ui.newItem()} className={primaryBtn}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> New item</button>
         </div>
       </div>
@@ -62,7 +66,7 @@ export const ItemsScreen: React.FC = () => {
                     <Fragment key={p.id}>
                     <tr className={`hover:bg-[#FAF9F6] dark:hover:bg-[#162436] ${details ? 'max-sm:border-b-0' : ''}`}>
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-[#111827] dark:text-white">{p.name}</div>
+                        <button type="button" onClick={() => stock.itemHistory(p.id)} className="font-semibold text-left text-[#111827] dark:text-white hover:underline inline-flex items-center gap-1.5" aria-label={`History of ${p.name}`} title="Stock history">{p.name}<History className="w-3.5 h-3.5 text-[#9CA3AF]" /></button>
                         <div className="text-[11px] text-[#8E9299]">per {p.unit || 'pcs'}{p.costPricePerKg ? ` • cost ${rs(p.costPricePerKg)}` : ''}{p.trackBatches ? ' • batch & expiry' : ''}</div>
                         <div className="hidden sm:block"><ItemStockDetails product={p} /></div>
                       </td>
@@ -75,6 +79,7 @@ export const ItemsScreen: React.FC = () => {
                       <td className="px-4 py-3 text-right font-mono text-[#6B7280] dark:text-[#94A3B8] hidden sm:table-cell">{soldCount(p.id).toLocaleString()}</td>
                       <td className="px-2 py-3 text-right whitespace-nowrap">
                         {canStock && <button type="button" onClick={() => openStock('receive', p.id)} aria-label={`Receive stock for ${p.name}`} title="Receive stock" className="p-2 rounded-xl text-[#9CA3AF] hover:text-teal-700"><PackagePlus className="w-4 h-4" /></button>}
+                        {canAdjust && <button type="button" onClick={() => stock.adjustStock(p.id)} aria-label={`Adjust stock of ${p.name}`} title="Adjust stock" className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600"><Scale className="w-4 h-4" /></button>}
                         <button type="button" onClick={() => ui.editItem(p.id)} aria-label={`Edit ${p.name}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-[#111827] dark:hover:text-white"><Pencil className="w-4 h-4" /></button>
                         {canDelete && <button type="button" onClick={() => setPending(p)} aria-label={`Delete ${p.name}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>}
                       </td>

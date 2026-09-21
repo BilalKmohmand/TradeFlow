@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Banknote, Landmark, ArrowLeftRight, HandCoins, Receipt, Settings2, ChevronRight, Printer } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
+import { useStockUI } from '../../components/billing/StockUI';
 import { Tile, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, rs } from '../../components/billing/ui';
 import { collectCashMovements, accountBalancesOn, positionSummary } from '../../utils/finance';
 import { groupExpenses } from '../../utils/billing';
@@ -19,6 +20,7 @@ export const MoneyScreen: React.FC = () => {
   // Bank reconciliation is book-keeping: staff without finance access (operators) don't see it.
   const canSeeBank = can('view_finance');
   const ui = useBillingUI();
+  const stockUI = useStockUI();
   const today = todayISO();
   const [tab, setTab] = useState<Tab>('overview');
   const [month, setMonth] = useState(today.slice(0, 7));
@@ -87,7 +89,7 @@ export const MoneyScreen: React.FC = () => {
           )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className={`${cardCls} overflow-hidden`}>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">Customers owe you</h2><span className="font-mono font-bold text-sm text-teal-700 dark:text-teal-300">{rs(position.receivables)}</span></div>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">Customers owe you</h2><span className="flex items-center gap-2"><button type="button" onClick={() => stockUI.aging('customers')} className="text-xs font-bold text-teal-700 dark:text-teal-300 px-2 py-1 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40">How long?</button><span className="font-mono font-bold text-sm text-teal-700 dark:text-teal-300">{rs(position.receivables)}</span></span></div>
               {debtors.length === 0 ? <div className="px-5 py-5 text-sm text-[#8E9299]">Nobody owes you anything.</div> : (
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                   {debtors.map((c) => (
@@ -102,7 +104,7 @@ export const MoneyScreen: React.FC = () => {
               )}
             </div>
             <div className={`${cardCls} overflow-hidden`}>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">You owe</h2><span className="font-mono font-bold text-sm text-rose-700 dark:text-rose-300">{rs(position.payables)}</span></div>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">You owe</h2><span className="flex items-center gap-2"><button type="button" onClick={() => stockUI.aging('suppliers')} className="text-xs font-bold text-teal-700 dark:text-teal-300 px-2 py-1 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40">How long?</button><span className="font-mono font-bold text-sm text-rose-700 dark:text-rose-300">{rs(position.payables)}</span></span></div>
               {creditors.length + unpaidExpenses.length + advances.length === 0 ? <div className="px-5 py-5 text-sm text-[#8E9299]">You owe nothing right now.</div> : (
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                   {creditors.map((s) => (

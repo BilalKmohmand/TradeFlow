@@ -39,6 +39,8 @@ import { DailySheetScreen } from './screens/billing/DailySheetScreen';
 import { MoneyScreen } from './screens/billing/MoneyScreen';
 import { CustomersBillingScreen } from './screens/billing/CustomersBillingScreen';
 import { AccountsScreen } from './screens/billing/AccountsScreen';
+import { SuppliersBillingScreen } from './screens/billing/SuppliersBillingScreen';
+import { StockUIProvider } from './components/billing/StockUI';
 
 function MainApp() {
   const {
@@ -59,8 +61,13 @@ function MainApp() {
     editRequest,
     setEditRequest,
     settings,
+    setActiveScreen,
   } = useTrading();
   const isBilling = (settings.appMode || 'billing') === 'billing';
+  // Trading-only screens have no place in simple billing: send the user home instead of showing them.
+  useEffect(() => {
+    if (isBilling && (activeScreen === 'bookings' || activeScreen === 'reports' || activeScreen === 'ops' || activeScreen === 'billing')) setActiveScreen('dashboard');
+  }, [isBilling, activeScreen, setActiveScreen]);
 
   // Modal States
   const [isCommandBarOpen, setIsCommandBarOpen] = useState<boolean>(false);
@@ -131,6 +138,7 @@ function MainApp() {
 
   return (
     <BillingUIProvider>
+    <StockUIProvider>
     <div className="min-h-screen print:min-h-0 w-full overflow-x-hidden bg-[#FAF9F6] dark:bg-[#090F17] text-[#111827] dark:text-[#F1F5F9] font-sans flex flex-col selection:bg-teal-700 selection:text-white transition-colors">
       {/* Navigation Header */}
       <Navbar
@@ -175,7 +183,8 @@ function MainApp() {
               />
             )}
 
-            {activeScreen === 'suppliers' && (
+            {activeScreen === 'suppliers' && isBilling && <SuppliersBillingScreen onAdd={() => setIsSupplierModalOpen(true)} onPay={handleOpenSupplierPayment} />}
+            {activeScreen === 'suppliers' && !isBilling && (
               <SuppliersScreen
                 onSelectSupplier={(sId) => setSelectedSupplierId(sId)}
                 onOpenAddSupplier={() => setIsSupplierModalOpen(true)}
@@ -192,7 +201,7 @@ function MainApp() {
               />
             )}
 
-            {activeScreen === 'bookings' && (
+            {activeScreen === 'bookings' && !isBilling && (
               <BookingsScreen
                 onOpenNewBooking={() => setIsBookingModalOpen(true)}
                 onOpenDispatchForBooking={handleOpenDispatch}
@@ -200,9 +209,9 @@ function MainApp() {
               />
             )}
 
-            {activeScreen === 'reports' && <ReportsScreen onReceiveStock={() => handleOpenPurchase()} />}
+            {activeScreen === 'reports' && !isBilling && <ReportsScreen onReceiveStock={() => handleOpenPurchase()} />}
 
-            {activeScreen === 'ops' && <OpsScreen initialTab={requestedOpsTab || 'alerts'} />}
+            {activeScreen === 'ops' && !isBilling && <OpsScreen initialTab={requestedOpsTab || 'alerts'} />}
 
             {activeScreen === 'admin' && <AdminScreen />}
           </motion.div>
@@ -232,6 +241,7 @@ function MainApp() {
         onOpenProductModal={() => setIsProductModalOpen(true)}
         onOpenWhatsAppDrawer={() => setIsWhatsAppDrawerOpen(true)}
         onOpenPurchaseModal={() => handleOpenPurchase()}
+        isBilling={isBilling}
       />
 
       {/* Toast Alert for background automated WhatsApp delivery */}
@@ -354,6 +364,7 @@ function MainApp() {
       {/* Printable documents (invoice, delivery challan, statements) */}
       <PrintDocument request={printRequest as PrintRequest | null} onClose={() => setPrintRequest(null)} />
     </div>
+    </StockUIProvider>
     </BillingUIProvider>
   );
 }
