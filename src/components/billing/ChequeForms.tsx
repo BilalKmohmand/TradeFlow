@@ -14,7 +14,7 @@ export interface ChequeFields {
 }
 export const emptyChequeFields = (): ChequeFields => ({ chequeNumber: '', bankName: '', chequeDate: todayISO() });
 
-export const ChequeFieldsInput: React.FC<{ value: ChequeFields; onChange: (v: ChequeFields) => void; idPrefix: string }> = ({ value, onChange, idPrefix }) => (
+export const ChequeFieldsInput: React.FC<{ value: ChequeFields; onChange: (v: ChequeFields) => void; idPrefix: string; direction?: 'received' | 'issued' }> = ({ value, onChange, idPrefix, direction = 'received' }) => (
   <div className="col-span-full grid grid-cols-2 sm:grid-cols-3 gap-3 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 p-3">
     <div>
       <label className={labelCls} htmlFor={`${idPrefix}-no`}>Cheque no.</label>
@@ -29,7 +29,9 @@ export const ChequeFieldsInput: React.FC<{ value: ChequeFields; onChange: (v: Ch
       <input id={`${idPrefix}-date`} type="date" value={value.chequeDate} onChange={(e) => onChange({ ...value, chequeDate: e.target.value })} className={inputCls} />
     </div>
     <datalist id="cheque-banks">{['HBL', 'MCB', 'UBL', 'Allied Bank', 'Bank Alfalah', 'Meezan Bank', 'National Bank', 'Bank Al Habib', 'Askari Bank', 'Faysal Bank', 'Standard Chartered', 'JS Bank', 'Bank of Punjab', 'Bank of Khyber'].map((b) => <option key={b} value={b} />)}</datalist>
-    <p className="col-span-full text-[11px] text-[#6B7280] dark:text-[#94A3B8]">Stays under "Cheques in hand" until the bank clears it.{value.chequeDate > todayISO() ? ` Post-dated: can be deposited from ${formatDate(value.chequeDate)}.` : ''}</p>
+    <p className="col-span-full text-[11px] text-[#6B7280] dark:text-[#94A3B8]">{direction === 'issued'
+        ? <>Shows under "Issued" in Money → Cheques and is paid from the bank when it clears.{value.chequeDate > todayISO() ? ` Post-dated: the supplier can cash it from ${formatDate(value.chequeDate)}.` : ''}</>
+        : <>Stays under "Cheques in hand" until the bank clears it.{value.chequeDate > todayISO() ? ` Post-dated: can be deposited from ${formatDate(value.chequeDate)}.` : ''}</>}</p>
   </div>
 );
 
@@ -80,7 +82,7 @@ export const ChequeFormModal: React.FC<{ isOpen: boolean; onClose: () => void; d
             <label className={labelCls} htmlFor="chq-entry">{received ? 'Received on' : 'Given on'}</label>
             <input id="chq-entry" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
           </div>
-          <ChequeFieldsInput value={fields} onChange={setFields} idPrefix="chq" />
+          <ChequeFieldsInput value={fields} onChange={setFields} idPrefix="chq" direction={direction} />
           {openBills.length > 0 && (
             <div className="col-span-2">
               <label className={labelCls} htmlFor="chq-bill">For bill (optional)</label>

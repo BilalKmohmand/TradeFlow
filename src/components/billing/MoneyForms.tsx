@@ -241,7 +241,7 @@ export const PaySupplierModal: React.FC<{ isOpen: boolean; onClose: () => void; 
             <label className={labelCls} htmlFor="ps-method">Method</label>
             <select id="ps-method" value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}>{BILL_PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}</select>
           </div>
-          {isCheque && <ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="ps-chq" />}
+          {isCheque && <ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="ps-chq" direction="issued" />}
           <div className="col-span-2">
             <label className={labelCls} htmlFor="ps-note">Note</label>
             <input id="ps-note" value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} placeholder="optional" />

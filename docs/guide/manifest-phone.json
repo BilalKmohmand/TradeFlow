@@ -32,35 +32,41 @@
   {
     "file": "m06.jpg",
     "section": "On a phone",
+    "title": "A4 bill on the phone",
+    "caption": "With A4 paper chosen in Bill settings, the full bill fits the phone screen. Print / Save PDF gives a normal A4 page."
+  },
+  {
+    "file": "m07.jpg",
+    "section": "On a phone",
     "title": "Bills",
     "caption": "Bills with what is still due in amber."
   },
   {
-    "file": "m07.jpg",
+    "file": "m08.jpg",
     "section": "On a phone",
     "title": "Money",
     "caption": "Cash, bank, who owes you and who you owe."
   },
   {
-    "file": "m08.jpg",
+    "file": "m09.jpg",
     "section": "On a phone",
     "title": "Cheques",
     "caption": "The cheque register with Deposit, Bounced and Mark cleared on each cheque."
   },
   {
-    "file": "m09.jpg",
+    "file": "m10.jpg",
     "section": "On a phone",
     "title": "Items",
     "caption": "The price list as cards, with stock and batches."
   },
   {
-    "file": "m10.jpg",
+    "file": "m11.jpg",
     "section": "On a phone",
     "title": "Customers",
     "caption": "Customers as cards, with the credit limit bar."
   },
   {
-    "file": "m11.jpg",
+    "file": "m12.jpg",
     "section": "On a phone",
     "title": "Owner dashboard",
     "caption": "The owner's figures on the phone."
