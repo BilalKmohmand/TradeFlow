@@ -83,6 +83,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 {inv.customerCompany && inv.customerCompany !== inv.customerName && <div>{inv.customerCompany}</div>}
                 {(inv.customerAddress || customer?.address) && <div>{inv.customerAddress || customer?.address}</div>}
                 <div className="font-mono">{inv.customerPhone || customer?.phone}</div>
+                {customer?.code && <div>Customer ID: <span className="font-mono font-bold">{customer.code}</span></div>}
               </div>
             </div>
             <table className="w-full text-xs mt-6 border-collapse">
@@ -508,6 +509,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 <div>{entity.name}</div>
                 <div>{entity.address}</div>
                 <div className="font-mono">{entity.phone}</div>
+                {entity.code && <div>{isCustomer ? 'Customer' : 'Supplier'} ID: <span className="font-mono font-bold">{entity.code}</span></div>}
               </div>
               <div className="text-right">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Balance on record</div>

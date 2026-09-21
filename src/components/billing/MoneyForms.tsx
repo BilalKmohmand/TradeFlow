@@ -136,7 +136,7 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
           <label className={labelCls} htmlFor="rc-cust">Customer</label>
           <select id="rc-cust" value={cust} onChange={(e) => setCust(e.target.value)} className={inputCls}>
             <option value="">Select customer…</option>
-            {[...customers].sort((a, b) => b.totalDue - a.totalDue).map((x) => <option key={x.id} value={x.id}>{x.name}{x.totalDue > 0 ? ` (owes Rs. ${x.totalDue.toLocaleString()})` : ''}</option>)}
+            {[...customers].sort((a, b) => b.totalDue - a.totalDue).map((x) => <option key={x.id} value={x.id}>{x.code ? `${x.code} • ` : ''}{x.name}{x.totalDue > 0 ? ` (owes Rs. ${x.totalDue.toLocaleString()})` : ''}</option>)}
           </select>
         </div>
         <div className="grid grid-cols-2 gap-3">

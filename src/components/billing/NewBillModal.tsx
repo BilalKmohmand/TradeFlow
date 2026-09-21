@@ -168,7 +168,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId }) =
                 <select id="bill-customer" value={customer} onChange={(e) => setCustomer(e.target.value)} className={inputCls}>
                   <option value="">Select customer…</option>
                   {sortedCustomers.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}{c.phone ? ` • ${c.phone}` : ''}{c.totalDue > 0 ? ` (due ${rs(c.totalDue)})` : ''}</option>
+                    <option key={c.id} value={c.id}>{c.code ? `${c.code} • ` : ''}{c.name}{c.phone ? ` • ${c.phone}` : ''}{c.totalDue > 0 ? ` (due ${rs(c.totalDue)})` : ''}</option>
                   ))}
                 </select>
                 <button type="button" onClick={() => setNewCustomer({ name: '', phone: '' })} className={`${secondaryBtn} shrink-0 px-3`} title="Add a new customer"><UserPlus className="w-4 h-4" /><span>New</span></button>

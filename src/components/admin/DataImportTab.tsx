@@ -5,8 +5,8 @@ import { useTrading } from '../../context/TradingContext';
 type Kind = 'customers' | 'suppliers' | 'products';
 
 const TEMPLATES: Record<Kind, { headers: string[]; sample: string[] }> = {
-  customers: { headers: ['name', 'company', 'phone', 'email', 'address', 'creditLimit', 'openingDue'], sample: ['Ali Raza', 'Raza Traders', '+92 300 1234567', 'ali@raza.pk', 'Karachi', '500000', '0'] },
-  suppliers: { headers: ['name', 'company', 'phone', 'email', 'materialCategory', 'address', 'openingOwed'], sample: ['Ahmed', 'Lucky Cement', '+92 300 7654321', 'orders@lucky.pk', 'Cement & Materials', 'Port Qasim', '0'] },
+  customers: { headers: ['name', 'company', 'phone', 'email', 'address', 'creditLimit', 'openingDue', 'code'], sample: ['Ali Raza', 'Raza Traders', '+92 300 1234567', 'ali@raza.pk', 'Karachi', '500000', '0', 'C-215'] },
+  suppliers: { headers: ['name', 'company', 'phone', 'email', 'materialCategory', 'address', 'openingOwed', 'code'], sample: ['Iftikhar', 'Tajj Mill', '+92 300 7654321', '', 'Ghee & oil', 'Peshawar', '0', 'S-104'] },
   products: { headers: ['name', 'category', 'unitPricePerKg', 'stockKg', 'minThresholdKg', 'supplierCompany', 'description'], sample: ['OPC Cement', 'Construction & Cement', '25', '480000', '100000', 'Lucky Cement', 'Grade 53'] },
 };
 
@@ -122,7 +122,7 @@ export const DataImportTab: React.FC = () => {
             errors.push(`Line ${line}: ${name} skipped, phone already exists.`);
             return;
           }
-          const c = addCustomer({ name, company, phone, email: col(row, 'email'), address: col(row, 'address'), creditLimit: num(col(row, 'creditLimit')) });
+          const c = addCustomer({ name, company, phone, email: col(row, 'email'), address: col(row, 'address'), creditLimit: num(col(row, 'creditLimit')), code: col(row, 'code') || undefined });
           const opening = num(col(row, 'openingDue'));
           if (opening > 0) updateCustomer(c.id, { totalDue: opening });
           added++;
@@ -140,7 +140,7 @@ export const DataImportTab: React.FC = () => {
             errors.push(`Line ${line}: ${company} skipped, phone already exists.`);
             return;
           }
-          const s = addSupplier({ name, company, phone, email: col(row, 'email'), materialCategory: col(row, 'materialCategory') || 'General', address: col(row, 'address') });
+          const s = addSupplier({ name, company, phone, email: col(row, 'email'), materialCategory: col(row, 'materialCategory') || 'General', address: col(row, 'address'), code: col(row, 'code') || undefined });
           const opening = num(col(row, 'openingOwed'));
           if (opening > 0) updateSupplier(s.id, { totalOwed: opening });
           added++;

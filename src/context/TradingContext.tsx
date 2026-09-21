@@ -669,6 +669,9 @@ const loadLocal = <T,>(key: string, fallback: T[], normalise?: (row: any) => T):
 const readCachedSettings = (): Partial<AppSettings> =>
   safeParse<Partial<AppSettings>>(localStorage.getItem(STORAGE_KEYS.SETTINGS), {});
 
+/** Cloud columns found missing this session, per table (see syncToSupabase). */
+const missingCloudColumns: Record<string, Set<string>> = {};
+
 export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [adminPin, setAdminPin] = useState<string>(() => {
     const localPin = localStorage.getItem(STORAGE_KEYS.ADMIN_PIN)?.trim();
@@ -928,10 +931,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!isCloudSyncReady || rows.length === 0) return;
     try {
       // PostgREST bulk upserts need every row to carry the same keys; fill gaps with null.
-      const keys = Array.from(new Set(rows.flatMap((r) => Object.keys(r as object))));
-      const uniform = rows.map((r) => Object.fromEntries(keys.map((k) => [k, (r as any)[k] ?? null])));
-      const { error } = await supabase.from(table).upsert(uniform as any[], { onConflict: 'id' });
-      if (error) console.warn(`Supabase ${table} upsert error:`, error.message);
+      const skip = missingCloudColumns[table] || (missingCloudColumns[table] = new Set());
+      // A column the cloud table doesn't have yet (setup.sql not re-run) is left out and the rest
+      // still syncs, instead of the whole table failing. It is kept on this device as normal.
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const keys = Array.from(new Set(rows.flatMap((r) => Object.keys(r as object)))).filter((k) => !skip.has(k));
+        const uniform = rows.map((r) => Object.fromEntries(keys.map((k) => [k, (r as any)[k] ?? null])));
+        const { error } = await supabase.from(table).upsert(uniform as any[], { onConflict: 'id' });
+        if (!error) return;
+        const missing = /Could not find the '([^']+)' column/.exec(error.message || '')?.[1];
+        if (!missing || skip.has(missing)) { console.warn(`Supabase ${table} upsert error:`, error.message); return; }
+        skip.add(missing);
+        console.warn(`Supabase ${table}: column "${missing}" is missing in the cloud — run supabase/setup.sql. Syncing the rest.`);
+      }
     } catch (err: any) {
       console.warn(`Supabase ${table} sync failed:`, err?.message || err);
     }

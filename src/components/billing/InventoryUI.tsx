@@ -159,7 +159,7 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
             <label className={labelCls} htmlFor="rs-supplier">Supplier (optional)</label>
             <select id="rs-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={inputCls}>
               <option value="">None</option>
-              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}{s.company && s.company !== s.name ? ` • ${s.company}` : ''}</option>)}
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.code ? `${s.code} • ` : ''}{s.name}{s.company && s.company !== s.name ? ` • ${s.company}` : ''}</option>)}
             </select>
           </div>
           <div className="col-span-2 sm:col-span-1">

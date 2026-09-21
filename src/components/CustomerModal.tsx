@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useTrading } from '../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice } from './billing/ui';
+import { codeTaken } from '../utils/partyCode';
 
 interface CustomerModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ const CustomerForm: React.FC<{
   updateCustomer: ReturnType<typeof useTrading>['updateCustomer'];
   onClose: () => void;
 }> = ({ editing, customers, addCustomer, updateCustomer, onClose }) => {
+  const [code, setCode] = useState(editing?.code || '');
   const [name, setName] = useState(editing?.name || '');
   const [company, setCompany] = useState(editing?.company && editing.company !== editing.name ? editing.company : '');
   const [phone, setPhone] = useState(editing?.phone || '');
@@ -48,10 +50,13 @@ const CustomerForm: React.FC<{
     const digits = phone.replace(/[^0-9]/g, '');
     const dup = customers.find((c) => c.id !== editing?.id && digits && c.phone.replace(/[^0-9]/g, '') === digits);
     if (dup) return setError(`${dup.name} already uses this phone number.`);
+    const taken = codeTaken(customers, code, editing?.id);
+    if (taken) return setError(`Customer ID ${code.trim()} is already used by ${taken.name}.`);
     const limit = creditLimit.trim() ? parseFloat(creditLimit.replace(/,/g, '')) : 0;
     if (!Number.isFinite(limit) || limit < 0) return setError('The credit limit must be a number (leave it empty for no limit).');
     busy.current = true;
     const data = {
+      code: code.trim() || undefined,
       name: name.trim(),
       company: company.trim() || name.trim(),
       phone: phone.trim(),
@@ -68,6 +73,10 @@ const CustomerForm: React.FC<{
     <form onSubmit={submit} className="space-y-4" aria-label={editing ? 'Edit customer' : 'New customer'}>
       {error && <Notice kind="error">{error}</Notice>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls} htmlFor="cust-code">Customer ID (optional)</label>
+          <input id="cust-code" value={code} onChange={(e) => setCode(e.target.value)} className={`${inputCls} font-mono`} placeholder="Your own code, e.g. C-215" autoCapitalize="characters" />
+        </div>
         <div>
           <label className={labelCls} htmlFor="cust-name">Name</label>
           <input id="cust-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} className={inputCls} placeholder="e.g. Haji Karim" />

@@ -48,12 +48,13 @@ test.describe.serial('Sarmaya end-to-end', () => {
     // Supplier
     await page.getByRole('button', { name: 'Suppliers' }).first().click();
     await page.getByRole('button', { name: 'Add Supplier' }).click();
-    const supForm = page.locator('form').last();
-    const supInputs = supForm.locator('input');
-    await supInputs.nth(0).fill('Ahmed');
-    await supInputs.nth(1).fill('Lucky Cement');
-    await supInputs.nth(2).fill('+92 300 1111111');
-    await supForm.getByRole('button', { name: /Create Supplier/ }).click();
+    const supForm = page.getByRole('dialog', { name: 'New supplier' });
+    await supForm.getByLabel('Supplier ID (optional)').fill('S-104');
+    await supForm.getByLabel('Name', { exact: true }).fill('Ahmed');
+    await supForm.getByLabel('Company / mill name (optional)').fill('Lucky Cement');
+    await supForm.getByLabel('Phone', { exact: true }).fill('+92 300 1111111');
+    await supForm.getByRole('button', { name: 'Save supplier' }).click();
+    await expect(page.getByText('S-104')).toBeVisible();
     await expect(page.getByText('Lucky Cement')).toBeVisible();
 
     // Product

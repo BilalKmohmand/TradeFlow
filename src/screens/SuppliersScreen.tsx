@@ -49,7 +49,8 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.materialCategory.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.phone.includes(searchQuery)
+      s.phone.includes(searchQuery) ||
+      (s.code || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const totalPayables = suppliers.reduce((acc, s) => acc + s.totalOwed, 0);
@@ -107,7 +108,7 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search suppliers by name, company, or commodity category..."
+          placeholder="Search suppliers by name, ID, company or phone..."
           className="w-full bg-white dark:bg-[#101A26] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl pl-11 pr-4 py-3 text-xs font-medium text-[#111827] dark:text-white placeholder-[#8E9299] dark:placeholder-[#94A3B8] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600 shadow-xs"
         />
       </div>
@@ -151,6 +152,7 @@ export const SuppliersScreen: React.FC<SuppliersScreenProps> = ({
                         onClick={() => onSelectSupplier(sup.id)}
                         className="font-bold text-base text-[#111827] dark:text-white group-hover:text-teal-800 dark:group-hover:text-teal-300 cursor-pointer transition-colors"
                       >
+                        {sup.code && <span className="font-mono text-xs font-bold text-teal-700 dark:text-teal-300 mr-1.5">{sup.code}</span>}
                         {sup.name}
                       </h3>
                       <p className="text-xs font-medium text-[#8E9299] dark:text-[#94A3B8] flex items-center gap-1 mt-0.5">

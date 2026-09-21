@@ -10,6 +10,8 @@ export interface Customer {
   totalDue: number;
   creditLimit: number;
   createdAt: string;
+  /** The shop's own account code for this customer (e.g. from their old books). Optional, unique. */
+  code?: string;
 }
 
 export interface Supplier {
@@ -22,6 +24,8 @@ export interface Supplier {
   totalOwed: number;
   address: string;
   createdAt: string;
+  /** The shop's own account code for this supplier (e.g. from their old books). Optional, unique. */
+  code?: string;
 }
 
 export interface Product {

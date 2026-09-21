@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS customers (
   address TEXT,
   "totalDue" NUMERIC DEFAULT 0,
   "creditLimit" NUMERIC DEFAULT 0,
-  "createdAt" TEXT
+  "createdAt" TEXT,
+  code TEXT
 );
 
 CREATE TABLE IF NOT EXISTS suppliers (
@@ -24,7 +25,8 @@ CREATE TABLE IF NOT EXISTS suppliers (
   "materialCategory" TEXT,
   "totalOwed" NUMERIC DEFAULT 0,
   address TEXT,
-  "createdAt" TEXT
+  "createdAt" TEXT,
+  code TEXT
 );
 
 CREATE TABLE IF NOT EXISTS products (

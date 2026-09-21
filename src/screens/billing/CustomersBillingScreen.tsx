@@ -21,7 +21,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
   const canDelete = can('delete_records');
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return customers.filter((c) => !q || c.name.toLowerCase().includes(q) || c.phone.includes(q) || (c.company || '').toLowerCase().includes(q)).sort((a, b) => b.totalDue - a.totalDue || a.name.localeCompare(b.name));
+    return customers.filter((c) => !q || c.name.toLowerCase().includes(q) || c.phone.includes(q) || (c.code || '').toLowerCase().includes(q) || (c.company || '').toLowerCase().includes(q)).sort((a, b) => b.totalDue - a.totalDue || a.name.localeCompare(b.name));
   }, [customers, query]);
   const owed = customers.reduce((a, c) => a + c.totalDue, 0);
   const open = customers.find((c) => c.id === openId) || null;
@@ -39,7 +39,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
       </div>
       <div className="relative">
         <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name or phone" className={`${inputCls} pl-10`} aria-label="Search customers" />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, phone or ID" className={`${inputCls} pl-10`} aria-label="Search customers" />
       </div>
       <div className={`${cardCls} overflow-hidden`}>
         {rows.length === 0 ? (
@@ -49,7 +49,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
             {rows.map((c) => (
               <li key={c.id} className="flex items-center gap-2 px-3 sm:px-5 py-3 hover:bg-[#FAF9F6] dark:hover:bg-[#162436]">
                 <button type="button" onClick={() => setOpenId(c.id)} className="flex-1 min-w-0 text-left">
-                  <div className="font-semibold text-sm text-[#111827] dark:text-white truncate">{c.name} <OverLimitBadge customer={c} /></div>
+                  <div className="font-semibold text-sm text-[#111827] dark:text-white truncate">{c.code && <span className="font-mono text-[11px] font-bold text-teal-700 dark:text-teal-300 mr-1.5">{c.code}</span>}{c.name} <OverLimitBadge customer={c} /></div>
                   <div className="text-[11px] text-[#8E9299] flex items-center gap-1"><Phone className="w-3 h-3" /> {c.phone || 'no phone'}</div>
                 </button>
                 <div className="text-right shrink-0">

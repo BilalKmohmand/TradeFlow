@@ -202,6 +202,37 @@ test.describe('Customer dialog', () => {
     await page.addInitScript(seed);
   });
 
+  test('customer ID is saved, shown, searchable, on the bill picker, and must be unique', async ({ page }) => {
+    await unlock(page);
+    await page.getByRole('button', { name: 'Customers' }).first().click();
+    await page.getByRole('button', { name: 'Add customer' }).click();
+    let form = page.getByRole('dialog', { name: 'New customer' });
+    await form.getByLabel('Customer ID (optional)').fill('C-215');
+    await form.getByLabel('Name', { exact: true }).fill('Gul Traders');
+    await form.getByLabel('Phone', { exact: true }).fill('0312 5556677');
+    await form.getByRole('button', { name: 'Save customer' }).click();
+    await expect(form).toBeHidden();
+    await expect(page.getByText('C-215')).toBeVisible();
+
+    await page.getByLabel('Search customers').fill('c-215');
+    await expect(page.getByText('Gul Traders')).toBeVisible();
+    await page.getByLabel('Search customers').fill('');
+
+    // Same ID again is refused.
+    await page.getByRole('button', { name: 'Add customer' }).click();
+    form = page.getByRole('dialog', { name: 'New customer' });
+    await form.getByLabel('Customer ID (optional)').fill('c-215');
+    await form.getByLabel('Name', { exact: true }).fill('Another');
+    await form.getByLabel('Phone', { exact: true }).fill('0312 0000001');
+    await form.getByRole('button', { name: 'Save customer' }).click();
+    await expect(form.getByText('Customer ID c-215 is already used by Gul Traders.')).toBeVisible();
+    await form.getByRole('button', { name: 'Cancel' }).click();
+
+    await page.getByRole('button', { name: 'New Bill' }).first().click();
+    const bill = page.getByRole('dialog', { name: 'New Bill' });
+    await bill.getByLabel('Customer', { exact: true }).selectOption({ label: 'C-215 • Gul Traders • 0312 5556677' });
+  });
+
   test('a customer added without typing a limit has no credit limit and nothing invented', async ({ page }) => {
     await unlock(page);
     await page.getByRole('button', { name: 'Customers' }).first().click();
