@@ -152,6 +152,8 @@ In VS Code, install the recommended **Vitest** extension (`.vscode/extensions.js
 
 **Just run [`supabase/setup.sql`](supabase/setup.sql).** Supabase → SQL Editor → New query → paste the whole file → Run. It works on a brand-new project and on one that is part way through: it creates whatever is missing, adds whatever column is missing, and does nothing the second time. It never deletes a table, drops a column or changes a value.
 
+Securing the database is separate on purpose: `supabase/auth_setup.sql`, then `supabase/lock.sql` (undo with `supabase/unlock.sql`). See **Locking the database** under *Signing in*.
+
 That is the whole setup. The one exception is `migrate_tons_to_kg.sql`, which converts a pre-2026 tons-based database and must be run once, by hand, *before* `setup.sql`; projects created from `setup.sql` or `schema.sql` never need it.
 
 Verified against a real PostgreSQL 16: on an empty database it creates all 27 tables; on a database missing the billing tables it brings it from 19 to 27 with every column the app writes; running it twice reports no errors.
@@ -188,10 +190,79 @@ Everyone signs in with a **username and password** (the old PIN keypad is gone).
 - **Lock** (header button, or the account menu → *Lock screen*, or ⌘K) hides the app until the same person types their password again; *Not you? Switch user* goes back to the sign-in form. A reload does not get past the lock. **Log out** is in the account menu (top right), next to **My account**, where you can change your own password.
 - **Staff**: *Admin → User Accounts & Auth → Add staff* — name, username, role and a temporary password (a random one is suggested). The person must choose their own password the first time they sign in. The key icon on a row sets a new temporary password (same forced change); the unlock icon lifts a lockout. Only roles with the user-management permissions can do this.
 - **Moving from PINs**: existing users get a username made from their first name in small letters (Bilal Khan Mohmand → `bilal`, Rashid Minhas → `rashid`, Zahid … → `zahid`; a number is added if two people share a first name). The username is shown under *Admin → User Accounts & Auth*. Each person signs in **once** with their username and their **old PIN as the password**, then must choose a new password, and the PIN is deleted. The owner can also use the old master PIN that one time; once the owner has a password the master PIN is forgotten on every device.
-- **How passwords are kept**: never in plain text. The browser hashes them with PBKDF2-SHA256 (WebCrypto, a random 16-byte salt per password, 210,000 iterations) and only the hash, salt and iteration count are stored and synced (`users.passwordHash`, `passwordSalt`, `passwordIter`), so the owner can sign in on another device once `migrate_v16_passwords.sql` has been run. WebCrypto needs https or localhost.
+- **How passwords are kept**: never in plain text. On each device the browser keeps a PBKDF2-SHA256 hash (WebCrypto, a random 16-byte salt per password, 210,000 iterations) so the person can sign in there without internet. The hash is **not** uploaded any more. When Supabase is set up, the same username and password also sign in to Supabase Auth, and that login is what lets a new device in (see *Locking the database*). WebCrypto needs https or localhost.
 - Sign-ins, failed attempts, lockouts, lock/unlock, logouts, password changes and resets are written to the audit log.
 
-> **Security note**: this is sign-in for a local-first app, enforced in the browser. With RLS disabled, anyone holding the Supabase anon key can read or change every table, including the password hashes. True database security would additionally need **Supabase Auth + Row Level Security** policies (not implemented). Keep the Supabase URL/key private and restrict who can open the deployed URL.
+> **Security note**: until `supabase/lock.sql` has been run, anyone holding the Supabase anon key can read or change every table. Follow **Locking the database** below.
+
+## Locking the database
+
+Until you do this, **anyone who has the app's public Supabase key can read and change all of the shop's data**. The key is inside the app, so anyone who opens the app's web address can find it. After locking:
+
+- only shop staff who have signed in can read or change the data;
+- the public key on its own gets nothing;
+- no password hashes are kept in the shared `users` table.
+
+The app keeps working without internet the same way it does now.
+
+**How it works, in one paragraph.** Each person in *Admin → Users* also gets a Supabase login. Their username becomes a made-up email, `username@shop.sarmaya.local`, and they use the same password. That email never receives mail, and nobody sees it. When someone signs in with internet, the app signs them in to Supabase too, and the locked database only answers people signed in that way. Without internet, sign-in still works on any device that person has used before, because the device keeps its own copy of the password check. The very first sign-in on a new phone or computer needs internet.
+
+You run three files in Supabase, in order, over a few days. Each one is safe to run twice. To run a file: open Supabase, go to **SQL Editor → New query**, paste the whole file, and press **Run**.
+
+### Step 1: prepare (the shop keeps working normally)
+
+1. Run **`supabase/auth_setup.sql`**. Nothing is locked yet, and nothing the app uses changes.
+   - It creates the Supabase logins' helper functions.
+   - On a brand-new shop, it also creates the built-in **admin / 1234**.
+   - At the end it shows a small table. `linked` means that person can already sign in to Supabase. `MISSING` means they will be linked the next time they sign in.
+2. Publish the new app version (for example, push to Vercel).
+3. On every phone and computer that uses the app, reload it once so the new version loads.
+4. Ask everyone to **sign out and sign in again once** while they have internet: the owner, the built-in admin, and every staff member. That first sign-in links their Supabase login automatically. Nobody has to do anything else.
+5. To check progress, run this in the SQL Editor:
+   `SELECT * FROM sarmaya_private.login_report();`
+   Wait until everyone who still works in the shop shows `linked`.
+
+### Step 2: lock
+
+1. Pick a quiet moment, such as after closing.
+2. Run **`supabase/lock.sql`**.
+   - If no owner or admin can sign in to Supabase yet, it stops and locks **nothing**. It then tells you to sign in once as the owner and run it again.
+   - When it works, it shows the same small table as step 1.
+3. Anyone who still has the app open is asked for their password once. The message says: *"The shop's data is now protected: your password is needed once to keep syncing."* Their work on that device is kept and uploads after they type the password.
+
+### Staff still marked `MISSING` after the lock
+
+For **30 days** after step 1 (the "grace period"), such a person can still sign in on a device they used before. That links their login, the same as in step 1.
+
+After 30 days, or on a new device, the owner sets them a temporary password instead: *Admin → Users → key icon*. They then choose their own password at their next sign-in.
+
+To change the grace period, run one of these in the SQL Editor:
+
+- `SELECT sarmaya_private.set_claim_grace(0);` closes it now (safest once everyone is `linked`);
+- `SELECT sarmaya_private.set_claim_grace(14);` gives 14 more days.
+
+### New staff, password resets and username changes
+
+These work as before from *Admin → Users*, but they now **need internet**, because the Supabase login is created or changed at the same moment. Only the owner or an admin can do this, and the database checks that as well as the app. A person changing their own password also needs internet.
+
+### Undo (if something goes wrong)
+
+Run **`supabase/unlock.sql`**. The database is open again, exactly as before step 2, and the new app keeps working. Supabase logins are kept, so you can run `lock.sql` again later.
+
+If you also go back to an **older** app version, see the optional part at the end of `unlock.sql`.
+
+### Good to know
+
+- If you ever re-run `supabase/setup.sql`, run `supabase/lock.sql` again afterwards. `setup.sql` switches the lock off on some tables. The public key still gets nothing, but `lock.sql` puts every rule back.
+- Lock the database only with `lock.sql`, not with the RLS switch in the Supabase dashboard.
+- Switching a person off in *Admin → Users* cuts their access to the shop's data at once.
+- **The built-in admin / 1234**:
+  - **Brand-new shop:** `auth_setup.sql` (and `lock.sql`) create the Supabase login admin / 1234, so the first sign-in with admin / 1234 works on any device.
+  - **Existing shop:** if admin already has a password, admin gets linked with that password at their first sign-in on the new app.
+  - **Shop that deleted admin** and has its own owner: admin is never brought back.
+  - Change the 1234 password as soon as the shop is ready.
+- Settings you do **not** need to change in Supabase: email confirmation, sign-ups, and SMTP. Logins are created by the database functions, never by public sign-up.
+- Tested against a real Supabase stack (Postgres, Auth and API) in Docker: `bash supabase/tests/start_stack.sh && node supabase/tests/verify_lock.mjs`.
 
 **Tests**: the e2e specs sign in through `e2e/helpers/login.ts` — `await signIn(page)` seeds the standard test users and signs in as the owner (`bilal` / `Sarmaya@2026`); `signIn(page, OPERATOR)` signs in as `zahid`; `seedUsers(page)` + `login(page, username, password)` do the two steps separately. The accounts (`bilal` super admin, `rashid` manager, `zahid` operator, `ayesha` viewer, all with password `Sarmaya@2026`) are defined once in `e2e/helpers/users.ts`, which unit tests also use through `src/__tests__/helpers/auth.ts` (`seedTestUsers()` + `await signIn(() => hook.result.current)`).
 
@@ -214,7 +285,7 @@ The Admin screen is open to the owner (super admin) and roles with the admin per
 - **Purge table / Factory reset / Load sample data** live on the Admin screen and require typing a confirmation word. They do **not** cascade.
 - Deletes are applied locally and, when Supabase is configured, to the cloud database. Every action is written to the audit log.
 
-> **Security note**: sign-in is enforced in the browser only. With RLS disabled in `supabase/schema.sql`, anyone holding the anon key can read and write every table; real protection needs Supabase Auth + RLS. Keep the Supabase URL/key out of public repos and restrict who can open the deployed URL.
+> **Security note**: the database is only protected after **Locking the database** (see *Signing in*). Until then anyone holding the anon key can read and write every table.
 
 ## Run Locally
 

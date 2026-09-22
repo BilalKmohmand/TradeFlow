@@ -79,6 +79,8 @@ import { resolveBillPayments, paymentMethodLabel } from '../utils/billing';
 import { hasPack, formatPackQty } from '../utils/packUnits';
 import { shortStockLines } from '../utils/inventory';
 import {
+  AppData,
+  isAccessDeniedError,
   loadAllData,
   deleteRows,
   clearTable,
@@ -90,6 +92,7 @@ import {
   normalizeLedger,
 } from '../lib/database';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { cloudAdminSetLogin, cloudSessionEmail } from '../lib/cloudAuth';
 import { useInventoryStore, InventoryApi, INVENTORY_STORAGE_KEYS } from './inventoryStore';
 import { createStockActions, StockActionsApi } from './stockActions';
 import { Account, JournalEntry, mergeAccounts, validateEntry, validateAccount, booksLockedFor } from '../utils/accounting';
@@ -781,6 +784,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }));
   // Sign-in state. The audit logger is defined further down, so it is reached through a ref.
   const [cloudSettled, setCloudSettled] = useState<boolean>(!isSupabaseConfigured);
+  // The cloud copy was read in this session / the cloud refused this device (locked database, no sign-in).
+  const [cloudLoaded, setCloudLoaded] = useState<boolean>(false);
+  const [cloudNeedsSignIn, setCloudNeedsSignIn] = useState<boolean>(false);
+  const cloudLoadedRef = useRef(false);
+  const cloudConnectRef = useRef<(opts?: { reload?: boolean }) => Promise<AppUser[] | null>>(async () => null);
   const auditLogRef = useRef<(action: string, details: string, severity?: 'info' | 'warning' | 'danger', category?: AuditCategory) => void>(() => {});
   const auth = useAuthStore({
     users,
@@ -790,6 +798,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     settings,
     setSettings,
     cloudSettled,
+    cloud: {
+      enabled: isSupabaseConfigured,
+      loaded: cloudLoaded,
+      needsSignIn: cloudNeedsSignIn,
+      connect: (opts) => cloudConnectRef.current(opts),
+    },
     log: (...args) => auditLogRef.current(...args),
   });
   const currentUser = auth.currentUser;
@@ -863,63 +877,119 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // (possibly stale) localStorage snapshot up would resurrect rows that were deleted elsewhere.
   const [isCloudSyncReady, setIsCloudSyncReady] = useState<boolean>(false);
 
+  /** Put a freshly read cloud copy into the app and turn cloud sync on. */
+  const applyCloudData = (data: AppData) => {
+    setCustomers(data.customers);
+    setSuppliers(data.suppliers);
+    setProducts(data.products);
+    setBookings(data.bookings);
+    setDispatches(data.dispatches);
+    setPurchases(data.purchases);
+    setPriceHistory(data.priceHistory);
+    setExpenses(data.expenses);
+    setTrucks(data.trucks);
+    // Same id -> the newer copy wins; users only on this device are kept and uploaded.
+    setUsers((prev) => migrateLegacyUsers(mergeUsers(prev, data.users || [])));
+    setCashEntries(data.cashEntries);
+    setQuotations(data.quotations);
+    setPurchaseOrders(data.purchaseOrders);
+    setReturns(data.returns);
+    setAdjustments(data.adjustments);
+    setTasks(data.tasks);
+    if (data.settings) {
+      const mergedSettings = { ...DEFAULT_SETTINGS, ...data.settings, id: 'default' as const };
+      setSettings((prev) => ({ ...DEFAULT_SETTINGS, ...prev, ...mergedSettings, id: 'default' }));
+    }
+    setLedger(data.ledger);
+    setWhatsappMessages(data.whatsappMessages);
+    // Bills: only when the cloud table exists (migration v8); otherwise keep local copies.
+    // A table that exists but is still empty (migration just run, nothing uploaded yet) must not
+    // wipe what this device already has; the sync effects then upload the local rows.
+    const cloudOrLocal = <T,>(cloud: T[]) => (prev: T[]) => (cloud.length > 0 || prev.length === 0 ? cloud : prev);
+    if (data.invoices) setInvoices(data.invoices);
+    // Bank reconciliation: only when the cloud tables exist (migration v12).
+    if (data.bankStatementLines) setBankStatementLines(cloudOrLocal(data.bankStatementLines));
+    if (data.bankReconciliations) setBankReconciliations(cloudOrLocal(data.bankReconciliations));
+    // Cheque register: only when the cloud table exists (migration v14).
+    if (data.cheques) setCheques(cloudOrLocal(data.cheques));
+    // Salesmen / areas / schemes: only when the cloud tables exist (migration v19).
+    salesExtras.hydrate({ salesmen: data.salesmen ?? undefined, areas: data.areas ?? undefined, schemes: data.schemes ?? undefined }, { keepLocalIfEmpty: true });
+    // Godowns / batches / transfers: only when the cloud tables exist (migration v11).
+    inventory.hydrate({ godowns: data.godowns, stockBatches: data.stockBatches, stockTransfers: data.stockTransfers }, { keepLocalIfEmpty: true });
+    // Supplier bills and claims: only when the cloud tables exist (migration v20).
+    purchasing.hydrate({ supplierBills: data.supplierBills, supplierClaims: data.supplierClaims }, { keepLocalIfEmpty: true });
+    // Accounts: only when the cloud tables exist (migration v10); otherwise keep local copies.
+    if (data.journalEntries) setManualJournals(cloudOrLocal(data.journalEntries));
+    if (data.accounts) setCustomAccounts(cloudOrLocal(data.accounts));
+    // Customer rates: only when the cloud table exists (migration v13).
+    if (data.customerAgreedRates) setCustomerAgreedRates(cloudOrLocal(data.customerAgreedRates));
+    // Finance (assets, staff, budgets, cost centres, year closes): only tables that exist (migration v21).
+    finance.hydrate(data.finance || {}, { keepLocalIfEmpty: true });
+    // Approvals, deleted records, branches: only when the cloud tables exist (migration v22).
+    controlStore.hydrate({ approvals: data.approvals, deletedRecords: data.deletedRecords, branches: data.branches });
+    cloudLoadedRef.current = true;
+    setCloudLoaded(true);
+    setCloudNeedsSignIn(false);
+    setIsCloudSyncReady(true);
+    setCloudSettled(true);
+  };
+  const applyCloudDataRef = useRef(applyCloudData);
+  applyCloudDataRef.current = applyCloudData;
+
+  /**
+   * Read the cloud. A locked database (supabase/lock.sql) without a staff sign-in answers "permission denied";
+   * a signed-in person who is not (or no longer) active staff sees no rows at all, not even their own user.
+   * Either way nothing local is touched: the app keeps working on this device and asks for the password.
+   */
+  const readCloud = async (): Promise<AppData | 'denied'> => {
+    const signedIn = Boolean(await cloudSessionEmail());
+    try {
+      const data = await loadAllData();
+      if (signedIn && (data.users || []).length === 0) return 'denied';
+      return data;
+    } catch (err: any) {
+      if (err?.name === 'CloudAccessDeniedError' || isAccessDeniedError(err)) return 'denied';
+      throw err;
+    }
+  };
+
+  // After a Supabase sign-in (authStore): read the cloud if this session has not yet (or on request) and
+  // turn sync on. When the cloud was read earlier, sync simply resumes and pushes this device's changes.
+  cloudConnectRef.current = async (opts) => {
+    if (!isSupabaseConfigured) return null;
+    if (cloudLoadedRef.current && !opts?.reload) {
+      setCloudNeedsSignIn(false);
+      setIsCloudSyncReady(true);
+      return null;
+    }
+    try {
+      const data = await readCloud();
+      if (data === 'denied') {
+        setCloudNeedsSignIn(true);
+        return null;
+      }
+      applyCloudDataRef.current(data);
+      return data.users || [];
+    } catch (err: any) {
+      console.warn('Supabase load failed:', err?.message || err);
+      return null;
+    }
+  };
+
   // Load live data from Supabase on mount (falls back to localStorage/empty if no tables or network error)
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     let cancelled = false;
-    loadAllData()
+    readCloud()
       .then((data) => {
         if (cancelled) return;
-        setCustomers(data.customers);
-        setSuppliers(data.suppliers);
-        setProducts(data.products);
-        setBookings(data.bookings);
-        setDispatches(data.dispatches);
-        setPurchases(data.purchases);
-        setPriceHistory(data.priceHistory);
-        setExpenses(data.expenses);
-        setTrucks(data.trucks);
-        // Same id -> the newer copy wins; users only on this device are kept and uploaded.
-        setUsers((prev) => migrateLegacyUsers(mergeUsers(prev, data.users || [])));
-        setCashEntries(data.cashEntries);
-        setQuotations(data.quotations);
-        setPurchaseOrders(data.purchaseOrders);
-        setReturns(data.returns);
-        setAdjustments(data.adjustments);
-        setTasks(data.tasks);
-        if (data.settings) {
-          const mergedSettings = { ...DEFAULT_SETTINGS, ...data.settings, id: 'default' as const };
-          setSettings((prev) => ({ ...DEFAULT_SETTINGS, ...prev, ...mergedSettings, id: 'default' }));
+        if (data === 'denied') {
+          console.warn('Supabase: the database is locked; sign in to sync. Working on this device meanwhile.');
+          setCloudNeedsSignIn(true);
+          setCloudSettled(true);
+          return;
         }
-        setLedger(data.ledger);
-        setWhatsappMessages(data.whatsappMessages);
-        // Bills: only when the cloud table exists (migration v8); otherwise keep local copies.
-        // A table that exists but is still empty (migration just run, nothing uploaded yet) must not
-        // wipe what this device already has; the sync effects then upload the local rows.
-        const cloudOrLocal = <T,>(cloud: T[]) => (prev: T[]) => (cloud.length > 0 || prev.length === 0 ? cloud : prev);
-        if (data.invoices) setInvoices(data.invoices);
-        // Bank reconciliation: only when the cloud tables exist (migration v12).
-        if (data.bankStatementLines) setBankStatementLines(cloudOrLocal(data.bankStatementLines));
-        if (data.bankReconciliations) setBankReconciliations(cloudOrLocal(data.bankReconciliations));
-        // Cheque register: only when the cloud table exists (migration v14).
-        if (data.cheques) setCheques(cloudOrLocal(data.cheques));
-        // Salesmen / areas / schemes: only when the cloud tables exist (migration v19).
-        salesExtras.hydrate({ salesmen: data.salesmen ?? undefined, areas: data.areas ?? undefined, schemes: data.schemes ?? undefined }, { keepLocalIfEmpty: true });
-        // Godowns / batches / transfers: only when the cloud tables exist (migration v11).
-        inventory.hydrate({ godowns: data.godowns, stockBatches: data.stockBatches, stockTransfers: data.stockTransfers }, { keepLocalIfEmpty: true });
-        // Supplier bills and claims: only when the cloud tables exist (migration v20).
-        purchasing.hydrate({ supplierBills: data.supplierBills, supplierClaims: data.supplierClaims }, { keepLocalIfEmpty: true });
-        // Accounts: only when the cloud tables exist (migration v10); otherwise keep local copies.
-        if (data.journalEntries) setManualJournals(cloudOrLocal(data.journalEntries));
-        if (data.accounts) setCustomAccounts(cloudOrLocal(data.accounts));
-        // Customer rates: only when the cloud table exists (migration v13).
-        if (data.customerAgreedRates) setCustomerAgreedRates(cloudOrLocal(data.customerAgreedRates));
-        // Finance (assets, staff, budgets, cost centres, year closes): only tables that exist (migration v21).
-        finance.hydrate(data.finance || {}, { keepLocalIfEmpty: true });
-        // Approvals, deleted records, branches: only when the cloud tables exist (migration v22).
-        controlStore.hydrate({ approvals: data.approvals, deletedRecords: data.deletedRecords, branches: data.branches });
-        setIsCloudSyncReady(true);
-        setCloudSettled(true);
+        applyCloudDataRef.current(data);
       })
       .catch((err) => {
         console.warn('Supabase load failed; running in local-only mode:', err?.message || err);
@@ -1017,6 +1087,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const uniform = rows.map((r) => Object.fromEntries(keys.map((k) => [k, (r as any)[k] ?? null])));
         const { error } = await supabase.from(table).upsert(uniform as any[], { onConflict: 'id' });
         if (!error) return;
+        if (isAccessDeniedError(error)) {
+          // The database was locked (or the sign-in ran out): pause sync until the person signs in again.
+          // Nothing is lost: this device keeps its changes and pushes them once sync resumes.
+          console.warn(`Supabase ${table}: not allowed without signing in; sync paused.`);
+          setIsCloudSyncReady(false);
+          setCloudNeedsSignIn(true);
+          return;
+        }
         const missing = /Could not find the '([^']+)' column/.exec(error.message || '')?.[1];
         if (!missing || skip.has(missing)) { console.warn(`Supabase ${table} upsert error:`, error.message); return; }
         skip.add(missing);
@@ -1037,7 +1115,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { void syncToSupabase('expenses', expenses); }, [expenses, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('trucks', trucks); }, [trucks, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('invoices', invoices); }, [invoices, isCloudSyncReady]);
-  // Only the table's columns are sent (password hash/salt/iterations included, so the owner can sign in on another device).
+  // Only the table's columns are sent. Password hashes stay on this device (Supabase Auth holds the real password).
   useEffect(() => { void syncToSupabase('users', users.map(toUserRow)); }, [users, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('cash_entries', cashEntries); }, [cashEntries, isCloudSyncReady]);
   useEffect(() => { void syncToSupabase('settings', [settings]); }, [settings, isCloudSyncReady]);
@@ -2486,6 +2564,16 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setUsers((prev) =>
       prev.map((u) => (u.id === id ? { ...u, ...updatePayload } : u))
     );
+
+    // The Supabase sign-in follows a username change (owner/admin only; checked by the server).
+    if (isSupabaseConfigured && updatePayload.username && updatePayload.username !== (existing.username || '').trim().toLowerCase()) {
+      const newName = updatePayload.username;
+      void cloudAdminSetLogin(id, newName, null).then((res) => {
+        if (!res.ok && res.status !== 'not_installed') {
+          logAuditEvent('Sign-in Not Renamed', `@${newName} (${existing.name}): the cloud sign-in still uses the old username (${res.message}). Set a temporary password for them to fix it.`, 'warning', 'users');
+        }
+      });
+    }
 
     logAuditEvent('User Updated', `${existing.name}: profile/settings modified by administrator.`, 'info', 'users');
 

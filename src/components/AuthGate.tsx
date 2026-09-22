@@ -209,7 +209,7 @@ const SignUpForm: React.FC = () => {
 };
 
 const LoginForm: React.FC = () => {
-  const { login, users } = useTrading();
+  const { login, users, isCloudSyncEnabled } = useTrading();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [keep, setKeep] = useState(true);
@@ -269,6 +269,7 @@ const LoginForm: React.FC = () => {
             example <span className="font-mono">bilal</span>). Sign in once with your old PIN as the password, then choose a new password.
           </p>
         )}
+        {users.length === 0 && isCloudSyncEnabled && <p data-testid="first-signin-hint">First time on this device? You need the internet to sign in.</p>}
         <p>Forgot your password? Ask the shop owner to set a temporary one from Admin → Users.</p>
       </div>
     </Card>
@@ -276,7 +277,7 @@ const LoginForm: React.FC = () => {
 };
 
 const LockedForm: React.FC = () => {
-  const { unlockScreen, logout, pendingUser } = useTrading();
+  const { unlockScreen, logout, pendingUser, cloudSignInRequired } = useTrading();
   const [password, setPassword] = useState('');
   const { busy, error, shake, run } = useSubmit();
 
@@ -299,6 +300,11 @@ const LockedForm: React.FC = () => {
         <>
           Signed in as <span className="font-bold text-[#111827] dark:text-white">{pendingUser?.name}</span>{' '}
           <span className="font-mono">@{pendingUser?.username}</span>. Enter your password to continue.
+          {cloudSignInRequired && (
+            <span data-testid="cloud-signin-hint" className="block mt-1.5">
+              The shop&apos;s data is now protected: your password is needed once to keep syncing.
+            </span>
+          )}
         </>
       }
       shake={shake}
@@ -429,7 +435,7 @@ export const AuthGate: React.FC = () => {
 
       <div className="w-full max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1 text-[11px] text-[#6B7280] dark:text-[#94A3B8] z-10">
         <span>Sarmaya • Karachi, Pakistan</span>
-        <span>Passwords are stored as salted PBKDF2 hashes, never as plain text.</span>
+        <span>Passwords are never stored as plain text.</span>
       </div>
     </div>
   );
