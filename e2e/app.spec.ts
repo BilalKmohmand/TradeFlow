@@ -43,7 +43,7 @@ test.describe.serial('Sarmaya end-to-end', () => {
     await page.getByRole('button', { name: 'Suppliers' }).first().click();
     await page.getByRole('button', { name: 'Add Supplier' }).click();
     const supForm = page.getByRole('dialog', { name: 'New supplier' });
-    await supForm.getByLabel('Supplier ID (optional)').fill('S-104');
+    await supForm.getByLabel('Supplier ID').fill('S-104');
     await supForm.getByLabel('Name', { exact: true }).fill('Ahmed');
     await supForm.getByLabel('Company / mill name (optional)').fill('Lucky Cement');
     await supForm.getByLabel('Phone', { exact: true }).fill('+92 300 1111111');

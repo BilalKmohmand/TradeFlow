@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useTrading } from '../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice } from './billing/ui';
-import { codeTaken } from '../utils/partyCode';
+import { codeTaken, nextPartyCode, CUSTOMER_CODE_PREFIX } from '../utils/partyCode';
 
 interface CustomerModalProps {
   isOpen: boolean;
@@ -32,7 +32,7 @@ const CustomerForm: React.FC<{
   updateCustomer: ReturnType<typeof useTrading>['updateCustomer'];
   onClose: () => void;
 }> = ({ editing, customers, addCustomer, updateCustomer, onClose }) => {
-  const [code, setCode] = useState(editing?.code || '');
+  const [code, setCode] = useState(editing ? editing.code || '' : nextPartyCode(customers, CUSTOMER_CODE_PREFIX));
   const [name, setName] = useState(editing?.name || '');
   const [company, setCompany] = useState(editing?.company && editing.company !== editing.name ? editing.company : '');
   const [phone, setPhone] = useState(editing?.phone || '');
@@ -74,8 +74,8 @@ const CustomerForm: React.FC<{
       {error && <Notice kind="error">{error}</Notice>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className={labelCls} htmlFor="cust-code">Customer ID (optional)</label>
-          <input id="cust-code" value={code} onChange={(e) => setCode(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="Your own code, e.g. C-215" autoCapitalize="characters" />
+          <label className={labelCls} htmlFor="cust-code">Customer ID</label>
+          <input id="cust-code" value={code} onChange={(e) => setCode(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="Given automatically" autoCapitalize="characters" />
         </div>
         <div>
           <label className={labelCls} htmlFor="cust-name">Name</label>

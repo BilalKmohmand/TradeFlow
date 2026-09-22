@@ -212,7 +212,7 @@ test.describe('QA — a new shop', () => {
     await goTo(page, 'Suppliers');
     await page.getByRole('button', { name: 'Add supplier' }).first().click();
     const sup = dialog(page, 'New supplier');
-    await sup.getByLabel('Supplier ID (optional)').fill('S-01');
+    await sup.getByLabel('Supplier ID').fill('S-01');
     await sup.getByLabel('Name', { exact: true }).fill('Ahmed');
     await sup.getByLabel('Company / mill name (optional)').fill('Dalda Foods');
     await sup.getByLabel('Phone', { exact: true }).fill('03007654321');
@@ -221,7 +221,7 @@ test.describe('QA — a new shop', () => {
     await goTo(page, 'Customers');
     await page.getByRole('button', { name: 'Add customer' }).first().click();
     const cust = dialog(page, 'New customer');
-    await cust.getByLabel('Customer ID (optional)').fill('Z01');
+    await cust.getByLabel('Customer ID').fill('Z01');
     await cust.getByLabel('Name', { exact: true }).fill('Zaman and Co BTK');
     await cust.getByLabel('Phone', { exact: true }).fill('03443838294');
     await cust.getByLabel('Credit limit in Rs. (optional)').fill('50000');
@@ -234,7 +234,7 @@ test.describe('QA — a new shop', () => {
     await page.getByRole('button', { name: /Deep Ocean \(Dark\)/ }).click();
     await expect(page.locator('html')).toHaveClass(/dark/);
     await page.getByRole('button', { name: 'Theme' }).click();
-    await page.getByRole('button', { name: /Light Neutral/ }).click();
+    await page.getByRole('button', { name: /^Light Neutral/ }).click();
     await expect(page.locator('html')).not.toHaveClass(/dark/);
 
     // Full trading suite switch in the sidebar, and back.

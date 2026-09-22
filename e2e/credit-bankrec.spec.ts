@@ -206,7 +206,7 @@ test.describe('Customer dialog', () => {
     await goTo(page, 'Customers');
     await page.getByRole('button', { name: 'Add customer' }).click();
     let form = page.getByRole('dialog', { name: 'New customer' });
-    await form.getByLabel('Customer ID (optional)').fill('C-215');
+    await form.getByLabel('Customer ID').fill('C-215');
     await form.getByLabel('Name', { exact: true }).fill('Gul Traders');
     await form.getByLabel('Phone', { exact: true }).fill('0312 5556677');
     await form.getByRole('button', { name: 'Save customer' }).click();
@@ -220,7 +220,7 @@ test.describe('Customer dialog', () => {
     // Same ID again is refused.
     await page.getByRole('button', { name: 'Add customer' }).click();
     form = page.getByRole('dialog', { name: 'New customer' });
-    await form.getByLabel('Customer ID (optional)').fill('c-215');
+    await form.getByLabel('Customer ID').fill('c-215');
     await form.getByLabel('Name', { exact: true }).fill('Another');
     await form.getByLabel('Phone', { exact: true }).fill('0312 0000001');
     await form.getByRole('button', { name: 'Save customer' }).click();
@@ -244,13 +244,17 @@ test.describe('Customer dialog', () => {
     await expect(form).toBeHidden();
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('tradeflow_customers_v2') || '[]').find((c: { name: string }) => c.name === 'Gul Traders'));
     expect(stored.creditLimit).toBe(0);
+    expect(stored.code).toMatch(/^C-\d{4}$/); // ID given automatically
     expect(stored.email).toBe('');
     expect(stored.address).toBe('');
 
     // A big bill on credit is not blocked by a limit nobody set.
     await page.getByRole('button', { name: 'New Bill' }).first().click();
     const bill = page.getByRole('dialog', { name: 'New Bill' });
-    await bill.getByLabel('Customer', { exact: true }).selectOption({ label: 'Gul Traders • 0312 5556677' });
+    // The customer got an automatic ID (C-000n), shown before the name in the picker.
+    const picker = bill.getByLabel('Customer', { exact: true });
+    await picker.selectOption({ label: (await picker.locator('option', { hasText: 'Gul Traders • 0312 5556677' }).textContent())!.trim() });
+    await expect(picker.locator('option:checked')).toHaveText(/^C-\d{4} • Gul Traders/);
     await bill.getByLabel('Item 1', { exact: true }).selectOption('p1');
     await bill.getByLabel('Quantity 1', { exact: true }).fill('300');
     await expect(bill.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();

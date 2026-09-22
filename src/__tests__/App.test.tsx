@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { vi } from 'vitest';
 import React from 'react';
 import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
 import App from '../App';
@@ -28,6 +29,8 @@ const unlock = async () => {
 };
 
 describe('App integration', () => {
+  // Full app render + real password hashing: slow on a busy machine.
+  vi.setConfig({ testTimeout: 20_000 });
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();

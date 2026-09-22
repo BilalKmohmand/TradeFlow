@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { assignMissingCodes, CUSTOMER_CODE_PREFIX, SUPPLIER_CODE_PREFIX } from '../utils/partyCode';
 import {
   Customer,
   Supplier,
@@ -781,6 +782,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }));
   // Sign-in state. The audit logger is defined further down, so it is reached through a ref.
   const [cloudSettled, setCloudSettled] = useState<boolean>(!isSupabaseConfigured);
+  // Every customer and supplier gets an automatic ID (C-0001 / S-0001) — new ones from any screen,
+  // and old ones that never had one. Waits for the cloud copy so all devices number the same way.
+  useEffect(() => {
+    if (!cloudSettled) return;
+    setCustomers((prev) => assignMissingCodes(prev, CUSTOMER_CODE_PREFIX));
+    setSuppliers((prev) => assignMissingCodes(prev, SUPPLIER_CODE_PREFIX));
+  }, [cloudSettled, customers, suppliers]);
   const auditLogRef = useRef<(action: string, details: string, severity?: 'info' | 'warning' | 'danger', category?: AuditCategory) => void>(() => {});
   const auth = useAuthStore({
     users,
