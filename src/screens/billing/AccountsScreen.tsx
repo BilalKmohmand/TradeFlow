@@ -32,10 +32,17 @@ import { CashFlowTab } from '../../components/finance/CashFlowTab';
 import { YearEndTab } from '../../components/finance/YearEndTab';
 import { useFinancialYears } from '../../components/finance/common';
 import { formatDate } from '../../utils/formatters';
+import { VouchersTab } from '../../components/accounting/VouchersTab';
+import { AccountLedgerTab } from '../../components/accounting/AccountLedgerTab';
+import { ChartTree } from '../../components/accounting/ChartTree';
+import { PartyBalancesView } from '../../components/billing/PartyBalances';
 
-type Tab = 'tb' | 'gl' | 'journal' | 'coa' | 'pnl' | 'bs' | 'profit' | 'cashflow' | 'assets' | 'staff' | 'budget' | 'centres' | 'year';
+type Tab = 'vouchers' | 'ledger' | 'parties' | 'tb' | 'gl' | 'journal' | 'coa' | 'pnl' | 'bs' | 'profit' | 'cashflow' | 'assets' | 'staff' | 'budget' | 'centres' | 'year';
 
 const TABS: { id: Tab; label: string; help: string }[] = [
+  { id: 'vouchers', label: 'Vouchers', help: 'Cash payment (CPV), cash receipt (CRV), bank payment (BPV), bank receipt (BRV) and journal (JV) vouchers, each with many lines. Numbers are given automatically.' },
+  { id: 'ledger', label: 'Account ledger', help: 'Any account — a customer, supplier, bank, cash, expense or income — for a date range: opening balance, every entry with a running Dr / Cr balance, and the grand total.' },
+  { id: 'parties', label: 'Receivable & payable', help: 'What customers owe you and what you owe suppliers, city-wise with subtotals if you like.' },
   { id: 'tb', label: 'Trial balance', help: 'The balance of every account on one date. Debits (what the business has or spent) must equal credits (what it owes, the owner put in, or it earned).' },
   { id: 'gl', label: 'General ledger', help: 'Every posting to one account, in date order, with a running balance — like a bank statement for that account.' },
   { id: 'journal', label: 'Journal', help: 'The book of entries. Bills, payments and expenses post here automatically; the accountant can add manual entries for corrections.' },
@@ -52,7 +59,7 @@ const TABS: { id: Tab; label: string; help: string }[] = [
 ];
 
 /** Tabs that take a date or date range: they get the "Financial year" shortcut. */
-const DATED_TABS: Tab[] = ['tb', 'gl', 'journal', 'pnl', 'bs'];
+const DATED_TABS: Tab[] = ['tb', 'gl', 'journal', 'pnl', 'bs', 'ledger'];
 
 const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
 const thCls = 'px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap';
@@ -75,12 +82,15 @@ export const AccountsScreen: React.FC = () => {
   const [from, setFrom] = useState(`${today.slice(0, 7)}-01`);
   const [to, setTo] = useState(today);
   const [glCode, setGlCode] = useState('1000');
+  // Account ledger: the account last opened (from the chart tree or a click) and a key to remount on change.
+  const [ledgerRef, setLedgerRef] = useState<{ ref: string; n: number }>({ ref: '1000', n: 0 });
+  const openLedger = (ref: string) => { setLedgerRef((p) => ({ ref, n: p.n + 1 })); setTab('ledger'); };
   const [jSource, setJSource] = useState<'all' | 'auto' | 'manual'>('all');
   const [jSearch, setJSearch] = useState('');
   const [jLimit, setJLimit] = useState(50);
   const [newJournal, setNewJournal] = useState(0);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
-  const [acc, setAcc] = useState<{ code: string; name: string; type: AccountType; description: string }>({ code: '', name: '', type: 'expense', description: '' });
+  const [acc, setAcc] = useState<{ code: string; name: string; type: AccountType; description: string; parent: string }>({ code: '', name: '', type: 'expense', description: '', parent: '' });
   const [lockDate, setLockDate] = useState(settings.booksLockedUntil || '');
   const { years: fyears } = useFinancialYears();
   const fyValue = fyears.find((y) => y.start === from && (y.end === to || (y.end > today && to === today)))?.start || '';
@@ -197,6 +207,10 @@ export const AccountsScreen: React.FC = () => {
       )}
       {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
 
+      {tab === 'vouchers' && <VouchersTab accounts={accounts} flash={flash} />}
+      {tab === 'ledger' && <AccountLedgerTab key={`ledger-${ledgerRef.n}`} accounts={accounts} journal={journal} initial={ledgerRef.ref} from={from} to={to} setFrom={setFrom} setTo={setTo} />}
+      {tab === 'parties' && <PartyBalancesView />}
+
       {/* ---------------- Trial balance ---------------- */}
       {tab === 'tb' && (
         <div className={`${cardCls} overflow-hidden`}>
@@ -305,7 +319,8 @@ export const AccountsScreen: React.FC = () => {
                 )}
                 <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${e.source === 'manual' ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300' : 'bg-[#F4F3EF] dark:bg-[#162436] text-[#6B7280]'}`}>{e.source === 'manual' ? 'manual' : 'auto'}</span>
                 <span className="text-sm font-semibold text-[#111827] dark:text-white min-w-0 flex-1 truncate">{e.memo}</span>
-                {e.source === 'manual' && canRemove && !booksLockedFor(settings, e.date) && (
+                {e.voucherType && <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300">voucher</span>}
+                {e.source === 'manual' && !e.voucherType && canRemove && !booksLockedFor(settings, e.date) && (
                   <button type="button" aria-label={`Delete journal entry ${e.ref}`} onClick={() => setConfirmDel({ title: `Delete journal entry ${e.ref}?`, message: `${e.memo} — this entry will be removed from the books.`, label: 'Delete entry', action: () => flash(deleteManualJournal(e.id)) })} className="p-1.5 text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
                 )}
               </div>
@@ -331,43 +346,21 @@ export const AccountsScreen: React.FC = () => {
       {/* ---------------- Chart of accounts ---------------- */}
       {tab === 'coa' && (
         <div className="space-y-4">
-          <div className={`${cardCls} overflow-hidden`}>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px]" aria-label="Chart of accounts">
-                <thead><tr className="border-b border-[#E5E5E1] dark:border-[#203248] text-left"><th className={thCls}>Code</th><th className={thCls}>Account</th><th className={thCls}>Type</th><th className={`${thCls} text-right`}>Balance today</th><th className={thCls} aria-label="Actions" /></tr></thead>
-                <tbody>
-                  {accounts.map((a: Account) => (
-                    <tr key={a.code} className="border-b border-[#F1F0EC] dark:border-[#1E2E40]">
-                      <td className={`${tdCls} tabular-nums text-xs text-[#8E9299]`}>{a.code}</td>
-                      <td className={tdCls}>
-                        <button type="button" onClick={() => openGl(a.code)} className="text-left font-semibold hover:underline">{a.name}</button>
-                        {a.description && <span className="block text-[11px] text-[#8E9299]">{a.description}</span>}
-                      </td>
-                      <td className={`${tdCls} text-xs capitalize`}>{a.type}{a.system ? <span className="ml-1.5 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-[#F4F3EF] dark:bg-[#162436] text-[#6B7280]">system</span> : null}</td>
-                      <td className={numCls}>{drCr(balances.get(a.code)?.net ?? 0)}</td>
-                      <td className="px-2 text-right">
-                        {!a.system && canRemove && (
-                          <button type="button" aria-label={`Delete account ${a.code}`} onClick={() => setConfirmDel({ title: `Delete account ${a.code}?`, message: `${a.name} will be removed from the chart of accounts.`, label: 'Delete account', action: () => flash(deleteAccount(a.code)) })} className="p-1.5 text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <ChartTree accounts={accounts} balances={balances} canPost={canPost} canRemove={canRemove} flash={flash} onOpen={openLedger}
+            onDelete={(code) => { const a = accounts.find((x) => x.code === code); setConfirmDel({ title: `Delete account ${code}?`, message: `${a?.name || code} will be removed from the chart of accounts.`, label: 'Delete account', action: () => flash(deleteAccount(code)) }); }} />
           {canPost && <form
             onSubmit={(e) => {
               e.preventDefault();
-              const r = addAccount({ code: acc.code, name: acc.name, type: acc.type, description: acc.description });
+              const r = addAccount({ code: acc.code, name: acc.name, type: acc.type, description: acc.description, ...(acc.parent ? { parent: acc.parent } : {}) });
               flash(r);
-              if (r.success) setAcc({ code: '', name: '', type: acc.type, description: '' });
+              if (r.success) setAcc({ code: '', name: '', type: acc.type, description: '', parent: acc.parent });
             }}
             className={`${cardCls} p-4 sm:p-5 grid grid-cols-2 sm:grid-cols-5 gap-3`}
           >
             <h2 className="col-span-2 sm:col-span-5 font-bold text-[#111827] dark:text-white">Add an account</h2>
             <div className="min-w-0"><label className={labelCls} htmlFor="acc-code">Code</label><input id="acc-code" inputMode="numeric" value={acc.code} onChange={(e) => setAcc({ ...acc, code: e.target.value })} placeholder="e.g. 1020" className={`${inputCls} tabular-nums`} /></div>
-            <div className="min-w-0"><label className={labelCls} htmlFor="acc-type">Type</label><select id="acc-type" value={acc.type} onChange={(e) => setAcc({ ...acc, type: e.target.value as AccountType })} className={inputCls}>{ACCOUNT_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></div>
+            <div className="min-w-0"><label className={labelCls} htmlFor="acc-type">Type</label><select id="acc-type" value={acc.type} onChange={(e) => setAcc({ ...acc, type: e.target.value as AccountType, parent: '' })} className={inputCls}>{ACCOUNT_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></div>
+            <div className="col-span-2 sm:col-span-5 min-w-0"><label className={labelCls} htmlFor="acc-parent">Under (group)</label><select id="acc-parent" value={acc.parent} onChange={(e) => setAcc({ ...acc, parent: e.target.value })} className={inputCls}><option value="">Top level of {ACCOUNT_TYPES.find((t) => t.id === acc.type)?.label}</option>{accounts.filter((a) => a.type === acc.type && a.code !== '1100' && a.code !== '2000' && a.code !== '1010').map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}</select></div>
             <div className="col-span-2 min-w-0"><label className={labelCls} htmlFor="acc-name">Name</label><input id="acc-name" value={acc.name} onChange={(e) => setAcc({ ...acc, name: e.target.value })} placeholder="e.g. Meezan Bank current account" className={inputCls} /></div>
             <div className="col-span-2 sm:col-span-1 flex items-end"><button type="submit" className={`${primaryBtn} w-full`}>Add account</button></div>
           </form>}

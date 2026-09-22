@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useTrading } from '../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice } from './billing/ui';
 import { codeTaken, nextPartyCode, CUSTOMER_CODE_PREFIX } from '../utils/partyCode';
+import { PartyExtraFields, cleanPartyExtra, usePartyExtra } from './billing/PartyFields';
 
 interface CustomerModalProps {
   isOpen: boolean;
@@ -39,6 +40,7 @@ const CustomerForm: React.FC<{
   const [creditLimit, setCreditLimit] = useState(editing && editing.creditLimit > 0 ? String(editing.creditLimit) : '');
   const [email, setEmail] = useState(editing?.email || '');
   const [address, setAddress] = useState(editing?.address || '');
+  const [extra, setExtra] = usePartyExtra(editing);
   const [error, setError] = useState('');
   const busy = useRef(false);
 
@@ -63,6 +65,7 @@ const CustomerForm: React.FC<{
       email: email.trim(),
       address: address.trim(),
       creditLimit: limit,
+      ...cleanPartyExtra(extra),
     };
     if (editing) updateCustomer(editing.id, data);
     else addCustomer(data);
@@ -102,6 +105,7 @@ const CustomerForm: React.FC<{
           <label className={labelCls} htmlFor="cust-address">Address (optional)</label>
           <input id="cust-address" value={address} onChange={(e) => setAddress(e.target.value)} className={inputCls} />
         </div>
+        <PartyExtraFields idPrefix="cust" value={extra} onChange={setExtra} />
       </div>
       <div className="flex justify-end gap-2 pt-2">
         <button type="button" onClick={onClose} className={secondaryBtn}>Cancel</button>

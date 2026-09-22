@@ -8,6 +8,7 @@ import { dispatchBilledTotal, EXPENSE_CATEGORIES, BillPrintSize } from '../types
 import { hasPack, formatPackQty, formatQtyWithPacks, shortPack } from '../utils/packUnits';
 import { buildDailySheet, lineQty, linePrice } from '../utils/billing';
 import { collectCashMovements } from '../utils/finance';
+import { scopeToBank } from '../utils/banks';
 import { bankRecPrintContent } from './billing/BankRecPrint';
 import { chequeRegisterPrintContent } from './billing/ChequeRegisterPrint';
 import { CHEQUE_EVENT_LABEL } from '../utils/cheques';
@@ -19,6 +20,7 @@ import { isSalesExtrasPrint, useSalesExtrasPrint } from './billing/SalesExtrasPr
 import type { SalesExtrasPrintRequest } from '../context/salesExtrasActions';
 import { PurchasingPrintRequest, isPurchasingPrint, usePurchasingPrint } from './billing/purchasing/PurchasingPrint';
 import { FinancePrintRequest, isFinancePrint, useFinancePrint } from './finance/FinancePrint';
+import { BooksPrintRequest, isBooksPrint, useBooksPrint } from './accounting/BooksPrint';
 import { lineDiscountLabel, lineGross, billNetTotal, returnsForBill, returnedQtyByLine, quotationLines, quotationTotal } from '../utils/salesDocs';
 
 export type PrintRequest =
@@ -34,7 +36,7 @@ export type PrintRequest =
   | { type: 'bill'; invoiceId: string }
   | { type: 'bill_challan'; invoiceId: string; driver?: string; vehicle?: string }
   | { type: 'daily_sheet'; date: string }
-  | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number }
+  | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number; bankCode?: string }
   | { type: 'trial_balance'; asOf: string }
   | { type: 'profit_loss'; from: string; to: string }
   | { type: 'balance_sheet'; asOf: string }
@@ -42,7 +44,8 @@ export type PrintRequest =
   | { type: 'cheque_register'; view?: string }
   | SalesExtrasPrintRequest
   | PurchasingPrintRequest
-  | FinancePrintRequest;
+  | FinancePrintRequest
+  | BooksPrintRequest;
 
 /** One line of a thermal receipt: text on the left, amount on the right. */
 const ThermalRow: React.FC<{ left: string; right: string; bold?: boolean }> = ({ left, right, bold }) => (
@@ -112,6 +115,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
   const salesExtrasReport = useSalesExtrasPrint(request);
   const purchasingDoc = usePurchasingPrint(request);
   const financeDoc = useFinancePrint(request);
+  const booksDoc = useBooksPrint(request);
 
   const content = useMemo(() => {
     if (!request) return null;
@@ -120,6 +124,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
     if (isSalesExtrasPrint(request)) return salesExtrasReport;
     if (isPurchasingPrint(request)) return purchasingDoc;
     if (isFinancePrint(request)) return financeDoc;
+    if (isBooksPrint(request)) return booksDoc;
 
     if (request.type === 'bill') {
       const inv = invoices.find((i) => i.id === request.invoiceId);
@@ -347,8 +352,10 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
     if (request.type === 'cheque_register') return chequeRegisterPrintContent({ cheques, view: request.view, today: todayISO() });
 
     if (request.type === 'bank_reconciliation') {
-      const movements = collectCashMovements(ledger, expenses, cashEntries, customers, suppliers);
-      return bankRecPrintContent({ ...request, movements, settings, lines: bankStatementLines, reconciliations: bankReconciliations });
+      const bank = request.bankCode || '1010';
+      const scoped = scopeToBank(collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), settings, bank);
+      const mine = <T extends { bankCode?: string }>(rows: T[]) => rows.filter((r) => (r.bankCode || '1010') === bank);
+      return bankRecPrintContent({ ...request, movements: scoped.movements, settings: scoped.settings, lines: mine(bankStatementLines), reconciliations: mine(bankReconciliations) });
     }
 
     if (request.type === 'daily_sheet') {
@@ -920,7 +927,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       };
     }
     return null;
-  }, [request, paper, books, billingReport, salesExtrasReport, purchasingDoc, financeDoc, salesmen, areas, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques]);
+  }, [request, paper, books, billingReport, salesExtrasReport, purchasingDoc, financeDoc, booksDoc, salesmen, areas, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques]);
 
   // On a narrow screen (a phone) the A4 / A5 page is scaled down to fit the width instead of being cut
   // off at the right. Only the preview: print CSS resets the zoom, so the paper is unchanged.

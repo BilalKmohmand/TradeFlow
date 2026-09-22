@@ -135,6 +135,8 @@ export const filterBills = (invoices: Invoice[], query: string, period: 'today' 
 export interface PaymentPart {
   method: string;
   amount: number;
+  /** Bank account (chart code) of a bank / wallet part; empty = the main bank. */
+  bankCode?: string;
 }
 
 export interface ResolvedBillPayment {
@@ -155,7 +157,7 @@ export interface ResolvedBillPayment {
  * callers: paidNow + paymentMethod) is simply capped at the total, as before.
  */
 export const resolveBillPayments = (total: number, parts: PaymentPart[], chequeAmount = 0): ResolvedBillPayment => {
-  const clean = parts.map((p) => ({ method: p.method || 'Cash', amount: round2(Math.max(0, Number(p.amount) || 0)) })).filter((p) => p.amount > 0);
+  const clean = parts.map((p) => ({ method: p.method || 'Cash', amount: round2(Math.max(0, Number(p.amount) || 0)), ...(p.bankCode && !isCashMethod(p.method) ? { bankCode: p.bankCode } : {}) })).filter((p) => p.amount > 0);
   const cheque = round2(Math.max(0, Number(chequeAmount) || 0));
   const fail = (error: string): ResolvedBillPayment => ({ parts: clean, cheque, paid: 0, change: 0, error });
   if (cheque > total + 0.005) return fail('The cheque is more than the bill total.');

@@ -8,8 +8,8 @@ import { formatCurrency } from '../utils/formatters';
 export interface BankRecApi {
   bankStatementLines: BankStatementLine[];
   bankReconciliations: BankReconciliation[];
-  /** Add statement lines (skips ones already imported) and auto-match them straight away. */
-  addBankStatementLines: (lines: ParsedStatementLine[]) => { added: number; duplicates: number; matched: number };
+  /** Add statement lines of one bank account (skips ones already imported) and auto-match them straight away. */
+  addBankStatementLines: (lines: ParsedStatementLine[], bankCode?: string) => { added: number; duplicates: number; matched: number };
   deleteBankStatementLine: (id: string) => void;
   /** Re-run auto-matching on every unmatched line. Returns how many were matched. */
   autoMatchBankLines: () => number;
@@ -34,8 +34,8 @@ interface Deps {
   lockedFor?: (date: string) => string | null;
   /** Whether the signed-in user may change bank reconciliation (cash book permission). */
   canEdit?: () => boolean;
-  recordCustomerPayment?: (customerId: string, amount: number, notes?: string, date?: string) => LedgerEntry | undefined;
-  recordSupplierPayment?: (supplierId: string, amount: number, notes?: string, date?: string) => LedgerEntry | undefined;
+  recordCustomerPayment?: (customerId: string, amount: number, notes?: string, date?: string, opts?: { bankCode?: string }) => LedgerEntry | undefined;
+  recordSupplierPayment?: (supplierId: string, amount: number, notes?: string, date?: string, opts?: { bankCode?: string }) => LedgerEntry | undefined;
   logAuditEvent: (action: string, details: string, severity?: 'info' | 'warning' | 'danger') => void;
   removeRemote: (table: 'bank_statement_lines' | 'bank_reconciliations', ids: string[]) => void;
   uid: (prefix: string) => string;
@@ -44,10 +44,17 @@ interface Deps {
 }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+const MAIN_BANK = '1010';
+/** Bank account of a statement line / reconciliation (none = the main bank). */
+const bankOfLine = (l: { bankCode?: string }) => l.bankCode || MAIN_BANK;
+const bankTag = (code?: string) => (code && code !== MAIN_BANK ? { bankCode: code } : {});
 
 export const createBankRecApi = (d: Deps): BankRecApi => {
   const applyProposals = (all: BankStatementLine[]): { lines: BankStatementLine[]; matched: number } => {
-    const proposals = autoMatch(all, d.getMovements());
+    // Each bank's statement lines are matched only with that bank's own movements.
+    const moves = d.getMovements();
+    const banks = Array.from(new Set(all.map(bankOfLine)));
+    const proposals = banks.flatMap((b) => autoMatch(all.filter((l) => bankOfLine(l) === b), moves.filter((m) => (m.bankCode || MAIN_BANK) === b)));
     if (proposals.length === 0) return { lines: all, matched: 0 };
     const byLine = new Map(proposals.map((p) => [p.lineId, p]));
     return {
@@ -59,14 +66,15 @@ export const createBankRecApi = (d: Deps): BankRecApi => {
     };
   };
 
-  const addBankStatementLines: BankRecApi['addBankStatementLines'] = (incoming) => {
+  const addBankStatementLines: BankRecApi['addBankStatementLines'] = (incoming, bankCode) => {
+    const bank = bankCode || MAIN_BANK;
     if (d.canEdit && !d.canEdit()) return { added: 0, duplicates: 0, matched: 0 };
     const clean = incoming
       .filter((l) => l.date && Number.isFinite(l.amount) && Math.abs(l.amount) >= 0.005)
       .map((l) => ({ ...l, amount: round2(l.amount), description: (l.description || '').trim() || 'Bank entry', reference: l.reference?.trim() || undefined }));
-    const { fresh, duplicates } = splitNewLines(d.lines, clean);
+    const { fresh, duplicates } = splitNewLines(d.lines.filter((l) => bankOfLine(l) === bank), clean);
     const importedAt = new Date().toISOString();
-    const rows: BankStatementLine[] = fresh.map((l) => ({ id: d.uid('bsl'), date: l.date, description: l.description, amount: l.amount, reference: l.reference, importedAt, matchedMovementIds: [], status: 'unmatched' }));
+    const rows: BankStatementLine[] = fresh.map((l) => ({ id: d.uid('bsl'), date: l.date, description: l.description, amount: l.amount, reference: l.reference, importedAt, matchedMovementIds: [], status: 'unmatched', ...bankTag(bank) }));
     const { lines, matched } = applyProposals([...d.lines, ...rows]);
     d.setLines(lines);
     if (rows.length > 0) d.logAuditEvent('Bank Statement Imported', `${rows.length} line(s) added${duplicates.length ? `, ${duplicates.length} already there skipped` : ''}; ${matched} matched automatically.`, 'info');
@@ -126,26 +134,26 @@ export const createBankRecApi = (d: Deps): BankRecApi => {
     let message: string;
     if (line.amount > 0 && opts?.customerId && d.recordCustomerPayment) {
       // A customer's transfer: it reduces what they owe, exactly like taking a payment by bank.
-      const row = d.recordCustomerPayment(opts.customerId, amount, `Bank Transfer - ${description}`, line.date);
+      const row = d.recordCustomerPayment(opts.customerId, amount, `Bank Transfer - ${description}`, line.date, bankTag(line.bankCode));
       if (!row) return { success: false, message: 'Customer not found.' };
       entryId = row.id;
       movementId = `cm-${row.id}`;
       message = `${formatCurrency(amount)} received from the customer by bank, recorded and matched.`;
     } else if (line.amount < 0 && opts?.supplierId && d.recordSupplierPayment) {
-      const row = d.recordSupplierPayment(opts.supplierId, amount, `Bank Transfer - ${description}`, line.date);
+      const row = d.recordSupplierPayment(opts.supplierId, amount, `Bank Transfer - ${description}`, line.date, bankTag(line.bankCode));
       if (!row) return { success: false, message: 'Supplier not found.' };
       entryId = row.id;
       movementId = `cm-${row.id}`;
       message = `${formatCurrency(amount)} paid to the supplier from the bank, recorded and matched.`;
     } else if (line.amount < 0) {
       const category = opts?.category || 'bank_charges';
-      const exp = d.addExpense({ date: line.date, category, amount, description, paidVia: 'Bank Transfer', referenceId: line.reference });
+      const exp = d.addExpense({ date: line.date, category, amount, description, paidVia: 'Bank Transfer', referenceId: line.reference, ...bankTag(line.bankCode) });
       entryId = exp.id;
       movementId = `cm-${exp.id}`;
       message = `Expense of ${formatCurrency(amount)} added (paid from bank) and matched.`;
     } else {
       // Unknown source: parked in Suspense for the accountant, never guessed from the bank's narration.
-      const entry = d.addCashEntry({ date: line.date, direction: 'in', amount, description, method: 'Bank Transfer', accountCode: '2900' });
+      const entry = d.addCashEntry({ date: line.date, direction: 'in', amount, description, method: 'Bank Transfer', accountCode: '2900', ...bankTag(line.bankCode) });
       entryId = entry.id;
       movementId = `cm-${entry.id}`;
       message = `Money received into bank ${formatCurrency(amount)} added (for your accountant to classify) and matched.`;
@@ -155,11 +163,12 @@ export const createBankRecApi = (d: Deps): BankRecApi => {
   };
 
   const saveBankReconciliation: BankRecApi['saveBankReconciliation'] = (data) => {
-    const existing = d.recs.find((r) => r.statementDate === data.statementDate);
+    const existing = d.recs.find((r) => r.statementDate === data.statementDate && bankOfLine(r) === bankOfLine(data));
     const now = new Date().toISOString();
+    if (data.bankCode === MAIN_BANK) delete (data as { bankCode?: string }).bankCode;
     const rec: BankReconciliation = existing
       ? { ...existing, ...data, closingBalance: round2(data.closingBalance), updatedAt: now }
-      : { ...data, closingBalance: round2(data.closingBalance), id: d.uid('brec'), createdAt: now, createdBy: d.userName };
+      : { ...data, ...bankTag(data.bankCode), closingBalance: round2(data.closingBalance), id: d.uid('brec'), createdAt: now, createdBy: d.userName };
     d.setRecs((prev) => (existing ? prev.map((r) => (r.id === existing.id ? rec : r)) : [rec, ...prev]));
     if (data.reconciled && !existing?.reconciled) d.logAuditEvent('Bank Reconciled', `Statement to ${data.statementDate}: closing ${formatCurrency(rec.closingBalance)} agrees with the books.`, 'info');
     return rec;

@@ -67,6 +67,8 @@ import { buildJournal, combineJournal } from '../utils/accounting';
 import { ControlApi, createControlApi, useControlStore } from './controlActions';
 import { ReminderApi, createReminderApi, computeRemindersDue } from './reminderActions';
 import { NumberGuardApi, useNumberGuard } from './numberGuardActions';
+import { VoucherApi, createVoucherApi } from './voucherActions';
+import { planDocNumber } from '../utils/control';
 import { chequesBlockingCustomerDelete } from '../utils/cheques';
 import {
   DEFAULT_ROLES,
@@ -110,7 +112,7 @@ import {
   initialWhatsAppMessages,
 } from '../data/initialData';
 
-interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, PurchasingApi, FinanceApi, AuthApi, SalesExtrasApi, ControlApi, ReminderApi, NumberGuardApi {
+interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, PurchasingApi, FinanceApi, AuthApi, SalesExtrasApi, ControlApi, ReminderApi, NumberGuardApi, VoucherApi {
   /** Why this customer can't be deleted right now (cheques still in hand), or null. */
   customerDeleteBlock: (id: string) => string | null;
   customers: Customer[];
@@ -230,7 +232,7 @@ interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, P
   ) => { success: boolean; message: string };
   /** Simple billing: one call creates the bill, books the sale, takes stock and records any cash paid now. */
   createBill: (input: CreateBillInput) => { success: boolean; message: string; invoice?: Invoice };
-  payBill: (invoiceId: string, amount: number, method: string, notes?: string, date?: string) => { success: boolean; message: string };
+  payBill: (invoiceId: string, amount: number, method: string, notes?: string, date?: string, bankCode?: string) => { success: boolean; message: string };
   deleteBill: (invoiceId: string) => { success: boolean; message: string };
   /** Sales return against a bill: goods back to stock, credit note, money back now or off what they owe. */
   returnBillItems: (input: ReturnBillInput) => { success: boolean; message: string; stockReturn?: StockReturn };
@@ -241,7 +243,8 @@ interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, P
   deleteQuotation: (id: string) => void;
   returns: StockReturn[];
   deleteReturn: (id: string) => { success: boolean; message: string };
-  addCashTransfer: (input: { amount: number; from: 'cash' | 'bank'; date?: string; note?: string }) => { success: boolean; message: string };
+  /** Cash <-> bank, or bank -> bank (from 'bank' with toBankCode). bankCode = the bank account (empty = main bank). */
+  addCashTransfer: (input: { amount: number; from: 'cash' | 'bank'; date?: string; note?: string; bankCode?: string; toBankCode?: string }) => { success: boolean; message: string };
   // Bank reconciliation (see bankRecActions.ts)
   bankStatementLines: BankRecApi['bankStatementLines'];
   bankReconciliations: BankRecApi['bankReconciliations'];
@@ -312,8 +315,8 @@ interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, P
   markDelivered: (dispatchId: string, data?: { receivedBy?: string; podNote?: string; deliveredAt?: string }) => void;
   reopenDispatch: (dispatchId: string) => void;
   
-  recordCustomerPayment: (customerId: string, amount: number, notes?: string, date?: string) => LedgerEntry | undefined;
-  recordSupplierPayment: (supplierId: string, amount: number, notes?: string, date?: string) => LedgerEntry | undefined;
+  recordCustomerPayment: (customerId: string, amount: number, notes?: string, date?: string, opts?: { bankCode?: string }) => LedgerEntry | undefined;
+  recordSupplierPayment: (supplierId: string, amount: number, notes?: string, date?: string, opts?: { bankCode?: string }) => LedgerEntry | undefined;
   
   sendWhatsAppReminder: (customerId: string, customText?: string) => WhatsAppMessage;
   sendWhatsAppDirect: (phone: string, text: string) => void;
@@ -419,7 +422,7 @@ export type PrintRequestLike =
   | { type: 'bill'; invoiceId: string }
   | { type: 'bill_challan'; invoiceId: string; driver?: string; vehicle?: string }
   | { type: 'daily_sheet'; date: string }
-  | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number }
+  | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number; bankCode?: string }
   | { type: 'trial_balance'; asOf: string }
   | { type: 'profit_loss'; from: string; to: string }
   | { type: 'balance_sheet'; asOf: string }
@@ -439,7 +442,10 @@ export type PrintRequestLike =
   | { type: 'payslip'; runId: string; staffId: string }
   | { type: 'staff_ledger'; staffId: string }
   | { type: 'cash_flow'; from: string; to: string }
-  | { type: 'cheque_print'; chequeId: string };
+  | { type: 'cheque_print'; chequeId: string }
+  | { type: 'vouchers_print'; ids: string[] }
+  | { type: 'account_ledger'; ref: string; from: string; to: string }
+  | { type: 'party_balances'; kind: 'both' | 'receivable' | 'payable'; cityWise: boolean; city?: string };
 
 /** Collision-safe id generator (Date.now() alone repeats when called in a tight loop). */
 let idCounter = 0;
@@ -473,6 +479,8 @@ export interface CreateBillItemInput {
 export interface BillPaymentPart {
   method: string;
   amount: number;
+  /** Bank account (chart code) for a bank / wallet part; empty = the main bank. */
+  bankCode?: string;
 }
 
 /** A customer's cheque taken with the bill: goes into the cheque register (in hand), not the bank. */
@@ -1779,6 +1787,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const deleteLedgerEntry = (id: string) => {
     const target = ledger.find((l) => l.id === id);
     if (!target) return;
+    if (target.voucherId) return; // part of a voucher: changed or deleted from Accounts → Vouchers
     setLedger((prev) => prev.filter((l) => l.id !== id));
     removeRemote('ledger', [id]);
     logAuditEvent('Ledger Entry Deleted', `${target.referenceId}: ${target.description}`, 'danger');
@@ -2236,7 +2245,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return { dispatch: newDispatch, message: waMessage };
   };
 
-  const recordCustomerPayment = (customerId: string, amount: number, notes?: string, date?: string): LedgerEntry | undefined => {
+  const recordCustomerPayment = (customerId: string, amount: number, notes?: string, date?: string, opts: { bankCode?: string } = {}): LedgerEntry | undefined => {
     const customer = customers.find((c) => c.id === customerId);
     if (!customer) return undefined;
 
@@ -2263,6 +2272,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       credit: amount,
       balanceAfter: newTotalDue,
       ...controlStore.branchStamp(),
+      ...(opts.bankCode && opts.bankCode !== '1010' ? { bankCode: opts.bankCode } : {}),
     };
 
     setLedger((prev) => [newLedger, ...prev]);
@@ -2288,7 +2298,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return newLedger;
   };
 
-  const recordSupplierPayment = (supplierId: string, amount: number, notes?: string, date?: string): LedgerEntry | undefined => {
+  const recordSupplierPayment = (supplierId: string, amount: number, notes?: string, date?: string, opts: { bankCode?: string } = {}): LedgerEntry | undefined => {
     const supplier = suppliers.find((s) => s.id === supplierId);
     if (!supplier) return undefined;
 
@@ -2308,10 +2318,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       referenceId: payRef,
       date: today,
       description: notes ? `Supplier payment made: ${notes}` : `Supplier payment made (${payRef})`,
+      ...(notes ? { method: notes.split(' - ')[0].trim() } : {}),
       debit: 0,
       credit: amount,
       balanceAfter: newTotalOwed,
       ...controlStore.branchStamp(),
+      ...(opts.bankCode && opts.bankCode !== '1010' ? { bankCode: opts.bankCode } : {}),
     };
 
     setLedger((prev) => [newLedger, ...prev]);
@@ -2978,6 +2990,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         referenceId: invoiceNumber,
         sourceId: invoice.id,
         method: p.method,
+        ...((p as BillPaymentPart).bankCode && (p as BillPaymentPart).bankCode !== '1010' ? { bankCode: (p as BillPaymentPart).bankCode } : {}),
         date,
         description: `Payment received: ${p.method} - Bill ${invoiceNumber}`,
         debit: 0,
@@ -3029,7 +3042,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return { success: true, message: `Bill ${invoiceNumber} saved.`, invoice };
   };
 
-  const payBill = (invoiceId: string, amount: number, method: string, notes?: string, date?: string): { success: boolean; message: string } => {
+  const payBill = (invoiceId: string, amount: number, method: string, notes?: string, date?: string, bankCode?: string): { success: boolean; message: string } => {
     const inv = invoices.find((i) => i.id === invoiceId);
     if (!inv) return { success: false, message: 'Bill not found.' };
     const payAmt = round2(Math.max(0, amount));
@@ -3060,6 +3073,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         referenceId: inv.invoiceNumber,
         sourceId: inv.id,
         method,
+        ...(bankCode && bankCode !== '1010' ? { bankCode } : {}),
         date: when,
         description: `Payment received: ${method} - Bill ${inv.invoiceNumber}${notes ? ` (${notes})` : ''}`,
         debit: 0,
@@ -3179,18 +3193,25 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return { success: true, message, stockReturn: r };
   };
 
-  const addCashTransfer = ({ amount, from, date, note }: { amount: number; from: 'cash' | 'bank'; date?: string; note?: string }): { success: boolean; message: string } => {
+  const addCashTransfer = ({ amount, from, date, note, bankCode, toBankCode }: { amount: number; from: 'cash' | 'bank'; date?: string; note?: string; bankCode?: string; toBankCode?: string }): { success: boolean; message: string } => {
     const amt = round2(Math.max(0, amount));
     if (amt <= 0) return { success: false, message: 'Enter an amount greater than zero.' };
     const when = date || todayISO();
     const closedXfer = booksLockedFor(settings, when);
     if (closedXfer) return { success: false, message: closedXfer };
-    const to = from === 'cash' ? 'bank' : 'cash';
-    const label = from === 'cash' ? 'Deposited cash to bank' : 'Withdrew cash from bank';
-    const description = `${label}${note ? ` - ${note}` : ''}`;
+    const bank = bankCode || '1010';
+    const bankToBank = from === 'bank' && Boolean(toBankCode);
+    if (bankToBank && (toBankCode || '1010') === bank) return { success: false, message: 'Pick two different bank accounts.' };
+    const known = vouchersApi.bankAccounts;
+    if (!known.some((b) => b.code === bank) || (bankToBank && !known.some((b) => b.code === toBankCode))) return { success: false, message: 'Pick the bank account.' };
+    const bankName = (code: string) => known.find((b) => b.code === code)?.name || 'bank';
+    const to = from === 'cash' ? 'bank' : bankToBank ? 'bank' : 'cash';
+    const label = bankToBank ? `Moved from ${bankName(bank)} to ${bankName(toBankCode!)}` : from === 'cash' ? 'Deposited cash to bank' : 'Withdrew cash from bank';
+    const description = `${label}${!bankToBank && known.length > 1 ? ` (${bankName(bank)})` : ''}${note ? ` - ${note}` : ''}`;
     const pairId = uid('xfer');
-    const out: CashEntry = { ...controlStore.branchStamp(), id: uid('cash'), date: when, direction: 'out', amount: amt, description, method: from === 'cash' ? 'Cash' : 'Bank Transfer', createdAt: todayISO(), createdBy: currentUser?.name, pairId };
-    const inn: CashEntry = { ...controlStore.branchStamp(), id: uid('cash'), date: when, direction: 'in', amount: amt, description, method: to === 'cash' ? 'Cash' : 'Bank Transfer', createdAt: todayISO(), createdBy: currentUser?.name, pairId };
+    const bankTag = (code: string) => (code && code !== '1010' ? { bankCode: code } : {});
+    const out: CashEntry = { ...controlStore.branchStamp(), id: uid('cash'), date: when, direction: 'out', amount: amt, description, method: from === 'cash' ? 'Cash' : 'Bank Transfer', ...(from === 'bank' ? bankTag(bank) : {}), createdAt: todayISO(), createdBy: currentUser?.name, pairId };
+    const inn: CashEntry = { ...controlStore.branchStamp(), id: uid('cash'), date: when, direction: 'in', amount: amt, description, method: to === 'cash' ? 'Cash' : 'Bank Transfer', ...(to === 'bank' ? bankTag(bankToBank ? toBankCode! : bank) : {}), createdAt: todayISO(), createdBy: currentUser?.name, pairId };
     setCashEntries((prev) => [inn, out, ...prev]);
     logAuditEvent('Cash Transfer', `${label}: ${formatCurrency(amt)}`, 'info');
     return { success: true, message: `${label}: ${formatCurrency(amt)}.` };
@@ -3316,6 +3337,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (booksLockedFor(settings, existing.date)) return; // closed period: the screens hide the delete button too
     if (chequeApi.isChequeRecord(id)) return; // a bounced cheque's bank charge: changed through the cheque, not deleted
     if (finance.api.isFinanceRecord(id)) return; // a salary payment: undone from Accounts → Staff & salaries
+    if (existing.voucherId) return; // part of a voucher: changed from Accounts → Vouchers
     setExpenses((prev) => prev.filter((e) => e.id !== id));
     removeRemote('expenses', [id]);
     logAuditEvent('Expense Deleted', `${existing.category}: ${formatCurrency(existing.amount)} — ${existing.description}`, 'danger');
@@ -3361,6 +3383,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (booksLockedFor(settings, existing.date)) return; // closed period: the screens hide the delete button too
     if (chequeApi.isChequeRecord(id)) return; // a cleared cheque: part of the cheque register, not a loose cash entry
     if (finance.api.isFinanceRecord(id)) return; // an asset purchase / sale or staff advance: changed from Accounts
+    if (existing.voucherId) return; // part of a voucher: changed from Accounts → Vouchers
     // A transfer has two legs; remove both so cash and bank stay in step.
     const ids = existing.pairId ? cashEntries.filter((e) => e.pairId === existing.pairId).map((e) => e.id) : [id];
     setCashEntries((prev) => prev.filter((e) => !ids.includes(e.id)));
@@ -3686,7 +3709,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const entry: JournalEntry = {
       id: uid('je'),
       date: input.date,
-      ref: input.ref?.trim() || `JV-${manualJournals.reduce((m, j) => Math.max(m, parseInt((j.ref.match(/^JV-(\d+)$/) || [])[1] || '0', 10)), 0) + 1}`,
+      // Same series as journal vouchers (JV-…): a number is never used twice, even after a delete.
+      ref: input.ref?.trim() || controlStore.nextDocNumber('jv', input.date, manualJournals.map((j) => j.ref)),
       memo: input.memo.trim(),
       lines,
       source: 'manual',
@@ -3702,6 +3726,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const target = manualJournals.find((j) => j.id === id);
     if (!target) return { success: false, message: 'Journal entry not found.' };
     if (target.closing) return { success: false, message: 'This is a year-end closing entry. Reopen the year from Accounts → Year end instead.' };
+    if (target.voucherType) return { success: false, message: `${target.ref} is a voucher. Delete it from Accounts → Vouchers.` };
     if (!can('finance:view_pnl') || !can('delete_records')) return { success: false, message: 'Only a manager or admin can delete journal entries.' };
     const closedDel = booksLockedFor(settings, target.date);
     if (closedDel) return { success: false, message: `This entry is in a closed period. ${closedDel}` };
@@ -3716,6 +3741,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const error = validateAccount(acc, mergeAccounts(customAccounts));
     if (error) return { success: false, message: error };
     const code = acc.code.trim();
+    const parentAcc = acc.parent ? mergeAccounts(customAccounts).find((a) => a.code === acc.parent) : undefined;
+    if (acc.parent && !parentAcc) return { success: false, message: `Parent account ${acc.parent} not found.` };
+    if (parentAcc && parentAcc.type !== acc.type) return { success: false, message: `A sub-account of ${parentAcc.code} ${parentAcc.name} must be ${parentAcc.type === 'asset' ? 'an' : 'a'} ${parentAcc.type} account too.` };
     const account: Account = {
       id: `acc-${code}`,
       code,
@@ -3737,7 +3765,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const target = customAccounts.find((a) => a.code === code);
     if (!target) return { success: false, message: 'System accounts cannot be deleted.' };
     if (manualJournals.some((j) => j.lines.some((l) => l.accountCode === code))) {
-      return { success: false, message: `Account ${code} is used in journal entries; delete those entries first.` };
+      return { success: false, message: `Account ${code} is used in journal entries or vouchers; delete those first.` };
+    }
+    if (customAccounts.some((a) => a.parent === code)) return { success: false, message: `Account ${code} has sub-accounts. Remove those first.` };
+    if (target.isBank) {
+      const why = vouchersApi.bankInUse(code);
+      if (why) return { success: false, message: why };
     }
     setCustomAccounts((prev) => prev.filter((a) => a.code !== code));
     if (target.id) removeRemote('accounts', [target.id]);
@@ -3980,8 +4013,18 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     removeRemote,
     centreInUse: (id) => invoices.some((i) => i.costCentreId === id) || expenses.some((e) => e.costCentreId === id) || manualJournals.some((j) => j.costCentreId === id || j.lines.some((l) => l.costCentreId === id)),
   });
-  /** Expense / cash rows owned by a cheque or a finance record: changed from there, never deleted on their own. */
-  const isLinkedRecord = (id: string) => chequeApi.isChequeRecord(id) || finance.api.isFinanceRecord(id);
+  // Bank accounts, vouchers (CPV / CRV / BPV / BRV / JV) and the city list (see voucherActions.ts / utils/vouchers.ts).
+  const vouchersApi = createVoucherApi({
+    settings, setSettings, customAccounts, setCustomAccounts, manualJournals, setManualJournals,
+    ledger, setLedger, cashEntries, setCashEntries, expenses, setExpenses, customers, setCustomers, suppliers, setSuppliers,
+    cheques, bankLines: bankStatementLines,
+    can: (p) => can(p as Permission), logAuditEvent, uid, userName: currentUser?.name, today: todayISO, removeRemote,
+    nextDocNumber: controlStore.nextDocNumber,
+    previewDocNumber: (key, date, existing) => planDocNumber({ numberSeries: settings.numberSeries, docCounters: controlStore.counters.current }, key, date, existing).number,
+  });
+  /** Expense / cash / ledger rows owned by a cheque, a finance record or a voucher: changed from there, never deleted on their own. */
+  const voucherRecordIds = useMemo(() => new Set([...ledger, ...expenses, ...cashEntries].filter((r) => r.voucherId).map((r) => r.id)), [ledger, expenses, cashEntries]);
+  const isLinkedRecord = (id: string) => chequeApi.isChequeRecord(id) || finance.api.isFinanceRecord(id) || voucherRecordIds.has(id);
   // Approval rules, deleted-records bin, number series, branches, backups (see controlActions.ts).
   const control = createControlApi({
     store: controlStore, settings, setSettings, currentUser, users, setUsers,
@@ -3991,6 +4034,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCustomers, setSuppliers, setProducts, setExpenses, setCashEntries, setInvoices, setLedger,
     isLinkedRecord, planBill: inventory.planBill, importSystemBackup, exportSystemBackup,
     createBill, recordSupplierPayment, issueCheque: chequeApi.issueCheque, adjustStockBy: stockActions.adjustStockBy,
+    vouchers: {
+      addVoucher: vouchersApi.addVoucher, deleteVoucher: vouchersApi.deleteVoucher, voucherSnapshot: vouchersApi.voucherSnapshot,
+      restoreVoucher: vouchersApi.restoreVoucher, voucherRestoreBlock: vouchersApi.voucherRestoreBlock, validate: vouchersApi.validateVoucherInput,
+    },
     deleteBill, deleteInvoice, deleteCustomer, deleteSupplier, deleteProduct, deleteExpense, deleteCashEntry, deleteReturn,
     deletePurchaseReturn: stockActions.deletePurchaseReturn, undoStockAdjustment: stockActions.undoStockAdjustment, deleteAdjustment,
     deleteQuotation, deletePurchaseOrder, deletePurchase, deleteManualJournal, deleteBooking, deleteDispatch, deleteLedgerEntry,
@@ -4016,6 +4063,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ...auth,
         ...reminders,
         ...numberGuard,
+        ...vouchersApi,
         customerDeleteBlock,
         customers,
         suppliers,

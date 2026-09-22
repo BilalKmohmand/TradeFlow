@@ -17,6 +17,7 @@ import { unclearedChequeTotals } from '../../utils/cheques';
 import { useBranchScoped } from '../../hooks/useBranchScoped';
 import { BranchFilter } from '../../components/control/BranchFilter';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { BankAccountsCard } from '../../components/billing/BankAccounts';
 
 export type MoneyTab = 'overview' | 'expenses' | 'cashbook' | 'cheques' | 'bank';
 type Tab = MoneyTab;
@@ -28,7 +29,10 @@ export const MoneyScreen: React.FC = () => {
   // Money of the branch picked in the branch filter (everything while there is one branch).
   // Customer / supplier balances are the branch's own when one branch is picked (see partyBalancesForBranch).
   const { ledger, expenses, cashEntries, settings: branchSettings, customers: partyCustomers, suppliers: partySuppliers, wholeShop } = useBranchScoped();
-  const { branchName, branchView } = useTrading();
+  const { branchName, branchView, bankAccounts } = useTrading();
+  // Cash book: every movement, the cash drawer only, or one bank account.
+  const [bookAcct, setBookAcct] = useState<string>('all');
+  const bankName = (code?: string) => bankAccounts.find((b) => b.code === code)?.name;
   const [pendingExp, setPendingExp] = useState<{ id: string; label: string } | null>(null);
   // Bank reconciliation is book-keeping: staff without finance access (operators) don't see it.
   const canSeeBank = can('view_finance');
@@ -57,7 +61,10 @@ export const MoneyScreen: React.FC = () => {
   const unpaidExpenses = useMemo(() => expenses.filter((e) => e.paidVia === 'Credit (unpaid)'), [expenses]);
   const monthExpenses = useMemo(() => groupExpenses(expenses.filter((e) => e.date.startsWith(month))), [expenses, month]);
   const monthTotal = monthExpenses.reduce((a, g) => a + g.total, 0);
-  const monthMoves = useMemo(() => movements.filter((m) => m.date.startsWith(month)).sort((a, b) => (a.date < b.date ? 1 : -1)), [movements, month]);
+  const monthMoves = useMemo(
+    () => movements.filter((m) => m.date.startsWith(month) && (bookAcct === 'all' || (bookAcct === 'cash' ? !m.bankCode : m.bankCode === bookAcct))).sort((a, b) => (a.date < b.date ? 1 : -1)),
+    [movements, month, bookAcct]
+  );
 
   const saveOpening = (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,10 +109,11 @@ export const MoneyScreen: React.FC = () => {
               <button type="button" onClick={() => { setOpening({ cash: String(settings.cashOpeningBalance || 0), bank: String(settings.openingBankBalance || 0), date: settings.cashOpeningDate }); setShowOpening((v) => !v); }} className={secondaryBtn}><Settings2 className="w-4 h-4" /> Opening balances</button>
             </div>
           </div>
+          <BankAccountsCard balances={balances.banks} onOpenBank={(code) => { setBookAcct(code); setTab('cashbook'); }} />
           {showOpening && (
             <form onSubmit={saveOpening} className={`${cardCls} p-5 grid grid-cols-1 sm:grid-cols-4 gap-3`}>
               <div><label className={labelCls} htmlFor="op-cash">Cash on opening day</label><input id="op-cash" type="number" inputMode="decimal" step="any" value={opening.cash} onChange={(e) => setOpening({ ...opening, cash: e.target.value })} className={`${inputCls} tabular-nums`} /></div>
-              <div><label className={labelCls} htmlFor="op-bank">Bank on opening day</label><input id="op-bank" type="number" inputMode="decimal" step="any" value={opening.bank} onChange={(e) => setOpening({ ...opening, bank: e.target.value })} className={`${inputCls} tabular-nums`} /></div>
+              <div><label className={labelCls} htmlFor="op-bank">{bankAccounts.length > 1 ? `${bankAccounts[0].name} on opening day` : 'Bank on opening day'}</label><input id="op-bank" type="number" inputMode="decimal" step="any" value={opening.bank} onChange={(e) => setOpening({ ...opening, bank: e.target.value })} className={`${inputCls} tabular-nums`} /></div>
               <div><label className={labelCls} htmlFor="op-date">Counting from</label><input id="op-date" type="date" value={opening.date} onChange={(e) => setOpening({ ...opening, date: e.target.value })} className={inputCls} /></div>
               <div className="flex items-end"><button type="submit" className={`${primaryBtn} w-full`}>Save</button></div>
             </form>
@@ -172,6 +180,13 @@ export const MoneyScreen: React.FC = () => {
           <input id="money-month" type="month" value={month} max={today.slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} className={`${inputCls} !w-auto`} />
           <span className="ml-auto" />
           {tab === 'expenses' && <CsvButton fileName={`expenses-${month}.csv`} table={() => expensesCsv(monthExpenses.flatMap((g) => g.rows))} label="Download expenses CSV" />}
+          {tab === 'cashbook' && (
+            <select aria-label="Cash book account" data-testid="cashbook-account" value={bookAcct} onChange={(e) => setBookAcct(e.target.value)} className={`${inputCls} !w-auto`}>
+              <option value="all">Cash and all banks</option>
+              <option value="cash">Cash in hand</option>
+              {bankAccounts.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
+            </select>
+          )}
           {tab === 'cashbook' && <CsvButton fileName={`cash-book-${month}.csv`} table={() => cashBookCsv(monthMoves)} label="Download cash book CSV" />}
           {tab === 'expenses' && <button type="button" onClick={() => ui.addExpense()} className={primaryBtn}><Receipt className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add expense</button>}
         </div>
@@ -203,7 +218,7 @@ export const MoneyScreen: React.FC = () => {
           {monthMoves.length === 0 ? <EmptyState compact icon={<Coins className="w-5 h-5" />} text="No money moved this month." /> : (
             <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
               {monthMoves.map((m) => (
-                <li key={m.id} className="flex items-center gap-2 px-4 sm:px-5 py-2.5 text-sm hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"><span className="text-xs text-[#6B7280] dark:text-[#8E9299] w-20 shrink-0 tabular-nums">{formatDate(m.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{m.counterparty ? `${m.counterparty} • ` : ''}{m.description}<span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]"> • {m.method || 'Cash'}</span></span><span className={`tabular-nums whitespace-nowrap font-bold ${m.direction === 'in' ? 'text-teal-700 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}>{m.direction === 'in' ? '+' : '−'} {rs(m.amount)}</span></li>
+                <li key={m.id} className="flex items-center gap-2 px-4 sm:px-5 py-2.5 text-sm hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"><span className="text-xs text-[#6B7280] dark:text-[#8E9299] w-20 shrink-0 tabular-nums">{formatDate(m.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{m.counterparty ? `${m.counterparty} • ` : ''}{m.description}<span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]"> • {m.method || 'Cash'}{m.bankCode && bankAccounts.length > 1 ? ` • ${bankName(m.bankCode) || m.bankCode}` : ''}</span></span><span className={`tabular-nums whitespace-nowrap font-bold ${m.direction === 'in' ? 'text-teal-700 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}>{m.direction === 'in' ? '+' : '−'} {rs(m.amount)}</span></li>
               ))}
             </ul>
           )}

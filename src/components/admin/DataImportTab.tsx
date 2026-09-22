@@ -6,8 +6,8 @@ import { useTrading } from '../../context/TradingContext';
 type Kind = 'customers' | 'suppliers' | 'products';
 
 const TEMPLATES: Record<Kind, { headers: string[]; sample: string[] }> = {
-  customers: { headers: ['name', 'company', 'phone', 'email', 'address', 'creditLimit', 'openingDue', 'code'], sample: ['Ali Raza', 'Raza Traders', '+92 300 1234567', 'ali@raza.pk', 'Karachi', '500000', '0', 'C-215'] },
-  suppliers: { headers: ['name', 'company', 'phone', 'email', 'materialCategory', 'address', 'openingOwed', 'code'], sample: ['Iftikhar', 'Tajj Mill', '+92 300 7654321', '', 'Ghee & oil', 'Peshawar', '0', 'S-104'] },
+  customers: { headers: ['name', 'company', 'phone', 'email', 'address', 'creditLimit', 'openingDue', 'code', 'city', 'contactPerson', 'salesTaxNo', 'fax'], sample: ['Ali Raza', 'Raza Traders', '+92 300 1234567', 'ali@raza.pk', 'Karachi', '500000', '0', 'C-215', 'Karachi', 'Ali Raza', '32-77-8761-123-45', '021-1234567'] },
+  suppliers: { headers: ['name', 'company', 'phone', 'email', 'materialCategory', 'address', 'openingOwed', 'code', 'city', 'contactPerson', 'salesTaxNo', 'fax'], sample: ['Iftikhar', 'Tajj Mill', '+92 300 7654321', '', 'Ghee & oil', 'Peshawar', '0', 'S-104', 'Peshawar', 'Iftikhar', '', ''] },
   products: { headers: ['name', 'category', 'unitPricePerKg', 'stockKg', 'minThresholdKg', 'supplierCompany', 'description'], sample: ['OPC Cement', 'Construction & Cement', '25', '480000', '100000', 'Lucky Cement', 'Grade 53'] },
 };
 
@@ -93,6 +93,12 @@ export const DataImportTab: React.FC = () => {
   };
   const num = (v: string) => Math.max(0, parseFloat(v.replace(/[^0-9.\-]/g, '')) || 0);
   const digits = (v: string) => v.replace(/[^0-9]/g, '');
+  /** City / town, contact person, sales tax # and fax (optional columns; also "City/Town", "Sales Tax #"). */
+  const partyExtraCols = (row: string[]) => {
+    const any = (...names: string[]) => names.map((n) => col(row, n)).find(Boolean) || '';
+    const out = { city: any('city', 'City', 'City/Town', 'town'), contactPerson: any('contactPerson', 'Contact person', 'contact'), salesTaxNo: any('salesTaxNo', 'Sales Tax #', 'STRN', 'stn'), fax: any('fax', 'Fax') };
+    return Object.fromEntries(Object.entries(out).filter(([, v]) => v)) as { city?: string; contactPerson?: string; salesTaxNo?: string; fax?: string };
+  };
 
   const runImport = () => {
     if (!preview || preview.problems.length > 0) return;
@@ -116,7 +122,7 @@ export const DataImportTab: React.FC = () => {
             errors.push(`Line ${line}: ${name} skipped, phone already exists.`);
             return;
           }
-          const c = addCustomer({ name, company, phone, email: col(row, 'email'), address: col(row, 'address'), creditLimit: num(col(row, 'creditLimit')), code: col(row, 'code') || undefined });
+          const c = addCustomer({ name, company, phone, email: col(row, 'email'), address: col(row, 'address'), creditLimit: num(col(row, 'creditLimit')), code: col(row, 'code') || undefined, ...partyExtraCols(row) });
           const opening = num(col(row, 'openingDue'));
           if (opening > 0) updateCustomer(c.id, { totalDue: opening });
           added++;
@@ -134,7 +140,7 @@ export const DataImportTab: React.FC = () => {
             errors.push(`Line ${line}: ${company} skipped, phone already exists.`);
             return;
           }
-          const s = addSupplier({ name, company, phone, email: col(row, 'email'), materialCategory: col(row, 'materialCategory') || 'General', address: col(row, 'address'), code: col(row, 'code') || undefined });
+          const s = addSupplier({ name, company, phone, email: col(row, 'email'), materialCategory: col(row, 'materialCategory') || 'General', address: col(row, 'address'), code: col(row, 'code') || undefined, ...partyExtraCols(row) });
           const opening = num(col(row, 'openingOwed'));
           if (opening > 0) updateSupplier(s.id, { totalOwed: opening });
           added++;

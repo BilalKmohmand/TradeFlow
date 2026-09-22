@@ -56,6 +56,24 @@ const Details: React.FC<{ req: ApprovalRequest }> = ({ req }) => {
     return <div className="space-y-1 text-xs">{row('Item', it?.name || 'Item')}{row('Take off', `${Math.abs(p.deltaQty)} ${it?.unit || 'pcs'}`)}{row('Why', adjustmentReasonLabel(p.reason))}{p.note && row('Note', p.note)}{row('Date', formatDate(p.date))}{it && row('In stock now', `${it.stockKg} ${it.unit || 'pcs'}`)}</div>;
   }
   if (req.kind === 'delete_bill') return <div className="space-y-1 text-xs">{row('Bill', p.invoiceNumber)}{row('Reason', req.note || 'No reason given')}</div>;
+  if (req.kind === 'voucher') {
+    const who = (ref: string) => {
+      if (ref.startsWith('supp:')) { const s = suppliers.find((x) => x.id === ref.slice(5)); return s?.company || s?.name || 'Supplier'; }
+      if (ref.startsWith('cust:')) return customers.find((x) => x.id === ref.slice(5))?.name || 'Customer';
+      return `Account ${ref}`;
+    };
+    return (
+      <div className="space-y-1 text-xs">
+        {row('Voucher', `${p.type} — ${p.narration || ''}`)}
+        {row('Date', formatDate(p.date))}
+        <ul className="rounded-xl border border-[#E5E5E1] dark:border-[#203248] divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] my-1">
+          {(p.lines || []).map((l: { account: string; debit: number; credit: number }, i: number) => (
+            <li key={i} className="flex justify-between gap-2 px-2.5 py-1.5"><span className="min-w-0 truncate">{who(l.account)}</span><span className={moneyCls}>{Number(l.debit) > 0 ? `Dr ${rs(l.debit)}` : `Cr ${rs(l.credit)}`}</span></li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
   return null;
 };
 

@@ -32,7 +32,7 @@ export const CashFlowTab: React.FC<{ journal: JournalEntry[]; accounts: Account[
   const today = todayISO();
   const [from, setFrom] = useState(`${today.slice(0, 7)}-01`);
   const [to, setTo] = useState(today);
-  const cf = useMemo(() => cashFlowStatement(journal, from, to), [journal, from, to]);
+  const cf = useMemo(() => cashFlowStatement(journal, from, to, accounts), [journal, from, to, accounts]);
   const ratios = useMemo(() => keyRatios(journal, from, to, accounts), [journal, from, to, accounts]);
   return (
     <div className="space-y-4" data-testid="cashflow-tab">

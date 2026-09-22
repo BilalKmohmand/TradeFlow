@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { BankSelect } from './BankSelect';
+import { needsBank } from '../../utils/banks';
 import { hasPack, formatPackQty, shortPack } from '../../utils/packUnits';
 import { Printer, Trash2, Wallet, MessageCircle, RotateCcw, Truck } from 'lucide-react';
 import { batchLines } from '../../utils/inventory';
@@ -33,6 +35,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
   const customer = inv ? customers.find((c) => c.id === inv.customerId) : undefined;
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Cash');
+  const [bank, setBank] = useState('');
   const [note, setNote] = useState('');
   const [cheque, setCheque] = useState(emptyChequeFields());
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -45,7 +48,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
     // Cheques go into the cheque register against this bill (in hand until the bank clears them).
     const r = method === 'Cheque'
       ? receiveCheque({ customerId: inv.customerId, invoiceId: inv.id, amount: parseFloat(amount) || 0, ...cheque, note: note.trim() || undefined })
-      : payBill(inv.id, parseFloat(amount) || 0, method, note.trim() || undefined);
+      : payBill(inv.id, parseFloat(amount) || 0, method, note.trim() || undefined, undefined, needsBank(method) ? bank || undefined : undefined);
     setMsg({ kind: r.success ? 'ok' : 'error', text: r.message });
     if (r.success) {
       setAmount('');
@@ -190,6 +193,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
                     <input id="pay-note" value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} placeholder="optional" />
                   </div>
                   {method === 'Cheque' && <ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="pay-chq" />}
+                  {needsBank(method) && <BankSelect id="pay-bank" className="col-span-full" label="Into bank" value={bank} onChange={setBank} />}
                   <div className="flex items-end"><button type="submit" className={`${primaryBtn} w-full`}>Receive</button></div>
                 </div>
               </form>

@@ -10,7 +10,7 @@ export const DELETED_KIND_LABEL: Record<DeletedKind, string> = {
   debit_note: 'Debit note', quotation: 'Quotation', purchase_order: 'Purchase order', stock_receipt: 'Stock received', stock_adjustment: 'Stock adjustment',
   journal: 'Journal entry', payment: 'Payment', booking: 'Booking', dispatch: 'Dispatch',
   supplier_bill: 'Supplier bill', supplier_claim: 'Supplier claim', fixed_asset: 'Fixed asset', staff: 'Staff member', staff_advance: 'Staff advance',
-  cost_centre: 'Cost centre', salesman: 'Salesman', area: 'Area', scheme: 'Scheme', godown: 'Godown', other: 'Other',
+  cost_centre: 'Cost centre', salesman: 'Salesman', area: 'Area', scheme: 'Scheme', godown: 'Godown', voucher: 'Voucher', other: 'Other',
 };
 
 const when = (iso: string) => `${formatDate(iso.slice(0, 10))} ${new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;

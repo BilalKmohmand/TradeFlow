@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { BankSelect, bankOpt } from './BankSelect';
 import { useTrading } from '../../context/TradingContext';
 import { Cheque } from '../../types';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, Notice, rs } from './ui';
@@ -45,6 +46,7 @@ export const ChequeFormModal: React.FC<{ isOpen: boolean; onClose: () => void; d
   const [billId, setBillId] = useState('');
   const [note, setNote] = useState('');
   const [fields, setFields] = useState<ChequeFields>(emptyChequeFields());
+  const [bank, setBank] = useState('');
   const [error, setError] = useState('');
   const [sent, setSent] = useState('');
   const openBills = received && party ? billsOnly(invoices).filter((i) => i.customerId === party && i.balanceDue > 0) : [];
@@ -53,7 +55,7 @@ export const ChequeFormModal: React.FC<{ isOpen: boolean; onClose: () => void; d
     if (sent) return;
     const amt = parseFloat(amount) || 0;
     const common = { amount: amt, bankName: fields.bankName, chequeNumber: fields.chequeNumber, chequeDate: fields.chequeDate, date, note: note.trim() || undefined };
-    const r = received ? receiveCheque({ ...common, customerId: party, invoiceId: billId || null }) : issueCheque({ ...common, supplierId: party });
+    const r = received ? receiveCheque({ ...common, customerId: party, invoiceId: billId || null }) : issueCheque({ ...common, supplierId: party, ...bankOpt(bank) });
     if (!r.success) return setError(r.message);
     // Approval rule "payment to a supplier above Rs. Y": the cheque waits for a manager.
     if ('pendingApproval' in r && r.pendingApproval) return setSent(r.message);
@@ -83,6 +85,7 @@ export const ChequeFormModal: React.FC<{ isOpen: boolean; onClose: () => void; d
             <input id="chq-entry" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
           </div>
           <ChequeFieldsInput value={fields} onChange={setFields} idPrefix="chq" direction={direction} />
+          {!received && <BankSelect id="chq-own-bank" className="col-span-2" label="Drawn on (your bank account)" value={bank} onChange={setBank} />}
           {openBills.length > 0 && (
             <div className="col-span-2">
               <label className={labelCls} htmlFor="chq-bill">For bill (optional)</label>
@@ -123,14 +126,15 @@ export const ChequeActionModal: React.FC<{ cheque: Cheque | null; action: Cheque
   const [reason, setReason] = useState('');
   const [charge, setCharge] = useState('');
   const [chargeTo, setChargeTo] = useState<'customer' | 'shop'>('customer');
+  const [bank, setBank] = useState('');
   const [error, setError] = useState('');
   const open = Boolean(cheque && action);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!cheque || !action) return;
     const r =
-      action === 'deposit' ? depositCheque(cheque.id, date)
-      : action === 'clear' ? clearCheque(cheque.id, date)
+      action === 'deposit' ? depositCheque(cheque.id, date, bank || undefined)
+      : action === 'clear' ? clearCheque(cheque.id, date, bank || undefined)
       : action === 'bounce' ? bounceCheque(cheque.id, { date, reason, bankCharge: parseFloat(charge) || 0, chargeTo })
       : cancelCheque(cheque.id, { date, reason });
     if (!r.success) return setError(r.message);
@@ -154,6 +158,7 @@ export const ChequeActionModal: React.FC<{ cheque: Cheque | null; action: Cheque
               <label className={labelCls} htmlFor="chq-act-date">Date</label>
               <input id="chq-act-date" type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} className={inputCls} />
             </div>
+            {(action === 'deposit' || action === 'clear') && <BankSelect id="chq-act-bank" label={action === 'deposit' ? 'Deposited into' : received ? 'Cleared into' : 'Paid from'} value={bank || cheque.bankCode || ''} onChange={setBank} />}
             {(action === 'bounce' || action === 'cancel') && (
               <div className={action === 'cancel' ? '' : 'col-span-2 sm:col-span-1'}>
                 <label className={labelCls} htmlFor="chq-act-reason">{action === 'bounce' ? 'Why it bounced' : 'Reason'}</label>

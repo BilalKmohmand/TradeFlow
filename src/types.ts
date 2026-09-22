@@ -20,6 +20,13 @@ export interface Customer {
   interestAfterDays?: number;
   /** When a payment reminder was last sent to this customer (ISO date-time), so nobody is reminded twice too soon. */
   lastRemindedAt?: string | null;
+  /** City / town (Search party by city; the city-wise receivable & payable reports). */
+  city?: string;
+  /** Person to talk to at the shop / firm. */
+  contactPerson?: string;
+  /** Sales tax registration number (STRN). */
+  salesTaxNo?: string;
+  fax?: string;
 }
 
 export interface Supplier {
@@ -34,6 +41,13 @@ export interface Supplier {
   createdAt: string;
   /** The shop's own account code for this supplier (e.g. from their old books). Optional, unique. */
   code?: string;
+  /** City / town (Search party by city; the city-wise receivable & payable reports). */
+  city?: string;
+  /** Person to talk to at the shop / firm. */
+  contactPerson?: string;
+  /** Sales tax registration number (STRN). */
+  salesTaxNo?: string;
+  fax?: string;
 }
 
 export interface Product {
@@ -186,7 +200,9 @@ export type TransactionType =
    */
   | 'purchase_variance'
   /** Accepted supplier claim (leaked / damaged / short goods): takes it off what is owed (debit note). */
-  | 'supplier_claim';
+  | 'supplier_claim'
+  /** A line of a voucher (CPV / CRV / BPV / BRV / JV) on a party that is not a plain payment (see utils/vouchers.ts). */
+  | 'voucher';
 
 export interface LedgerEntry {
   id: string;
@@ -208,6 +224,10 @@ export interface LedgerEntry {
   salesmanId?: string | null;
   /** Branch (shop) where the money moved; absent = the main branch. */
   branchId?: string | null;
+  /** Bank account (chart code, e.g. 1010 main bank, 1011, 1012…) the money went through; empty = the main bank 1010. Ignored for cash. */
+  bankCode?: string;
+  /** Voucher (CPV / CRV / BPV / BRV / JV) this row was posted from: changed or deleted only through the voucher. */
+  voucherId?: string;
 }
 
 export interface WhatsAppMessage {
@@ -459,6 +479,10 @@ export interface Expense {
   costCentreId?: string | null;
   /** Branch (shop) that paid it; absent = the main branch. */
   branchId?: string | null;
+  /** Bank account (chart code, e.g. 1010 main bank, 1011, 1012…) the money went through; empty = the main bank 1010. Ignored for cash. */
+  bankCode?: string;
+  /** Voucher (CPV / CRV / BPV / BRV / JV) this row was posted from: changed or deleted only through the voucher. */
+  voucherId?: string;
 }
 
 export type TruckStatus = 'available' | 'on_trip' | 'maintenance' | 'inactive';
@@ -709,6 +733,10 @@ export interface CashEntry {
   accountCode?: string;
   /** Branch (shop) of the drawer / account; absent = the main branch. */
   branchId?: string | null;
+  /** Bank account (chart code, e.g. 1010 main bank, 1011, 1012…) the money went through; empty = the main bank 1010. Ignored for cash. */
+  bankCode?: string;
+  /** Voucher (CPV / CRV / BPV / BRV / JV) this row was posted from: changed or deleted only through the voucher. */
+  voucherId?: string;
 }
 
 export interface AppSettings {
@@ -757,6 +785,12 @@ export interface AppSettings {
   docCounters?: Record<string, number>;
   /** Automatic payment reminders (off by default): who is listed on Home to be reminded on WhatsApp. */
   reminders?: ReminderSettings;
+  /** Opening balance of each extra bank account by chart code (1011, 1012…) on cashOpeningDate. The main bank (1010) uses openingBankBalance. */
+  bankOpenings?: Record<string, number>;
+  /** Name shown for the main bank account 1010 (e.g. "HBL current"); default "Main bank". */
+  mainBankName?: string;
+  /** Cities / towns offered when adding a customer or supplier (free text is allowed too). */
+  cities?: string[];
 }
 
 /**
@@ -1105,6 +1139,8 @@ export interface BankStatementLine {
   matchConfidence?: BankMatchConfidence;
   /** Expense / cash entry created from this line ("add missing record"). */
   createdEntryId?: string;
+  /** Bank account (chart code) this statement belongs to; empty = the main bank 1010. */
+  bankCode?: string;
 }
 
 /** A reconciliation for one statement end date. */
@@ -1120,6 +1156,8 @@ export interface BankReconciliation {
   createdAt: string;
   updatedAt?: string;
   createdBy?: string;
+  /** Bank account (chart code) reconciled; empty = the main bank 1010. */
+  bankCode?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1211,6 +1249,8 @@ export interface Cheque {
   bankCharge?: number;
   chargeTo?: 'customer' | 'shop' | null;
   note?: string;
+  /** The shop's bank account (chart code) it was deposited into / drawn on; empty = the main bank 1010. */
+  bankCode?: string;
   /** Records this cheque created, so it can be reversed exactly and they can't be deleted on their own. */
   ledgerId?: string | null;
   reversalLedgerId?: string | null;
@@ -1498,7 +1538,7 @@ export interface ApprovalRules {
   deleteBills?: boolean;
 }
 
-export type ApprovalKind = 'bill' | 'supplier_payment' | 'supplier_cheque' | 'stock_loss' | 'delete_bill';
+export type ApprovalKind = 'bill' | 'supplier_payment' | 'supplier_cheque' | 'stock_loss' | 'delete_bill' | 'voucher';
 export type ApprovalRuleKey = 'discount' | 'credit_limit' | 'supplier_payment' | 'stock_loss' | 'delete_bill';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
@@ -1532,7 +1572,7 @@ export interface ApprovalRequest {
 export type DeletedKind =
   | 'bill' | 'customer' | 'supplier' | 'item' | 'expense' | 'cash_entry' | 'return' | 'debit_note' | 'quotation'
   | 'purchase_order' | 'stock_receipt' | 'stock_adjustment' | 'journal' | 'payment' | 'booking' | 'dispatch'
-  | 'supplier_bill' | 'supplier_claim' | 'fixed_asset' | 'staff' | 'staff_advance' | 'cost_centre' | 'salesman' | 'area' | 'scheme' | 'godown'
+  | 'supplier_bill' | 'supplier_claim' | 'fixed_asset' | 'staff' | 'staff_advance' | 'cost_centre' | 'salesman' | 'area' | 'scheme' | 'godown' | 'voucher'
   | 'other';
 
 /** A copy of a deleted record: who deleted it, when and why. */
@@ -1552,7 +1592,7 @@ export interface DeletedRecord {
   restoredBy?: string | null;
 }
 
-export type DocSeriesKey = 'bill' | 'credit_note' | 'debit_note' | 'quotation' | 'receipt' | 'supplier_payment' | 'po';
+export type DocSeriesKey = 'bill' | 'credit_note' | 'debit_note' | 'quotation' | 'receipt' | 'supplier_payment' | 'po' | 'cpv' | 'crv' | 'bpv' | 'brv' | 'jv';
 
 export interface DocSeriesConfig {
   prefix: string;

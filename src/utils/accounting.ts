@@ -7,7 +7,12 @@
  * profit & loss, balance sheet) are computed from the combined journal.
  *
  * Posting rules (one entry per business event):
- *  - Opening balances (settings)      Dr Cash 1000 / Bank 1010            Cr Opening balance equity 3900
+ *  - Opening balances (settings)      Dr Cash 1000 / Bank 1010 (+ each extra bank 1011, 1012…)  Cr Opening balance equity 3900
+ *  - Bank accounts: 1010 is the main bank; the shop can add more (1011, 1012… under 1010, see utils/banks.ts).
+ *    Every bank movement carries the chart code of its bank (`bankCode`, empty = 1010) and posts there.
+ *  - Vouchers (CPV / CRV / BPV / BRV / JV, see utils/vouchers.ts) are stored as manual journal entries with
+ *    their lines; the ledger rows, cash entries and expenses a voucher creates (marked `voucherId`) keep the
+ *    party balances, cash book and expense sheets in step and are NOT posted again here.
  *  - Bill (bill_issued ledger row)     Dr Receivable 1100 (total)          Cr Sales 4000 (subtotal)
  *                                      Dr Sales discounts 4010 (discount)  Cr Sales tax payable 2100 (tax)
  *                                      Cr Freight income 4100 (freight/handling charges, if any)
@@ -101,6 +106,11 @@ export interface Account {
   description?: string;
   createdAt?: string;
   createdBy?: string;
+  /** A bank account of the shop (money can be paid / received through it). */
+  isBank?: boolean;
+  bankName?: string;
+  accountTitle?: string;
+  accountNumber?: string;
 }
 
 export interface JournalLine {
@@ -110,6 +120,13 @@ export interface JournalLine {
   memo?: string;
   /** Optional cost / profit centre of this line (manual journals); overrides the entry's centre. */
   costCentreId?: string | null;
+  /** Voucher line on a customer / supplier: the control account (1100 / 2000) plus who it was. */
+  partyType?: 'customer' | 'supplier';
+  partyId?: string;
+  /** Voucher: the line's own narration as typed. */
+  narration?: string;
+  /** Voucher: the cash / bank side a CPV / CRV / BPV / BRV adds by itself. */
+  moneySide?: boolean;
 }
 
 export interface JournalEntry {
@@ -131,6 +148,12 @@ export interface JournalEntry {
   costCentreId?: string | null;
   /** Year-end closing entry: moves the year's profit to equity. Left out of profit & loss figures. */
   closing?: boolean;
+  /** A voucher (CPV / CRV / BPV / BRV / JV); `ref` is its number. See utils/vouchers.ts. */
+  voucherType?: 'CPV' | 'CRV' | 'BPV' | 'BRV' | 'JV';
+  /** Bank account (chart code) of a bank voucher (BPV / BRV). */
+  bankCode?: string;
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -435,12 +458,17 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
     out.push({ ...rest, lines, source: 'auto' });
   };
 
-  // Payment method of every money movement, resolved exactly as the Money screen does.
+  // Payment method and bank of every money movement, resolved exactly as the Money screen does.
   const movements = collectCashMovements(ledger, expenses, cashEntries, customers, suppliers);
   const methodOf = new Map<string, string | undefined>();
-  movements.forEach((m) => methodOf.set(m.sourceId, m.method));
+  const bankOf = new Map<string, string | undefined>();
+  movements.forEach((m) => {
+    methodOf.set(m.sourceId, m.method);
+    bankOf.set(m.sourceId, m.bankCode);
+  });
   /** Cash or bank account for a movement; before the opening date it is already in the opening figures. */
-  const moneyAccount = (method: string | undefined, date: string) => (date < openingDate ? ACC.OPENING_EQUITY : isCashMethod(method) ? ACC.CASH : ACC.BANK);
+  const moneyAccount = (method: string | undefined, date: string, sourceId?: string, bankCode?: string) =>
+    date < openingDate ? ACC.OPENING_EQUITY : isCashMethod(method) ? ACC.CASH : (sourceId && bankOf.get(sourceId)) || bankCode || ACC.BANK;
 
   /** Cost on a date: what it was bought for up to then; the item's current cost price only as a last resort. */
   const productCost = (productId: string, date: string): number | null => {
@@ -455,7 +483,15 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
     const b = new EntryBuilder();
     const cash = Number(settings.cashOpeningBalance) || 0;
     const bank = Number(settings.openingBankBalance) || 0;
-    b.dr(ACC.CASH, cash, 'Opening cash in hand').dr(ACC.BANK, bank, 'Opening bank balance').cr(ACC.OPENING_EQUITY, cash + bank);
+    b.dr(ACC.CASH, cash, 'Opening cash in hand').dr(ACC.BANK, bank, 'Opening bank balance');
+    let others = 0;
+    Object.entries(settings.bankOpenings || {}).forEach(([code, v]) => {
+      const amt = Number(v) || 0;
+      if (code === ACC.BANK || !amt) return;
+      others += amt;
+      b.dr(code, amt, 'Opening bank balance');
+    });
+    b.cr(ACC.OPENING_EQUITY, cash + bank + others);
     push({ id: 'auto-opening-money', date: openingDate, ref: 'OPENING', memo: 'Opening cash and bank balances', sourceType: 'opening', builder: b });
   }
 
@@ -468,6 +504,8 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
   const supName = new Map(suppliers.map((s) => [s.id, s.company || s.name]));
 
   ledger.forEach((l) => {
+    // A voucher posts its own entry (a manual journal); its party rows only keep the balances in step.
+    if (l.voucherId) return;
     const debit = round2(Number(l.debit) || 0);
     const credit = round2(Number(l.credit) || 0);
     if (debit <= 0 && credit <= 0) return;
@@ -523,7 +561,7 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
         } else if (l.type === 'refund_paid') {
           sourceType = 'customer_refund';
           if (l.sourceId && invById.has(l.sourceId)) billId = l.sourceId;
-          b.dr(ACC.RECEIVABLE, debit, who).cr(moneyAccount(methodOf.get(l.id) ?? l.method, l.date), debit);
+          b.dr(ACC.RECEIVABLE, debit, who).cr(moneyAccount(methodOf.get(l.id) ?? l.method, l.date, l.id, l.bankCode), debit);
           memo = `Refund to ${who}${l.referenceId ? ` (${l.referenceId})` : ''}`;
         } else if (l.type === 'cheque_returned') {
           // Bounced, or handed back: the cheque leaves "Cheques in hand" and the customer owes again.
@@ -549,7 +587,7 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
         if (l.type === 'payment_received') {
           sourceType = debit > 0 ? sourceType : 'customer_payment';
           if (!billId && l.sourceId && invById.has(l.sourceId)) billId = l.sourceId;
-          b.dr(moneyAccount(methodOf.get(l.id) ?? l.method, l.date), credit).cr(ACC.RECEIVABLE, credit, who);
+          b.dr(moneyAccount(methodOf.get(l.id) ?? l.method, l.date, l.id, l.bankCode), credit).cr(ACC.RECEIVABLE, credit, who);
           if (debit <= 0) memo = `Received from ${who}${l.referenceId ? ` (${l.referenceId})` : ''}`;
         } else if (l.type === 'cheque_received') {
           sourceType = 'cheque_received';
@@ -606,7 +644,7 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
       if (credit > 0) {
         if (l.type === 'payment_made') {
           sourceType = debit > 0 ? sourceType : 'supplier_payment';
-          b.dr(ACC.PAYABLE, credit, who).cr(moneyAccount(methodOf.get(l.id) ?? l.method, l.date), credit);
+          b.dr(ACC.PAYABLE, credit, who).cr(moneyAccount(methodOf.get(l.id) ?? l.method, l.date, l.id, l.bankCode), credit);
           if (debit <= 0) memo = `Paid to ${who}${l.referenceId ? ` (${l.referenceId})` : ''}`;
         } else if (l.type === 'cheque_issued') {
           sourceType = 'cheque_issued';
@@ -661,18 +699,20 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
 
   // --- 4. Expenses ----------------------------------------------------------------------------
   expenses.forEach((e) => {
+    if (e.voucherId) return; // posted by its voucher
     const amount = round2(Number(e.amount) || 0);
     if (amount <= 0) return;
     const account = EXPENSE_ACCOUNT[e.category] || ACC.OTHER_EXPENSES;
     const onCredit = e.paidVia === 'Credit (unpaid)';
     const b = new EntryBuilder();
-    b.dr(account, amount, e.description).cr(onCredit ? ACC.UNPAID_EXPENSES : moneyAccount(methodOf.get(e.id) ?? e.paidVia, e.date), amount);
+    b.dr(account, amount, e.description).cr(onCredit ? ACC.UNPAID_EXPENSES : moneyAccount(methodOf.get(e.id) ?? e.paidVia, e.date, e.id, e.bankCode), amount);
     push({ id: `auto-exp-${e.id}`, date: e.date, ref: e.category === 'drawings' ? 'DRAWINGS' : 'EXPENSE', memo: e.description || e.category, sourceType: 'expense', sourceId: e.id, ...(e.costCentreId ? { costCentreId: e.costCentreId } : {}), builder: b });
   });
 
   // --- 5. Cash entries: transfers and other movements --------------------------------------
   const byPair = new Map<string, CashEntry[]>();
   cashEntries.forEach((c) => {
+    if (c.voucherId) return; // posted by its voucher
     if (c.pairId) byPair.set(c.pairId, [...(byPair.get(c.pairId) || []), c]);
   });
   const handled = new Set<string>();
@@ -683,14 +723,14 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
     handled.add(inn.id);
     handled.add(outLeg.id);
     const b = new EntryBuilder();
-    b.dr(moneyAccount(methodOf.get(inn.id) ?? inn.method, inn.date), inn.amount).cr(moneyAccount(methodOf.get(outLeg.id) ?? outLeg.method, outLeg.date), outLeg.amount);
+    b.dr(moneyAccount(methodOf.get(inn.id) ?? inn.method, inn.date, inn.id, inn.bankCode), inn.amount).cr(moneyAccount(methodOf.get(outLeg.id) ?? outLeg.method, outLeg.date, outLeg.id, outLeg.bankCode), outLeg.amount);
     push({ id: `auto-xfer-${pairId}`, date: inn.date, ref: 'TRANSFER', memo: inn.description || 'Cash / bank transfer', sourceType: 'transfer', sourceId: inn.id, builder: b });
   });
   cashEntries.forEach((c) => {
-    if (handled.has(c.id)) return;
+    if (handled.has(c.id) || c.voucherId) return;
     const amount = round2(Number(c.amount) || 0);
     if (amount <= 0) return;
-    const money = moneyAccount(methodOf.get(c.id) ?? c.method, c.date);
+    const money = moneyAccount(methodOf.get(c.id) ?? c.method, c.date, c.id, c.bankCode);
     const b = new EntryBuilder();
     if (c.direction === 'in') {
       const other = c.accountCode || (cashCapitalRe.test(c.description || '') ? ACC.CAPITAL : ACC.SUSPENSE);

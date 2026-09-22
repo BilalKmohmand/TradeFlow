@@ -49,6 +49,8 @@ export interface IssueChequeInput {
   chequeDate: string;
   date?: string;
   note?: string;
+  /** The shop's bank account the cheque is drawn on (chart code; empty = the main bank). */
+  bankCode?: string;
 }
 
 export interface ChequeApi {
@@ -57,9 +59,10 @@ export interface ChequeApi {
   receiveCheque: (input: ReceiveChequeInput) => Result;
   /** Record a cheque given to a supplier. Takes it off what you owe them. */
   issueCheque: (input: IssueChequeInput) => Result;
-  depositCheque: (id: string, date?: string) => Result;
-  /** The bank paid: the money moves into (or out of) the bank. */
-  clearCheque: (id: string, date?: string) => Result;
+  /** Deposited into one of the shop's bank accounts (bankCode; empty = the main bank). */
+  depositCheque: (id: string, date?: string, bankCode?: string) => Result;
+  /** The bank paid: the money moves into (or out of) the bank (the cheque's own bank unless one is given). */
+  clearCheque: (id: string, date?: string, bankCode?: string) => Result;
   /** The customer's cheque bounced: they owe it again, plus the bank charge if passed on. */
   bounceCheque: (id: string, opts: { reason: string; date?: string; bankCharge?: number; chargeTo?: 'customer' | 'shop' }) => Result;
   /** Cheque handed back to the customer / cancelled with the supplier before it cleared. */
@@ -220,6 +223,7 @@ export const createChequeApi = (d: Deps): ChequeApi => {
       invoiceId: null,
       status: 'issued',
       note: input.note?.trim() || undefined,
+      ...(input.bankCode && input.bankCode !== '1010' ? { bankCode: input.bankCode } : {}),
       ledgerId,
       createdAt: d.today(),
       createdBy: who,
@@ -245,7 +249,7 @@ export const createChequeApi = (d: Deps): ChequeApi => {
     return { success: true, message: `Cheque ${cheque.chequeNumber} for ${formatCurrency(amount)} given to ${name}.`, cheque };
   };
 
-  const depositCheque: ChequeApi['depositCheque'] = (id, when) => {
+  const depositCheque: ChequeApi['depositCheque'] = (id, when, bankCode) => {
     if (!d.can('finance:record_payment')) return noPermission('deposit cheques');
     const c = find(id);
     if (!c) return fail('Cheque not found.');
@@ -254,12 +258,12 @@ export const createChequeApi = (d: Deps): ChequeApi => {
     const bad = checkDate(c, date, 'deposited');
     if (bad) return fail(bad);
     if (date < c.chequeDate) return fail(`This cheque is dated ${formatDate(c.chequeDate)}. The bank won't take it before then.`);
-    update(id, { status: 'deposited', depositedDate: date });
+    update(id, { status: 'deposited', depositedDate: date, ...(bankCode && bankCode !== '1010' ? { bankCode } : {}) });
     d.logAuditEvent('Cheque Deposited', `${label(c)} from ${c.partyName}: ${formatCurrency(c.amount)}.`, 'info');
     return { success: true, message: `${label(c)} deposited. Mark it cleared when the bank shows the money.` };
   };
 
-  const clearCheque: ChequeApi['clearCheque'] = (id, when) => {
+  const clearCheque: ChequeApi['clearCheque'] = (id, when, bankCode) => {
     if (!d.can('finance:cashbook')) return noPermission('mark cheques cleared');
     const c = find(id);
     if (!c) return fail('Cheque not found.');
@@ -270,6 +274,7 @@ export const createChequeApi = (d: Deps): ChequeApi => {
     if (date < c.chequeDate) return fail(`This cheque is dated ${formatDate(c.chequeDate)}; the bank can't clear it before then.`);
     if (c.depositedDate && date < c.depositedDate) return fail(`It was deposited on ${formatDate(c.depositedDate)}; it can't clear before that.`);
     const received = c.direction === 'received';
+    const bank = bankCode || c.bankCode;
     const entry: CashEntry = {
       id: d.uid('cash'),
       date,
@@ -278,11 +283,12 @@ export const createChequeApi = (d: Deps): ChequeApi => {
       description: `${label(c)} cleared - ${c.partyName}`,
       method: BANK_METHOD,
       accountCode: received ? ACC.CHEQUES_IN_HAND : ACC.CHEQUES_ISSUED,
+      ...(bank && bank !== '1010' ? { bankCode: bank } : {}),
       createdAt: d.today(),
       createdBy: who,
     };
     d.setCashEntries((prev) => [entry, ...prev]);
-    update(id, { status: 'cleared', clearedDate: date, clearedEntryId: entry.id });
+    update(id, { status: 'cleared', clearedDate: date, clearedEntryId: entry.id, ...(bank && bank !== '1010' ? { bankCode: bank } : {}) });
     if (received && c.invoiceId) {
       d.setInvoices((prev) => prev.map((i) => (i.id === c.invoiceId ? { ...i, payments: (i.payments || []).map((p) => (p.id === `pay-${c.id}` ? { ...p, notes: (p.notes || '').replace(/ - in hand$/, ` - cleared ${formatDate(date)}`) } : p)) } : i)));
     }
@@ -324,7 +330,7 @@ export const createChequeApi = (d: Deps): ChequeApi => {
     let chargeLedgerId: string | null = null;
     if (charge > 0) {
       // The bank takes its fee from the shop's account either way; passing it on puts it on the customer.
-      const expense: Expense = { id: d.uid('exp'), date, category: 'bank_charges', amount: charge, description: `Bank charge: bounced cheque ${c.chequeNumber} (${c.partyName})`, paidVia: CHARGE_PAID_VIA, truckId: null, dispatchId: null, createdAt: d.today(), createdBy: who };
+      const expense: Expense = { id: d.uid('exp'), date, category: 'bank_charges', amount: charge, description: `Bank charge: bounced cheque ${c.chequeNumber} (${c.partyName})`, paidVia: CHARGE_PAID_VIA, ...(c.bankCode ? { bankCode: c.bankCode } : {}), truckId: null, dispatchId: null, createdAt: d.today(), createdBy: who };
       d.setExpenses((prev) => [expense, ...prev]);
       chargeExpenseId = expense.id;
       if (chargeTo === 'customer') {

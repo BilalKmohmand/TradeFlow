@@ -210,7 +210,7 @@ export const useFinancePrint = (request: { type: string } | null): FinancePrintC
     }
 
     // Cash flow statement
-    const cf = cashFlowStatement(books.journal, request.from, request.to);
+    const cf = cashFlowStatement(books.journal, request.from, request.to, books.accounts);
     const section = (id: 'operating' | 'investing' | 'financing' | 'opening', title: string, total: number) => {
       const lines = CASH_FLOW_LINES.filter((l) => l.section === id).flatMap((l) => [
         cf.flows[l.id].in ? { key: `${l.id}-in`, label: l.inLabel, v: cf.flows[l.id].in } : null,

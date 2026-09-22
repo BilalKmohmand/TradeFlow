@@ -157,10 +157,9 @@ export interface CashFlowStatement {
   difference: number;
 }
 
-const MONEY = new Set<string>([ACC.CASH, ACC.BANK]);
-
-/** Where the shop's cash and bank money came from and went, between two dates. */
-export const cashFlowStatement = (journal: JournalEntry[], from: string, to: string): CashFlowStatement => {
+/** Where the shop's cash and bank money came from and went, between two dates (every bank account counts as money). */
+export const cashFlowStatement = (journal: JournalEntry[], from: string, to: string, accounts: Account[] = []): CashFlowStatement => {
+  const MONEY = new Set<string>([ACC.CASH, ACC.BANK, ...accounts.filter((a) => a.isBank).map((a) => a.code)]);
   const flows = Object.fromEntries(CASH_FLOW_LINES.map((l) => [l.id, { in: 0, out: 0 }])) as CashFlowStatement['flows'];
   let opening = 0;
   let closing = 0;

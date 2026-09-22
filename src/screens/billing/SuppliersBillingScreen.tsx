@@ -15,7 +15,9 @@ import { useBillingUI } from '../../components/billing/BillingUI';
 import { PurchaseOrdersView } from '../../components/billing/purchasing/PurchaseOrders';
 import { SupplierBillsView } from '../../components/billing/purchasing/SupplierBills';
 import { SupplierClaimsView } from '../../components/billing/purchasing/SupplierClaims';
-import { ClipboardList, FileText, ShieldAlert } from 'lucide-react';
+import { ClipboardList, FileText, ShieldAlert, MapPin } from 'lucide-react';
+import { CityFilter, PartyBalancesView } from '../../components/billing/PartyBalances';
+import { filterParties } from '../../utils/vouchers';
 
 type Tab = 'suppliers' | 'orders' | 'received' | 'bills' | 'claims' | 'returns';
 const num = (n: number) => n.toLocaleString('en-PK', { maximumFractionDigits: 2 });
@@ -32,6 +34,8 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
   const openClaims = supplierClaims.filter((c) => c.status === 'open').length;
   const [tab, setTab] = useState<Tab>('suppliers');
   const [query, setQuery] = useState('');
+  const [city, setCity] = useState('');
+  const [showBalances, setShowBalances] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null);
   // Opened from elsewhere (Money, search): show that supplier here.
@@ -46,11 +50,9 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
   const canDelete = can('delete_records');
   const canStock = can('products:create') || can('stock:adjust');
   const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return suppliers
-      .filter((s) => !q || s.name.toLowerCase().includes(q) || (s.company || '').toLowerCase().includes(q) || (s.phone || '').includes(q) || (s.code || '').toLowerCase().includes(q))
+    return filterParties<Supplier>(suppliers, query, city)
       .sort((a, b) => b.totalOwed - a.totalOwed || (a.company || a.name).localeCompare(b.company || b.name));
-  }, [suppliers, query]);
+  }, [suppliers, query, city]);
   const owed = suppliers.reduce((a, s) => a + Math.max(0, s.totalOwed), 0);
   const open = suppliers.find((s) => s.id === openId) || null;
   const productName = (id: string) => products.find((p) => p.id === id)?.name || 'Item';
@@ -73,7 +75,8 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
       <PageHeader title="Suppliers" subtitle={<>{suppliers.length} supplier{suppliers.length === 1 ? '' : 's'}{owed > 0 ? <> • you owe <span className={moneyCls}>{rs(owed)}</span></> : ''}</>}>
         {canStock && <button type="button" onClick={() => stock.purchaseReturn()} className={secondaryBtn}><Undo2 className="w-4 h-4 text-rose-600 dark:text-rose-400" /> Return goods</button>}
         <button type="button" onClick={() => stock.aging('suppliers')} className={secondaryBtn}><Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" /> How long owed</button>
-        <CsvButton fileName={`suppliers-${todayISO()}.csv`} table={() => ({ headers: ['Code', 'Name', 'Company', 'Phone', 'Address', 'You owe (Rs.)'], rows: rows.map((x) => [x.code || '', x.name, x.company, x.phone, x.address, x.totalOwed]) })} label="Download suppliers CSV" />
+        <button type="button" onClick={() => setShowBalances(true)} className={secondaryBtn}><MapPin className="w-4 h-4 text-indigo-600 dark:text-indigo-300" /> Payable by city</button>
+        <CsvButton fileName={`suppliers-${todayISO()}.csv`} table={() => ({ headers: ['Code', 'Name', 'Company', 'Phone', 'City', 'Contact person', 'Sales tax #', 'Fax', 'Address', 'You owe (Rs.)'], rows: rows.map((x) => [x.code || '', x.name, x.company, x.phone, x.city || '', x.contactPerson || '', x.salesTaxNo || '', x.fax || '', x.address, x.totalOwed]) })} label="Download suppliers CSV" />
         <button type="button" onClick={onAdd} className={`${primaryBtn} max-sm:flex-1`}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add supplier</button>
       </PageHeader>
       <div role="tablist" aria-label="Suppliers views" className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">
@@ -88,16 +91,19 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
 
       {tab === 'suppliers' && (
         <>
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, phone or ID" className={`${inputCls} pl-10`} aria-label="Search suppliers" />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, phone or ID" className={`${inputCls} pl-10`} aria-label="Search suppliers" />
+            </div>
+            <CityFilter id="supplier-city" value={city} onChange={setCity} />
           </div>
           <div className={`${cardCls} overflow-hidden`}>
             {rows.length === 0 ? (
               <EmptyState
                 icon={<Layers className="w-5 h-5" />}
-                text={query ? 'No supplier matches that search.' : 'No suppliers yet. Add the companies you buy stock from.'}
-                action={!query && <button type="button" onClick={onAdd} className={secondaryBtn}><Plus className="w-4 h-4" /> Add supplier</button>}
+                text={query || city ? 'No supplier matches that search.' : 'No suppliers yet. Add the companies you buy stock from.'}
+                action={!query && !city && <button type="button" onClick={onAdd} className={secondaryBtn}><Plus className="w-4 h-4" /> Add supplier</button>}
               />
             ) : (
               <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
@@ -105,7 +111,7 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
                   <li key={s.id} className="flex flex-wrap md:flex-nowrap items-center gap-x-3 gap-y-1 px-4 md:px-5 py-2.5 hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors">
                     <button type="button" onClick={() => setOpenId(s.id)} className="flex-1 min-w-0 text-left py-1 group">
                       <span className="flex items-center gap-1.5 min-w-0 font-semibold text-sm text-[#111827] dark:text-white">{s.code && <span className="shrink-0 text-[11px] font-bold text-teal-700 dark:text-teal-300">{s.code}</span>}<span className="truncate group-hover:underline">{s.company || s.name}</span></span>
-                      <span className="text-[11px] text-[#6B7280] dark:text-[#8E9299] flex items-center gap-1 truncate"><Phone className="w-3 h-3 shrink-0" /> {s.phone || 'no phone'}{s.company && s.name !== s.company ? ` • ${s.name}` : ''}</span>
+                      <span className="text-[11px] text-[#6B7280] dark:text-[#8E9299] flex items-center gap-1 truncate"><Phone className="w-3 h-3 shrink-0" /> {s.phone || 'no phone'}{s.company && s.name !== s.company ? ` • ${s.name}` : ''}{s.city ? ` • ${s.city}` : ''}</span>
                     </button>
                     <div className="text-right shrink-0 md:w-36">
                       {s.totalOwed > 0 ? (
@@ -248,6 +254,9 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
           setPendingReturn(null);
         }}
       />
+      <Modal isOpen={showBalances} onClose={() => setShowBalances(false)} title="Payable by city" subtitle="Receivable and payable reports, city-wise with subtotals." wide>
+        <PartyBalancesView initialKind="payable" />
+      </Modal>
     </div>
   );
 };

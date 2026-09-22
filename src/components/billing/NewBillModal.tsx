@@ -16,6 +16,9 @@ import { ChequeFieldsInput, ChequeFields, emptyChequeFields } from './ChequeForm
 import { evaluateSchemes } from '../../utils/salesExtras';
 import { CostCentreSelect } from '../finance/common';
 import { isPendingApproval } from '../../context/controlActions';
+import { BankSelect, bankOpt } from './BankSelect';
+import { needsBank } from '../../utils/banks';
+import { allCities, filterParties } from '../../utils/vouchers';
 
 interface Row {
   key: string;
@@ -91,6 +94,10 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const [splitBank, setSplitBank] = useState('');
   const [splitBankMethod, setSplitBankMethod] = useState(BANK_METHODS[0] || 'Bank Transfer');
   const [splitCheque, setSplitCheque] = useState('');
+  // Bank account the bank part goes into (only asked when the shop has more than one bank).
+  const [bank, setBank] = useState('');
+  // "Search party by city": narrows the customer list.
+  const [billCity, setBillCity] = useState('');
   const [cheque, setCheque] = useState<ChequeFields>(emptyChequeFields());
   const [notes, setNotes] = useState(quote ? `From quotation ${quote.quoteNumber}` : '');
   const [costCentre, setCostCentre] = useState('');
@@ -103,9 +110,13 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const focusRow = useRef<string | null>(null);
   const allowNegative = settings.allowNegativeStock !== false;
 
-  const sortedCustomers = useMemo(() => [...customers].sort((a, b) => a.name.localeCompare(b.name)), [customers]);
+  const cityList = useMemo(() => allCities(settings, customers, []), [settings, customers]);
+  const sortedCustomers = useMemo(() => {
+    const all = [...customers].sort((a, b) => a.name.localeCompare(b.name));
+    return billCity ? all.filter((c) => c.id === customer || filterParties([c], '', billCity).length > 0) : all;
+  }, [customers, billCity, customer]);
   const sortedProducts = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name)), [products]);
-  const customerOptions: PickOption[] = useMemo(() => sortedCustomers.map((c) => ({ value: c.id, name: c.name, code: c.code, extra: c.phone })), [sortedCustomers]);
+  const customerOptions: PickOption[] = useMemo(() => sortedCustomers.map((c) => ({ value: c.id, name: c.name, code: c.code, extra: [c.phone, c.city].filter(Boolean).join(' ') })), [sortedCustomers]);
   const productOptions: PickOption[] = useMemo(() => sortedProducts.map((p) => ({ value: p.id, name: p.name, code: p.code, barcode: p.barcode })), [sortedProducts]);
 
   const setRow = (key: string, patch: Partial<Row>) => setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -253,7 +264,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
 
   // What was paid now: one method, or split across cash / bank / cheque.
   const amt = (s: string) => Math.max(0, parseFloat(s) || 0);
-  const payParts: PaymentPart[] = split ? [{ method: 'Cash', amount: amt(splitCash) }, { method: splitBankMethod, amount: amt(splitBank) }] : method === 'Cheque' ? [] : [{ method, amount: amt(paidNow) }];
+  const payParts: PaymentPart[] = split ? [{ method: 'Cash', amount: amt(splitCash) }, { method: splitBankMethod, amount: amt(splitBank), ...bankOpt(bank) }] : method === 'Cheque' ? [] : [{ method, amount: amt(paidNow), ...(needsBank(method) ? bankOpt(bank) : {}) }];
   const chequeAmount = split ? amt(splitCheque) : method === 'Cheque' ? amt(paidNow) : 0;
   const payment = resolveBillPayments(total, payParts, chequeAmount);
   const given = payParts.reduce((a, p) => a + p.amount, 0) + chequeAmount;
@@ -430,6 +441,12 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                     ))}
                   </QuickSelect>
                 </div>
+                {cityList.length > 0 && (
+                  <select aria-label="Customer city" data-testid="bill-customer-city" value={billCity} onChange={(e) => setBillCity(e.target.value)} className={`${inputCls} !w-28 shrink-0 max-sm:!w-24`} title="Search party by city">
+                    <option value="">All cities</option>
+                    {cityList.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                )}
                 <button type="button" onClick={() => setNewCustomer({ name: '', phone: '' })} className={`${secondaryBtn} shrink-0 px-3`} title="Add a new customer"><UserPlus className="w-4 h-4" /><span>New</span></button>
               </div>
             )}
@@ -647,6 +664,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                       {BANK_METHODS.map((m) => <option key={m}>{m}</option>)}
                     </select>
                   </div>
+                  <BankSelect id="bill-split-bank-account" className="col-span-2" label="Into bank" value={bank} onChange={setBank} />
                 </div>
                 <button type="button" onClick={() => { setSplit(false); setSplitCash(''); setSplitBank(''); setSplitCheque(''); }} className="text-[11px] font-bold text-[#6B7280] dark:text-[#94A3B8] hover:text-teal-700">← One payment method</button>
               </div>
@@ -666,6 +684,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                       {BILL_PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
                     </select>
                   </div>
+                  {needsBank(method) && <BankSelect id="bill-bank" className="col-span-2" label="Into bank" value={bank} onChange={setBank} />}
                 </div>
                 <button type="button" onClick={() => { setSplit(true); if (method === 'Cheque') setSplitCheque(paidNow); else if (method === 'Cash') setSplitCash(paidNow); else { setSplitBankMethod(BANK_METHODS.includes(method) ? method : BANK_METHODS[0]); setSplitBank(paidNow); } setPaidNow(''); }} className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:underline"><SplitSquareHorizontal className="w-3 h-3" /> Split: cash + bank + cheque</button>
               </>
