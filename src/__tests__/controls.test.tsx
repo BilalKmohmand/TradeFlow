@@ -208,14 +208,24 @@ describe('deleted records bin', () => {
     expect(run(h, () => h.result.current.restoreDeletedRecord(bin[0].id)).success).toBe(false); // only once
   });
 
-  it('bills are kept for viewing but not restorable; managers cannot restore', async () => {
+  it('a deleted bill is made again through the normal bill path; twice is refused; managers cannot restore', async () => {
     const h = await setup(OWNER);
     const bill = run(h, () => h.result.current.createBill({ customerId: 'c2', items: [{ productId: 'p1', name: 'Oil tin', qty: 1, unitPrice: 1000 }], paidNow: 1000 }));
     expect(run(h, () => h.result.current.deleteRecord('bill', bill.invoice!.id, 'test')).success).toBe(true);
+    expect(h.result.current.products[0].stockKg).toBe(500);
     const rec = h.result.current.deletedRecords[0];
     expect((rec.data as Invoice).invoiceNumber).toBe(bill.invoice!.invoiceNumber);
-    expect(h.result.current.canRestore(rec)).toBe(false);
-    expect(run(h, () => h.result.current.restoreDeletedRecord(rec.id)).message).toMatch(/cannot be restored/);
+    expect(h.result.current.restoreBlockReason(rec)).toBeNull();
+    expect(h.result.current.canRestore(rec)).toBe(true);
+    const r = run(h, () => h.result.current.restoreDeletedRecord(rec.id));
+    expect(r.success, r.message).toBe(true);
+    expect(r.message).toMatch(/is back as/);
+    const back = h.result.current.invoices[0];
+    expect(back.invoiceNumber).not.toBe(bill.invoice!.invoiceNumber);
+    expect(back.notes).toContain(`Restored from deleted bill ${bill.invoice!.invoiceNumber}`);
+    expect(back.paidAmount).toBe(1000);
+    expect(h.result.current.products[0].stockKg).toBe(499);
+    expect(run(h, () => h.result.current.restoreDeletedRecord(rec.id)).message).toMatch(/already restored/);
     run(h, () => h.result.current.deleteRecord('customer', 'c1', 'x'));
     await switchTo(h, MANAGER);
     expect(h.result.current.canRestore(h.result.current.deletedRecords[0])).toBe(false);

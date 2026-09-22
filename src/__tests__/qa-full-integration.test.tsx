@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import React from 'react';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { renderHook, act } from '@testing-library/react';
 import { TradingProvider, useTrading } from '../context/TradingContext';
@@ -411,9 +411,13 @@ describe('QA: one shop, every feature, books always in step', () => {
   });
 });
 
-/** Columns in supabase/setup.sql (CREATE TABLE + ALTER TABLE … ADD COLUMN), by table. */
+/**
+ * Columns in supabase/setup.sql (CREATE TABLE + ALTER TABLE … ADD COLUMN), by table — plus the
+ * newest migration not yet folded into setup.sql (migrate_v23_fixes.sql), when it is there.
+ */
 const cloudColumns = (): Map<string, Set<string>> => {
-  const sql = readFileSync(resolve(__dirname, '../../supabase/setup.sql'), 'utf8').replace(/--[^\n]*/g, '');
+  const read = (f: string) => (existsSync(resolve(__dirname, `../../supabase/${f}`)) ? readFileSync(resolve(__dirname, `../../supabase/${f}`), 'utf8') : '');
+  const sql = `${read('setup.sql')}\n${read('migrate_v23_fixes.sql')}`.replace(/--[^\n]*/g, '');
   const cols = new Map<string, Set<string>>();
   const add = (t: string, c: string) => { if (!cols.has(t)) cols.set(t, new Set()); cols.get(t)!.add(c); };
   const create = /CREATE TABLE IF NOT EXISTS\s+(\w+)\s*\(([\s\S]*?)\n\);/g;

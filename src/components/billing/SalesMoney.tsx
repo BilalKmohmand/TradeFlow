@@ -1,10 +1,51 @@
 import React, { useMemo, useState } from 'react';
-import { Printer, Save, Search, Percent } from 'lucide-react';
+import { Printer, Save, Search, Percent, Undo2 } from 'lucide-react';
+import { ConfirmDialog } from '../ConfirmDialog';
+import type { PostedRun } from '../../context/salesExtrasActions';
 import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
 import { Modal, Notice, EmptyState, inputCls, labelCls, primaryBtn, secondaryBtn, rs, moneyCls } from './ui';
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 import { booksLockedFor } from '../../utils/accounting';
+
+/** Recent interest runs / collection sheets with a one-tap Undo (asks once, then reverses the whole run). */
+const RecentRuns: React.FC<{ title: string; runs: PostedRun[]; noun: string; allowed: boolean; onUndo: (id: string) => { success: boolean; message: string }; testId: string }> = ({ title, runs, noun, allowed, onUndo, testId }) => {
+  const [pending, setPending] = useState<PostedRun | null>(null);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  if (runs.length === 0 && !msg) return null;
+  return (
+    <div className="space-y-2" data-testid={testId}>
+      <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">{title}</h3>
+      {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
+      {runs.length > 0 && (
+        <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248]">
+          {runs.slice(0, 5).map((r) => (
+            <li key={r.id} className="flex items-center gap-2 pl-3 pr-1 py-1.5 text-sm">
+              <span className="flex-1 min-w-0"><span className="font-semibold">{r.label}</span> <span className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">• {formatDate(r.date)} • {r.customers} customer{r.customers === 1 ? '' : 's'}</span></span>
+              <span className={`${moneyCls} font-bold`}>{rs(r.total)}</span>
+              {allowed && <button type="button" onClick={() => setPending(r)} aria-label={`Undo ${noun} ${r.label}`} className="inline-flex items-center gap-1 min-h-11 sm:min-h-9 px-2.5 rounded-xl text-xs font-bold text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-700 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40"><Undo2 className="w-4 h-4" /> Undo</button>}
+            </li>
+          ))}
+        </ul>
+      )}
+      <ConfirmDialog
+        isOpen={Boolean(pending)}
+        title={`Undo ${noun} ${pending?.label || ''}?`}
+        message={pending ? `${rs(pending.total)} for ${pending.customers} customer${pending.customers === 1 ? '' : 's'} is taken back and their balances go back to what they were.` : ''}
+        confirmLabel={`Undo ${noun}`}
+        askReason={false}
+        onCancel={() => setPending(null)}
+        onConfirm={() => {
+          if (pending) {
+            const r = onUndo(pending.id);
+            setMsg({ kind: r.success ? 'ok' : 'error', text: r.message });
+          }
+          setPending(null);
+        }}
+      />
+    </div>
+  );
+};
 
 /** Cheques need their own details and wait in the cheque register, so they are not offered here. */
 const METHODS = BILL_PAYMENT_METHODS.filter((m) => m !== 'Cheque');
@@ -20,7 +61,7 @@ interface Line {
  * paid, save once. Every customer gets their own payment row; they share one collection-sheet number.
  */
 export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const { customers, salesmen, areas, receiveMany, setPrintRequest, settings } = useTrading();
+  const { customers, salesmen, areas, receiveMany, setPrintRequest, settings, collectionSheets, undoCollection, can } = useTrading();
   const today = todayISO();
   const [date, setDate] = useState(today);
   const [salesmanId, setSalesmanId] = useState('');
@@ -60,6 +101,7 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
       <Modal isOpen={isOpen} onClose={onClose} title="Money received" subtitle={`Collection sheet ${done.sheetNo}`}>
         <div className="space-y-4">
           <Notice kind="ok">{done.message}</Notice>
+          <RecentRuns title="Made a mistake?" runs={collectionSheets.filter((c) => c.id === done.sheetNo)} noun="collection" allowed={can('finance:record_payment')} onUndo={undoCollection} testId="undo-collection" />
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" onClick={() => setPrintRequest({ type: 'sales_extras', report: 'collection', sheetNo: done.sheetNo })} className={secondaryBtn}><Printer className="w-4 h-4" /> Print collection sheet</button>
             <button type="button" onClick={onClose} className={primaryBtn}>Done</button>
@@ -141,6 +183,7 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
           </ul>
         )}
         <p className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">Got a cheque? Use Receive payment → Cheque, so it waits in the cheque register until the bank clears it.</p>
+        <RecentRuns title="Recent collection sheets" runs={collectionSheets} noun="collection" allowed={can('finance:record_payment')} onUndo={undoCollection} testId="recent-collections" />
       </div>
     </Modal>
   );
@@ -148,7 +191,7 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
 
 /** Late-payment interest: preview what each customer would be charged, then post it as debit notes. */
 export const InterestRunModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const { previewInterest, chargeInterest, customers, can } = useTrading();
+  const { previewInterest, chargeInterest, customers, can, interestRuns, undoInterestRun } = useTrading();
   const today = todayISO();
   const [asOf, setAsOf] = useState(today);
   const [skip, setSkip] = useState<Set<string>>(new Set());
@@ -200,6 +243,7 @@ export const InterestRunModal: React.FC<{ isOpen: boolean; onClose: () => void }
             ))}
           </ul>
         )}
+        <RecentRuns title="Interest already charged" runs={interestRuns} noun="interest" allowed={allowed} onUndo={undoInterestRun} testId="recent-interest" />
       </div>
     </Modal>
   );

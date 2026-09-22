@@ -126,6 +126,8 @@ export const planReturn = (inv: Invoice, returns: StockReturn[], picks: ReturnPi
       ...(it.costPricePerKg ? { costPricePerKg: it.costPricePerKg } : {}),
       ...(it.godownId ? { godownId: it.godownId } : {}),
       ...(batches.length ? { batches } : {}),
+      // The bill line's pack, so the credit note prints "1 ctn + 2 tins" (qty stays in the base unit).
+      ...(it.packName && (it.packSize || 0) > 1 ? { packName: it.packName, packSize: it.packSize } : {}),
     });
   }
   let goods = round2(lines.reduce((a, l) => a + l.amount, 0));

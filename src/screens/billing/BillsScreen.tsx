@@ -13,6 +13,7 @@ import { ReturnsList, QuotationsList } from '../../components/billing/SalesDocsL
 import { useBranchScoped } from '../../hooks/useBranchScoped';
 import { BranchFilter } from '../../components/control/BranchFilter';
 import { ApprovalsTile } from '../../components/control/Approvals';
+import { NumberNoticesBanner } from '../../components/control/NumberNotices';
 
 type Period = 'today' | 'week' | 'month' | 'all';
 
@@ -58,6 +59,7 @@ export const BillsScreen: React.FC = () => {
         {tab === 'quotes' && <button type="button" onClick={() => ui.newQuote()} className={secondaryBtn}><FileText className="w-4 h-4" /> New Quotation</button>}
         <button type="button" onClick={() => ui.newBill()} className={`${primaryBtn} max-sm:flex-1`}><FilePlus2 className="w-4 h-4 text-teal-400 dark:text-teal-700" /> New Bill</button>
       </PageHeader>
+      <NumberNoticesBanner />
 
       <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]" role="tablist" aria-label="Bills, returns and quotations">
         {([['bills', 'Bills'], ['returns', `Returns${billReturnCount ? ` (${billReturnCount})` : ''}`], ['quotes', `Quotations${openQuoteCount ? ` (${openQuoteCount})` : ''}`]] as const).map(([id, label]) => (

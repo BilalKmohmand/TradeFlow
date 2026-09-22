@@ -234,7 +234,7 @@ test.describe('QA — a new shop', () => {
     await page.getByRole('button', { name: /Deep Ocean \(Dark\)/ }).click();
     await expect(page.locator('html')).toHaveClass(/dark/);
     await page.getByRole('button', { name: 'Theme' }).click();
-    await page.getByRole('button', { name: /Light Neutral/ }).click();
+    await page.getByRole('button', { name: /^Light Neutral/ }).click();
     await expect(page.locator('html')).not.toHaveClass(/dark/);
 
     // Full trading suite switch in the sidebar, and back.

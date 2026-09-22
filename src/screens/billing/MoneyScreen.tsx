@@ -26,7 +26,9 @@ export const MoneyScreen: React.FC = () => {
   const { customers, suppliers, settings, updateSettings, setSelectedCustomerId, setSelectedSupplierId, setActiveScreen, setPrintRequest, deleteExpense, can, cheques, isLinkedRecord } = useTrading();
   const canDelete = can('delete_records');
   // Money of the branch picked in the branch filter (everything while there is one branch).
-  const { ledger, expenses, cashEntries, settings: branchSettings } = useBranchScoped();
+  // Customer / supplier balances are the branch's own when one branch is picked (see partyBalancesForBranch).
+  const { ledger, expenses, cashEntries, settings: branchSettings, customers: partyCustomers, suppliers: partySuppliers, wholeShop } = useBranchScoped();
+  const { branchName, branchView } = useTrading();
   const [pendingExp, setPendingExp] = useState<{ id: string; label: string } | null>(null);
   // Bank reconciliation is book-keeping: staff without finance access (operators) don't see it.
   const canSeeBank = can('view_finance');
@@ -42,14 +44,16 @@ export const MoneyScreen: React.FC = () => {
 
   const movements = useMemo(() => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), [ledger, expenses, cashEntries, customers, suppliers]);
   const balances = useMemo(() => accountBalancesOn(movements, branchSettings, today), [movements, branchSettings, today]);
-  const position = useMemo(() => positionSummary(customers, suppliers, expenses, balances), [customers, suppliers, expenses, balances]);
+  const position = useMemo(() => positionSummary(partyCustomers, partySuppliers, expenses, balances), [partyCustomers, partySuppliers, expenses, balances]);
   // Cheques not yet cleared are still the business's money (or still owed): count them in the total.
   const pdc = useMemo(() => unclearedChequeTotals(cheques), [cheques]);
   const netWithCheques = position.netPosition + pdc.receivable - pdc.payable;
-  const debtors = useMemo(() => customers.filter((c) => c.totalDue > 0).sort((a, b) => b.totalDue - a.totalDue), [customers]);
-  const creditors = useMemo(() => suppliers.filter((s) => s.totalOwed > 0).sort((a, b) => b.totalOwed - a.totalOwed), [suppliers]);
+  const debtors = useMemo(() => partyCustomers.filter((c) => c.totalDue > 0.005).sort((a, b) => b.totalDue - a.totalDue), [partyCustomers]);
+  const creditors = useMemo(() => partySuppliers.filter((s) => s.totalOwed > 0.005).sort((a, b) => b.totalOwed - a.totalOwed), [partySuppliers]);
+  // In a branch view a supplier paid from this branch but billed to the main one shows as paid ahead here.
+  const supplierAdvances = useMemo(() => partySuppliers.filter((s) => s.totalOwed < -0.005), [partySuppliers]);
   // Customers who paid in advance: the shop owes them goods or money back.
-  const advances = useMemo(() => customers.filter((c) => c.totalDue < 0).sort((a, b) => a.totalDue - b.totalDue), [customers]);
+  const advances = useMemo(() => partyCustomers.filter((c) => c.totalDue < -0.005).sort((a, b) => a.totalDue - b.totalDue), [partyCustomers]);
   const unpaidExpenses = useMemo(() => expenses.filter((e) => e.paidVia === 'Credit (unpaid)'), [expenses]);
   const monthExpenses = useMemo(() => groupExpenses(expenses.filter((e) => e.date.startsWith(month))), [expenses, month]);
   const monthTotal = monthExpenses.reduce((a, g) => a + g.total, 0);
@@ -76,6 +80,11 @@ export const MoneyScreen: React.FC = () => {
 
       {tab === 'overview' && (
         <>
+          {!wholeShop && (
+            <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] -mt-2" data-testid="branch-balances-note">
+              {branchName(branchView)} only: customer and supplier balances come from this branch's bills and payments. Records with no branch (older ones, opening balances, stock bought) count as {branchName(null)}.
+            </p>
+          )}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Tile label="Cash in hand" value={rs(balances.cash)} icon={<Banknote className="w-4 h-4" />} />
             <Tile label="In bank" value={rs(balances.bank)} icon={<Landmark className="w-4 h-4" />} />
@@ -104,14 +113,20 @@ export const MoneyScreen: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className={`${cardCls} overflow-hidden`}>
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 sm:px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">Customers owe you</h2><span className="flex items-center gap-2 ml-auto"><button type="button" onClick={() => stockUI.aging('customers')} className="text-xs font-bold text-teal-700 dark:text-teal-300 min-h-9 px-2 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40">How long?</button><span className="tabular-nums whitespace-nowrap font-bold text-sm text-teal-700 dark:text-teal-300">{rs(position.receivables)}</span></span></div>
-              {debtors.length === 0 ? <div className="px-5 py-5 text-sm text-[#6B7280] dark:text-[#94A3B8]">Nobody owes you anything.</div> : (
-                <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
+              {debtors.length + supplierAdvances.length === 0 ? <div className="px-5 py-5 text-sm text-[#6B7280] dark:text-[#94A3B8]">Nobody owes you anything.</div> : (
+                <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]" data-testid="money-debtors">
                   {debtors.map((c) => (
                     <li key={c.id} className="flex flex-wrap sm:flex-nowrap items-center gap-x-2 pl-4 sm:pl-5 pr-2 py-2 hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors">
                       <button type="button" onClick={() => { setSelectedCustomerId(c.id); setActiveScreen('customers'); }} className="flex-1 min-w-0 text-left py-1"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{c.name}</span><span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">{c.phone}</span></button>
                       <span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(c.totalDue)}</span>
                       <span className="max-sm:w-full flex justify-end gap-1"><RowAction label={`Receive payment from ${c.name}`} text="Receive" alwaysText tone="teal" icon={<HandCoins className="w-4 h-4" />} onClick={() => ui.receive(c.id)} />
                       <RowAction label={`Print statement for ${c.name}`} icon={<Printer className="w-4 h-4" />} onClick={() => setPrintRequest({ type: 'statement', customerId: c.id, from: `${today.slice(0, 4)}-01-01`, to: today })} /></span>
+                    </li>
+                  ))}
+                  {supplierAdvances.map((x) => (
+                    <li key={x.id} className="flex items-center gap-2 px-4 sm:px-5 py-2.5">
+                      <button type="button" onClick={() => { setSelectedSupplierId(x.id); setActiveScreen('suppliers'); }} className="flex-1 min-w-0 text-left"><span className="font-semibold text-sm text-[#111827] dark:text-white block truncate">{x.company || x.name}</span><span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]">supplier paid ahead{wholeShop ? '' : ' from this branch'}</span></button>
+                      <span className="tabular-nums whitespace-nowrap font-bold text-sm text-[#111827] dark:text-white">{rs(-x.totalOwed)}</span>
                     </li>
                   ))}
                 </ul>

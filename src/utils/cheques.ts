@@ -19,6 +19,14 @@ export const chequeStatusLabel = (c: Pick<Cheque, 'status' | 'direction'>) =>
 /** Still waiting on the bank (not cleared, bounced or cancelled). */
 export const isPendingCheque = (c: Pick<Cheque, 'status'>) => c.status === 'in_hand' || c.status === 'deposited' || c.status === 'issued';
 
+/**
+ * Cheques from a customer still in hand or deposited (not yet cleared, bounced or cancelled). Deleting
+ * the customer would remove the ledger line the cheque hangs on and leave it in "Cheques in hand"
+ * with nobody to clear or bounce it against, so the delete waits until these are settled.
+ */
+export const chequesBlockingCustomerDelete = (cheques: Cheque[], customerId: string): Cheque[] =>
+  cheques.filter((c) => c.direction === 'received' && c.customerId === customerId && (c.status === 'in_hand' || c.status === 'deposited'));
+
 /** Pending cheques dated up to 6 days from today (older, still-pending ones are overdue and included). */
 export const chequesDueThisWeek = (cheques: Cheque[], today: string): Cheque[] => {
   const end = shiftDate(today, 6);

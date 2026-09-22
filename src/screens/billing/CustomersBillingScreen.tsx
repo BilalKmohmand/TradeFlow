@@ -5,7 +5,7 @@ import { useTrading } from '../../context/TradingContext';
 import { useWideLayout } from '../../hooks/useMediaQuery';
 import { useBillingUI } from '../../components/billing/BillingUI';
 import { useStockUI } from '../../components/billing/StockUI';
-import { Modal, cardCls, inputCls, primaryBtn, secondaryBtn, dangerBtn, rs, moneyCls, PageHeader, EmptyState, RowAction } from '../../components/billing/ui';
+import { Modal, Notice, cardCls, inputCls, primaryBtn, secondaryBtn, dangerBtn, rs, moneyCls, PageHeader, EmptyState, RowAction } from '../../components/billing/ui';
 import { creditUsage } from '../../utils/credit';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { billsOnly } from '../../utils/billing';
@@ -19,13 +19,15 @@ import { billNetTotal } from '../../utils/salesDocs';
 
 /** Customers the simple way: who they are, what they owe, and their bills. */
 export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd }) => {
-  const { customers, invoices, ledger, setEditRequest, deleteCustomer, setPrintRequest, can, selectedCustomerId, setSelectedCustomerId } = useTrading();
+  const { customers, invoices, ledger, setEditRequest, deleteCustomer, customerDeleteBlock, setPrintRequest, can, selectedCustomerId, setSelectedCustomerId } = useTrading();
   const ui = useBillingUI();
   const wide = useWideLayout();
   const stockUI = useStockUI();
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Customer | null>(null);
+  const [deleteBlocked, setDeleteBlocked] = useState<string | null>(null);
+  useEffect(() => setDeleteBlocked(null), [openId]);
   // Opened from elsewhere (Money, search): show that customer here.
   useEffect(() => {
     if (!selectedCustomerId) return;
@@ -102,7 +104,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
                           <span className="truncate group-hover:underline">{c.name}</span>
                           <OverLimitBadge customer={c} />
                         </span>
-                        <span className="text-[11px] text-[#6B7280] dark:text-[#8E9299] flex items-center gap-1"><Phone className="w-3 h-3" /> {c.phone || 'no phone'}</span>
+                        <span className="text-[11px] text-[#6B7280] dark:text-[#8E9299] flex items-center gap-1"><Phone className="w-3 h-3" /> {c.phone || 'no phone'}{c.lastRemindedAt ? <span className="truncate"> • reminded {formatDate(c.lastRemindedAt.slice(0, 10))}</span> : null}</span>
                       </button>
                       {!wide && <div className="shrink-0">{balance}</div>}
                     </div>
@@ -129,19 +131,21 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
                 <button type="button" onClick={() => { setOpenId(null); ui.newQuote(open.id); }} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><FileText className="w-4 h-4" /> Quotation</button>
                 <button type="button" onClick={() => setPrintRequest({ type: 'statement', customerId: open.id, from: `${today.slice(0, 4)}-01-01`, to: today })} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Printer className="w-4 h-4" /> Statement</button>
                 <button type="button" onClick={() => { setOpenId(null); setEditRequest({ type: 'customer', id: open.id }); }} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Pencil className="w-4 h-4" /> Edit</button>
-                {canDelete && <button type="button" onClick={() => setPendingDelete(open)} className={`${dangerBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs sm:ml-auto`}><Trash2 className="w-4 h-4" /> Delete</button>}
+                {canDelete && <button type="button" onClick={() => { const why = customerDeleteBlock(open.id); if (why) setDeleteBlocked(why); else setPendingDelete(open); }} className={`${dangerBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs sm:ml-auto`}><Trash2 className="w-4 h-4" /> Delete</button>}
               </div>
           </div>
         )}
       >
         {open && (
           <div className="space-y-5">
+            {deleteBlocked && <Notice kind="error">{deleteBlocked}</Notice>}
             <div className="grid grid-cols-3 gap-2 text-sm">
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">{open.totalDue < 0 ? 'Advance paid' : 'Owes you'}</div><div className={`tabular-nums font-extrabold ${open.totalDue > 0 ? 'text-amber-700 dark:text-amber-300' : open.totalDue < 0 ? 'text-teal-700 dark:text-teal-300' : 'text-[#111827] dark:text-white'}`}>{rs(Math.abs(open.totalDue))}</div></div>
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Bills</div><div className="tabular-nums font-extrabold text-[#111827] dark:text-white">{openBills.length}</div></div>
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Bought so far</div><div className="tabular-nums font-extrabold text-[#111827] dark:text-white">{rs(openBills.reduce((a, b) => a + billNetTotal(b), 0))}</div></div>
             </div>
             <CreditUsageBar customer={open} />
+            <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]" data-testid="last-reminded">Last reminded: {open.lastRemindedAt ? `${formatDate(open.lastRemindedAt.slice(0, 10))} (WhatsApp)` : 'never'}</p>
             <CustomerRatesPanel customerId={open.id} />
             <CustomerSalesPanel key={open.id} customerId={open.id} />
             <div>
@@ -178,8 +182,9 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
         confirmLabel="Delete customer"
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => {
-          if (pendingDelete) deleteCustomer(pendingDelete.id);
+          const r = pendingDelete ? deleteCustomer(pendingDelete.id) : null;
           setPendingDelete(null);
+          if (r?.blocked) { setDeleteBlocked(r.blocked); return; }
           setOpenId(null);
         }}
       />

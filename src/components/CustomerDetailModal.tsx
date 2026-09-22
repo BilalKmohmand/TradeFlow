@@ -535,7 +535,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
         requireText={customerBookings.length > 0 ? 'DELETE' : undefined}
         onConfirm={() => {
           setConfirmDeleteCustomer(false);
-          deleteCustomer(customer.id);
+          const r = deleteCustomer(customer.id);
+          if (r?.blocked) { window.alert(r.blocked); return; }
           onClose();
         }}
         onCancel={() => setConfirmDeleteCustomer(false)}

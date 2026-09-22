@@ -55,6 +55,9 @@ export default defineConfig(() => {
             if (!id.includes('node_modules')) return undefined;
             if (id.includes('recharts') || id.includes('d3-') || id.includes('victory')) return 'charts';
             if (id.includes('@supabase')) return 'supabase';
+            // Camera barcode decoder for browsers without BarcodeDetector (iPhone Safari): its own file,
+            // only downloaded when someone opens the scanner's camera.
+            if (id.includes('@zxing')) return 'barcode-scan';
             if (id.includes('motion') || id.includes('framer')) return 'motion';
             if (id.includes('lucide-react')) return 'icons';
             if (id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) return 'react';

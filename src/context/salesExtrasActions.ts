@@ -53,6 +53,16 @@ export interface ReceiveManyInput {
   note?: string;
 }
 
+/** One interest run or collection sheet as a group of ledger rows (for the "Undo" lists). */
+export interface PostedRun {
+  id: string;
+  label: string;
+  date: string;
+  total: number;
+  customers: number;
+  ledgerIds: string[];
+}
+
 export type SchemeInput = Omit<Scheme, 'id' | 'createdAt' | 'createdBy' | 'updatedAt'> & { id?: string };
 
 export interface SalesExtrasApi {
@@ -74,6 +84,14 @@ export interface SalesExtrasApi {
   previewInterest: (asOf: string) => InterestRow[];
   /** Post the interest as debit notes (only the customers given, default all in the preview). */
   chargeInterest: (asOf: string, customerIds?: string[]) => Result<{ ledgerIds: string[]; total: number }>;
+  /** Interest runs posted so far (newest first): one per "Post interest", with its debit notes. */
+  interestRuns: PostedRun[];
+  /** Take back a whole interest run: its INT debit notes are removed and the customers' balances go back. */
+  undoInterestRun: (runId: string) => Result;
+  /** Collection sheets ("receive from many") posted so far, newest first. */
+  collectionSheets: PostedRun[];
+  /** Take back a whole collection sheet: its payment rows are removed and what each customer owes goes back up. */
+  undoCollection: (sheetNo: string) => Result;
   /** Pay a salesman's commission: booked as a "Salesman commission" expense. */
   payCommission: (input: { salesmanId: string; amount: number; paidVia: string; date?: string; note?: string }) => Result<{ expense: Expense }>;
 }
@@ -348,6 +366,8 @@ export const useSalesExtrasStore = (d: Deps) => {
     if (rows.length === 0) return fail('No interest to charge on this date.');
     const first = nextNumber(d.ledger, 'INT');
     let n = parseInt(first.split('-')[1], 10);
+    // Every debit note of this run shares one run id (sourceId), so the run can be undone in one tap.
+    const runId = d.uid('intrun');
     const entries: LedgerEntry[] = rows.map((r) => ({
       id: d.uid('led'),
       entityType: 'customer',
@@ -359,6 +379,8 @@ export const useSalesExtrasStore = (d: Deps) => {
       debit: r.interest,
       credit: 0,
       balanceAfter: round2(r.customer.totalDue + r.interest),
+      sourceId: runId,
+      ...(d.branchStamp ? d.branchStamp() : {}),
     }));
     const add = new Map(rows.map((r) => [r.customer.id, r.interest]));
     d.setCustomers((prev) => prev.map((c) => (add.has(c.id) ? { ...c, totalDue: round2(c.totalDue + (add.get(c.id) || 0)) } : c)));
@@ -366,6 +388,68 @@ export const useSalesExtrasStore = (d: Deps) => {
     const total = round2(rows.reduce((a, r) => a + r.interest, 0));
     d.logAuditEvent('Interest Charged', `${rows.length} customer(s), ${formatCurrency(total)} as of ${asOf}.`, 'warning');
     return { success: true, message: `Interest of ${formatCurrency(total)} charged to ${rows.length} customer${rows.length === 1 ? '' : 's'}.`, ledgerIds: entries.map((e) => e.id), total };
+  };
+
+  // ---- undo an interest run / a collection sheet ---------------------------------------------
+  /** Interest rows grouped by run (older runs without a run id: by the date they were charged to). */
+  const interestKey = (l: LedgerEntry) => l.sourceId || `int-${l.date}`;
+  const groupRuns = (rows: LedgerEntry[], key: (l: LedgerEntry) => string, label: (rows: LedgerEntry[]) => string, amount: (l: LedgerEntry) => number): PostedRun[] => {
+    const by = new Map<string, LedgerEntry[]>();
+    rows.forEach((l) => by.set(key(l), [...(by.get(key(l)) || []), l]));
+    return Array.from(by.entries())
+      .map(([id, ls]) => ({ id, label: label(ls), date: ls.map((l) => l.date).sort().slice(-1)[0], total: round2(ls.reduce((a, l) => a + amount(l), 0)), customers: new Set(ls.map((l) => l.entityId)).size, ledgerIds: ls.map((l) => l.id) }))
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id.localeCompare(a.id)));
+  };
+  const interestRuns = groupRuns(
+    d.ledger.filter((l) => l.entityType === 'customer' && l.type === 'interest_charge'),
+    interestKey,
+    (ls) => {
+      const refs = ls.map((l) => l.referenceId).sort((a, b) => parseInt(a.split('-')[1] || '0', 10) - parseInt(b.split('-')[1] || '0', 10));
+      return refs.length > 1 ? `${refs[0]} to ${refs[refs.length - 1]}` : refs[0];
+    },
+    (l) => Number(l.debit) || 0
+  );
+  const collectionSheets = groupRuns(
+    d.ledger.filter((l) => l.entityType === 'customer' && l.type === 'payment_received' && /^CS-\d+$/.test(l.referenceId || '')),
+    (l) => l.referenceId,
+    (ls) => ls[0].referenceId,
+    (l) => Number(l.credit) || 0
+  );
+
+  /** Remove these customer rows and put each customer's balance back as it was before they were posted. */
+  const reverseRows = (ids: string[]) => {
+    const rows = d.ledger.filter((l) => ids.includes(l.id));
+    const delta = new Map<string, number>();
+    rows.forEach((l) => delta.set(l.entityId, round2((delta.get(l.entityId) || 0) - (Number(l.debit) || 0) + (Number(l.credit) || 0))));
+    d.setCustomers((prev) => prev.map((c) => (delta.has(c.id) ? { ...c, totalDue: round2(c.totalDue + (delta.get(c.id) || 0)) } : c)));
+    d.setLedger((prev) => prev.filter((l) => !ids.includes(l.id)));
+    d.removeRemote('ledger', ids);
+    return rows;
+  };
+  const lockedAny = (dates: string[]) => dates.map((x) => booksLockedFor(d.settings, x)).find(Boolean) || null;
+
+  const undoInterestRun: SalesExtrasApi['undoInterestRun'] = (runId) => {
+    if (!d.can('finance:view_pnl')) return noPermission('undo interest');
+    const run = interestRuns.find((r) => r.id === runId);
+    if (!run) return fail('That interest run was not found (it may already be undone).');
+    const rows = d.ledger.filter((l) => run.ledgerIds.includes(l.id));
+    const locked = lockedAny(rows.map((l) => l.date));
+    if (locked) return fail(`This interest is in a closed period. ${locked}`);
+    reverseRows(run.ledgerIds);
+    d.logAuditEvent('Interest Run Undone', `${run.label}: ${formatCurrency(run.total)} taken back from ${run.customers} customer(s) (charged ${run.date}).`, 'warning');
+    return { success: true, message: `Interest ${run.label} undone: ${formatCurrency(run.total)} taken off ${run.customers} customer${run.customers === 1 ? '' : 's'}.` };
+  };
+
+  const undoCollection: SalesExtrasApi['undoCollection'] = (sheetNo) => {
+    if (!d.can('finance:record_payment')) return noPermission('undo a collection');
+    const sheet = collectionSheets.find((r) => r.id === sheetNo);
+    if (!sheet) return fail('That collection sheet was not found (it may already be undone).');
+    const rows = d.ledger.filter((l) => sheet.ledgerIds.includes(l.id));
+    const locked = lockedAny(rows.map((l) => l.date));
+    if (locked) return fail(`This collection is in a closed period. ${locked}`);
+    reverseRows(sheet.ledgerIds);
+    d.logAuditEvent('Collection Undone', `${sheetNo}: ${formatCurrency(sheet.total)} from ${sheet.customers} customer(s) (dated ${sheet.date}) taken back.`, 'warning');
+    return { success: true, message: `Collection ${sheetNo} undone: ${formatCurrency(sheet.total)} is owed again by ${sheet.customers} customer${sheet.customers === 1 ? '' : 's'}.` };
   };
 
   // ---- commission --------------------------------------------------------------------------
@@ -423,6 +507,10 @@ export const useSalesExtrasStore = (d: Deps) => {
     receiveMany,
     previewInterest,
     chargeInterest,
+    interestRuns,
+    undoInterestRun,
+    collectionSheets,
+    undoCollection,
     payCommission,
   };
   return { api, hydrate, backupData, reset, purgeSetters };

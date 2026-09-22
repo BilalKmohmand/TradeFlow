@@ -17,21 +17,23 @@ export interface Books {
  * (e.g. the print host when no accounting document is open).
  */
 export const useAccounting = (enabled = true): Books => {
-  const { customers, suppliers, dispatches, purchases, products, adjustments, manualJournals, customAccounts, fixedAssets, depreciationRuns, salaryRuns } = useTrading();
-  // Bills, money rows and opening balances of the branch picked in the branch filter (all while there is one branch).
-  const { settings, ledger, invoices, expenses, cashEntries, returns } = useBranchScoped();
+  const { dispatches, purchases, products, adjustments, manualJournals, customAccounts, fixedAssets, depreciationRuns, salaryRuns } = useTrading();
+  // Bills, money rows, opening balances and customer / supplier balances of the branch picked in the
+  // branch filter (all while there is one branch). Stock, fixed assets and manual journals carry no
+  // branch: they belong to the main branch, so another branch's books leave them out.
+  const { settings, ledger, invoices, expenses, cashEntries, returns, customers, suppliers, branchPart, allInvoices, allReturns } = useBranchScoped();
   const accounts = useMemo(() => mergeAccounts(customAccounts), [customAccounts]);
   const auto = useMemo(
     () =>
       enabled
         ? [
-            ...buildJournal({ settings, customers, suppliers, ledger, invoices, dispatches, purchases, expenses, cashEntries, products, returns, adjustments }),
+            ...buildJournal({ settings, customers, suppliers, ledger, invoices, dispatches, purchases, expenses, cashEntries, products, returns, adjustments, branchPart, stockInvoices: allInvoices, stockReturns: allReturns }),
             // Fixed assets, depreciation and advances recovered from salaries (see utils/financeBooks.ts).
-            ...buildFinanceJournal({ settings, fixedAssets, depreciationRuns, salaryRuns }),
+            ...(branchPart === 'other' ? [] : buildFinanceJournal({ settings, fixedAssets, depreciationRuns, salaryRuns })),
           ]
         : [],
-    [enabled, settings, customers, suppliers, ledger, invoices, dispatches, purchases, expenses, cashEntries, products, returns, adjustments, fixedAssets, depreciationRuns, salaryRuns]
+    [enabled, settings, customers, suppliers, ledger, invoices, dispatches, purchases, expenses, cashEntries, products, returns, adjustments, fixedAssets, depreciationRuns, salaryRuns, branchPart, allInvoices, allReturns]
   );
-  const journal = useMemo(() => (enabled ? combineJournal(auto, manualJournals) : []), [enabled, auto, manualJournals]);
+  const journal = useMemo(() => (enabled ? combineJournal(auto, branchPart === 'other' ? [] : manualJournals) : []), [enabled, auto, manualJournals, branchPart]);
   return { accounts, auto, journal };
 };

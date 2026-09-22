@@ -5,6 +5,7 @@ import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice, rs } from 
 import { planReturn, returnableQty, maxRefund, billNetTotal } from '../../utils/salesDocs';
 import { lineQty } from '../../utils/billing';
 import { todayISO } from '../../utils/stockFlow';
+import { hasPack, formatQtyWithPacks, formatPackQty, baseToPacks, packsToBase } from '../../utils/packUnits';
 
 interface Props {
   invoiceId: string | null;
@@ -21,6 +22,8 @@ export const ReturnItemsModal: React.FC<Props> = ({ invoiceId, onClose, onDone }
   const { invoices, returns, returnBillItems, setPrintRequest } = useTrading();
   const inv = invoices.find((i) => i.id === invoiceId) || null;
   const [qty, setQty] = useState<Record<string, string>>({});
+  /** Bill lines being typed in packs (cartons) instead of base units. */
+  const [inPack, setInPack] = useState<Record<string, boolean>>({});
   const [settle, setSettle] = useState<'refund' | 'credit' | null>(null);
   const [method, setMethod] = useState('Cash');
   const [reason, setReason] = useState('');
@@ -30,7 +33,16 @@ export const ReturnItemsModal: React.FC<Props> = ({ invoiceId, onClose, onDone }
   const busy = useRef(false);
 
   const left = useMemo(() => (inv ? returnableQty(inv, returns) : new Map<string, number>()), [inv, returns]);
-  const picks = inv ? inv.items.map((it) => ({ billLineId: it.id, qty: Math.max(0, parseFloat(qty[it.id] || '') || 0) })) : [];
+  // What was typed, in base units (packs × pack size when the line is typed in packs).
+  const packOf = (it: { id: string; packName?: string; packSize?: number }) => (inPack[it.id] && hasPack(it) ? it.packSize || 1 : 1);
+  const picks = inv ? inv.items.map((it) => ({ billLineId: it.id, qty: packsToBase(Math.max(0, parseFloat(qty[it.id] || '') || 0), packOf(it)) })) : [];
+  const switchPack = (it: { id: string; packName?: string; packSize?: number }, toPack: boolean) => {
+    if (!hasPack(it) || Boolean(inPack[it.id]) === toPack) return;
+    const v = parseFloat(qty[it.id] || '');
+    const size = it.packSize || 1;
+    setInPack((p) => ({ ...p, [it.id]: toPack }));
+    if (Number.isFinite(v)) setQty((q) => ({ ...q, [it.id]: String(Math.round((toPack ? baseToPacks(v, size) : v * size) * 10000) / 10000) }));
+  };
   const plan = inv && picks.some((p) => p.qty > 0) ? planReturn(inv, returns, picks) : null;
   const total = plan?.ok ? plan.total : 0;
   const refundable = inv && plan?.ok ? maxRefund(inv, total) : 0;
@@ -82,11 +94,28 @@ export const ReturnItemsModal: React.FC<Props> = ({ invoiceId, onClose, onDone }
             {inv.items.map((it, idx) => {
               const can = left.get(it.id) || 0;
               const sold = lineQty(it);
+              const packed = hasPack(it);
+              const pack = packOf(it);
+              const typed = parseFloat(qty[it.id] || '') || 0;
+              const pk = { unit: it.unit, packName: it.packName, packSize: it.packSize };
+              const qtyText = (n: number) => (packed ? formatQtyWithPacks(n, pk) : `${n} ${it.unit || ''}`.trim());
               return (
-                <div key={it.id} className="flex items-center gap-3 px-3 py-2.5">
+                <div key={it.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5">
                   <div className="min-w-0 flex-1">
                     <div className="font-semibold text-sm text-[#111827] dark:text-white truncate">{it.productName}</div>
-                    <div className="text-[11px] text-[#8E9299]">Sold {sold} {it.unit || ''}{sold - can > 0 ? ` • ${Math.round((sold - can) * 100) / 100} already back` : ''} • {rs(sold > 0 ? it.amount / sold : 0)} each</div>
+                    <div className="text-[11px] text-[#8E9299]">Sold {qtyText(sold)}{sold - can > 0 ? ` • ${qtyText(Math.round((sold - can) * 100) / 100)} already back` : ''} • {rs(sold > 0 ? it.amount / sold : 0)} each</div>
+                    {packed && (
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[#6B7280] dark:text-[#94A3B8]">
+                        <span className="inline-flex rounded-xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden font-bold" role="group" aria-label={`Unit for return ${idx + 1}`}>
+                          {[false, true].map((packMode) => (
+                            <button key={String(packMode)} type="button" disabled={can <= 0} aria-pressed={Boolean(inPack[it.id]) === packMode} onClick={() => switchPack(it, packMode)} className={`px-2 py-1 min-h-8 ${Boolean(inPack[it.id]) === packMode ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : ''}`}>
+                              {packMode ? `${it.packName} (${it.packSize})` : it.unit || 'pcs'}
+                            </button>
+                          ))}
+                        </span>
+                        {pack > 1 && typed > 0 && <span className="font-semibold text-[#374151] dark:text-[#CBD5E1]">= {formatPackQty(typed * pack, pk)}</span>}
+                      </div>
+                    )}
                   </div>
                   <div className="w-28 shrink-0">
                     <input
@@ -94,13 +123,13 @@ export const ReturnItemsModal: React.FC<Props> = ({ invoiceId, onClose, onDone }
                       type="number"
                       inputMode="decimal"
                       min="0"
-                      max={can}
+                      max={pack > 1 ? baseToPacks(can, pack) : can}
                       step="any"
                       disabled={can <= 0}
                       value={qty[it.id] || ''}
                       onChange={(e) => setQty((q) => ({ ...q, [it.id]: e.target.value }))}
                       className={`${inputCls} tabular-nums`}
-                      placeholder={can > 0 ? `max ${can}` : 'none left'}
+                      placeholder={can > 0 ? `max ${pack > 1 ? baseToPacks(can, pack) : can}` : 'none left'}
                     />
                   </div>
                 </div>

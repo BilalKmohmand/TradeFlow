@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FilePlus2, Receipt, Wallet, ArrowLeftRight, HandCoins, AlertTriangle, ChevronRight, Landmark, Banknote, CalendarClock, FileText } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
 import { useStockUI } from '../../components/billing/StockUI';
 import { overdueCustomers } from '../../utils/stockReports';
-import { Tile, PageHeader, cardCls, primaryBtn, secondaryBtn, rs, moneyCls } from '../../components/billing/ui';
+import { Tile, PageHeader, Notice, cardCls, primaryBtn, secondaryBtn, rs, moneyCls } from '../../components/billing/ui';
 import { collectCashMovements, accountBalancesOn, positionSummary } from '../../utils/finance';
 import { daySummary, billsOnly } from '../../utils/billing';
 import { todayISO } from '../../utils/stockFlow';
@@ -17,18 +17,21 @@ import { useBranchScoped } from '../../hooks/useBranchScoped';
 import { BranchFilter } from '../../components/control/BranchFilter';
 import { ApprovalsTile } from '../../components/control/Approvals';
 import { BackupReminder } from '../../components/control/AutoBackups';
+import { SendRemindersPanel } from '../../components/billing/Reminders';
+import { NumberNoticesBanner } from '../../components/control/NumberNotices';
+import { depreciationDue, monthLabel } from '../../utils/financeBooks';
 
 /** The first screen every morning: today's numbers, the four buttons you press all day, what needs attention, recent bills. */
 export const BillingHomeScreen: React.FC = () => {
-  const { ledger, customers, suppliers, products, setActiveScreen, currentUser, stockBatches, cheques } = useTrading();
+  const { ledger, customers, suppliers, products, setActiveScreen, currentUser, stockBatches, cheques, fixedAssets, depreciationRuns, runDepreciation, can } = useTrading();
   // Bills and money of the branch picked in the branch filter (everything while there is one branch).
-  const { invoices, ledger: branchLedger, expenses, cashEntries, settings } = useBranchScoped();
+  const { invoices, ledger: branchLedger, expenses, cashEntries, settings, customers: partyCustomers, suppliers: partySuppliers } = useBranchScoped();
   const ui = useBillingUI();
   const today = todayISO();
   const movements = useMemo(() => collectCashMovements(branchLedger, expenses, cashEntries, customers, suppliers), [branchLedger, expenses, cashEntries, customers, suppliers]);
   const day = useMemo(() => daySummary(invoices, movements, today, expenses), [invoices, movements, today, expenses]);
   const balances = useMemo(() => accountBalancesOn(movements, settings, today), [movements, settings, today]);
-  const position = useMemo(() => positionSummary(customers, suppliers, expenses, balances), [customers, suppliers, expenses, balances]);
+  const position = useMemo(() => positionSummary(partyCustomers, partySuppliers, expenses, balances), [partyCustomers, partySuppliers, expenses, balances]);
   const recent = useMemo(() => billsOnly(invoices).sort((a, b) => (a.issueDate < b.issueDate ? 1 : a.issueDate > b.issueDate ? -1 : b.createdAt.localeCompare(a.createdAt))).slice(0, 8), [invoices]);
   const lowStock = products.filter((p) => p.minThresholdKg > 0 && p.stockKg <= p.minThresholdKg);
   const unpaid = billsOnly(invoices).filter((i) => i.balanceDue > 0);
@@ -40,7 +43,11 @@ export const BillingHomeScreen: React.FC = () => {
   // Customers with money owed for more than 60 days (credit-limit breaches are listed separately above).
   const oldDues = useMemo(() => overdueCustomers(customers, ledger, today).filter((o) => o.oldAmount > 0), [customers, ledger, today]);
   const unpaidTotal = unpaid.reduce((a, i) => a + i.balanceDue, 0);
-  const attentionCount = (unpaid.length > 0 ? 1 : 0) + (overLimit.length > 0 ? 1 : 0) + (oldDues.length > 0 ? 1 : 0) + (expiring > 0 ? 1 : 0) + Math.min(lowStock.length, 4);
+  // Last month's depreciation not run yet while fixed assets exist (only for those who can run it).
+  const canRunDep = can('finance:view_pnl');
+  const depDue = useMemo(() => (canRunDep ? depreciationDue(fixedAssets, depreciationRuns, today) : null), [canRunDep, fixedAssets, depreciationRuns, today]);
+  const [depMsg, setDepMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const attentionCount = (depDue ? 1 : 0) + (unpaid.length > 0 ? 1 : 0) + (overLimit.length > 0 ? 1 : 0) + (oldDues.length > 0 ? 1 : 0) + (expiring > 0 ? 1 : 0) + Math.min(lowStock.length, 4);
 
   const attnRow = 'group w-full flex items-center gap-3 px-4 sm:px-5 py-3 min-h-12 text-left text-sm hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors';
   const dot = (c: string) => <span aria-hidden="true" className={`w-2 h-2 rounded-full shrink-0 ${c}`} />;
@@ -55,7 +62,10 @@ export const BillingHomeScreen: React.FC = () => {
       </PageHeader>
 
       <BackupReminder />
+      <NumberNoticesBanner />
       <ApprovalsTile />
+      <SendRemindersPanel />
+      {depMsg && <Notice kind={depMsg.kind}>{depMsg.text}</Notice>}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Tile label="Sales today" value={rs(day.sales)} hint={`${day.billCount} bill${day.billCount === 1 ? '' : 's'}`} onClick={() => setActiveScreen('bills')} />
@@ -80,6 +90,13 @@ export const BillingHomeScreen: React.FC = () => {
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">{attentionCount}</span>
               </div>
               <div className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
+                {depDue && (
+                  <div className={`${attnRow} text-[#374151] dark:text-[#CBD5E1] flex-wrap`} data-testid="depreciation-due">
+                    {dot('bg-amber-500')}
+                    <span className="flex-1 min-w-0">Depreciation for <strong className="text-[#111827] dark:text-white">{monthLabel(depDue.month)}</strong> has not been run ({depDue.assets} asset{depDue.assets === 1 ? '' : 's'}, <span className={moneyCls}>{rs(depDue.total)}</span>).</span>
+                    <button type="button" onClick={() => setDepMsg((() => { const r = runDepreciation({ month: depDue.month }); return { kind: r.success ? 'ok' : 'error', text: r.message }; })())} className={`${secondaryBtn} max-sm:w-full`}>Run for {monthLabel(depDue.month)}</button>
+                  </div>
+                )}
                 {unpaid.length > 0 && (
                   <button type="button" onClick={() => setActiveScreen('bills')} className={`${attnRow} text-[#374151] dark:text-[#CBD5E1]`}>
                     {dot('bg-amber-500')}

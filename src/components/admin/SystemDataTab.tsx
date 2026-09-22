@@ -26,6 +26,7 @@ import {
 import { useTrading } from '../../context/TradingContext';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { BillSettingsCard } from '../billing/BillSettings';
+import { RemindersSettingsCard } from '../billing/Reminders';
 import { TableName } from '../../lib/database';
 
 type PendingAction =
@@ -408,6 +409,7 @@ export const SystemDataTab: React.FC = () => {
 
       {/* Bills: paper size, footer, previous balance, short stock */}
       <BillSettingsCard />
+      <RemindersSettingsCard />
 
       {/* CSV Data Exports */}
       <div className={cardCls}>
