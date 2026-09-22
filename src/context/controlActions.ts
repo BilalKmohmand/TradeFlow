@@ -59,6 +59,9 @@ import {
   saveBackup,
 } from '../lib/autoBackup';
 import type { DeleteSummary } from './TradingContext';
+import type { VoucherSnapshot } from './voucherActions';
+import { VoucherInput, validateVoucher, voucherSupplierPayments, voucherTypeInfo } from '../utils/vouchers';
+import type { JournalEntry } from '../utils/accounting';
 
 /**
  * Controls for the owner (see utils/control.ts for the pure parts):
@@ -421,7 +424,16 @@ interface ApiDeps {
   exportSystemBackup: () => string;
   // actions that the rules / bin wrap
   createBill: (input: any) => BillResult;
-  recordSupplierPayment: (supplierId: string, amount: number, notes?: string, date?: string) => LedgerEntry | undefined;
+  recordSupplierPayment: (supplierId: string, amount: number, notes?: string, date?: string, opts?: { bankCode?: string }) => LedgerEntry | undefined;
+  /** Vouchers (see voucherActions.ts): the rules and the bin wrap these. */
+  vouchers: {
+    addVoucher: (input: VoucherInput) => Result & { voucher?: JournalEntry };
+    deleteVoucher: (id: string) => Result;
+    voucherSnapshot: (id: string) => VoucherSnapshot | null;
+    restoreVoucher: (snap: VoucherSnapshot) => Result;
+    voucherRestoreBlock: (snap: VoucherSnapshot) => string | null;
+    validate: (input: VoucherInput) => string[];
+  };
   issueCheque: (input: any) => Result & { cheque?: Cheque };
   adjustStockBy: (input: any) => Result & { adjustment?: StockAdjustment };
   deleteBill: (id: string) => Result;
@@ -601,11 +613,22 @@ export const createControlApi = (d: ApiDeps) => {
     return `Supplier payment of ${rs(amount)} is over the ${rs(limit)} limit`;
   };
 
-  const recordSupplierPayment = (supplierId: string, amount: number, notes?: string, date?: string): LedgerEntry | undefined => {
+  const recordSupplierPayment = (supplierId: string, amount: number, notes?: string, date?: string, opts?: { bankCode?: string }): LedgerEntry | undefined => {
     const why = supplierPaymentApproval(round2(Number(amount) || 0));
-    if (!why || !d.suppliers.some((x) => x.id === supplierId)) return d.recordSupplierPayment(supplierId, amount, notes, date);
-    queue('supplier_payment', ['supplier_payment'], [why], `Pay ${supName(supplierId)} — ${rs(amount)}`, amount, { supplierId, amount: round2(amount), notes, date: date || todayISO() });
+    if (!why || !d.suppliers.some((x) => x.id === supplierId)) return d.recordSupplierPayment(supplierId, amount, notes, date, opts);
+    queue('supplier_payment', ['supplier_payment'], [why], `Pay ${supName(supplierId)} — ${rs(amount)}`, amount, { supplierId, amount: round2(amount), notes, date: date || todayISO(), ...(opts?.bankCode ? { bankCode: opts.bankCode } : {}) });
     return undefined;
+  };
+
+  /** A payment voucher that pays suppliers more than the limit goes to a manager (like a supplier payment). */
+  const addVoucher = (input: VoucherInput): Result & { voucher?: JournalEntry; pendingApproval?: ApprovalRequest } => {
+    const paid = voucherSupplierPayments(input);
+    const why = paid > 0 ? supplierPaymentApproval(paid) : null;
+    if (!why) return d.vouchers.addVoucher(input);
+    const errors = d.vouchers.validate(input);
+    if (errors.length) return fail(errors[0]);
+    const req = queue('voucher', ['supplier_payment'], [why], `${voucherTypeInfo(input.type).label} — ${input.narration.trim()} — ${rs(paid)} to suppliers`, paid, input);
+    return { success: true, message: `Sent for approval: ${why}. The voucher is posted when a manager approves it.`, pendingApproval: req };
   };
 
   const issueCheque = (input: { supplierId: string; amount: number; bankName: string; chequeNumber: string; chequeDate: string; date?: string; note?: string }) => {
@@ -784,6 +807,13 @@ export const createControlApi = (d: ApiDeps) => {
   const deleteArea = wrap('area', m.deleteArea, snapOf(m.areas, (x) => `Area ${x.name}`), kept);
   const deleteScheme = wrap('scheme', m.deleteScheme, snapOf(m.schemes, (x) => `Scheme ${x.name}`), okResult);
   const deleteGodown = wrap('godown', m.deleteGodown, snapOf(d.godowns, (g) => `Godown ${g.name}`), okResult);
+  const deleteVoucher = wrap('voucher', d.vouchers.deleteVoucher, (id) => {
+    const snap = d.vouchers.voucherSnapshot(id);
+    if (!snap) return null;
+    const v = snap.voucher;
+    const amt = round2(v.lines.reduce((a, l) => a + (Number(l.debit) || 0), 0));
+    return { recordId: id, label: `Voucher ${v.ref} • ${v.memo} • ${rs(amt)} • ${formatDate(v.date)}`, data: snap };
+  }, okResult);
 
   const deleters: Partial<Record<DeletedKind, (id: string) => unknown>> = {
     bill: deleteBill,
@@ -812,6 +842,7 @@ export const createControlApi = (d: ApiDeps) => {
     area: deleteArea,
     scheme: deleteScheme,
     godown: deleteGodown,
+    voucher: deleteVoucher,
   };
 
   const deleteRecord = (kind: DeletedKind, id: string, reason = ''): Result => {
@@ -878,10 +909,11 @@ export const createControlApi = (d: ApiDeps) => {
     if (rec.restoredAt) return null;
     if (rec.kind === 'bill') return billRestoreBlock(rec.data as Invoice);
     if (rec.kind === 'payment') return paymentRestoreBlock(rec.data as LedgerEntry);
+    if (rec.kind === 'voucher') return d.vouchers.voucherRestoreBlock(rec.data as VoucherSnapshot);
     if (RESTORABLE.includes(rec.kind)) return null;
     return 'Returns, stock and other records change stock and several accounts at once, so they are kept here to view only. Enter them again instead.';
   };
-  const canRestore = (rec: DeletedRecord) => canRestoreAtAll && !rec.restoredAt && (RESTORABLE.includes(rec.kind) || ((rec.kind === 'bill' || rec.kind === 'payment') && !restoreBlockReason(rec)));
+  const canRestore = (rec: DeletedRecord) => canRestoreAtAll && !rec.restoredAt && (RESTORABLE.includes(rec.kind) || ((rec.kind === 'bill' || rec.kind === 'payment' || rec.kind === 'voucher') && !restoreBlockReason(rec)));
 
   /** A deleted bill is made again through createBill (stock, period lock, credit limit and payments checked again). */
   const restoreBill = (rec: DeletedRecord): Result => {
@@ -946,9 +978,9 @@ export const createControlApi = (d: ApiDeps) => {
     if (!canRestoreAtAll) return fail('Only an admin can restore deleted records.');
     if (rec.restoredAt) return fail('This record was already restored.');
     if (s.deciding.current.has(binId)) return fail('This record is already being restored.');
-    if (rec.kind === 'bill' || rec.kind === 'payment') {
+    if (rec.kind === 'bill' || rec.kind === 'payment' || rec.kind === 'voucher') {
       s.deciding.current.add(binId);
-      const r = rec.kind === 'bill' ? restoreBill(rec) : restorePayment(rec);
+      const r = rec.kind === 'bill' ? restoreBill(rec) : rec.kind === 'voucher' ? d.vouchers.restoreVoucher(rec.data as VoucherSnapshot) : restorePayment(rec);
       if (!r.success) {
         s.deciding.current.delete(binId);
         return r;
@@ -1024,8 +1056,12 @@ export const createControlApi = (d: ApiDeps) => {
         d.setInvoices((prev) => prev.map((i) => (i.id === invId ? { ...i, createdBy: req.requestedBy || i.createdBy, ...(req.branchId ? { branchId: req.branchId } : {}), approval: { requestId: req.id, requestedBy: req.requestedBy, approvedBy: me, approvedAt: new Date().toISOString(), ...(approvedNote ? { note: approvedNote } : {}), rules: req.rules } } : i)));
         res = ok(`Approved. Bill ${r.invoice.invoiceNumber} is posted.`);
       }
+    } else if (req.kind === 'voucher') {
+      const r = d.vouchers.addVoucher(p);
+      res = r.success ? ok(`Approved. Voucher ${r.voucher?.ref} is posted.`) : r;
+      if (r.success) resultRef = r.voucher?.ref;
     } else if (req.kind === 'supplier_payment') {
-      const led = d.recordSupplierPayment(p.supplierId, p.amount, p.notes, p.date);
+      const led = d.recordSupplierPayment(p.supplierId, p.amount, p.notes, p.date, p.bankCode ? { bankCode: p.bankCode } : undefined);
       if (led) {
         resultRef = led.referenceId;
         if (req.branchId) d.setLedger((prev) => prev.map((l) => (l.id === led.id ? { ...l, branchId: req.branchId } : l)));
@@ -1109,6 +1145,7 @@ export const createControlApi = (d: ApiDeps) => {
       case 'supplier_payment': return d.ledger.filter((l) => l.type === 'payment_made').map((l) => l.referenceId);
       case 'po': return d.purchaseOrders.map((p) => p.poNumber);
       case 'purchase_invoice': return (d.purchaseInvoices || []).map((p) => p.invoiceNumber);
+      case 'cpv': case 'crv': case 'bpv': case 'brv': case 'jv': return d.manualJournals.map((j) => j.ref);
       default: return [];
     }
   };
@@ -1313,6 +1350,8 @@ export const createControlApi = (d: ApiDeps) => {
     deleteArea,
     deleteScheme,
     deleteGodown,
+    deleteVoucher,
+    addVoucher,
     exportSystemBackup,
   };
 

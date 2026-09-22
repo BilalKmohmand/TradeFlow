@@ -8,13 +8,15 @@ import { rs } from './ui';
 import { booksLockedFor } from '../../utils/accounting';
 import { ChequeFieldsInput, emptyChequeFields } from './ChequeForms';
 import { CostCentreSelect } from '../finance/common';
+import { BankSelect, bankOpt } from './BankSelect';
+import { needsBank, MAIN_BANK_CODE } from '../../utils/banks';
 
 const EXPENSE_PAID_VIA = ['Cash', 'Bank Transfer', 'Easypaisa / JazzCash', 'Card', 'Credit (unpaid)'];
 
 /** Record an expense: what, how much, which sheet (category) it belongs to, and how it was paid. */
 export const ExpenseModal: React.FC<{ isOpen: boolean; onClose: () => void; date?: string; category?: ExpenseCategory }> = ({ isOpen, onClose, date, category }) => {
   const { addExpense, settings } = useTrading();
-  const [form, setForm] = useState({ date: date || todayISO(), category: (category || 'daily') as ExpenseCategory, amount: '', description: '', paidVia: 'Cash', costCentreId: '' });
+  const [form, setForm] = useState({ date: date || todayISO(), category: (category || 'daily') as ExpenseCategory, amount: '', description: '', paidVia: 'Cash', costCentreId: '', bank: '' });
   const [error, setError] = useState('');
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +25,7 @@ export const ExpenseModal: React.FC<{ isOpen: boolean; onClose: () => void; date
     if (!form.description.trim()) return setError('Write what this expense was for.');
     const closed = booksLockedFor(settings, form.date);
     if (closed) return setError(closed);
-    addExpense({ date: form.date, category: form.category, amount, description: form.description.trim(), paidVia: form.paidVia, truckId: null, dispatchId: null, ...(form.costCentreId ? { costCentreId: form.costCentreId } : {}) });
+    addExpense({ date: form.date, category: form.category, amount, description: form.description.trim(), paidVia: form.paidVia, truckId: null, dispatchId: null, ...(form.costCentreId ? { costCentreId: form.costCentreId } : {}), ...(needsBank(form.paidVia) ? bankOpt(form.bank) : {}) });
     onClose();
   };
   return (
@@ -51,6 +53,7 @@ export const ExpenseModal: React.FC<{ isOpen: boolean; onClose: () => void; date
             <label className={labelCls} htmlFor="exp-via">Paid from</label>
             <select id="exp-via" value={form.paidVia} onChange={(e) => setForm({ ...form, paidVia: e.target.value })} className={inputCls}>{EXPENSE_PAID_VIA.map((v) => <option key={v}>{v}</option>)}</select>
           </div>
+          {needsBank(form.paidVia) && <BankSelect id="exp-bank" className="col-span-2" value={form.bank} onChange={(v) => setForm({ ...form, bank: v })} />}
           <div className="col-span-2 empty:hidden"><CostCentreSelect id="exp-centre" value={form.costCentreId} onChange={(v) => setForm({ ...form, costCentreId: v })} /></div>
         </div>
         <div className="flex justify-end gap-2 pt-2">
@@ -64,9 +67,13 @@ export const ExpenseModal: React.FC<{ isOpen: boolean; onClose: () => void; date
 
 /** Move money between the cash drawer and the bank account (deposit or withdrawal). */
 export const TransferModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const { addCashTransfer, ledger, expenses, cashEntries, customers, suppliers, settings } = useTrading();
+  const { addCashTransfer, ledger, expenses, cashEntries, customers, suppliers, settings, bankAccounts } = useTrading();
   const balances = accountBalancesOn(collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), settings, todayISO());
-  const [from, setFrom] = useState<'cash' | 'bank'>('cash');
+  const [from, setFrom] = useState<'cash' | 'bank' | 'bank2bank'>('cash');
+  const [bank, setBank] = useState(MAIN_BANK_CODE);
+  const [toBank, setToBank] = useState(bankAccounts.find((b) => b.code !== MAIN_BANK_CODE)?.code || '');
+  const many = bankAccounts.length > 1;
+  const bankBal = (code: string) => balances.banks[code || MAIN_BANK_CODE] || 0;
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState('');
@@ -74,9 +81,9 @@ export const TransferModal: React.FC<{ isOpen: boolean; onClose: () => void }> =
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount) || 0;
-    const available = from === 'cash' ? balances.cash : balances.bank;
-    if (amt > available + 0.005) return setError(`Only ${rs(available)} is ${from === 'cash' ? 'in the cash drawer' : 'in the bank'} right now.`);
-    const r = addCashTransfer({ amount: amt, from, date, note: note.trim() || undefined });
+    const available = from === 'cash' ? balances.cash : bankBal(bank);
+    if (amt > available + 0.005) return setError(`Only ${rs(available)} is ${from === 'cash' ? 'in the cash drawer' : `in ${bankAccounts.find((b) => b.code === bank)?.name || 'the bank'}`} right now.`);
+    const r = addCashTransfer({ amount: amt, from: from === 'cash' ? 'cash' : 'bank', date, note: note.trim() || undefined, bankCode: bank, ...(from === 'bank2bank' ? { toBankCode: toBank } : {}) });
     if (!r.success) return setError(r.message);
     onClose();
   };
@@ -84,10 +91,17 @@ export const TransferModal: React.FC<{ isOpen: boolean; onClose: () => void }> =
     <Modal isOpen={isOpen} onClose={onClose} title="Cash ↔ Bank" subtitle="Deposit cash into the bank, or withdraw cash from it.">
       <form onSubmit={submit} className="space-y-4">
         {error && <Notice kind="error">{error}</Notice>}
-        <div className="grid grid-cols-2 gap-2">
+        <div className={`grid ${many ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
           <button type="button" onClick={() => setFrom('cash')} className={`rounded-2xl border p-3 text-sm font-bold ${from === 'cash' ? 'border-teal-600 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300' : 'border-[#E5E5E1] dark:border-[#203248] text-[#6B7280]'}`}>Deposit to bank<div className="text-[11px] font-normal">cash in hand {rs(balances.cash)}</div></button>
           <button type="button" onClick={() => setFrom('bank')} className={`rounded-2xl border p-3 text-sm font-bold ${from === 'bank' ? 'border-teal-600 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300' : 'border-[#E5E5E1] dark:border-[#203248] text-[#6B7280]'}`}>Withdraw cash<div className="text-[11px] font-normal">in bank {rs(balances.bank)}</div></button>
+          {many && <button type="button" onClick={() => setFrom('bank2bank')} className={`rounded-2xl border p-3 text-sm font-bold ${from === 'bank2bank' ? 'border-teal-600 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300' : 'border-[#E5E5E1] dark:border-[#203248] text-[#6B7280]'}`}>Bank → bank<div className="text-[11px] font-normal">{bankAccounts.length} accounts</div></button>}
         </div>
+        {many && (
+          <div className="grid grid-cols-2 gap-3">
+            <BankSelect id="tr-bank" className={from === 'bank2bank' ? '' : 'col-span-2'} label={from === 'bank2bank' ? 'From bank' : 'Bank account'} value={bank} onChange={(v) => { setBank(v); if (v === toBank) setToBank(bankAccounts.find((b) => b.code !== v)?.code || ''); }} balances={balances.banks} />
+            {from === 'bank2bank' && <BankSelect id="tr-to-bank" label="To bank" value={toBank} onChange={setToBank} exclude={bank} balances={balances.banks} />}
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls} htmlFor="tr-amount">Amount (Rs.)</label>
@@ -117,6 +131,7 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
   const [cust, setCust] = useState(customerId || '');
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Cash');
+  const [bank, setBank] = useState('');
   const [note, setNote] = useState('');
   const [cheque, setCheque] = useState(emptyChequeFields());
   const [error, setError] = useState('');
@@ -136,7 +151,7 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
       if (!r.success) return setError(r.message);
       return onClose();
     }
-    recordCustomerPayment(c.id, amt, `${method}${note.trim() ? ` - ${note.trim()}` : ''}`);
+    recordCustomerPayment(c.id, amt, `${method}${note.trim() ? ` - ${note.trim()}` : ''}`, undefined, needsBank(method) ? bankOpt(bank) : {});
     onClose();
   };
   return (
@@ -162,6 +177,7 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
             <label className={labelCls} htmlFor="rc-method">Method</label>
             <select id="rc-method" value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}>{BILL_PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}</select>
           </div>
+          {needsBank(method) && <BankSelect id="rc-bank" className="col-span-2" label="Into bank" value={bank} onChange={setBank} />}
           {isCheque && <ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="rc-chq" />}
           <div className="col-span-2">
             <label className={labelCls} htmlFor="rc-note">Note</label>
@@ -186,6 +202,7 @@ export const PaySupplierModal: React.FC<{ isOpen: boolean; onClose: () => void; 
   const [sup, setSup] = useState(supplierId || '');
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Cash');
+  const [bank, setBank] = useState('');
   const [note, setNote] = useState('');
   const [cheque, setCheque] = useState(emptyChequeFields());
   const [error, setError] = useState('');
@@ -203,12 +220,12 @@ export const PaySupplierModal: React.FC<{ isOpen: boolean; onClose: () => void; 
     if (closed) return setError(closed);
     if (isCheque) {
       // A cheque goes into the cheque register (given, paid from the bank when it clears).
-      const r = issueCheque({ supplierId: s.id, amount: amt, ...cheque, note: note.trim() || undefined });
+      const r = issueCheque({ supplierId: s.id, amount: amt, ...cheque, note: note.trim() || undefined, ...bankOpt(bank) });
       if (!r.success) return setError(r.message);
       if ('pendingApproval' in r && r.pendingApproval) return setSent(r.message);
       return onClose();
     }
-    recordSupplierPayment(s.id, amt, `${method}${note.trim() ? ` - ${note.trim()}` : ''}`);
+    recordSupplierPayment(s.id, amt, `${method}${note.trim() ? ` - ${note.trim()}` : ''}`, undefined, needsBank(method) ? bankOpt(bank) : {});
     if (needsApproval) return setSent(`Sent for approval: ${needsApproval}. Nothing is paid until a manager approves it.`);
     onClose();
   };
@@ -241,6 +258,7 @@ export const PaySupplierModal: React.FC<{ isOpen: boolean; onClose: () => void; 
             <label className={labelCls} htmlFor="ps-method">Method</label>
             <select id="ps-method" value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}>{BILL_PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}</select>
           </div>
+          {(needsBank(method) || isCheque) && <BankSelect id="ps-bank" className="col-span-2" label={isCheque ? 'Cheque drawn on' : 'Paid from bank'} value={bank} onChange={setBank} />}
           {isCheque && <ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="ps-chq" direction="issued" />}
           <div className="col-span-2">
             <label className={labelCls} htmlFor="ps-note">Note</label>

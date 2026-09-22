@@ -22,7 +22,7 @@ export const PARTNER_SCREENS = {
   cityReport: 'city-report',
 } as const;
 
-export type AccountsTab = 'tb' | 'gl' | 'journal' | 'coa' | 'pnl' | 'bs';
+export type AccountsTab = 'tb' | 'gl' | 'journal' | 'coa' | 'pnl' | 'bs' | 'vouchers' | 'ledger' | 'parties';
 export type MoneyTabId = 'overview' | 'expenses' | 'cashbook' | 'cheques' | 'bank';
 
 export type NavTarget =
@@ -61,10 +61,10 @@ export const CLASSIC_BUTTONS: ClassicButton[] = [
   { id: 'daily-purchase', label: 'Daily Purchase', hint: 'Purchases day by day', target: { kind: 'report', report: 'daily-purchase' } },
   { id: 'stock-in-hand', label: 'Stock In Hand', hint: 'Qty and value of every item on a date', target: { kind: 'report', report: 'stock-in-hand' } },
   { id: 'accounts-coding', label: 'Accounts Coding', hint: 'Chart of accounts', target: { kind: 'screen', screen: PARTNER_SCREENS.chartOfAccounts, fallback: { kind: 'accounts', tab: 'coa' } } },
-  { id: 'account-ledger', label: 'Account Ledger', hint: 'Every posting to one account with the running balance', target: { kind: 'screen', screen: PARTNER_SCREENS.accountLedger, fallback: { kind: 'accounts', tab: 'gl' } } },
+  { id: 'account-ledger', label: 'Account Ledger', hint: 'Every posting to one account with the running balance', target: { kind: 'screen', screen: PARTNER_SCREENS.accountLedger, fallback: { kind: 'accounts', tab: 'ledger' } } },
   { id: 'cheque-deposits', label: 'Cheque Deposits Bank', hint: 'Cheque register: cheques in hand, deposited, cleared', target: { kind: 'money', tab: 'cheques' } },
   { id: 'books', label: 'Books', hint: 'Cash book, bank book, day book, journal book, book balances', target: { kind: 'books' } },
-  { id: 'vouchers', label: 'Vouchers', hint: 'Payment, receipt and journal vouchers', target: { kind: 'screen', screen: PARTNER_SCREENS.vouchers, fallback: { kind: 'accounts', tab: 'journal' } } },
+  { id: 'vouchers', label: 'Vouchers', hint: 'Payment, receipt and journal vouchers', target: { kind: 'screen', screen: PARTNER_SCREENS.vouchers, fallback: { kind: 'accounts', tab: 'vouchers' } } },
   { id: 'trial-balances', label: 'Trial Balances', hint: 'Trial balance on a date', target: { kind: 'report', report: 'trial-balance' } },
   { id: 'profit-loss', label: 'Profit & Loss', hint: 'Profit and loss for this financial year', target: { kind: 'report', report: 'profit-loss' } },
   { id: 'balance-sheet', label: 'Balance Sheet', hint: 'What the business owns and owes', target: { kind: 'report', report: 'balance-sheet' } },
@@ -95,7 +95,7 @@ export const REPORTS_MENU: MenuSection[] = [
     label: 'Accounts Reports',
     items: [
       { label: 'Chart of Accounts', target: { kind: 'screen', screen: PARTNER_SCREENS.chartOfAccounts, fallback: { kind: 'accounts', tab: 'coa' } } },
-      { label: 'Account Ledger', target: { kind: 'screen', screen: PARTNER_SCREENS.accountLedger, fallback: { kind: 'accounts', tab: 'gl' } } },
+      { label: 'Account Ledger', target: { kind: 'screen', screen: PARTNER_SCREENS.accountLedger, fallback: { kind: 'accounts', tab: 'ledger' } } },
       { label: 'Accounts Reconciliation', target: { kind: 'money', tab: 'bank' } },
       r('Cash Book', 'cash-book', 'F9'),
       r('Day Book', 'day-book'),
@@ -104,14 +104,14 @@ export const REPORTS_MENU: MenuSection[] = [
       r('Trial Balance Between Dates', 'trial-balance-period'),
       r('Book Balances', 'book-balances'),
       r('Receivable And Payable', 'receivable-payable'),
-      { label: 'Receivable And Payable CityWise', target: { kind: 'screen', screen: PARTNER_SCREENS.cityReport, fallback: { kind: 'report', report: 'receivable-payable' } } },
+      { label: 'Receivable And Payable CityWise', target: { kind: 'screen', screen: PARTNER_SCREENS.cityReport, fallback: { kind: 'accounts', tab: 'parties' } } },
       r('Receivable', 'receivables'),
       r('Payable', 'payables'),
       r('Profit And Loss', 'profit-loss'),
       r('Profit and Loss Between Dates', 'profit-loss-period'),
       r('Balance Sheet', 'balance-sheet'),
       r('Balance Sheet Between Dates', 'balance-sheet-period'),
-      { label: 'Vouchers Printing', target: { kind: 'screen', screen: PARTNER_SCREENS.vouchers, fallback: { kind: 'accounts', tab: 'journal' } } },
+      { label: 'Vouchers Printing', target: { kind: 'screen', screen: PARTNER_SCREENS.vouchers, fallback: { kind: 'accounts', tab: 'vouchers' } } },
     ],
   },
   {

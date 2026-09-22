@@ -22,6 +22,8 @@ import {
 import { BankStatementLine, EXPENSE_CATEGORIES, ExpenseCategory } from '../../types';
 import { formatDate } from '../../utils/formatters';
 import { todayISO } from '../../utils/stockFlow';
+import { BankSelect } from './BankSelect';
+import { MAIN_BANK_CODE, scopeToBank } from '../../utils/banks';
 
 const signed = (n: number) => `${n < 0 ? '−' : '+'} ${rs(Math.abs(n))}`;
 const moveLabel = (m: CashMovement) => `${formatDate(m.date)} • ${m.counterparty ? `${m.counterparty} — ` : ''}${m.description} • ${m.method}`;
@@ -48,8 +50,8 @@ const FIELDS: { key: keyof StatementMapping; label: string; hint?: string }[] = 
  */
 export const BankReconciliationTab: React.FC = () => {
   const {
-    ledger, expenses, cashEntries, customers, suppliers, settings, can, setPrintRequest,
-    bankStatementLines: lines, bankReconciliations: recs,
+    ledger, expenses, cashEntries, customers, suppliers, settings: allSettings, can, setPrintRequest, bankAccounts,
+    bankStatementLines: allLines, bankReconciliations: allRecs,
     addBankStatementLines, deleteBankStatementLine, autoMatchBankLines, matchBankLine, unmatchBankLine, setBankLineIgnored, createEntryFromBankLine, saveBankReconciliation,
   } = useTrading();
   const canDelete = can('delete_records');
@@ -71,7 +73,12 @@ export const BankReconciliationTab: React.FC = () => {
   const [createParty, setCreateParty] = useState('');
   const [filter, setFilter] = useState<'all' | 'unmatched' | 'matched' | 'ignored'>('all');
 
-  const movements = useMemo(() => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), [ledger, expenses, cashEntries, customers, suppliers]);
+  // One bank account at a time: its statement lines, its reconciliations and its own book movements.
+  const [bank, setBank] = useState(MAIN_BANK_CODE);
+  const lines = useMemo(() => allLines.filter((l) => (l.bankCode || MAIN_BANK_CODE) === bank), [allLines, bank]);
+  const recs = useMemo(() => allRecs.filter((r) => (r.bankCode || MAIN_BANK_CODE) === bank), [allRecs, bank]);
+  const allMovements = useMemo(() => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), [ledger, expenses, cashEntries, customers, suppliers]);
+  const { movements, settings } = useMemo(() => scopeToBank(allMovements, allSettings, bank), [allMovements, allSettings, bank]);
   const moveById = useMemo(() => new Map(movements.map((m) => [m.id, m])), [movements]);
 
   const latestLineDate = lines.reduce((mx, l) => (l.date > mx ? l.date : mx), '');
@@ -115,7 +122,7 @@ export const BankReconciliationTab: React.FC = () => {
   const headerCells = pending ? (pending.hasHeader ? pending.rows[0] : pending.rows[0].map((_, i) => `Column ${i + 1}`)) : [];
   const doImport = () => {
     if (!preview || preview.lines.length === 0) return;
-    const r = addBankStatementLines(preview.lines);
+    const r = addBankStatementLines(preview.lines, bank);
     setPending(null);
     setDateInput('');
     setNotice({ kind: 'ok', text: `${r.added} line${r.added === 1 ? '' : 's'} added${r.duplicates ? ` (${r.duplicates} already there, skipped)` : ''}. ${r.matched} matched automatically.` });
@@ -127,27 +134,27 @@ export const BankReconciliationTab: React.FC = () => {
     const date = parseStatementDate(manual.date);
     if (!date) return setNotice({ kind: 'error', text: 'Enter the date of the bank line.' });
     if (!amt || amt <= 0) return setNotice({ kind: 'error', text: 'Enter an amount more than zero.' });
-    const r = addBankStatementLines([{ date, description: manual.description.trim() || 'Bank entry', amount: manual.direction === 'in' ? Math.abs(amt) : -Math.abs(amt), reference: manual.reference.trim() || undefined }]);
+    const r = addBankStatementLines([{ date, description: manual.description.trim() || 'Bank entry', amount: manual.direction === 'in' ? Math.abs(amt) : -Math.abs(amt), reference: manual.reference.trim() || undefined }], bank);
     setManual({ ...manual, description: '', amount: '', reference: '' });
     setNotice({ kind: 'ok', text: r.added ? (r.matched ? 'Line added and matched.' : 'Line added.') : 'That line is already there.' });
   };
 
   // ---- Clearing ---------------------------------------------------------------------------
   const persist = (clearedMovementIds: string[]) =>
-    saveBankReconciliation({ statementDate, closingBalance: closing ?? savedRec?.closingBalance ?? 0, clearedMovementIds, bookBalance: summary.bookBalance, difference: summary.difference, reconciled: savedRec?.reconciled ?? false });
+    saveBankReconciliation({ statementDate, closingBalance: closing ?? savedRec?.closingBalance ?? 0, clearedMovementIds, bookBalance: summary.bookBalance, difference: summary.difference, reconciled: savedRec?.reconciled ?? false, bankCode: bank });
   const setCleared = (ids: string[], cleared: boolean) => {
     const mine = savedRec?.clearedMovementIds || [];
     if (cleared) persist(Array.from(new Set([...mine, ...ids])));
     else {
       recs.filter((r) => r.clearedMovementIds.some((id) => ids.includes(id))).forEach((r) =>
-        saveBankReconciliation({ statementDate: r.statementDate, closingBalance: r.closingBalance, clearedMovementIds: r.clearedMovementIds.filter((id) => !ids.includes(id)), bookBalance: r.bookBalance, difference: r.difference, reconciled: r.reconciled })
+        saveBankReconciliation({ statementDate: r.statementDate, closingBalance: r.closingBalance, clearedMovementIds: r.clearedMovementIds.filter((id) => !ids.includes(id)), bookBalance: r.bookBalance, difference: r.difference, reconciled: r.reconciled, bankCode: r.bankCode })
       );
     }
   };
   const matchedIds = new Set(lines.filter((l) => l.status === 'matched').flatMap((l) => l.matchedMovementIds));
   const saveRec = () => {
     if (closing === null) return setNotice({ kind: 'error', text: 'Type the closing balance from your bank statement first.' });
-    saveBankReconciliation({ statementDate, closingBalance: closing, clearedMovementIds: savedRec?.clearedMovementIds || [], bookBalance: summary.bookBalance, difference: summary.difference, reconciled: summary.reconciled });
+    saveBankReconciliation({ statementDate, closingBalance: closing, clearedMovementIds: savedRec?.clearedMovementIds || [], bookBalance: summary.bookBalance, difference: summary.difference, reconciled: summary.reconciled, bankCode: bank });
     setNotice({ kind: 'ok', text: summary.reconciled ? `Saved. Bank reconciled to ${formatDate(statementDate)}.` : 'Saved. The difference still needs explaining.' });
   };
 
@@ -189,6 +196,7 @@ export const BankReconciliationTab: React.FC = () => {
           <h2 className="font-bold text-[#111827] dark:text-white">Check your bank statement</h2>
           <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Bring in the statement from your bank. Sarmaya pairs each line with the bank entries already in your books (same amount, within 3 days), so you only look at what doesn't match.</p>
         </div>
+        {bankAccounts.length > 1 && <BankSelect id="rec-bank" className="max-w-sm" label="Bank account to reconcile" value={bank} onChange={(v) => { setBank(v); setDateInput(''); }} />}
         {!canEdit && <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">You can view the reconciliation. Importing statements and matching lines needs a manager or admin.</p>}
         {canEdit && <div className="flex flex-wrap gap-2">
           <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} className="hidden" aria-label="Bank statement CSV file" data-testid="bank-csv-input" />
@@ -360,7 +368,7 @@ export const BankReconciliationTab: React.FC = () => {
           <div><label className={labelCls} htmlFor="rec-closing">Closing balance on statement</label><input id="rec-closing" inputMode="decimal" value={closingText} onChange={(e) => setClosingInput({ ...closingInput, [statementDate]: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="e.g. 139750" /></div>
           <div className="flex items-end gap-2">
             <button type="button" onClick={saveRec} className={`${secondaryBtn} flex-1`}><Save className="w-4 h-4" /> Save</button>
-            <button type="button" onClick={() => setPrintRequest({ type: 'bank_reconciliation', statementDate, closingBalance: closing ?? 0 })} className={`${secondaryBtn} flex-1`}><Printer className="w-4 h-4" /> Print</button>
+            <button type="button" onClick={() => setPrintRequest({ type: 'bank_reconciliation', statementDate, closingBalance: closing ?? 0, ...(bank !== MAIN_BANK_CODE ? { bankCode: bank } : {}) })} className={`${secondaryBtn} flex-1`}><Printer className="w-4 h-4" /> Print</button>
           </div>
         </div>
 

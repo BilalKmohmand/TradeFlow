@@ -16,6 +16,9 @@ import { OverLimitBadge, CreditUsageBar } from '../../components/billing/CreditL
 import { CustomerRatesPanel } from '../../components/billing/CustomerRates';
 import { CustomerSalesPanel } from '../../components/billing/SalesTeam';
 import { billNetTotal } from '../../utils/salesDocs';
+import { MapPin } from 'lucide-react';
+import { CityFilter, CitiesModal, PartyBalancesView } from '../../components/billing/PartyBalances';
+import { filterParties } from '../../utils/vouchers';
 
 /** Customers the simple way: who they are, what they owe, and their bills. */
 export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd }) => {
@@ -24,6 +27,9 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
   const wide = useWideLayout();
   const stockUI = useStockUI();
   const [query, setQuery] = useState('');
+  const [city, setCity] = useState('');
+  const [showBalances, setShowBalances] = useState(false);
+  const [showCities, setShowCities] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Customer | null>(null);
   const [deleteBlocked, setDeleteBlocked] = useState<string | null>(null);
@@ -37,32 +43,38 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
   const today = todayISO();
   const canDelete = can('delete_records');
   const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return customers.filter((c) => !q || c.name.toLowerCase().includes(q) || c.phone.includes(q) || (c.code || '').toLowerCase().includes(q) || (c.company || '').toLowerCase().includes(q)).sort((a, b) => b.totalDue - a.totalDue || a.name.localeCompare(b.name));
-  }, [customers, query]);
+    return filterParties<Customer>(customers, query, city).sort((a, b) => b.totalDue - a.totalDue || a.name.localeCompare(b.name));
+  }, [customers, query, city]);
   const owed = customers.reduce((a, c) => a + c.totalDue, 0);
   const open = customers.find((c) => c.id === openId) || null;
   const openBills = open ? billsOnly(invoices).filter((i) => i.customerId === open.id).sort((a, b) => (a.issueDate < b.issueDate ? 1 : -1)) : [];
-  const openPayments = open ? ledger.filter((l) => l.entityType === 'customer' && l.entityId === open.id && (l.type === 'payment_received' || l.type === 'cheque_received' || l.type === 'cheque_returned' || l.type === 'cheque_charge' || l.type === 'interest_charge')).sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
+  const openPayments = open ? ledger.filter((l) => l.entityType === 'customer' && l.entityId === open.id && (l.type === 'payment_received' || l.type === 'cheque_received' || l.type === 'cheque_returned' || l.type === 'cheque_charge' || l.type === 'interest_charge' || l.type === 'voucher' || (l.type === 'refund_paid' && Boolean(l.voucherId)))).sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
 
   return (
     <div className="space-y-5">
       <PageHeader title="Customers" subtitle={<>{customers.length} customer{customers.length === 1 ? '' : 's'}{owed > 0 ? <> • they owe you <span className={moneyCls}>{rs(owed)}</span></> : ''}</>}>
         <button type="button" onClick={() => stockUI.aging('customers')} className={secondaryBtn}><Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" /> Who owes for how long</button>
         <button type="button" onClick={() => ui.salesExtras('hub')} className={secondaryBtn}><Route className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Sales &amp; recovery</button>
-        <CsvButton fileName={`customers-${today}.csv`} table={() => ({ headers: ['Code', 'Name', 'Company', 'Phone', 'Address', 'Balance (Rs.)', 'Credit limit (Rs.)'], rows: rows.map((c) => [c.code || '', c.name, c.company, c.phone, c.address, c.totalDue, c.creditLimit || '']) })} label="Download customers CSV" />
+        <button type="button" onClick={() => setShowBalances(true)} className={secondaryBtn}><MapPin className="w-4 h-4 text-indigo-600 dark:text-indigo-300" /> Receivable by city</button>
+        <CsvButton fileName={`customers-${today}.csv`} table={() => ({ headers: ['Code', 'Name', 'Company', 'Phone', 'City', 'Contact person', 'Sales tax #', 'Fax', 'Address', 'Balance (Rs.)', 'Credit limit (Rs.)'], rows: rows.map((c) => [c.code || '', c.name, c.company, c.phone, c.city || '', c.contactPerson || '', c.salesTaxNo || '', c.fax || '', c.address, c.totalDue, c.creditLimit || '']) })} label="Download customers CSV" />
         <button type="button" onClick={onAdd} className={`${primaryBtn} max-sm:flex-1`}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add customer</button>
       </PageHeader>
-      <div className="relative">
-        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, phone or ID" className={`${inputCls} pl-10`} aria-label="Search customers" />
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1 min-w-0">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, phone or ID" className={`${inputCls} pl-10`} aria-label="Search customers" />
+        </div>
+        <div className="flex gap-2">
+          <CityFilter id="customer-city" value={city} onChange={setCity} />
+          <button type="button" onClick={() => setShowCities(true)} className={`${secondaryBtn} shrink-0`} aria-label="Cities list" title="Cities / towns list"><MapPin className="w-4 h-4" /><span className="sm:hidden">Cities</span></button>
+        </div>
       </div>
       <div className={`${cardCls} overflow-hidden`}>
         {rows.length === 0 ? (
           <EmptyState
             icon={<Users className="w-5 h-5" />}
-            text={query ? 'No customer matches that search.' : 'No customers yet. Add one here, or type a new name while making a bill.'}
-            action={!query && <button type="button" onClick={onAdd} className={secondaryBtn}><Plus className="w-4 h-4" /> Add customer</button>}
+            text={query || city ? 'No customer matches that search.' : 'No customers yet. Add one here, or type a new name while making a bill.'}
+            action={!query && !city && <button type="button" onClick={onAdd} className={secondaryBtn}><Plus className="w-4 h-4" /> Add customer</button>}
           />
         ) : (
           <>
@@ -104,7 +116,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
                           <span className="truncate group-hover:underline">{c.name}</span>
                           <OverLimitBadge customer={c} />
                         </span>
-                        <span className="text-[11px] text-[#6B7280] dark:text-[#8E9299] flex items-center gap-1"><Phone className="w-3 h-3" /> {c.phone || 'no phone'}{c.lastRemindedAt ? <span className="truncate"> • reminded {formatDate(c.lastRemindedAt.slice(0, 10))}</span> : null}</span>
+                        <span className="text-[11px] text-[#6B7280] dark:text-[#8E9299] flex items-center gap-1"><Phone className="w-3 h-3" /> {c.phone || 'no phone'}{c.city ? <span className="truncate"> • {c.city}</span> : null}{c.lastRemindedAt ? <span className="truncate"> • reminded {formatDate(c.lastRemindedAt.slice(0, 10))}</span> : null}</span>
                       </button>
                       {!wide && <div className="shrink-0">{balance}</div>}
                     </div>
@@ -188,6 +200,10 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
           setOpenId(null);
         }}
       />
+      <Modal isOpen={showBalances} onClose={() => setShowBalances(false)} title="Receivable by city" subtitle="Receivable and payable reports, city-wise with subtotals." wide>
+        <PartyBalancesView initialKind="receivable" />
+      </Modal>
+      <CitiesModal isOpen={showCities} onClose={() => setShowCities(false)} />
     </div>
   );
 };

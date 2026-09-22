@@ -380,7 +380,17 @@ export interface CashMovement {
   recordedBy?: string;
   /** id of the underlying record so it can be deleted from the cash book */
   sourceId: string;
+  /** Bank account (chart code) of a bank movement: the record's own bankCode, else the main bank 1010. Empty for cash. */
+  bankCode?: string;
+  /** Voucher (CPV / CRV / BPV / BRV / JV) the movement belongs to. */
+  voucherId?: string;
 }
+
+/** The main bank account's chart code (every bank movement without its own bank goes here). */
+export const MAIN_BANK_CODE = '1010';
+
+/** Bank account of a money record: undefined for cash, else its own bankCode or the main bank. */
+export const bankOfRecord = (method: string | undefined, bankCode?: string): string | undefined => (isCashMethod(method) ? undefined : bankCode || MAIN_BANK_CODE);
 
 export interface CashDay {
   date: string;
@@ -413,28 +423,49 @@ export const collectCashMovements = (
   customers: Customer[],
   suppliers: Supplier[]
 ): CashMovement[] => {
-  const out: CashMovement[] = [];
+  const raw: CashMovement[] = [];
   ledger.forEach((l) => {
     if (l.entityType === 'customer' && l.type === 'payment_received' && l.credit > 0) {
       const c = customers.find((x) => x.id === l.entityId);
-      out.push({ id: `cm-${l.id}`, date: l.date, direction: 'in', amount: l.credit, description: l.description, source: 'customer_payment', counterparty: c?.name || 'Customer', reference: l.referenceId, method: l.method || methodFromDescription(l.description), link: c ? { type: 'customer', id: c.id } : undefined, sourceId: l.id });
+      raw.push({ id: `cm-${l.id}`, date: l.date, direction: 'in', amount: l.credit, description: l.description, source: 'customer_payment', counterparty: c?.name || 'Customer', reference: l.referenceId, method: l.method || methodFromDescription(l.description), link: c ? { type: 'customer', id: c.id } : undefined, sourceId: l.id });
     }
     if (l.entityType === 'customer' && l.type === 'refund_paid' && l.debit > 0) {
       const c = customers.find((x) => x.id === l.entityId);
-      out.push({ id: `cm-${l.id}`, date: l.date, direction: 'out', amount: l.debit, description: l.description, source: 'customer_refund', counterparty: c?.name || 'Customer', reference: l.referenceId, method: l.method || methodFromDescription(l.description), link: c ? { type: 'customer', id: c.id } : undefined, sourceId: l.id });
+      raw.push({ id: `cm-${l.id}`, date: l.date, direction: 'out', amount: l.debit, description: l.description, source: 'customer_refund', counterparty: c?.name || 'Customer', reference: l.referenceId, method: l.method || methodFromDescription(l.description), link: c ? { type: 'customer', id: c.id } : undefined, sourceId: l.id });
     }
     if (l.entityType === 'supplier' && l.type === 'payment_made' && l.credit > 0) {
       const s = suppliers.find((x) => x.id === l.entityId);
-      out.push({ id: `cm-${l.id}`, date: l.date, direction: 'out', amount: l.credit, description: l.description, source: 'supplier_payment', counterparty: s?.company || 'Supplier', reference: l.referenceId, method: l.method || methodFromDescription(l.description), link: s ? { type: 'supplier', id: s.id } : undefined, sourceId: l.id });
+      raw.push({ id: `cm-${l.id}`, date: l.date, direction: 'out', amount: l.credit, description: l.description, source: 'supplier_payment', counterparty: s?.company || 'Supplier', reference: l.referenceId, method: l.method || methodFromDescription(l.description), link: s ? { type: 'supplier', id: s.id } : undefined, sourceId: l.id });
+    }
+    // A cash / bank voucher line on a party that is not a plain payment (e.g. money a supplier paid back).
+    if (l.type === 'voucher' && l.method && (l.debit > 0 || l.credit > 0)) {
+      const isCust = l.entityType === 'customer';
+      const party = isCust ? customers.find((x) => x.id === l.entityId) : suppliers.find((x) => x.id === l.entityId);
+      // Customer: debit = money out to them; supplier: debit (owed more) = money in from them.
+      const amount = l.debit > 0 ? l.debit : l.credit;
+      const direction: 'in' | 'out' = isCust ? (l.debit > 0 ? 'out' : 'in') : l.debit > 0 ? 'in' : 'out';
+      const name = party ? (isCust ? party.name : (party as Supplier).company || party.name) : isCust ? 'Customer' : 'Supplier';
+      raw.push({ id: `cm-${l.id}`, date: l.date, direction, amount, description: l.description, source: isCust ? (direction === 'in' ? 'customer_payment' : 'customer_refund') : 'supplier_payment', counterparty: name, reference: l.referenceId, method: l.method, link: party ? { type: l.entityType, id: party.id } : undefined, sourceId: l.id });
     }
   });
   expenses.filter((e) => e.paidVia !== 'Credit (unpaid)').forEach((e) => {
-    out.push({ id: `cm-${e.id}`, date: e.date, direction: 'out', amount: e.amount, description: e.description, source: 'expense', counterparty: EXPENSE_CATEGORIES.find((c) => c.id === e.category)?.label || e.category, method: e.paidVia, recordedBy: e.createdBy, sourceId: e.id });
+    raw.push({ id: `cm-${e.id}`, date: e.date, direction: 'out', amount: e.amount, description: e.description, source: 'expense', counterparty: EXPENSE_CATEGORIES.find((c) => c.id === e.category)?.label || e.category, method: e.paidVia, recordedBy: e.createdBy, sourceId: e.id });
   });
   cashEntries.forEach((c) => {
-    out.push({ id: `cm-${c.id}`, date: c.date, direction: c.direction, amount: c.amount, description: c.description, source: 'manual', method: c.method, recordedBy: c.createdBy, sourceId: c.id });
+    raw.push({ id: `cm-${c.id}`, date: c.date, direction: c.direction, amount: c.amount, description: c.description, source: 'manual', method: c.method, recordedBy: c.createdBy, sourceId: c.id });
   });
-  return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  // Bank account and voucher of each movement, from the record it came from.
+  const extra = new Map<string, { bankCode?: string; voucherId?: string }>();
+  ledger.forEach((l) => { if (l.bankCode || l.voucherId) extra.set(l.id, { bankCode: l.bankCode, voucherId: l.voucherId }); });
+  expenses.forEach((e) => { if (e.bankCode || e.voucherId) extra.set(e.id, { bankCode: e.bankCode, voucherId: e.voucherId }); });
+  cashEntries.forEach((c) => { if (c.bankCode || c.voucherId) extra.set(c.id, { bankCode: c.bankCode, voucherId: c.voucherId }); });
+  raw.forEach((m) => {
+    const x = extra.get(m.sourceId);
+    const bank = bankOfRecord(m.method, x?.bankCode);
+    if (bank) m.bankCode = bank;
+    if (x?.voucherId) m.voucherId = x.voucherId;
+  });
+  return raw.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 };
 
 export const buildCashBook = (movements: CashMovement[], settings: AppSettings, from: string, to: string): CashBook => {
@@ -471,21 +502,30 @@ export const cashBalanceOn = (movements: CashMovement[], settings: AppSettings, 
 // ---------------------------------------------------------------------------
 export interface AccountBalances {
   cash: number;
+  /** All bank accounts together. */
   bank: number;
   total: number;
+  /** Balance of each bank account by chart code (1010 = the main bank, 1011, 1012… = the others). */
+  banks: Record<string, number>;
 }
 
 export const accountBalancesOn = (movements: CashMovement[], settings: AppSettings, asOf: string): AccountBalances => {
   let cash = settings.cashOpeningBalance || 0;
-  let bank = settings.openingBankBalance || 0;
+  const banks: Record<string, number> = { [MAIN_BANK_CODE]: Number(settings.openingBankBalance) || 0 };
+  Object.entries(settings.bankOpenings || {}).forEach(([code, v]) => { if (code !== MAIN_BANK_CODE) banks[code] = (banks[code] || 0) + (Number(v) || 0); });
   movements
     .filter((m) => m.date >= settings.cashOpeningDate && m.date <= asOf)
     .forEach((m) => {
       const signed = m.direction === 'in' ? m.amount : -m.amount;
       if (isCashMethod(m.method)) cash += signed;
-      else bank += signed;
+      else {
+        const code = m.bankCode || MAIN_BANK_CODE;
+        banks[code] = (banks[code] || 0) + signed;
+      }
     });
-  return { cash: round2(cash), bank: round2(bank), total: round2(cash + bank) };
+  Object.keys(banks).forEach((k) => (banks[k] = round2(banks[k])));
+  const bank = round2(Object.values(banks).reduce((a, v) => a + v, 0));
+  return { cash: round2(cash), bank, total: round2(cash + bank), banks };
 };
 
 /** Everything the business owes and is owed, for the Money screen. */

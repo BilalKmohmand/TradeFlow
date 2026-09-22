@@ -41,6 +41,11 @@ export const DOC_SERIES: { key: DocSeriesKey; label: string; example: string }[]
   { key: 'supplier_payment', label: 'Supplier payments', example: 'SUP-PAY-' },
   { key: 'po', label: 'Purchase orders', example: 'PO-' },
   { key: 'purchase_invoice', label: 'Purchase invoices', example: 'P-' },
+  { key: 'cpv', label: 'Cash payment vouchers (CPV)', example: 'CPV-' },
+  { key: 'crv', label: 'Cash receipt vouchers (CRV)', example: 'CRV-' },
+  { key: 'bpv', label: 'Bank payment vouchers (BPV)', example: 'BPV-' },
+  { key: 'brv', label: 'Bank receipt vouchers (BRV)', example: 'BRV-' },
+  { key: 'jv', label: 'Journal vouchers (JV)', example: 'JV-' },
 ];
 
 /** Defaults keep the numbers the app always used (INV-1, CN-1, DN-1, QT-1, PO-1…). */
@@ -53,6 +58,11 @@ export const DEFAULT_SERIES: Record<DocSeriesKey, DocSeriesConfig> = {
   supplier_payment: { prefix: 'SUP-PAY-', yearly: false, pad: 0 },
   po: { prefix: 'PO-', yearly: false, pad: 0 },
   purchase_invoice: { prefix: 'P-', yearly: false, pad: 0 },
+  cpv: { prefix: 'CPV-', yearly: false, pad: 0 },
+  crv: { prefix: 'CRV-', yearly: false, pad: 0 },
+  bpv: { prefix: 'BPV-', yearly: false, pad: 0 },
+  brv: { prefix: 'BRV-', yearly: false, pad: 0 },
+  jv: { prefix: 'JV-', yearly: false, pad: 0 },
 };
 
 export const seriesConfig = (settings: Pick<AppSettings, 'numberSeries'>, key: DocSeriesKey): DocSeriesConfig => ({
@@ -205,7 +215,7 @@ export const partyBalancesForBranch = <T extends BranchSources & { customers: Cu
 
 /** Opening cash / bank balances belong to the main branch. */
 export const settingsForBranch = (settings: AppSettings, branchId: string | null | undefined, main: string | null): AppSettings =>
-  !branchId || branchId === 'all' || branchId === main ? settings : { ...settings, cashOpeningBalance: 0, openingBankBalance: 0 };
+  !branchId || branchId === 'all' || branchId === main ? settings : { ...settings, cashOpeningBalance: 0, openingBankBalance: 0, bankOpenings: {} };
 
 // ---------------------------------------------------------------------------
 // Owner dashboard

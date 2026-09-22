@@ -413,11 +413,11 @@ describe('QA: one shop, every feature, books always in step', () => {
 
 /**
  * Columns in supabase/setup.sql (CREATE TABLE + ALTER TABLE … ADD COLUMN), by table — plus the
- * newest migration not yet folded into setup.sql (migrate_v23_fixes.sql), when it is there.
+ * newest migrations not yet folded into setup.sql (migrate_v23_fixes.sql, migrate_v24_vouchers_banks.sql), when there.
  */
 const cloudColumns = (): Map<string, Set<string>> => {
   const read = (f: string) => (existsSync(resolve(__dirname, `../../supabase/${f}`)) ? readFileSync(resolve(__dirname, `../../supabase/${f}`), 'utf8') : '');
-  const sql = `${read('setup.sql')}\n${read('migrate_v23_fixes.sql')}\n${read('migrate_v25_invoices_reports.sql')}`.replace(/--[^\n]*/g, '');
+  const sql = `${read('setup.sql')}\n${read('migrate_v23_fixes.sql')}\n${read('migrate_v24_vouchers_banks.sql')}\n${read('migrate_v25_invoices_reports.sql')}`.replace(/--[^\n]*/g, '');
   const cols = new Map<string, Set<string>>();
   const add = (t: string, c: string) => { if (!cols.has(t)) cols.set(t, new Set()); cols.get(t)!.add(c); };
   const create = /CREATE TABLE IF NOT EXISTS\s+(\w+)\s*\(([\s\S]*?)\n\);/g;
