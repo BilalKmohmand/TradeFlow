@@ -3,7 +3,7 @@ import { trialBalanceCsv, generalLedgerCsv, profitLossCsv, balanceSheetCsv } fro
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Printer, Trash2, Lock, Unlock, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
-import { useBillingUI } from '../../components/billing/BillingUI';
+import { useBillingUI, useCurrentView } from '../../components/billing/BillingUI';
 import { Notice, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, rs, PageHeader, pillCls } from '../../components/billing/ui';
 import { JournalEntryModal } from '../../components/accounting/JournalEntryModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -58,6 +58,10 @@ const TABS: { id: Tab; label: string; help: string }[] = [
   { id: 'year', label: 'Year end', help: 'Financial year setting and closing a finished year.' },
 ];
 
+/** The Accounts tabs (the nav map has an entry for each). */
+export const ACCOUNTS_TABS: readonly Tab[] = TABS.map((t) => t.id);
+export const ACCOUNTS_TAB_NAMES: Readonly<Record<string, string>> = Object.fromEntries(TABS.map((t) => [t.id, t.label]));
+
 /** Tabs that take a date or date range: they get the "Financial year" shortcut. */
 const DATED_TABS: Tab[] = ['tb', 'gl', 'journal', 'pnl', 'bs', 'ledger'];
 
@@ -79,8 +83,18 @@ export const AccountsScreen: React.FC = () => {
   const today = todayISO();
   // The classic menu can open a tab (Accounts Coding → chart of accounts, Account Ledger → general ledger…).
   const [tab, setTab] = useState<Tab>(() => ui.accountsTabRequest?.tab || 'tb');
+  const [newJournal, setNewJournal] = useState(() => (ui.accountsTabRequest?.tab === 'journal' && ui.accountsTabRequest.sub === 'new' ? 1 : 0));
   const tabReq = ui.accountsTabRequest?.n;
-  useEffect(() => { if (ui.accountsTabRequest) setTab(ui.accountsTabRequest.tab); }, [tabReq]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A step inside the tab: "new:CPV" (a new voucher of that type), "view:<id>" (one voucher), "new" (journal entry).
+  const [voucherReq, setVoucherReq] = useState<{ sub: string; n: number } | null>(() => (ui.accountsTabRequest?.sub && ui.accountsTabRequest.tab === 'vouchers' ? { sub: ui.accountsTabRequest.sub, n: ui.accountsTabRequest.n } : null));
+  useEffect(() => {
+    const r = ui.accountsTabRequest;
+    if (!r) return;
+    setTab(r.tab);
+    if (r.tab === 'vouchers' && r.sub) setVoucherReq({ sub: r.sub, n: r.n });
+    if (r.tab === 'journal' && r.sub === 'new' && can('finance:view_pnl')) setNewJournal((x) => x + 1);
+  }, [tabReq]); // eslint-disable-line react-hooks/exhaustive-deps
+  useCurrentView('accounts', tab);
   const [asOf, setAsOf] = useState(today);
   const [from, setFrom] = useState(`${today.slice(0, 7)}-01`);
   const [to, setTo] = useState(today);
@@ -91,7 +105,6 @@ export const AccountsScreen: React.FC = () => {
   const [jSource, setJSource] = useState<'all' | 'auto' | 'manual'>('all');
   const [jSearch, setJSearch] = useState('');
   const [jLimit, setJLimit] = useState(50);
-  const [newJournal, setNewJournal] = useState(0);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [acc, setAcc] = useState<{ code: string; name: string; type: AccountType; description: string; parent: string }>({ code: '', name: '', type: 'expense', description: '', parent: '' });
   const [lockDate, setLockDate] = useState(settings.booksLockedUntil || '');
@@ -210,7 +223,7 @@ export const AccountsScreen: React.FC = () => {
       )}
       {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
 
-      {tab === 'vouchers' && <VouchersTab accounts={accounts} flash={flash} />}
+      {tab === 'vouchers' && <VouchersTab accounts={accounts} flash={flash} request={voucherReq} />}
       {tab === 'ledger' && <AccountLedgerTab key={`ledger-${ledgerRef.n}`} accounts={accounts} journal={journal} initial={ledgerRef.ref} from={from} to={to} setFrom={setFrom} setTo={setTo} />}
       {tab === 'parties' && <PartyBalancesView />}
 
@@ -368,7 +381,7 @@ export const AccountsScreen: React.FC = () => {
             <div className="col-span-2 sm:col-span-1 flex items-end"><button type="submit" className={`${primaryBtn} w-full`}>Add account</button></div>
           </form>}
           {isAdminUnlocked && can('admin_screen') && (
-            <div className={`${cardCls} p-4 sm:p-5 flex flex-col sm:flex-row sm:items-end gap-3`}>
+            <div data-nav-anchor="period-lock" className={`${cardCls} p-4 sm:p-5 flex flex-col sm:flex-row sm:items-end gap-3`}>
               <div className="flex-1 min-w-0">
                 <h2 className="font-bold text-[#111827] dark:text-white">Close the books (period lock)</h2>
                 <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">After the accountant has finished a period, lock it so nobody can add or delete anything dated on or before this date — bills, payments, expenses, transfers or journals.</p>

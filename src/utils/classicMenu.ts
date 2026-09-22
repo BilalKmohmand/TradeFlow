@@ -1,7 +1,7 @@
 /**
  * The "Apna Accountant SB" menus, with the names the shop's staff know, mapped onto Sarmaya's screens.
  *
- *  - CLASSIC_BUTTONS: the 16 big buttons of the old program's home screen.
+ *  - (the 16 big Home buttons: see navMap.ts CLASSIC_BUTTONS)
  *  - REPORTS_MENU: the old Reports menu (Accounts Reports / Inventory Reports / Pending Delivery).
  *  - BOOKS_MENU: what the "Books" button opens (cash book, bank book, day book, journal book, balances).
  *
@@ -22,7 +22,7 @@ export const PARTNER_SCREENS = {
   cityReport: 'city-report',
 } as const;
 
-export type AccountsTab = 'tb' | 'gl' | 'journal' | 'coa' | 'pnl' | 'bs' | 'vouchers' | 'ledger' | 'parties';
+export type AccountsTab = 'tb' | 'gl' | 'journal' | 'coa' | 'pnl' | 'bs' | 'vouchers' | 'ledger' | 'parties' | 'profit' | 'cashflow' | 'assets' | 'staff' | 'budget' | 'centres' | 'year';
 export type MoneyTabId = 'overview' | 'expenses' | 'cashbook' | 'cheques' | 'bank';
 
 export type NavTarget =
@@ -43,32 +43,7 @@ export const screenAvailable = (id: string): boolean => (ACTIVE_SCREENS as reado
 export const resolveTarget = (t: NavTarget): Exclude<NavTarget, { kind: 'screen' }> | { kind: 'screen'; screen: string; fallback: NavTarget } =>
   t.kind === 'screen' && !screenAvailable(t.screen) ? (resolveTarget(t.fallback) as Exclude<NavTarget, { kind: 'screen' }>) : t;
 
-export interface ClassicButton {
-  id: string;
-  label: string;
-  /** What it opens, in plain words (tooltip). */
-  hint: string;
-  target: NavTarget;
-}
-
-export const CLASSIC_BUTTONS: ClassicButton[] = [
-  { id: 'product-coding', label: 'Product Coding', hint: 'Items & Prices: add or change products, codes, units and prices', target: { kind: 'items' } },
-  { id: 'sale-invoice', label: 'Sale Invoice', hint: 'Make a new bill (F2)', target: { kind: 'newBill' } },
-  { id: 'purchase-invoice', label: 'Purchase Invoice', hint: 'Enter a supplier’s bill: stock in, supplier owed', target: { kind: 'newPurchase' } },
-  { id: 'product-list', label: 'Product List', hint: 'Codes, prices, last sale and purchase rates', target: { kind: 'report', report: 'rate-list' } },
-  { id: 'daily-gross-profit', label: 'Daily Gross Profit', hint: 'Sales, cost and gross profit day by day', target: { kind: 'report', report: 'daily-gross-profit' } },
-  { id: 'daily-sale', label: 'Daily Sale', hint: 'Bills and sale day by day', target: { kind: 'report', report: 'daily-sale' } },
-  { id: 'daily-purchase', label: 'Daily Purchase', hint: 'Purchases day by day', target: { kind: 'report', report: 'daily-purchase' } },
-  { id: 'stock-in-hand', label: 'Stock In Hand', hint: 'Qty and value of every item on a date', target: { kind: 'report', report: 'stock-in-hand' } },
-  { id: 'accounts-coding', label: 'Accounts Coding', hint: 'Chart of accounts', target: { kind: 'screen', screen: PARTNER_SCREENS.chartOfAccounts, fallback: { kind: 'accounts', tab: 'coa' } } },
-  { id: 'account-ledger', label: 'Account Ledger', hint: 'Every posting to one account with the running balance', target: { kind: 'screen', screen: PARTNER_SCREENS.accountLedger, fallback: { kind: 'accounts', tab: 'ledger' } } },
-  { id: 'cheque-deposits', label: 'Cheque Deposits Bank', hint: 'Cheque register: cheques in hand, deposited, cleared', target: { kind: 'money', tab: 'cheques' } },
-  { id: 'books', label: 'Books', hint: 'Cash book, bank book, day book, journal book, book balances', target: { kind: 'books' } },
-  { id: 'vouchers', label: 'Vouchers', hint: 'Payment, receipt and journal vouchers', target: { kind: 'screen', screen: PARTNER_SCREENS.vouchers, fallback: { kind: 'accounts', tab: 'vouchers' } } },
-  { id: 'trial-balances', label: 'Trial Balances', hint: 'Trial balance on a date', target: { kind: 'report', report: 'trial-balance' } },
-  { id: 'profit-loss', label: 'Profit & Loss', hint: 'Profit and loss for this financial year', target: { kind: 'report', report: 'profit-loss' } },
-  { id: 'balance-sheet', label: 'Balance Sheet', hint: 'What the business owns and owes', target: { kind: 'report', report: 'balance-sheet' } },
-];
+/** The 16 Home buttons now live in the nav map (utils/navMap.ts CLASSIC_BUTTONS), so buttons and menus never drift. */
 
 export interface MenuEntry {
   label: string;

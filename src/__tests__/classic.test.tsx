@@ -14,7 +14,8 @@ import { todayISO, shiftDate } from '../utils/stockFlow';
 import { ACC, accountBalance, buildJournal, trialBalance, mergeAccounts, balanceSheet } from '../utils/accounting';
 import { landedPosting, purchaseInvoiceTotals, matchesPurchaseInvoice } from '../utils/purchaseInvoices';
 import { REPORTS, ReportData, ReportFilter, ReportId, bookBalances, dailyGrossProfit, dailyPurchase, dailySale, deliveryBills, productTotals, rateList, receivablePayable, reportCsv, stockOn, trialBalanceBetween, defaultFilter } from '../utils/classicReports';
-import { BOOKS_MENU, CLASSIC_BUTTONS, PARTNER_SCREENS, REPORTS_MENU, allMenuEntries, isSubmenu, resolveTarget, screenAvailable } from '../utils/classicMenu';
+import { BOOKS_MENU, REPORTS_MENU, allMenuEntries, isSubmenu, resolveTarget, screenAvailable } from '../utils/classicMenu';
+import { CLASSIC_BUTTONS, classicEntry } from '../utils/navMap';
 import { filterBills } from '../utils/billing';
 import { findBillByNumber } from '../components/billing/NewBillModal';
 import { findPurchaseInvoice } from '../components/billing/classic/PurchaseInvoiceModal';
@@ -398,13 +399,13 @@ describe('classic menu', () => {
       'Product Coding', 'Sale Invoice', 'Purchase Invoice', 'Product List', 'Daily Gross Profit', 'Daily Sale', 'Daily Purchase', 'Stock In Hand',
       'Accounts Coding', 'Account Ledger', 'Cheque Deposits Bank', 'Books', 'Vouchers', 'Trial Balances', 'Profit & Loss', 'Balance Sheet',
     ]);
+    // Each button is a nav-map entry, so it opens exactly what the top menus open.
     CLASSIC_BUTTONS.forEach((b) => {
-      const t = resolveTarget(b.target);
-      if (t.kind === 'report') expect(REPORTS[t.report], b.label).toBeTruthy();
-      // Partner screens that do not exist yet open their fallback (never an unknown screen).
+      const t = classicEntry(b).target;
+      if (t.kind === 'report' && t.report !== 'books' && t.report !== 'menu') expect(REPORTS[t.report], b.label).toBeTruthy();
       if (t.kind === 'screen') expect(screenAvailable(t.screen), b.label).toBe(true);
     });
-    expect(resolveTarget(CLASSIC_BUTTONS.find((b) => b.id === 'accounts-coding')!.target)).toEqual(screenAvailable(PARTNER_SCREENS.chartOfAccounts) ? { kind: 'screen', screen: 'chart-of-accounts', fallback: { kind: 'accounts', tab: 'coa' } } : { kind: 'accounts', tab: 'coa' });
+    expect(classicEntry(CLASSIC_BUTTONS.find((b) => b.id === 'accounts-coding')!).target).toEqual({ kind: 'screen', screen: 'accounts', view: 'coa' });
   });
   it('the Reports menu is laid out like the old one and every entry opens a report or a screen', () => {
     expect(REPORTS_MENU.map((s) => s.label)).toEqual(['Accounts Reports', 'Inventory Reports', 'Pending Delivery']);

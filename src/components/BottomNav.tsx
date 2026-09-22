@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Gauge, Home, FileText, Coins, MoreHorizontal, Plus, Users, Layers, Tag, CalendarDays, BookOpen, ShieldCheck, Sun, Moon, Sparkles, Bell, KeyRound, Lock, LogOut, ChevronDown, ArrowLeftRight, PackagePlus, Library } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Gauge, Home, FileText, Coins, MoreHorizontal, Plus, Users, Layers, Tag, CalendarDays, BookOpen, ShieldCheck, Sun, Moon, Sparkles, Bell, KeyRound, Lock, LogOut, ChevronDown, ArrowLeftRight, PackagePlus, Library, Search, X, ChevronRight } from 'lucide-react';
 import { ClassicMenu } from './billing/classic/ClassicMenu';
 import { useTrading } from '../context/TradingContext';
 import { useTheme, ThemeMode } from '../context/ThemeContext';
@@ -9,6 +9,10 @@ import { MyAccountDialog } from './MyAccountDialog';
 import { computeAlerts } from '../utils/alerts';
 import { ActiveScreen } from '../types';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { NavEntry, NavGroupId } from '../utils/navMap';
+import { OPEN_MENU_EVENT, useNavGo, useNavGroups } from './nav/useNavGo';
+import { useFindAnything, FindItem } from './nav/useFindAnything';
+import { FindResults, useResultKeys } from './nav/FindAnything';
 
 type Icon = React.FC<{ className?: string }>;
 
@@ -27,6 +31,22 @@ export const BottomNav: React.FC = () => {
   const [moreOpen, setMoreOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  // More sheet: search at the top, then the five menus as collapsible groups.
+  const [query, setQuery] = useState('');
+  const [openGroup, setOpenGroup] = useState<NavGroupId | null>(null);
+  const navGroups = useNavGroups();
+  const navGo = useNavGo();
+  const results = useFindAnything(query);
+  const pickResult = (it: FindItem) => { setMoreOpen(false); it.run(); };
+  const keys = useResultKeys(results, query, pickResult);
+  const pickEntry = (e: NavEntry) => { setMoreOpen(false); navGo(e.target); };
+  useEffect(() => { if (!moreOpen) { setQuery(''); setOpenGroup(null); } }, [moreOpen]);
+  // The breadcrumb's group name opens the sheet on that group.
+  useEffect(() => {
+    const on = (e: Event) => { setOpenGroup((e as CustomEvent).detail as NavGroupId); setMoreOpen(true); };
+    window.addEventListener(OPEN_MENU_EVENT, on);
+    return () => window.removeEventListener(OPEN_MENU_EVENT, on);
+  }, []);
   const alerts = useMemo(
     () => computeAlerts({ products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders }, new Date().toISOString().split('T')[0]),
     [products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders]
@@ -123,6 +143,29 @@ export const BottomNav: React.FC = () => {
 
       <Modal isOpen={moreOpen} onClose={() => setMoreOpen(false)} title="More">
         <div className="space-y-5">
+          <div>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-teal-700 dark:text-teal-300" />
+              <input
+                data-skip-autofocus
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={keys.onKeyDown}
+                aria-label="Find anything"
+                placeholder="Find anything: bill, customer, udhaar, CPV…"
+                className="w-full min-h-12 pl-10 pr-10 rounded-2xl bg-[#F4F3EF] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-base font-semibold text-[#111827] dark:text-white placeholder:font-normal placeholder:text-[#9CA3AF] focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600"
+              />
+              {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear search" className="absolute right-1 top-1/2 -translate-y-1/2 p-2.5 rounded-xl text-[#6B7280]"><X className="w-4 h-4" /></button>}
+            </div>
+            {query.trim() && (
+              <div className="mt-3" data-testid="more-search-results">
+                {keys.flat.length === 0 ? <p className="px-2 py-3 text-sm text-[#6B7280] dark:text-[#94A3B8]">Nothing found for “{query}”. Try bill, khata, udhaar, cheque, stock…</p> : <FindResults sections={results} active={keys.active} onPick={pickResult} idPrefix="more-find" compact />}
+              </div>
+            )}
+          </div>
+
+          {!query.trim() && <>
           <div className="grid grid-cols-3 gap-2">
             {moreScreens.map((s) => {
               const I = s.icon;
@@ -145,6 +188,55 @@ export const BottomNav: React.FC = () => {
                 </button>
               );
             })}
+          </div>
+
+          <div data-testid="more-menus">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">All options</div>
+            <div className="rounded-2xl border border-[#E5E5E1] dark:border-[#203248] divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] overflow-hidden">
+              {navGroups.map((g) => {
+                const on = openGroup === g.id;
+                const count = g.sections.reduce((a, sec) => a + sec.entries.length, 0);
+                return (
+                  <div key={g.id}>
+                    <button type="button" aria-expanded={on} aria-controls={`more-group-${g.id}`} onClick={() => setOpenGroup(on ? null : g.id)} data-testid={`more-group-${g.id}`} className={`${rowCls} rounded-none text-[#111827] dark:text-white`}>
+                      <span className="flex-1 min-w-0">
+                        <span className="block font-bold">{g.label}</span>
+                        <span className="block text-[11px] font-medium text-[#6B7280] dark:text-[#94A3B8] truncate">{g.hint} · {count}</span>
+                      </span>
+                      <ChevronDown className={`w-4 h-4 text-[#8E9299] shrink-0 transition-transform ${on ? 'rotate-180' : ''}`} />
+                    </button>
+                    {on && (
+                      <div id={`more-group-${g.id}`} role="group" aria-label={g.label} className="pb-2 bg-[#FAF9F6] dark:bg-[#0D1520]">
+                        {g.sections.map((sec) => {
+                          let lastSub: string | undefined;
+                          return (
+                            <div key={sec.label} className="pt-2">
+                              <div className="px-4 pb-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-teal-800 dark:text-teal-300">{sec.label}</div>
+                              {sec.entries.map((e) => {
+                                const head = e.sub && e.sub !== lastSub ? e.sub : null;
+                                lastSub = e.sub;
+                                return (
+                                  <React.Fragment key={e.id}>
+                                    {head && <div className="px-4 pt-1.5 text-[11px] font-bold text-[#374151] dark:text-[#CBD5E1]">{head} ›</div>}
+                                    <button type="button" onClick={() => pickEntry(e)} aria-label={e.label} className="w-full min-h-11 flex items-center gap-2 px-4 py-1.5 text-left hover:bg-white dark:hover:bg-[#162436]">
+                                      <span className="flex-1 min-w-0">
+                                        <span className="block text-sm font-semibold text-[#111827] dark:text-white truncate">{e.label}</span>
+                                        <span className="block text-[11px] text-[#6B7280] dark:text-[#94A3B8] truncate">{e.hint}</span>
+                                      </span>
+                                      <ChevronRight className="w-4 h-4 text-[#9CA3AF] shrink-0" />
+                                    </button>
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {settings.classicMenu !== false && (
@@ -217,6 +309,7 @@ export const BottomNav: React.FC = () => {
               </button>
             </div>
           )}
+          </>}
         </div>
       </Modal>
       <MyAccountDialog isOpen={accountOpen} onClose={() => setAccountOpen(false)} />

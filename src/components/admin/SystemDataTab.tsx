@@ -213,10 +213,10 @@ export const SystemDataTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <AutoBackupsPanel />
+      <div data-nav-anchor="auto-backups"><AutoBackupsPanel /></div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Sign-in & session (the old master PIN is gone: everyone signs in with username + password) */}
-        <div className={cardCls}>
+        <div className={cardCls} data-nav-anchor="sign-in">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-900">
               <KeyRound className="w-5 h-5" />
@@ -252,7 +252,7 @@ export const SystemDataTab: React.FC = () => {
         </div>
 
         {/* Backup & Restore */}
-        <div className={cardCls}>
+        <div className={cardCls} data-nav-anchor="backups">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-900">
               <Database className="w-5 h-5" />
@@ -317,7 +317,7 @@ export const SystemDataTab: React.FC = () => {
       </div>
 
       {/* Company & Invoicing */}
-      <div className={cardCls}>
+      <div className={cardCls} data-nav-anchor="company">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-900">
             <Receipt className="w-5 h-5" />
@@ -408,11 +408,11 @@ export const SystemDataTab: React.FC = () => {
       </div>
 
       {/* Bills: paper size, footer, previous balance, short stock */}
-      <BillSettingsCard />
-      <RemindersSettingsCard />
+      <div data-nav-anchor="bill-settings"><BillSettingsCard /></div>
+      <div data-nav-anchor="reminders"><RemindersSettingsCard /></div>
 
       {/* CSV Data Exports */}
-      <div className={cardCls}>
+      <div className={cardCls} data-nav-anchor="exports">
         <h3 className="text-base font-bold text-[#111827] dark:text-white">Master Data CSV Exports</h3>
         <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Download full raw data for reporting in spreadsheet software.</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">

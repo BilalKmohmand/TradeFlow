@@ -27,6 +27,8 @@ import {
   KeyRound,
 } from 'lucide-react';
 import { MyAccountDialog } from './MyAccountDialog';
+import { MenuBar } from './nav/MenuBar';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useMemo } from 'react';
 import { computeAlerts } from '../utils/alerts';
 import { useTrading } from '../context/TradingContext';
@@ -80,6 +82,19 @@ export const Navbar: React.FC<NavbarProps> = ({
     [products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders]
   );
   const themeMenuRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  // Sticky things under the header (sidebar, table heads, anchored cards) read its height from --header-h.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const set = () => document.documentElement.style.setProperty('--header-h', `${el.offsetHeight}px`);
+    set();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Close theme menu when clicking outside
   useEffect(() => {
@@ -126,7 +141,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
 
   return (
-    <header className="print:hidden sticky top-0 z-30 bg-white/90 dark:bg-[#101A26]/90 backdrop-blur-md border-b border-[#E5E5E1] dark:border-[#203248] text-[#111827] dark:text-[#F1F5F9] shadow-xs transition-colors pt-[env(safe-area-inset-top)]">
+    <header ref={headerRef} className="print:hidden sticky top-0 z-30 bg-white/90 dark:bg-[#101A26]/90 backdrop-blur-md border-b border-[#E5E5E1] dark:border-[#203248] text-[#111827] dark:text-[#F1F5F9] shadow-xs transition-colors pt-[env(safe-area-inset-top)]">
       <div className="min-w-0 w-full mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between min-h-14 sm:min-h-16 min-w-0 py-2 sm:py-3 gap-2 sm:gap-4">
           {/* Logo & Brand: the shop name wraps to two lines on phones instead of being cut off. */}
@@ -146,22 +161,24 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Search (Ctrl/⌘ K): a real search field look on wider screens, an icon on phones. */}
+          {/* Find anything (Ctrl/⌘ K or "/"): a real search box on wider screens, an icon on phones. */}
           <button
             type="button"
             onClick={onOpenCommandBar}
-            aria-label="Search"
-            aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
-            title={`Search customers, bills, items… (${isMac ? '⌘K' : 'Ctrl+K'})`}
-            className="group shrink-0 flex items-center justify-center sm:justify-between gap-2 w-11 h-11 sm:w-60 lg:w-72 xl:w-80 sm:h-10 sm:px-3.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] hover:bg-white dark:hover:bg-[#1E2E40] border border-[#E5E5E1] dark:border-[#2A3F5A] hover:border-teal-600/50 dark:hover:border-teal-400/50 text-[#6B7280] dark:text-[#94A3B8] transition-colors"
+            aria-label="Find anything"
+            aria-keyshortcuts={isMac ? 'Meta+K /' : 'Control+K /'}
+            title={`Find anything: a menu option, customer, item, bill or voucher (/ or ${isMac ? '⌘K' : 'Ctrl+K'})`}
+            data-testid="find-anything"
+            className="group min-w-0 flex items-center justify-center sm:justify-between gap-2 w-11 h-11 shrink-0 sm:shrink sm:flex-1 sm:max-w-md xl:max-w-xl sm:h-11 sm:px-4 rounded-2xl bg-[#F4F3EF] dark:bg-[#162436] hover:bg-white dark:hover:bg-[#1E2E40] border border-[#D9D8D2] dark:border-[#2A3F5A] hover:border-teal-600/60 dark:hover:border-teal-400/50 text-[#6B7280] dark:text-[#94A3B8] transition-colors shadow-2xs"
           >
-            <span className="flex items-center gap-2 min-w-0">
-              <Search className="w-4.5 h-4.5 sm:w-4 sm:h-4 text-[#374151] dark:text-[#CBD5E1] shrink-0" />
-              <span className="hidden sm:inline text-sm font-medium truncate group-hover:text-[#111827] dark:group-hover:text-white">Search</span>
+            <span className="flex items-center gap-2.5 min-w-0">
+              <Search className="w-5 h-5 sm:w-4.5 sm:h-4.5 text-teal-700 dark:text-teal-300 shrink-0" />
+              <span className="hidden sm:inline text-sm font-medium truncate group-hover:text-[#111827] dark:group-hover:text-white">{isBilling ? 'Find anything… bill, customer, report, “udhaar”' : 'Search'}</span>
             </span>
-            <kbd className="hidden sm:inline-flex items-center text-[11px] font-semibold font-sans bg-white dark:bg-[#0D1520] px-1.5 py-0.5 rounded-md border border-[#E5E5E1] dark:border-[#203248] text-[#6B7280] dark:text-[#94A3B8] shrink-0">
-              {isMac ? '⌘K' : 'Ctrl K'}
-            </kbd>
+            <span className="hidden sm:flex items-center gap-1 shrink-0">
+              {isBilling && <kbd className="inline-flex items-center text-[11px] font-semibold font-sans bg-white dark:bg-[#0D1520] px-1.5 py-0.5 rounded-md border border-[#E5E5E1] dark:border-[#203248] text-[#6B7280] dark:text-[#94A3B8]">/</kbd>}
+              <kbd className="inline-flex items-center text-[11px] font-semibold font-sans bg-white dark:bg-[#0D1520] px-1.5 py-0.5 rounded-md border border-[#E5E5E1] dark:border-[#203248] text-[#6B7280] dark:text-[#94A3B8]">{isMac ? '⌘K' : 'Ctrl K'}</kbd>
+            </span>
           </button>
 
           {/* Right Action Hub */}
@@ -373,6 +390,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           </div>
         </div>
+
+        {/* Desktop, simple billing: the five menus (Coding · Invoice · Accounts · Reports · System). */}
+        {isBilling && isDesktop && (
+          <div className="border-t border-[#E5E5E1] dark:border-[#203248] -mx-4 sm:-mx-6 px-4 sm:px-6">
+            <MenuBar />
+          </div>
+        )}
 
         {/* Mobile Navigation Bar: equal-width tabs so all screens fit without scrolling */}
         {!isBilling && adminItem.length > 0 && (

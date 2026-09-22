@@ -45,6 +45,9 @@ import { StockUIProvider } from './components/billing/StockUI';
 import { OwnerDashboardScreen } from './screens/billing/OwnerDashboardScreen';
 import { PurchasesScreen } from './screens/billing/PurchasesScreen';
 import { ReportsHubScreen } from './screens/billing/ReportsHubScreen';
+import { FindAnythingDialog } from './components/nav/FindAnything';
+import { Breadcrumb } from './components/nav/Breadcrumb';
+import { somethingOpen } from './components/billing/useBillingShortcuts';
 
 function MainApp() {
   const {
@@ -105,12 +108,20 @@ function MainApp() {
     else setIsPurchaseModalOpen(true);
   };
 
-  // Global keydown listener for CMD+K / Ctrl+K
+  // Global keydown listener for CMD+K / Ctrl+K, and "/" (outside a text field) to find anything.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setIsCommandBarOpen((prev) => !prev);
+        return;
+      }
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const t = e.target as HTMLElement | null;
+        const typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+        if (typing || somethingOpen()) return;
+        e.preventDefault();
+        setIsCommandBarOpen(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -154,6 +165,7 @@ function MainApp() {
       <Sidebar onReceiveStock={() => handleOpenPurchase()} />
       {/* Main Content View with Smooth Transitions */}
       <main className={`flex-1 max-w-7xl min-w-0 w-full mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-5 sm:pt-6 ${isBilling ? 'pb-bottom-bar' : 'pb-12'}`}>
+        {isBilling && <Breadcrumb />}
         <AnimatePresence mode="wait">
           <motion.div
             key={activeScreen}
@@ -229,8 +241,10 @@ function MainApp() {
       {/* Phones & tablets in simple billing: bottom tab bar + "More" sheet (the sidebar takes over on desktop). */}
       {isBilling && <BottomNav />}
 
-      {/* Global Command Bar (CMD+K) */}
-      <CommandBar
+      {/* Find anything (Ctrl/⌘ K, "/"): the nav map + customers, suppliers, items, bills, vouchers. */}
+      {isBilling && <FindAnythingDialog isOpen={isCommandBarOpen} onClose={() => setIsCommandBarOpen(false)} />}
+      {/* Trading suite: the older command bar. */}
+      {!isBilling && <CommandBar
         isOpen={isCommandBarOpen}
         onClose={() => setIsCommandBarOpen(false)}
         onOpenDispatch={handleOpenDispatch}
@@ -252,7 +266,7 @@ function MainApp() {
         onOpenWhatsAppDrawer={() => setIsWhatsAppDrawerOpen(true)}
         onOpenPurchaseModal={() => handleOpenPurchase()}
         isBilling={isBilling}
-      />
+      />}
 
       {/* Toast Alert for background automated WhatsApp delivery */}
       <WhatsAppNotificationToast />

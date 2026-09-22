@@ -3,7 +3,7 @@ import { cashBookCsv, expensesCsv } from '../../utils/csvReports';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Banknote, Landmark, ArrowLeftRight, HandCoins, Receipt, Settings2, ChevronRight, Printer, Trash2, Coins } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
-import { useBillingUI } from '../../components/billing/BillingUI';
+import { useBillingUI, useRequestedView, useCurrentView } from '../../components/billing/BillingUI';
 import { useStockUI } from '../../components/billing/StockUI';
 import { Tile, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, rs, PageHeader, EmptyState, RowAction, pillCls } from '../../components/billing/ui';
 import { collectCashMovements, accountBalancesOn, positionSummary } from '../../utils/finance';
@@ -20,6 +20,10 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { BankAccountsCard } from '../../components/billing/BankAccounts';
 
 export type MoneyTab = 'overview' | 'expenses' | 'cashbook' | 'cheques' | 'bank';
+/** The Money tabs (the nav map has an entry for each). */
+export const MONEY_TABS: readonly MoneyTab[] = ['overview', 'expenses', 'cashbook', 'cheques', 'bank'];
+/** Views besides the tabs a menu can ask for: 'opening' = overview with the opening-balances form open. */
+export const MONEY_VIEWS: readonly string[] = [...MONEY_TABS, 'opening'];
 type Tab = MoneyTab;
 
 /** Where the money is: cash, bank, who owes you, who you owe; plus expense sheets and the cash book. */
@@ -40,11 +44,19 @@ export const MoneyScreen: React.FC = () => {
   const stockUI = useStockUI();
   const today = todayISO();
   // The home screen can open Money straight on a tab (e.g. "Cheques due this week").
-  const [tab, setTab] = useState<Tab>(() => ui.peekMoneyTab() || 'overview');
-  useEffect(() => { ui.openMoneyTab(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [tab, setTab] = useState<Tab>(() => { const v = ui.peekView('money'); return (MONEY_TABS as readonly string[]).includes(v || '') ? (v as Tab) : 'overview'; });
   const [month, setMonth] = useState(today.slice(0, 7));
   const [showOpening, setShowOpening] = useState(false);
   const [opening, setOpening] = useState({ cash: String(settings.cashOpeningBalance || 0), bank: String(settings.openingBankBalance || 0), date: settings.cashOpeningDate });
+  // Menus / search / Home tiles can open a tab (or the opening balances) here.
+  useRequestedView('money', (v) => {
+    if (v === 'opening') {
+      setTab('overview');
+      setOpening({ cash: String(settings.cashOpeningBalance || 0), bank: String(settings.openingBankBalance || 0), date: settings.cashOpeningDate });
+      setShowOpening(true);
+    } else if ((MONEY_TABS as readonly string[]).includes(v)) setTab(v as Tab);
+  });
+  useCurrentView('money', tab === 'overview' && showOpening ? 'opening' : tab);
 
   const movements = useMemo(() => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), [ledger, expenses, cashEntries, customers, suppliers]);
   const balances = useMemo(() => accountBalancesOn(movements, branchSettings, today), [movements, branchSettings, today]);
@@ -109,9 +121,9 @@ export const MoneyScreen: React.FC = () => {
               <button type="button" onClick={() => { setOpening({ cash: String(settings.cashOpeningBalance || 0), bank: String(settings.openingBankBalance || 0), date: settings.cashOpeningDate }); setShowOpening((v) => !v); }} className={secondaryBtn}><Settings2 className="w-4 h-4" /> Opening balances</button>
             </div>
           </div>
-          <BankAccountsCard balances={balances.banks} onOpenBank={(code) => { setBookAcct(code); setTab('cashbook'); }} />
+          <div data-nav-anchor="bank-accounts"><BankAccountsCard balances={balances.banks} onOpenBank={(code) => { setBookAcct(code); setTab('cashbook'); }} /></div>
           {showOpening && (
-            <form onSubmit={saveOpening} className={`${cardCls} p-5 grid grid-cols-1 sm:grid-cols-4 gap-3`}>
+            <form onSubmit={saveOpening} data-nav-anchor="opening" className={`${cardCls} p-5 grid grid-cols-1 sm:grid-cols-4 gap-3`}>
               <div><label className={labelCls} htmlFor="op-cash">Cash on opening day</label><input id="op-cash" type="number" inputMode="decimal" step="any" value={opening.cash} onChange={(e) => setOpening({ ...opening, cash: e.target.value })} className={`${inputCls} tabular-nums`} /></div>
               <div><label className={labelCls} htmlFor="op-bank">{bankAccounts.length > 1 ? `${bankAccounts[0].name} on opening day` : 'Bank on opening day'}</label><input id="op-bank" type="number" inputMode="decimal" step="any" value={opening.bank} onChange={(e) => setOpening({ ...opening, bank: e.target.value })} className={`${inputCls} tabular-nums`} /></div>
               <div><label className={labelCls} htmlFor="op-date">Counting from</label><input id="op-date" type="date" value={opening.date} onChange={(e) => setOpening({ ...opening, date: e.target.value })} className={inputCls} /></div>

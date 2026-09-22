@@ -16,6 +16,7 @@ import {
   ClipboardCheck,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
+import { useBillingUI, useRequestedView, useCurrentView } from '../components/billing/BillingUI';
 import { UserManagementTab } from '../components/admin/UserManagementTab';
 import { RolesAndMatrixTab } from '../components/admin/RolesAndMatrixTab';
 import { VisibilitySettingsTab } from '../components/admin/VisibilitySettingsTab';
@@ -28,11 +29,17 @@ import { DeletedRecordsTab } from '../components/control/DeletedRecords';
 import { ControlSettingsTab } from '../components/control/ControlSettings';
 
 type AdminTab = 'users' | 'roles' | 'visibility' | 'policy' | 'audit' | 'system' | 'import' | 'approvals' | 'deleted' | 'controls';
+/** The Admin tabs (the nav map has an entry for each). */
+export const ADMIN_TABS: readonly AdminTab[] = ['users', 'roles', 'visibility', 'policy', 'audit', 'approvals', 'deleted', 'controls', 'system', 'import'];
 
 export const AdminScreen: React.FC = () => {
   const { currentUser, can, users, roles, auditLogs, settings, updateSettings, setActiveScreen, approvals, deletedRecords } = useTrading();
   const waiting = approvals.filter((a) => a.status === 'pending').length;
-  const [activeTab, setActiveTab] = useState<AdminTab>('users');
+  const ui = useBillingUI();
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => { const v = ui.peekView('admin'); return (ADMIN_TABS as readonly string[]).includes(v || '') ? (v as AdminTab) : 'users'; });
+  // The System menu opens a tab here (Users & passwords, Document numbers, Backups…).
+  useRequestedView('admin', (v) => { if ((ADMIN_TABS as readonly string[]).includes(v)) setActiveTab(v as AdminTab); });
+  useCurrentView('admin', activeTab);
 
   const hasAccess = can('system:admin_screen') || can('admin_screen') || currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
 
@@ -145,6 +152,7 @@ export const AdminScreen: React.FC = () => {
             <button
               key={tab.id}
               type="button"
+              aria-pressed={isActive}
               onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 transition-all shrink-0 border ${
                 isActive

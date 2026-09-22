@@ -143,7 +143,7 @@ test.describe('Stock history, adjustments, purchase returns and reports (billing
     await flow(page);
     // Cmd+K offers billing actions, not trading ones.
     await page.keyboard.press('Control+k');
-    const search = page.getByRole('textbox', { name: 'Search' });
+    const search = page.getByRole('combobox', { name: 'Search' }); // Find anything: a combobox over the grouped results
     await expect(search).toBeVisible();
     await expect(page.getByText('New bill', { exact: true })).toBeVisible();
     await expect(page.getByText('Receive stock', { exact: true })).toBeVisible();

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { NewBillModal } from './NewBillModal';
 import { BillDetailModal } from './BillDetailModal';
 import { ItemModal } from './ItemModal';
@@ -43,9 +43,20 @@ interface BillingUI {
   openReport: (id: ReportRequest) => void;
   /** Latest request (the hub follows it; `n` changes on every request). */
   reportRequest: { id: ReportRequest; n: number } | null;
-  /** Ask the Accounts screen to show a tab (then go to 'accounts'). */
-  openAccountsTab: (tab: AccountsTab) => void;
-  accountsTabRequest: { tab: AccountsTab; n: number } | null;
+  /** Ask the Accounts screen to show a tab (then go to 'accounts'); `sub` = a step inside it ("new:CPV", "view:<id>", "new"). */
+  openAccountsTab: (tab: AccountsTab, sub?: string) => void;
+  accountsTabRequest: { tab: AccountsTab; sub?: string; n: number } | null;
+  /** Ask a screen to show one of its views (a tab or one of its dialogs) the next time it mounts / now. */
+  requestView: (screen: string, view: string) => void;
+  /** The view waiting for this screen, without taking it. */
+  peekView: (screen: string) => string | null;
+  /** Take (and clear) the view waiting for this screen. */
+  takeView: (screen: string) => string | null;
+  /** Changes on every requestView (screens watch it). */
+  viewRequestN: number;
+  /** What the screen on show is showing now (tab / report), for the breadcrumb. */
+  currentView: { screen: string; view: string | null } | null;
+  setCurrentView: (screen: string, view: string | null) => void;
   /** New purchase invoice, or look at a saved one. */
   newPurchaseInvoice: (supplierId?: string | null) => void;
   openPurchaseInvoice: (id: string) => void;
@@ -70,8 +81,16 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [nonce, setNonce] = useState(0);
   const bump = () => setNonce((n) => n + 1);
   const [salesView, setSalesView] = useState<SalesView | null>(null);
-  const moneyTab = useRef<ReturnType<BillingUI['peekMoneyTab']>>(null);
-  const { setActiveScreen } = useTrading();
+  const { setActiveScreen, activeScreen } = useTrading();
+  const pendingView = useRef<{ screen: string; view: string } | null>(null);
+  const [viewRequestN, setViewRequestN] = useState(0);
+  const [currentView, setCurrentViewState] = useState<BillingUI['currentView']>(null);
+  // A request for a screen the user then left without it showing is dropped.
+  useEffect(() => {
+    if (pendingView.current && pendingView.current.screen !== activeScreen) pendingView.current = null;
+  }, [activeScreen]);
+  const requestView = (screen: string, view: string) => { pendingView.current = { screen, view }; setViewRequestN((n) => n + 1); };
+  const peekView = (screen: string) => (pendingView.current?.screen === screen ? pendingView.current.view : null);
   const [reportRequest, setReportRequest] = useState<BillingUI['reportRequest']>(null);
   const [accountsTabRequest, setAccountsTabRequest] = useState<BillingUI['accountsTabRequest']>(null);
   const [purchase, setPurchase] = useState<{ open: boolean; supplierId: string | null }>({ open: false, supplierId: null });
@@ -91,12 +110,18 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     transfer: () => { bump(); setTransferOpen(true); },
     newItem: () => { bump(); setItem({ open: true, editId: null }); },
     editItem: (id) => { bump(); setItem({ open: true, editId: id }); },
-    openMoneyTab: (tab) => { moneyTab.current = tab; },
-    peekMoneyTab: () => moneyTab.current,
+    openMoneyTab: (tab) => { if (tab) requestView('money', tab); else if (pendingView.current?.screen === 'money') pendingView.current = null; },
+    peekMoneyTab: () => peekView('money') as ReturnType<BillingUI['peekMoneyTab']>,
+    requestView,
+    peekView,
+    takeView: (screen) => { const v = peekView(screen); if (v) pendingView.current = null; return v; },
+    viewRequestN,
+    currentView,
+    setCurrentView: (screen, view) => setCurrentViewState((c) => (c && c.screen === screen && c.view === view ? c : { screen, view })),
     salesExtras: (view = 'hub') => { bump(); setSalesView(view); },
     openReport: (id) => { setReportRequest((r) => ({ id, n: (r?.n || 0) + 1 })); setActiveScreen('reports-hub'); },
     reportRequest,
-    openAccountsTab: (tab) => setAccountsTabRequest((r) => ({ tab, n: (r?.n || 0) + 1 })),
+    openAccountsTab: (tab, sub) => setAccountsTabRequest((r) => ({ tab, ...(sub ? { sub } : {}), n: (r?.n || 0) + 1 })),
     accountsTabRequest,
     newPurchaseInvoice: (supplierId) => { bump(); setPurchase({ open: true, supplierId: supplierId || null }); },
     openPurchaseInvoice: (id) => { bump(); setPurchaseId(id); },
@@ -127,4 +152,21 @@ export const useBillingUI = (): BillingUI => {
   const c = useContext(Ctx);
   if (!c) throw new Error('useBillingUI must be used inside BillingUIProvider');
   return c;
+};
+
+/** A screen applies views asked for from a menu / search (`apply` gets e.g. "cheques"). */
+export const useRequestedView = (screen: string, apply: (view: string) => void) => {
+  const ui = useBillingUI();
+  const applyRef = useRef(apply);
+  applyRef.current = apply;
+  useEffect(() => {
+    const v = ui.takeView(screen);
+    if (v) applyRef.current(v);
+  }, [ui.viewRequestN]); // eslint-disable-line react-hooks/exhaustive-deps
+};
+
+/** A screen tells the breadcrumb which tab / report it shows. */
+export const useCurrentView = (screen: string, view: string | null) => {
+  const ui = useBillingUI();
+  useEffect(() => { ui.setCurrentView(screen, view); }, [screen, view]); // eslint-disable-line react-hooks/exhaustive-deps
 };

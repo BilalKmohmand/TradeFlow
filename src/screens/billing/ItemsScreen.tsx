@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Plus, Search, Pencil, Trash2, AlertTriangle, PackagePlus, Warehouse, ArrowRightLeft, Scale, History, Tag, Gift } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useWideLayout } from '../../hooks/useMediaQuery';
-import { useBillingUI } from '../../components/billing/BillingUI';
+import { useBillingUI, useRequestedView, useCurrentView } from '../../components/billing/BillingUI';
 import { useStockUI } from '../../components/billing/StockUI';
 import { cardCls, inputCls, primaryBtn, secondaryBtn, rs, moneyCls, PageHeader, EmptyState, RowAction, thCls, tableCardCls } from '../../components/billing/ui';
 import { isExpired } from '../../utils/inventory';
@@ -35,6 +35,11 @@ export const ItemsScreen: React.FC = () => {
   const [stockUI, setStockUI] = useState<{ kind: 'receive' | 'godowns' | 'move' | null; productId?: string | null; n: number }>({ kind: null, n: 0 });
   const openStock = (kind: 'receive' | 'godowns' | 'move', productId?: string | null) => setStockUI((s) => ({ kind, productId, n: s.n + 1 }));
   const closeStock = () => setStockUI((s) => ({ ...s, kind: null }));
+  // Menus / search: the godowns list, or Move stock (the godowns list first while there is only one godown).
+  useRequestedView('products', (v) => {
+    if (v === 'godowns') openStock('godowns');
+    else if (v === 'move') openStock(godowns.length > 1 ? 'move' : 'godowns');
+  });
   const canStock = can('products:create') || can('stock:adjust');
   const canGodowns = can('stock:adjust');
   const rows = useMemo(() => {

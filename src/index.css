@@ -130,3 +130,11 @@
     padding-bottom: 3rem;
   }
 }
+
+/* A card opened from a menu (Admin → Backups, Money → Bank accounts…) glows briefly so the eye finds it. */
+[data-nav-flash] {
+  outline: 2px solid rgb(13 148 136 / 0.7);
+  outline-offset: 4px;
+  border-radius: 24px;
+  transition: outline-color 0.4s ease;
+}

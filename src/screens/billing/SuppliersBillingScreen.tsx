@@ -11,7 +11,7 @@ import { todayISO } from '../../utils/stockFlow';
 import { booksLockedFor } from '../../utils/accounting';
 import { Supplier } from '../../types';
 import { usePurchasingUI } from '../../components/billing/purchasing/PurchasingUI';
-import { useBillingUI } from '../../components/billing/BillingUI';
+import { useBillingUI, useRequestedView, useCurrentView } from '../../components/billing/BillingUI';
 import { PurchaseOrdersView } from '../../components/billing/purchasing/PurchaseOrders';
 import { SupplierBillsView } from '../../components/billing/purchasing/SupplierBills';
 import { SupplierClaimsView } from '../../components/billing/purchasing/SupplierClaims';
@@ -20,6 +20,9 @@ import { CityFilter, PartyBalancesView } from '../../components/billing/PartyBal
 import { filterParties } from '../../utils/vouchers';
 
 type Tab = 'suppliers' | 'orders' | 'received' | 'bills' | 'claims' | 'returns';
+/** The Suppliers tabs (the nav map has an entry for each); views besides tabs: 'add', 'city'. */
+export const SUPPLIER_TABS: readonly Tab[] = ['suppliers', 'orders', 'received', 'bills', 'claims', 'returns'];
+export const SUPPLIER_VIEWS: readonly string[] = [...SUPPLIER_TABS, 'add', 'city'];
 const num = (n: number) => n.toLocaleString('en-PK', { maximumFractionDigits: 2 });
 
 /** Suppliers the simple way: what you owe them, stock received, goods sent back. No bookings or dispatches. */
@@ -32,7 +35,14 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
   const { purchaseOrders, supplierClaims } = useTrading();
   const openOrders = purchaseOrders.filter((p) => p.status === 'open' || p.status === 'partial').length;
   const openClaims = supplierClaims.filter((c) => c.status === 'open').length;
-  const [tab, setTab] = useState<Tab>('suppliers');
+  const [tab, setTab] = useState<Tab>(() => { const v = ui.peekView('suppliers'); return (SUPPLIER_TABS as readonly string[]).includes(v || '') ? (v as Tab) : 'suppliers'; });
+  // Menus / search: a tab, "add" (new supplier) or "city" (payable by city).
+  useRequestedView('suppliers', (v) => {
+    if ((SUPPLIER_TABS as readonly string[]).includes(v)) setTab(v as Tab);
+    else if (v === 'add') onAdd();
+    else if (v === 'city') setShowBalances(true);
+  });
+  useCurrentView('suppliers', tab);
   const [query, setQuery] = useState('');
   const [city, setCity] = useState('');
   const [showBalances, setShowBalances] = useState(false);

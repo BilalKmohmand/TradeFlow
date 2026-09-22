@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Phone, FilePlus2, HandCoins, Printer, Pencil, Trash2, Clock, FileText, Users, Route } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useWideLayout } from '../../hooks/useMediaQuery';
-import { useBillingUI } from '../../components/billing/BillingUI';
+import { useBillingUI, useRequestedView, useCurrentView } from '../../components/billing/BillingUI';
 import { useStockUI } from '../../components/billing/StockUI';
 import { Modal, Notice, cardCls, inputCls, primaryBtn, secondaryBtn, dangerBtn, rs, moneyCls, PageHeader, EmptyState, RowAction } from '../../components/billing/ui';
 import { creditUsage } from '../../utils/credit';
@@ -31,6 +31,12 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
   const [showBalances, setShowBalances] = useState(false);
   const [showCities, setShowCities] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  // Menus / search: "add" (new customer), "cities" (the cities list) or "city" (receivable by city).
+  useRequestedView('customers', (v) => {
+    if (v === 'add') onAdd();
+    else if (v === 'cities') setShowCities(true);
+    else if (v === 'city') setShowBalances(true);
+  });
   const [pendingDelete, setPendingDelete] = useState<Customer | null>(null);
   const [deleteBlocked, setDeleteBlocked] = useState<string | null>(null);
   useEffect(() => setDeleteBlocked(null), [openId]);

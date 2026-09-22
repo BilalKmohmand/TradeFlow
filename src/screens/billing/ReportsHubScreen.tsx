@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ChevronRight, Printer, Search, Lock, Truck } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
-import { useBillingUI, ReportRequest } from '../../components/billing/BillingUI';
+import { useBillingUI, ReportRequest, useCurrentView } from '../../components/billing/BillingUI';
 import { PageHeader, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, pillCls, Notice } from '../../components/billing/ui';
 import { CsvButton } from '../../components/billing/CsvButton';
 import { ScreenReport } from '../../components/billing/classic/ReportTables';
@@ -171,6 +171,7 @@ export const ReportsHubScreen: React.FC = () => {
   const [from, setFrom] = useState<'menu' | 'books'>(() => (ui.reportRequest?.id === 'books' ? 'books' : 'menu'));
   const [q, setQ] = useState('');
   const allowed = useReportAllowed();
+  useCurrentView('reports-hub', view);
   // A new request (a menu button, F9…) while the hub is already open switches to it.
   const n = ui.reportRequest?.n;
   useEffect(() => {

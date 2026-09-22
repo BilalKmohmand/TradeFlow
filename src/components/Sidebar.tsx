@@ -214,7 +214,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReceiveStock }) => {
 
   return (
     <aside
-      className={`hidden lg:flex flex-col shrink-0 sticky top-16 h-[calc(100vh-4rem)] border-r border-[#E5E5E1] dark:border-[#203248] bg-white/70 dark:bg-[#0D1520]/70 backdrop-blur-md transition-[width] duration-200 ${collapsed ? 'w-[76px]' : 'w-[264px]'}`}
+      className={`hidden lg:flex flex-col shrink-0 sticky top-[var(--header-h,4rem)] h-[calc(100vh-var(--header-h,4rem))] border-r border-[#E5E5E1] dark:border-[#203248] bg-white/70 dark:bg-[#0D1520]/70 backdrop-blur-md transition-[width] duration-200 ${collapsed ? 'w-[76px]' : 'w-[264px]'}`}
       aria-label="Primary"
     >
       <div className="flex-1 overflow-y-auto overflow-x-hidden py-4 px-3 space-y-5 [scrollbar-width:thin]">

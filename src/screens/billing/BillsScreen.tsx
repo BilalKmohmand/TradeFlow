@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FilePlus2, Search, Printer, Download, FileText } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useWideLayout } from '../../hooks/useMediaQuery';
-import { useBillingUI } from '../../components/billing/BillingUI';
+import { useBillingUI, useRequestedView, useCurrentView } from '../../components/billing/BillingUI';
 import { cardCls, inputCls, primaryBtn, secondaryBtn, rs, moneyCls, PageHeader, EmptyState, RowAction, pillCls, thCls, tableCardCls } from '../../components/billing/ui';
 import { filterBills } from '../../utils/billing';
 import { todayISO } from '../../utils/stockFlow';
@@ -18,12 +18,17 @@ import { NumberNoticesBanner } from '../../components/control/NumberNotices';
 type Period = 'today' | 'week' | 'month' | 'all';
 
 /** Every bill, newest first, with search and quick period filters. Tap a row to open it. */
+/** The Bills tabs (the nav map has an entry for each). */
+export const BILLS_TABS = ['bills', 'returns', 'quotes'] as const;
+
 export const BillsScreen: React.FC = () => {
   const { setPrintRequest, returns, quotations } = useTrading();
   const { invoices } = useBranchScoped();
   const ui = useBillingUI();
   const wide = useWideLayout();
-  const [tab, setTab] = useState<'bills' | 'returns' | 'quotes'>('bills');
+  const [tab, setTab] = useState<'bills' | 'returns' | 'quotes'>(() => { const v = ui.peekView('bills'); return v === 'returns' || v === 'quotes' ? v : 'bills'; });
+  useRequestedView('bills', (v) => { if (v === 'bills' || v === 'returns' || v === 'quotes') setTab(v); });
+  useCurrentView('bills', tab);
   const billReturnCount = returns.filter((r) => r.kind === 'sales' && r.invoiceId).length;
   const openQuoteCount = quotations.filter((q) => q.items?.length && q.status !== 'converted' && q.status !== 'rejected').length;
   const [query, setQuery] = useState('');

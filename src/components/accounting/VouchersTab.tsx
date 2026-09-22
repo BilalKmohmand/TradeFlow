@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Printer, Pencil, Trash2, Eye, X } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { Modal, Notice, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, rs, EmptyState, RowAction } from '../billing/ui';
@@ -24,7 +24,7 @@ const typeTone: Record<VoucherType, string> = {
 const voucherTotal = (v: JournalEntry) => v.lines.reduce((a, l) => a + (Number(l.debit) || 0), 0);
 
 /** Accounts → Vouchers: CPV / CRV / BPV / BRV / JV with many lines each, like the old desktop books. */
-export const VouchersTab: React.FC<{ accounts: Account[]; flash: Flash }> = ({ accounts, flash }) => {
+export const VouchersTab: React.FC<{ accounts: Account[]; flash: Flash; request?: { sub: string; n: number } | null }> = ({ accounts, flash, request }) => {
   const { vouchers, customers, suppliers, can, setPrintRequest, deleteVoucher, voucherEditBlock, bankAccounts, settings } = useTrading();
   const today = todayISO();
   const [kind, setKind] = useState<'all' | VoucherType>('all');
@@ -37,6 +37,13 @@ export const VouchersTab: React.FC<{ accounts: Account[]; flash: Flash }> = ({ a
   const [limit, setLimit] = useState(50);
   const canCash = can('finance:record_payment');
   const canJv = can('finance:view_pnl');
+  // Opened from a menu / search: "new:CPV" starts a new voucher of that type, "view:<id>" shows one.
+  useEffect(() => {
+    if (!request) return;
+    const [what, arg] = [request.sub.slice(0, request.sub.indexOf(':')), request.sub.slice(request.sub.indexOf(':') + 1)];
+    if (what === 'new' && VOUCHER_TYPES.some((t) => t.id === arg) && (arg === 'JV' ? canJv : canCash)) setEditor({ type: arg as VoucherType, nonce: Date.now() });
+    if (what === 'view' && vouchers.some((v) => v.id === arg)) setViewId(arg);
+  }, [request?.n]); // eslint-disable-line react-hooks/exhaustive-deps
   const canDelete = can('delete_records');
   const nameOf = (l: JournalEntry['lines'][number]) =>
     l.partyType === 'customer' ? customers.find((c) => c.id === l.partyId)?.name || 'Customer' : l.partyType === 'supplier' ? (() => { const s = suppliers.find((x) => x.id === l.partyId); return s ? s.company || s.name : 'Supplier'; })() : accounts.find((a) => a.code === l.accountCode)?.name || l.accountCode;

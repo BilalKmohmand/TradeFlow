@@ -6,8 +6,8 @@ import { Notice, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, RowActio
 import { DOC_SERIES, formatDocNumber } from '../../utils/control';
 
 type Msg = { kind: 'ok' | 'error'; text: string } | null;
-const Section: React.FC<{ icon: React.ReactNode; title: string; text: string; children: React.ReactNode }> = ({ icon, title, text, children }) => (
-  <section className={`${cardCls} p-4 sm:p-5 space-y-4`}>
+const Section: React.FC<{ icon: React.ReactNode; title: string; text: string; anchor?: string; children: React.ReactNode }> = ({ icon, title, text, anchor, children }) => (
+  <section data-nav-anchor={anchor} className={`${cardCls} p-4 sm:p-5 space-y-4`}>
     <div>
       <h2 className="font-bold text-[#111827] dark:text-white flex items-center gap-2">{icon} {title}</h2>
       <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-0.5">{text}</p>
@@ -35,7 +35,7 @@ export const ApprovalRulesForm: React.FC = () => {
     </label>
   );
   return (
-    <Section icon={<ShieldCheck className="w-4 h-4 text-teal-700 dark:text-teal-300" />} title="Approval rules" text="Staff without “Approve / Reject” (Admin → Roles) must send these to a manager. The document waits in Approvals and is only posted when approved. Leave a box empty to switch that rule off.">
+    <Section icon={<ShieldCheck className="w-4 h-4 text-teal-700 dark:text-teal-300" />} anchor="approval-rules" title="Approval rules" text="Staff without “Approve / Reject” (Admin → Roles) must send these to a manager. The document waits in Approvals and is only posted when approved. Leave a box empty to switch that rule off.">
       <form onSubmit={save} className="space-y-3" aria-label="Approval rules">
         {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -108,7 +108,7 @@ const SeriesRow: React.FC<{ k: DocSeriesKey; label: string; onMsg: (m: Msg) => v
 export const NumberSeriesForm: React.FC = () => {
   const [msg, setMsg] = useState<Msg>(null);
   return (
-    <Section icon={<Hash className="w-4 h-4 text-indigo-600 dark:text-indigo-300" />} title="Document numbers" text="Numbers run in order with no gaps and are never used again, even after a delete. Tick “New series each year” for numbers like INV-2026-0001. “Next no.” can only move forward.">
+    <Section icon={<Hash className="w-4 h-4 text-indigo-600 dark:text-indigo-300" />} anchor="doc-numbers" title="Document numbers" text="Numbers run in order with no gaps and are never used again, even after a delete. Tick “New series each year” for numbers like INV-2026-0001. “Next no.” can only move forward.">
       {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
       <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
         {DOC_SERIES.map((s) => <SeriesRow key={s.key} k={s.key} label={s.label} onMsg={setMsg} />)}
@@ -131,7 +131,7 @@ export const BranchesForm: React.FC = () => {
   };
   const godownBranch = (gid: string) => branches.find((b) => (b.godownIds || []).includes(gid))?.id || '';
   return (
-    <Section icon={<Store className="w-4 h-4 text-amber-600 dark:text-amber-300" />} title="Branches" text="For shops with more than one outlet (e.g. Batkhela shop, Mingora shop). Once a second branch is added, bills, expenses, cash entries and payments record the branch of the person making them, and Home, Bills, Daily sheet, Money and Accounts get a branch filter. Records made before belong to the first (main) branch.">
+    <Section icon={<Store className="w-4 h-4 text-amber-600 dark:text-amber-300" />} anchor="branches" title="Branches" text="For shops with more than one outlet (e.g. Batkhela shop, Mingora shop). Once a second branch is added, bills, expenses, cash entries and payments record the branch of the person making them, and Home, Bills, Daily sheet, Money and Accounts get a branch filter. Records made before belong to the first (main) branch.">
       {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
       {branches.length > 0 && (
         <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248]" aria-label="Branches list">

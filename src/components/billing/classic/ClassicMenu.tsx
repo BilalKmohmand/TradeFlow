@@ -20,7 +20,9 @@ import {
 import { useTrading } from '../../../context/TradingContext';
 import { useBillingUI } from '../BillingUI';
 import { ActiveScreen } from '../../../types';
-import { CLASSIC_BUTTONS, NavTarget, resolveTarget } from '../../../utils/classicMenu';
+import { NavTarget, resolveTarget } from '../../../utils/classicMenu';
+import { CLASSIC_BUTTONS, classicEntry } from '../../../utils/navMap';
+import { useNavGo } from '../../nav/useNavGo';
 import { cardCls } from '../ui';
 
 type Icon = React.FC<{ className?: string }>;
@@ -89,18 +91,21 @@ export const useClassicNav = () => {
 };
 
 /**
- * The 16 big buttons of Apna Accountant's home screen, same names, opening our screens.
+ * The 16 big buttons of Apna Accountant's home screen, same names, opening our screens. Each button is an
+ * entry of the nav map (utils/navMap.ts CLASSIC_BUTTONS), so it opens exactly what the menus open.
  * `compact` is the phone grid under "More"; the default is the desktop panel on Home.
  */
 export const ClassicMenu: React.FC<{ compact?: boolean; onPicked?: () => void }> = ({ compact, onPicked }) => {
-  const go = useClassicNav();
+  const nav = useNavGo();
+  const go = (b: (typeof CLASSIC_BUTTONS)[number]) => nav(classicEntry(b).target);
+  const hint = (b: (typeof CLASSIC_BUTTONS)[number]) => { const e = classicEntry(b); return `${e.hint}${e.key ? ` (${e.key})` : ''}`; };
   if (compact) {
     return (
       <div className="grid grid-cols-4 gap-1.5" data-testid="classic-menu-compact" role="group" aria-label="Classic menu">
         {CLASSIC_BUTTONS.map((b) => {
           const { icon: I, tint } = ICONS[b.id];
           return (
-            <button key={b.id} type="button" title={b.hint} onClick={() => { onPicked?.(); go(b.target); }} className="min-h-16 flex flex-col items-center justify-center gap-1 px-1 py-1.5 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] text-[10.5px] font-bold leading-tight text-center text-[#111827] dark:text-white hover:border-teal-500/50">
+            <button key={b.id} type="button" title={hint(b)} onClick={() => { onPicked?.(); go(b); }} className="min-h-16 flex flex-col items-center justify-center gap-1 px-1 py-1.5 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] text-[10.5px] font-bold leading-tight text-center text-[#111827] dark:text-white hover:border-teal-500/50">
               <I className={`w-4 h-4 ${tint}`} />
               <span>{b.label}</span>
             </button>
@@ -119,7 +124,7 @@ export const ClassicMenu: React.FC<{ compact?: boolean; onPicked?: () => void }>
         {CLASSIC_BUTTONS.map((b) => {
           const { icon: I, tint } = ICONS[b.id];
           return (
-            <button key={b.id} type="button" title={b.hint} onClick={() => go(b.target)} className="min-h-20 flex flex-col items-center justify-center gap-1.5 px-2 py-2 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] text-xs font-bold leading-tight text-center text-[#111827] dark:text-white hover:border-teal-500/60 hover:shadow-sm transition">
+            <button key={b.id} type="button" title={hint(b)} onClick={() => go(b)} className="min-h-20 flex flex-col items-center justify-center gap-1.5 px-2 py-2 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] text-xs font-bold leading-tight text-center text-[#111827] dark:text-white hover:border-teal-500/60 hover:shadow-sm transition">
               <I className={`w-5 h-5 ${tint}`} />
               <span>{b.label}</span>
             </button>

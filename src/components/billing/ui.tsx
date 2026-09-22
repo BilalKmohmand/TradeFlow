@@ -154,7 +154,7 @@ export const RowAction: React.FC<{ label: string; icon: React.ReactNode; onClick
 };
 
 /** Header cell / number cell helpers for the few real tables. */
-export const thCls = 'sticky top-16 z-[1] bg-[#FAF9F6] dark:bg-[#162436] px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]';
+export const thCls = 'sticky top-[var(--header-h,4rem)] z-[1] bg-[#FAF9F6] dark:bg-[#162436] px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]';
 
 /** Filter / tab pill: one look everywhere (44px tall on phones). */
 export const pillCls = (on: boolean, tone: 'dark' | 'teal' | 'amber' = 'dark') =>
