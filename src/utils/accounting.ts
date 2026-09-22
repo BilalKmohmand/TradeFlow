@@ -335,6 +335,16 @@ export interface JournalSources {
   products?: Product[];
   returns?: StockReturn[];
   adjustments?: StockAdjustment[];
+  /**
+   * Books of one branch: 'main' or 'other' ('all' / absent = the whole shop). The ledger, bills,
+   * expenses and cash entries passed in are already that branch's. Records with no branch — stock
+   * adjustments and opening stock — belong to the main branch, so 'other' leaves them out; that way
+   * the branches' books add up to the whole shop and each branch's trial balance still balances.
+   */
+  branchPart?: 'all' | 'main' | 'other';
+  /** Whole-shop bills and returns, used to work out opening stock when `invoices` / `returns` are one branch's. */
+  stockInvoices?: Invoice[];
+  stockReturns?: StockReturn[];
 }
 
 /** Collects lines for one entry, merging same-account lines and dropping zeros. */
@@ -413,6 +423,7 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
     products = [],
     returns = [],
     adjustments = [],
+    branchPart = 'all',
   } = src;
   const openingDate = settings.cashOpeningDate || '1970-01-01';
   const out: JournalEntry[] = [];
@@ -693,6 +704,8 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
   });
 
   // --- 6. Stock: adjustments and opening stock ---------------------------------------------
+  // They carry no branch: they are the main branch's (and the whole shop's), never another branch's.
+  if (branchPart === 'other') return out;
   adjustments.forEach((a) => {
     const cost = a.costPerKg && a.costPerKg > 0 ? a.costPerKg : productCost(a.productId, a.date);
     if (cost == null || !a.deltaKg) return;
@@ -716,9 +729,9 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
   const move = (productId: string, qty: number) => movedIn.set(productId, (movedIn.get(productId) || 0) + (Number(qty) || 0));
   purchases.forEach((x) => move(x.productId, x.kg));
   // Bills made in the app took stock item by item (trading invoices carry no qty: stock left via dispatches).
-  invoices.forEach((i) => i.items.forEach((it) => { if (it.qty != null) move(it.productId, -(it.qty || 0)); }));
+  (src.stockInvoices || invoices).forEach((i) => i.items.forEach((it) => { if (it.qty != null) move(it.productId, -(it.qty || 0)); }));
   dispatches.forEach((d) => move(d.productId, -d.kg));
-  returns.forEach((r) => {
+  (src.stockReturns || returns).forEach((r) => {
     if (r.items?.length) r.items.forEach((it) => move(it.productId, r.kind === 'sales' ? it.qty : -it.qty));
     else move(r.productId, r.kind === 'sales' ? r.kg : -r.kg);
   });

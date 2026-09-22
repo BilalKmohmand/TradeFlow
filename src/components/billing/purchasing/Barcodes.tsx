@@ -7,6 +7,7 @@ import { code128Bars, isEncodable } from '../../../utils/barcode';
 import { findByBarcode, itemBrands, itemGroup, itemGroups } from '../../../utils/purchasing';
 import { useEscape } from '../../../hooks/useEscape';
 import { Product } from '../../../types';
+import { cameraScanSupported, startCameraScan, StopScan } from '../../../lib/barcodeScan';
 
 /** A Code 128 barcode as inline SVG (drawn in the app, prints sharp at any size). */
 export const BarcodeSvg: React.FC<{ value: string; height?: number; className?: string; showText?: boolean }> = ({ value, height = 40, className, showText = true }) => {
@@ -23,14 +24,11 @@ export const BarcodeSvg: React.FC<{ value: string; height?: number; className?: 
   );
 };
 
-type Detector = { detect: (src: CanvasImageSource) => Promise<{ rawValue: string }[]> };
-const cameraSupported = () =>
-  typeof window !== 'undefined' && 'BarcodeDetector' in window && Boolean(navigator.mediaDevices?.getUserMedia);
-
 /**
- * Find an item by scanning. With a phone camera (browsers that have BarcodeDetector) the code is read
- * automatically; otherwise — or with a USB scanner, which types the code and presses Enter — type it
- * in the box. The item's barcode or its item code both work.
+ * Find an item by scanning. With a phone camera the code is read automatically (the browser's own
+ * BarcodeDetector where there is one, else a bundled decoder that loads on first use, so iPhone Safari
+ * works too); with a USB scanner, which types the code and presses Enter, or by hand, type it in the
+ * box. The item's barcode or its item code both work.
  */
 export const ScanDialog: React.FC<{ isOpen: boolean; onClose: () => void; onPick: (p: Product) => void; title?: string; keepOpen?: boolean }> = ({ isOpen, onClose, onPick, title = 'Scan barcode', keepOpen }) => {
   const { products } = useTrading();
@@ -38,14 +36,14 @@ export const ScanDialog: React.FC<{ isOpen: boolean; onClose: () => void; onPick
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [camera, setCamera] = useState<'off' | 'starting' | 'on' | 'failed'>('off');
   const video = useRef<HTMLVideoElement>(null);
-  const stream = useRef<MediaStream | null>(null);
+  const stopScan = useRef<StopScan | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const lastHit = useRef<{ code: string; at: number }>({ code: '', at: 0 });
   useEscape(isOpen, onClose, 1);
 
   const stop = () => {
-    stream.current?.getTracks().forEach((t) => t.stop());
-    stream.current = null;
+    stopScan.current?.();
+    stopScan.current = null;
   };
   useEffect(() => () => stop(), []);
   useEffect(() => {
@@ -72,35 +70,25 @@ export const ScanDialog: React.FC<{ isOpen: boolean; onClose: () => void; onPick
   pickRef.current = pick;
 
   const startCamera = async () => {
-    if (!cameraSupported()) return;
+    if (!cameraScanSupported() || !video.current) return;
     setCamera('starting');
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-      stream.current = s;
-      if (video.current) {
-        video.current.srcObject = s;
-        await video.current.play().catch(() => {});
-      }
-      setCamera('on');
-      const Ctor = (window as unknown as { BarcodeDetector: new (o?: unknown) => Detector }).BarcodeDetector;
-      const detector = new Ctor();
-      const tick = async () => {
-        if (!stream.current || !video.current) return;
-        try {
-          const found = await detector.detect(video.current);
-          const hit = found[0]?.rawValue;
-          const now = Date.now();
-          // The same code read twice in a row within 2 s is one scan.
-          if (hit && !(hit === lastHit.current.code && now - lastHit.current.at < 2000)) {
-            lastHit.current = { code: hit, at: now };
-            if (pickRef.current(hit) && !keepOpen) return;
-          }
-        } catch {
-          /* frame not ready */
+      let done = false;
+      const stopNow = await startCameraScan(video.current, (hit) => {
+        if (done) return;
+        const now = Date.now();
+        // The same code read twice in a row within 2 s is one scan.
+        if (hit === lastHit.current.code && now - lastHit.current.at < 2000) return;
+        lastHit.current = { code: hit, at: now };
+        if (pickRef.current(hit) && !keepOpen) {
+          done = true;
+          stop();
         }
-        setTimeout(tick, 250);
-      };
-      setTimeout(tick, 300);
+      });
+      // Closed while the camera was starting: let it go at once.
+      if (!video.current || done) { stopNow(); return; }
+      stopScan.current = stopNow;
+      setCamera('on');
     } catch {
       setCamera('failed');
     }
@@ -120,14 +108,15 @@ export const ScanDialog: React.FC<{ isOpen: boolean; onClose: () => void; onPick
           </div>
           <button type="button" onClick={onClose} aria-label="Close scanner" className="p-2 rounded-xl text-[#6B7280] hover:bg-[#F4F3EF] dark:hover:bg-[#162436]"><X className="w-5 h-5" /></button>
         </div>
-        {cameraSupported() ? (
+        {cameraScanSupported() ? (
           <div className="space-y-2">
             <video ref={video} playsInline muted className={`w-full rounded-2xl bg-black aspect-video object-cover ${camera === 'on' || camera === 'starting' ? '' : 'hidden'}`} />
+            {camera === 'starting' && <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]" role="status">Opening the camera…</p>}
             {camera === 'off' && <button type="button" onClick={() => void startCamera()} className={`${secondaryBtn} w-full`}><Camera className="w-4 h-4" /> Use the camera</button>}
             {camera === 'failed' && <p className="text-xs text-rose-700 dark:text-rose-300">The camera could not be opened (permission denied or no camera). Type or scan the code instead.</p>}
           </div>
         ) : (
-          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">This browser can't read barcodes with the camera. A USB barcode scanner works: click in the box and scan.</p>
+          <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">This browser can't open the camera. A USB barcode scanner works: click in the box and scan.</p>
         )}
         {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
         <form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); pick(code); }} className="flex gap-2 items-end">

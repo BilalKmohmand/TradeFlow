@@ -242,8 +242,9 @@ export const CustomersScreen: React.FC<CustomersScreenProps> = ({
         confirmLabel="Delete Customer"
         requireText={pendingBookings.length > 0 ? 'DELETE' : undefined}
         onConfirm={() => {
-          if (pendingDelete) deleteCustomer(pendingDelete.id);
+          const r = pendingDelete ? deleteCustomer(pendingDelete.id) : null;
           setPendingDelete(null);
+          if (r?.blocked) window.alert(r.blocked);
         }}
         onCancel={() => setPendingDelete(null)}
       />

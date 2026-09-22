@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { assignMissingCodes, CUSTOMER_CODE_PREFIX, SUPPLIER_CODE_PREFIX } from '../utils/partyCode';
 import {
   Customer,
@@ -65,6 +65,9 @@ import { receiveOnPo, unreceiveOnPo } from '../utils/purchasing';
 import { FinanceApi, useFinanceStore } from './financeActions';
 import { buildJournal, combineJournal } from '../utils/accounting';
 import { ControlApi, createControlApi, useControlStore } from './controlActions';
+import { ReminderApi, createReminderApi, computeRemindersDue } from './reminderActions';
+import { NumberGuardApi, useNumberGuard } from './numberGuardActions';
+import { chequesBlockingCustomerDelete } from '../utils/cheques';
 import {
   DEFAULT_ROLES,
   DEFAULT_VISIBILITY_SETTINGS,
@@ -104,7 +107,9 @@ import {
   initialWhatsAppMessages,
 } from '../data/initialData';
 
-interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, PurchasingApi, FinanceApi, AuthApi, SalesExtrasApi, ControlApi {
+interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, PurchasingApi, FinanceApi, AuthApi, SalesExtrasApi, ControlApi, ReminderApi, NumberGuardApi {
+  /** Why this customer can't be deleted right now (cheques still in hand), or null. */
+  customerDeleteBlock: (id: string) => string | null;
   customers: Customer[];
   suppliers: Supplier[];
   products: Product[];
@@ -368,6 +373,8 @@ export interface DeleteSummary {
   priceHistory: number;
   ledger: number;
   whatsappMessages: number;
+  /** Set when nothing was deleted on purpose, with the reason to show (e.g. cheques still in hand). */
+  blocked?: string;
 }
 
 const emptySummary = (): DeleteSummary => ({
@@ -1530,9 +1537,23 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return summary;
   };
 
+  /** Cheques from this customer that are still in hand or at the bank: settle or cancel them before deleting. */
+  const customerDeleteBlock = (id: string): string | null => {
+    const c = customers.find((x) => x.id === id);
+    const open = chequesBlockingCustomerDelete(cheques, id);
+    if (!c || open.length === 0) return null;
+    const list = open.slice(0, 3).map((q) => `${q.chequeNumber} (${q.bankName}, ${formatCurrency(q.amount)})`).join(', ');
+    return `${c.name} has ${open.length} cheque${open.length === 1 ? '' : 's'} not yet settled: ${list}${open.length > 3 ? '…' : ''}. Clear, bounce or cancel ${open.length === 1 ? 'it' : 'them'} first in Money → Cheques, then delete the customer.`;
+  };
+
   const deleteCustomer = (id: string): DeleteSummary => {
     const target = customers.find((c) => c.id === id);
     if (!target) return emptySummary();
+    const chequeBlock = customerDeleteBlock(id);
+    if (chequeBlock) {
+      logAuditEvent('Customer Delete Blocked', chequeBlock, 'warning');
+      return { ...emptySummary(), blocked: chequeBlock };
+    }
 
     const customerBookings = bookings.filter((b) => b.customerId === id);
     const removedBookingIds = new Set(customerBookings.map((b) => b.id));
@@ -2823,6 +2844,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ...(areaId ? { areaId } : {}),
       ...(input.costCentreId ? { costCentreId: input.costCentreId } : {}),
       ...controlStore.branchStamp(),
+      deviceId: numberGuard.deviceId,
     };
     invoicesRef.current = [invoice, ...invoicesRef.current];
     if (fromQuote) setQuotations((prev) => prev.map((q) => (q.id === fromQuote.id ? { ...q, status: 'converted', invoiceId: invoice.id } : q)));
@@ -3290,7 +3312,15 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   /** Billing-mode quotation: a customer, several items at quoted prices, and a valid-until date. */
   const saveBillQuotation = (input: { id?: string; customerId: string; items: QuotationLine[]; validUntil: string; notes?: string }): { success: boolean; message: string; quotation?: Quotation } => {
     if (!customers.some((c) => c.id === input.customerId)) return { success: false, message: 'Pick a customer.' };
-    const lines = (input.items || []).filter((l) => l.productId && l.qty > 0).map((l) => ({ ...l, qty: round2(l.qty), unitPrice: round2(l.unitPrice) }));
+    // A line typed per pack keeps 4 decimals on the base price, so qty × price still comes to packs × pack price.
+    const lines = (input.items || []).filter((l) => l.productId && l.qty > 0).map((l) => {
+      const packed = l.packPrice != null && (Number(l.packSize) || 0) > 1;
+      const clean = { ...l, qty: packed ? Math.round(l.qty * 10000) / 10000 : round2(l.qty), unitPrice: packed ? Math.round(l.unitPrice * 10000) / 10000 : round2(l.unitPrice) };
+      if (packed) clean.packPrice = round2(l.packPrice as number);
+      else delete clean.packPrice;
+      if (!((Number(l.packSize) || 0) > 1 && l.packName)) { delete clean.packName; delete clean.packSize; }
+      return clean;
+    });
     if (lines.length === 0) return { success: false, message: 'Add at least one item with a quantity.' };
     if (lines.some((l) => !(l.unitPrice >= 0))) return { success: false, message: 'A price cannot be negative.' };
     if (!input.validUntil) return { success: false, message: 'Enter the date these prices are good until.' };
@@ -3802,6 +3832,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     can: (p) => can(p as Permission),
   });
   // Salesmen, areas, schemes, receive-from-many, commission and interest (see salesExtrasActions.ts).
+  // Bill numbers two devices both used: the later bill made here is renumbered (see numberGuardActions.ts).
+  const numberGuard = useNumberGuard({
+    invoices, setInvoices, setLedger, cheques, isCloudSyncReady, logAuditEvent,
+    nextBillNumber: (date, existing) => controlStore.nextDocNumber('bill', date, existing),
+  });
+  // Payment reminders listed on Home (see reminderActions.ts / utils/reminders.ts).
+  const reminderDay = todayISO();
+  const dueReminders = useMemo(() => computeRemindersDue(customers, invoices, settings, reminderDay), [customers, invoices, settings, reminderDay]);
+  const reminders = createReminderApi({
+    customers, setCustomers, invoices, settings, setSettings, due: dueReminders, today: reminderDay,
+    can: (p) => can(p as Permission),
+    logAuditEvent: (a, dt, sev, cat) => logAuditEvent(a, dt, sev, cat),
+  });
   const salesExtras = useSalesExtrasStore({
     customers, setCustomers, invoices, ledger, setLedger, addExpense, settings,
     can: (p) => can(p as Permission),
@@ -3883,6 +3926,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ...purchasing.api,
         ...finance.api,
         ...auth,
+        ...reminders,
+        ...numberGuard,
+        customerDeleteBlock,
         customers,
         suppliers,
         products,

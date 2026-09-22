@@ -685,9 +685,9 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                   {lines.map((l, i) => (
                     <tr key={i} className="border-b border-gray-200">
                       <td className="py-3 px-3 font-bold">{l.productName}</td>
-                      <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(l.qty)}{l.unit && l.unit !== 'pcs' ? ` ${l.unit}` : ''}</td>
-                      <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(l.unitPrice)}</td>
-                      <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap">{money(l.qty * l.unitPrice)}</td>
+                      <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{hasPack(l) ? formatQtyWithPacks(l.qty, l) : `${money(l.qty)}${l.unit && l.unit !== 'pcs' ? ` ${l.unit}` : ''}`}</td>
+                      <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{l.packPrice != null && hasPack(l) ? `${money(l.packPrice)}/${shortPack(l.packName || '')}` : money(l.unitPrice)}</td>
+                      <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap">{money(Math.round(l.qty * l.unitPrice * 100) / 100)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -752,14 +752,18 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                   </tr>
                 </thead>
                 <tbody>
-                  {r.items.map((l, i) => (
+                  {r.items.map((l, i) => {
+                    // Pack of the bill line (older returns don't carry it themselves).
+                    const pk = hasPack(l) ? l : inv?.items.find((x) => x.id === l.billLineId);
+                    return (
                     <tr key={i} className="border-b border-gray-200">
                       <td className="py-3 px-3 font-bold">{l.productName}</td>
-                      <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(l.qty)}{l.unit && l.unit !== 'pcs' ? ` ${l.unit}` : ''}</td>
+                      <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{pk && hasPack(pk) ? formatQtyWithPacks(l.qty, { unit: l.unit || pk.unit, packName: pk.packName, packSize: pk.packSize }) : `${money(l.qty)}${l.unit && l.unit !== 'pcs' ? ` ${l.unit}` : ''}`}</td>
                       <td className="py-3 px-3 text-right font-mono whitespace-nowrap">{money(l.unitPrice)}</td>
                       <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap">{money(l.amount)}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   {tax > 0 && <tr><td colSpan={3} className="pt-4 text-right text-[11px] text-gray-600">{settings.taxLabel || 'Sales Tax'}</td><td className="pt-4 text-right font-mono px-3">{money(tax)}</td></tr>}

@@ -61,7 +61,7 @@ const numCls = 'px-3 py-2 text-sm text-right tabular-nums whitespace-nowrap';
 
 /** Double-entry books derived from everyday records, plus manual journals for the accountant. */
 export const AccountsScreen: React.FC = () => {
-  const { can, settings, updateSettings, setPrintRequest, deleteManualJournal, addAccount, deleteAccount, isAdminUnlocked } = useTrading();
+  const { can, settings, updateSettings, setPrintRequest, deleteManualJournal, addAccount, deleteAccount, isAdminUnlocked, branchesEnabled, branchView, branchName, mainBranchId } = useTrading();
   const ui = useBillingUI();
   const allowed = can('view_finance');
   // Viewing the books needs finance access; posting or changing them is for managers and admins.
@@ -184,6 +184,11 @@ export const AccountsScreen: React.FC = () => {
         </div>
       )}
 
+      {branchesEnabled && branchView !== 'all' && (
+        <p className="rounded-2xl px-4 py-3 text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-900" data-testid="branch-books-note">
+          Books of {branchName(branchView)}: its bills, payments, expenses and cash, and the customer / supplier balances built from them (Customers owe 1100, Suppliers 2000). Records with no branch — opening balances, stock bought and adjusted, fixed assets, manual journals — are {branchName(null)}'s{branchView === mainBranchId ? '' : ', so they are not here'}. Stock (Inventory 1200) is a whole-shop account: here it only shows this branch's cost of sales; pick All branches for the stock on hand. The trial balance of every branch balances, and the branches add up to the whole shop.
+        </p>
+      )}
       {settings.booksLockedUntil && (
         <div className="rounded-2xl px-4 py-3 text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900 flex items-center gap-2">
           <Lock className="w-4 h-4 shrink-0" />

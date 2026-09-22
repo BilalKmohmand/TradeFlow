@@ -73,7 +73,14 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const [date, setDate] = useState(todayISO());
   // A quotation fills the lines at the quoted prices; otherwise one empty line.
   const [rows, setRows] = useState<Row[]>(() =>
-    quote ? quotationLines(quote, (id) => products.find((p) => p.id === id)?.name).map((l) => newRow({ productId: l.productId, qty: String(l.qty), price: String(l.unitPrice), priceFrom: 'typed' })) : [newRow()]
+    quote
+      ? quotationLines(quote, (id) => products.find((p) => p.id === id)?.name).map((l) =>
+          // A line quoted per carton comes onto the bill per carton too.
+          l.packPrice != null && (l.packSize || 0) > 1 && hasPack(products.find((p) => p.id === l.productId))
+            ? newRow({ productId: l.productId, qty: num4(baseToPacks(l.qty, l.packSize!)), price: String(l.packPrice), inPack: true, priceFrom: 'typed' })
+            : newRow({ productId: l.productId, qty: String(l.qty), price: String(l.unitPrice), priceFrom: 'typed' })
+        )
+      : [newRow()]
   );
   const [discount, setDiscount] = useState('');
   const [paidNow, setPaidNow] = useState('');

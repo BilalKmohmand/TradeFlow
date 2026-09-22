@@ -318,6 +318,8 @@ export interface ControlApi {
   /** Delete through the bin with a reason (same as the screens' delete buttons). */
   deleteRecord: (kind: DeletedKind, id: string, reason?: string) => Result;
   canRestore: (rec: DeletedRecord) => boolean;
+  /** Why a deleted bill / payment can only be viewed, not restored (null = it can be restored). */
+  restoreBlockReason: (rec: DeletedRecord) => string | null;
   restoreDeletedRecord: (binId: string) => Result;
 
   // Document numbers
@@ -821,6 +823,7 @@ export const createControlApi = (d: ApiDeps) => {
       setDeleteReason('');
     }
     if (r && typeof r === 'object' && 'success' in (r as object)) return r as Result;
+    if (r && typeof r === 'object' && typeof (r as { blocked?: unknown }).blocked === 'string') return fail((r as { blocked: string }).blocked);
     if (r && typeof r === 'object') {
       const n = Object.values(r as Record<string, number>).reduce((a, v) => a + (Number(v) || 0), 0);
       return n > 0 ? ok('Deleted.') : fail('Nothing was deleted.');
@@ -830,14 +833,130 @@ export const createControlApi = (d: ApiDeps) => {
 
   const RESTORABLE: DeletedKind[] = ['customer', 'supplier', 'item', 'expense', 'cash_entry'];
   const canRestoreAtAll = d.can('system:backup_restore');
-  const canRestore = (rec: DeletedRecord) => canRestoreAtAll && !rec.restoredAt && RESTORABLE.includes(rec.kind);
+
+  // ---- Bills and payments: put back through the normal paths, or view-only with the reason ----
+  const payLabel = (p: { method: string; notes?: string }) => {
+    const first = (p.notes || '').split(' - ')[0].trim();
+    if (first) return first;
+    return p.method === 'cash' ? 'Cash' : p.method === 'online' ? 'Easypaisa / JazzCash' : 'Bank Transfer';
+  };
+  /** Why this deleted bill can't be made again by "New bill" with the same lines, or null. */
+  const billRestoreBlock = (inv: Invoice): string | null => {
+    if (!inv.billKind || inv.items.some((it) => it.qty == null)) return 'This invoice was made from bookings and dispatches, not as a bill. Enter it again from the booking.';
+    if (d.invoices.some((i) => i.id === inv.id)) return 'This bill is already in the list.';
+    const cust = d.customers.find((c) => c.id === inv.customerId);
+    if (!cust) return `The customer ${inv.customerName} has been deleted. Restore the customer first.`;
+    const missing = inv.items.find((it) => !d.products.some((p) => p.id === it.productId));
+    if (missing) return `The item ${missing.productName} has been deleted. Restore the item first.`;
+    const godowns = Array.from(new Set(inv.items.map((it) => it.godownId || '')));
+    if (godowns.length > 1) return 'The lines of this bill came from different godowns. Enter it again as new bills.';
+    if ((d.settings.taxRatePct ?? 0) !== (inv.taxRatePct ?? 0)) return `The sales tax rate has changed since (${inv.taxRatePct ?? 0}% then, ${d.settings.taxRatePct ?? 0}% now), so the same bill would come to a different total. Enter it again.`;
+    const locked = booksLockedFor(d.settings, inv.issueDate);
+    if (locked) return `The bill date is in a closed period. ${locked}`;
+    const twin = d.invoices.find((i) => i.customerId === inv.customerId && i.issueDate === inv.issueDate && Math.abs(i.totalAmount - inv.totalAmount) < 0.005 && i.status !== 'cancelled');
+    if (twin) return `${twin.invoiceNumber} for ${inv.customerName} on the same day for the same ${rs(inv.totalAmount)} is already there. It may have been entered again; check it before restoring.`;
+    return null;
+  };
+  const PAYMENT_TYPES = ['payment_received', 'payment_made'];
+  /** Why this deleted payment row can't be put back, or null. */
+  const paymentRestoreBlock = (l: LedgerEntry): string | null => {
+    if (!PAYMENT_TYPES.includes(l.type)) return 'Only plain payments can be put back. Cheques, bills and notes change other records too: enter them again.';
+    if (d.ledger.some((x) => x.id === l.id)) return 'This payment is already in the books.';
+    const who = l.entityType === 'customer' ? d.customers.some((c) => c.id === l.entityId) : d.suppliers.some((x) => x.id === l.entityId);
+    if (!who) return `The ${l.entityType} of this payment has been deleted.`;
+    if (l.sourceId && d.cheques.some((c) => c.id === l.sourceId)) return 'This row belongs to a cheque. Use Money → Cheques instead.';
+    if (l.sourceId && l.sourceId.startsWith('inv') && !d.invoices.some((i) => i.id === l.sourceId)) return 'The bill this payment was made against has been deleted.';
+    const locked = booksLockedFor(d.settings, l.date);
+    if (locked) return `The payment date is in a closed period. ${locked}`;
+    const twin = d.ledger.find((x) => x.entityId === l.entityId && x.type === l.type && x.date === l.date && Math.abs((x.credit || 0) - (l.credit || 0)) < 0.005 && Math.abs((x.debit || 0) - (l.debit || 0)) < 0.005);
+    if (twin) return `A payment of ${rs(l.credit || l.debit)} on the same day (${twin.referenceId}) is already there. It may have been entered again.`;
+    return null;
+  };
+  const restoreBlockReason = (rec: DeletedRecord): string | null => {
+    if (rec.restoredAt) return null;
+    if (rec.kind === 'bill') return billRestoreBlock(rec.data as Invoice);
+    if (rec.kind === 'payment') return paymentRestoreBlock(rec.data as LedgerEntry);
+    if (RESTORABLE.includes(rec.kind)) return null;
+    return 'Returns, stock and other records change stock and several accounts at once, so they are kept here to view only. Enter them again instead.';
+  };
+  const canRestore = (rec: DeletedRecord) => canRestoreAtAll && !rec.restoredAt && (RESTORABLE.includes(rec.kind) || ((rec.kind === 'bill' || rec.kind === 'payment') && !restoreBlockReason(rec)));
+
+  /** A deleted bill is made again through createBill (stock, period lock, credit limit and payments checked again). */
+  const restoreBill = (rec: DeletedRecord): Result => {
+    const inv = rec.data as Invoice;
+    const block = billRestoreBlock(inv);
+    if (block) return fail(block);
+    const paidSameDay = (inv.payments || []).filter((p) => p.method !== 'cheque' && p.date === inv.issueDate && p.amount > 0);
+    const later = (inv.payments || []).filter((p) => p.method !== 'cheque' && p.date !== inv.issueDate && p.amount > 0);
+    const cheque = (inv.payments || []).filter((p) => p.method === 'cheque');
+    const salesmanOk = inv.salesmanId && d.more.salesmen.some((x) => x.id === inv.salesmanId);
+    const areaOk = inv.areaId && d.more.areas.some((x) => x.id === inv.areaId);
+    const note = `Restored from deleted bill ${inv.invoiceNumber}.`;
+    const r = d.createBill({
+      customerId: inv.customerId,
+      items: inv.items.map((it) => ({
+        productId: it.productId,
+        name: it.productName,
+        qty: it.qty as number,
+        unitPrice: it.unitPrice ?? it.ratePerKg,
+        unit: it.unit,
+        ...(it.discountAmount ? { discountType: it.discountType, discountValue: it.discountValue } : {}),
+        ...(it.customerRate ? { customerRate: true } : {}),
+        ...(it.packPrice != null ? { packPrice: it.packPrice } : {}),
+        ...(it.free ? { free: true, schemeId: it.schemeId, schemeName: it.schemeName } : {}),
+      })),
+      discount: inv.discount || 0,
+      freightCharges: inv.freightCharges || 0,
+      payments: paidSameDay.map((p) => ({ method: payLabel(p), amount: p.amount })),
+      date: inv.issueDate,
+      godownId: inv.items[0]?.godownId,
+      notes: inv.notes ? `${inv.notes} ${note}` : note,
+      salesmanId: salesmanOk ? inv.salesmanId : null,
+      areaId: areaOk ? inv.areaId : null,
+      costCentreId: inv.costCentreId || null,
+      ...(d.can('override_credit') ? { allowOverLimit: true, overrideReason: `Restored from deleted records by ${me}` } : {}),
+    });
+    if (!r.success || !r.invoice) return fail(`Could not restore: ${r.message}`);
+    const newId = r.invoice.id;
+    if (inv.branchId) d.setInvoices((prev) => prev.map((i) => (i.id === newId ? { ...i, branchId: inv.branchId } : i)));
+    const extra: string[] = [];
+    if (later.length) extra.push(`Payments made on other days (${later.map((p) => `${rs(p.amount)} on ${formatDate(p.date)}`).join(', ')}) were not put back: record them again with Receive payment.`);
+    if (cheque.length) extra.push('The cheque on it was cancelled or bounced before the delete, so it is not put back.');
+    return ok(`Bill ${inv.invoiceNumber} is back as ${r.invoice.invoiceNumber} (stock and the customer's account updated).${extra.length ? ` ${extra.join(' ')}` : ''}`);
+  };
+
+  /**
+   * A deleted payment row is put back exactly as it was. Deleting a payment only removed its row (the
+   * balance on the customer / supplier was left alone), so recording it again with "Receive payment"
+   * would take the money off twice; putting the same row back is the exact reverse of the delete.
+   */
+  const restorePayment = (rec: DeletedRecord): Result => {
+    const l = rec.data as LedgerEntry;
+    const block = paymentRestoreBlock(l);
+    if (block) return fail(block);
+    d.setLedger((prev) => [l, ...prev]);
+    return ok(`Payment ${l.referenceId} (${rs(l.credit || l.debit)}, ${formatDate(l.date)}) is back in the books.`);
+  };
 
   const restoreDeletedRecord = (binId: string): Result => {
     const rec = s.deletedRecords.find((r) => r.id === binId);
     if (!rec) return fail('Record not found in the bin.');
     if (!canRestoreAtAll) return fail('Only an admin can restore deleted records.');
     if (rec.restoredAt) return fail('This record was already restored.');
-    if (!RESTORABLE.includes(rec.kind)) return fail('Bills, payments, returns and stock records cannot be restored safely (they change stock and accounts). Enter them again instead.');
+    if (s.deciding.current.has(binId)) return fail('This record is already being restored.');
+    if (rec.kind === 'bill' || rec.kind === 'payment') {
+      s.deciding.current.add(binId);
+      const r = rec.kind === 'bill' ? restoreBill(rec) : restorePayment(rec);
+      if (!r.success) {
+        s.deciding.current.delete(binId);
+        return r;
+      }
+      const at = new Date().toISOString();
+      s.setDeletedRecords((prev) => prev.map((x) => (x.id === binId ? { ...x, restoredAt: at, restoredBy: me } : x)));
+      d.logAuditEvent('Deleted Record Restored', `${rec.label} — ${r.message}`, 'warning', 'data');
+      return r;
+    }
+    if (!RESTORABLE.includes(rec.kind)) return fail(restoreBlockReason(rec) || 'This record cannot be restored.');
     let message = '';
     if (rec.kind === 'customer') {
       const c = rec.data as Customer;
@@ -1129,6 +1248,7 @@ export const createControlApi = (d: ApiDeps) => {
     deletedRecords: s.deletedRecords,
     deleteRecord,
     canRestore,
+    restoreBlockReason,
     restoreDeletedRecord,
     numberSeries,
     updateNumberSeries,

@@ -36,7 +36,7 @@ const Fields: React.FC<{ data: unknown }> = ({ data }) => {
 
 /** Admin → Deleted records: every delete with who / when / why; view it, restore the simple ones. */
 export const DeletedRecordsTab: React.FC = () => {
-  const { deletedRecords, canRestore, restoreDeletedRecord } = useTrading();
+  const { deletedRecords, canRestore, restoreDeletedRecord, restoreBlockReason } = useTrading();
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState<DeletedKind | 'all'>('all');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -57,7 +57,7 @@ export const DeletedRecordsTab: React.FC = () => {
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-bold text-[#111827] dark:text-white">Deleted records</h2>
-        <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">A copy of everything deleted, with who deleted it, when and why. Customers, suppliers, items, expenses and cash entries can be put back.</p>
+        <p className="text-sm text-[#6B7280] dark:text-[#94A3B8]">A copy of everything deleted, with who deleted it, when and why. Customers, suppliers, items, expenses, cash entries, bills and payments can be put back. A bill is made again like a new bill (stock, closed periods and duplicates are checked again).</p>
       </div>
       {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
       <div className="flex flex-col sm:flex-row gap-2">
@@ -110,6 +110,7 @@ export const DeletedRecordsTab: React.FC = () => {
             <p className="font-semibold text-sm text-[#111827] dark:text-white">{open.label}</p>
             <p className="text-sm"><span className="text-[#6B7280] dark:text-[#94A3B8]">Reason: </span>{open.reason || 'No reason given'}</p>
             {open.restoredAt && <Notice kind="ok">Restored by {open.restoredBy} on {when(open.restoredAt)}.</Notice>}
+            {!open.restoredAt && restoreBlockReason(open) && <p className="rounded-2xl px-4 py-3 text-sm bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-900" data-testid="restore-block">View only: {restoreBlockReason(open)}</p>}
             <Fields data={open.data} />
           </div>
         )}

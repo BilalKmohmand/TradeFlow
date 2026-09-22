@@ -18,6 +18,8 @@ export interface Customer {
   /** Late-payment charge: % per month on money overdue more than `interestAfterDays` days (0 / empty = off). */
   interestPctPerMonth?: number;
   interestAfterDays?: number;
+  /** When a payment reminder was last sent to this customer (ISO date-time), so nobody is reminded twice too soon. */
+  lastRemindedAt?: string | null;
 }
 
 export interface Supplier {
@@ -376,6 +378,10 @@ export interface Invoice {
   branchId?: string | null;
   /** Set when the bill needed a manager's approval before it was posted. */
   approval?: { requestId: string; requestedBy?: string; approvedBy?: string; approvedAt?: string; note?: string; rules?: string[] };
+  /** Short tag of the device the bill was made on (used to settle a number two devices both used). */
+  deviceId?: string;
+  /** The number the bill had before it was renumbered because another device had already used it. */
+  renumberedFrom?: string;
 }
 
 export type AuditCategory = 'auth' | 'roles' | 'users' | 'visibility' | 'data' | 'system' | 'billing';
@@ -747,6 +753,19 @@ export interface AppSettings {
   numberSeries?: Partial<Record<DocSeriesKey, DocSeriesConfig>>;
   /** Last number used per series (key = series, or series:year for yearly series). Never goes down, so a deleted number is never reused. */
   docCounters?: Record<string, number>;
+  /** Automatic payment reminders (off by default): who is listed on Home to be reminded on WhatsApp. */
+  reminders?: ReminderSettings;
+}
+
+/**
+ * Payment reminders: a customer is listed when their oldest unpaid bill is `daysAfterDue` days past its
+ * due date or `olderThanDays` days old (either rule may be off = null), at most once every `everyDays` days.
+ */
+export interface ReminderSettings {
+  enabled: boolean;
+  daysAfterDue: number | null;
+  olderThanDays: number | null;
+  everyDays: number;
 }
 
 export type BillPrintSize = 'a4' | 'a5' | 'thermal80';
@@ -783,6 +802,11 @@ export interface QuotationLine {
   qty: number;
   unitPrice: number;
   unit?: string;
+  /** The item's pack at the time (qty stays in the base unit; prints "2 ctn + 3 tins"). */
+  packName?: string;
+  packSize?: number;
+  /** The line was typed in packs at this price per pack. */
+  packPrice?: number;
 }
 
 export interface Quotation {
@@ -970,6 +994,9 @@ export interface ReturnLine {
   /** Where the stock went back to. */
   godownId?: string;
   batches?: BatchAllocation[];
+  /** The item's pack on the bill (qty stays in the base unit; prints "1 ctn + 2 tins"). */
+  packName?: string;
+  packSize?: number;
 }
 
 export type AdjustmentReason = 'count' | 'wastage' | 'moisture' | 'damage' | 'theft' | 'other' | 'received' | 'leaked' | 'expired' | 'free';

@@ -356,3 +356,16 @@ export const closingEntry = (journal: JournalEntry[], end: string, accounts: Acc
 
 /** The latest year close (the only one that can be undone). */
 export const latestClose = (closes: YearClose[]) => [...closes].sort((a, b) => (a.end < b.end ? 1 : -1))[0];
+
+/**
+ * Home reminder: last month's depreciation has not been run while fixed assets exist. Returns the
+ * month and what running it would charge, or null when there is nothing to run.
+ */
+export const depreciationDue = (assets: FixedAsset[], runs: DepreciationRun[], today: string): { month: string; total: number; assets: number } | null => {
+  const month = addMonths(monthOf(today), -1);
+  const eligible = assets.filter((a) => a.purchaseDate <= monthEnd(month));
+  if (eligible.length === 0) return null;
+  const lines = planDepreciation(eligible, runs, [month], today);
+  if (lines.length === 0) return null;
+  return { month, total: round2(lines.reduce((a, l) => a + l.amount, 0)), assets: lines.length };
+};

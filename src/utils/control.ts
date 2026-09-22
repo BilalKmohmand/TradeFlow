@@ -161,6 +161,46 @@ export const scopeToBranch = <T extends BranchSources>(src: T, branchId: string 
   };
 };
 
+/**
+ * Customer and supplier balances as one branch sees them (the whole-shop figures when 'all').
+ *
+ * A balance is the branch's own ledger rows: bills made there (rows follow their bill), payments
+ * received / made there (stamped with the branch), returns on its bills. Rows with no branch, and
+ * the opening / unexplained part of a balance (what the ledger does not explain), count as the main
+ * branch. So the branch figures always add up to the whole-shop balance, and the per-branch trial
+ * balance stays balanced (the journal's "opening / unexplained" plug uses these same figures).
+ * A customer who buys in one branch and pays in another owes one branch and is in advance at the
+ * other; together they come to what the customer really owes.
+ */
+export const partyBalancesForBranch = <T extends BranchSources & { customers: Customer[]; suppliers: Supplier[] }>(
+  src: T,
+  branchId: string | null | undefined,
+  main: string | null
+): { customers: Customer[]; suppliers: Supplier[] } => {
+  if (!branchId || branchId === 'all') return { customers: src.customers, suppliers: src.suppliers };
+  const scoped = scopeToBranch(src, branchId, main);
+  const net = (rows: LedgerEntry[]) => {
+    const m = new Map<string, number>();
+    rows.forEach((l) => {
+      const k = `${l.entityType}|${l.entityId}`;
+      m.set(k, (m.get(k) || 0) + (Number(l.debit) || 0) - (Number(l.credit) || 0));
+    });
+    return m;
+  };
+  const whole = net(src.ledger);
+  const here = net(scoped.ledger);
+  const isMain = branchId === main;
+  const balance = (type: 'customer' | 'supplier', id: string, recorded: number) => {
+    const k = `${type}|${id}`;
+    const unexplained = round2((Number(recorded) || 0) - (whole.get(k) || 0));
+    return round2((here.get(k) || 0) + (isMain ? unexplained : 0));
+  };
+  return {
+    customers: src.customers.map((c) => ({ ...c, totalDue: balance('customer', c.id, c.totalDue) })),
+    suppliers: src.suppliers.map((x) => ({ ...x, totalOwed: balance('supplier', x.id, x.totalOwed) })),
+  };
+};
+
 /** Opening cash / bank balances belong to the main branch. */
 export const settingsForBranch = (settings: AppSettings, branchId: string | null | undefined, main: string | null): AppSettings =>
   !branchId || branchId === 'all' || branchId === main ? settings : { ...settings, cashOpeningBalance: 0, openingBankBalance: 0 };
