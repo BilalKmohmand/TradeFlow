@@ -490,12 +490,14 @@ export interface AppUser {
   pin?: string;
   /** Legacy bcrypt-hashed PIN. Cleared once the user sets a password. */
   pinHash?: string | null;
-  /** PBKDF2-SHA256 hash of the password, base64 (see src/lib/password.ts). Older records may hold a bcrypt hash with no salt. */
+  /** PBKDF2-SHA256 hash of the password, base64 (see src/lib/password.ts). Older records may hold a bcrypt hash with no salt. Kept on the device only (not synced). */
   passwordHash?: string | null;
   /** Random 16-byte salt for passwordHash, base64. */
   passwordSalt?: string | null;
   /** PBKDF2 iteration count used for passwordHash. */
   passwordIter?: number | null;
+  /** This device knows the user has a Supabase Auth login (set after a successful cloud sign-in). Device-only. */
+  cloudLinked?: boolean;
   /** True after an admin sets a temporary password or after a one-time sign-in with an old PIN: a new password must be chosen. */
   mustChangePassword?: boolean;
   /** Last change to the record (ISO); the newer copy wins when device and cloud disagree. */

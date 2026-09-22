@@ -7,10 +7,9 @@
  *   passwordIter  – PBKDF2 iteration count (new hashes use PASSWORD_ITERATIONS)
  * computed with WebCrypto (crypto.subtle), so the same record verifies on any device.
  *
- * SECURITY NOTE: this protects passwords at rest, but the app is local-first and syncs through
- * Supabase with the anon key and RLS disabled. Anyone holding that key can read or change the
- * users table (including these hashes), so true database security would additionally need
- * Supabase Auth + Row Level Security policies. That is deliberately not implemented here.
+ * These three fields stay ON THIS DEVICE only (they let a user sign in offline on a device they have
+ * used before). They are no longer synced to the Supabase users table: the real credential is the
+ * user's Supabase Auth login (see src/lib/cloudAuth.ts and README → "Locking the database").
  */
 import bcrypt from 'bcryptjs';
 import { AppUser, SecurityPolicySettings } from '../types';
@@ -183,25 +182,51 @@ export const migrateLegacyUsers = (users: AppUser[]): AppUser[] => {
 };
 
 /**
+ * Fields kept on this device only. The password hash lets a user sign in offline on a device they have
+ * used before; `cloudLinked` remembers that this user has a Supabase login. None of them is sent to the
+ * cloud (see toUserRow), and a newer cloud copy of the user never wipes them (see mergeUsers).
+ */
+export const LOCAL_ONLY_USER_FIELDS = ['passwordHash', 'passwordSalt', 'passwordIter', 'pin', 'pinHash', 'cloudLinked'] as const;
+
+/**
  * Combine this device's users with the cloud copy: same id → the newer `updatedAt` wins (cloud on a tie),
  * users only on one side are kept (a local-only user is uploaded by the sync that follows).
+ * This device's cached password hash (and link flag) is kept when the cloud copy wins: the cloud no longer
+ * carries hashes, and an old one still sitting in the cloud row is only used when this device has none.
  */
 export const mergeUsers = (local: AppUser[], cloud: AppUser[]): AppUser[] => {
   const byId = new Map<string, AppUser>();
   local.forEach((u) => byId.set(u.id, u));
   cloud.forEach((c) => {
     const l = byId.get(c.id);
-    if (!l || (c.updatedAt || '') >= (l.updatedAt || '')) byId.set(c.id, c);
+    if (l && (c.updatedAt || '') < (l.updatedAt || '')) return;
+    if (!l) return void byId.set(c.id, c);
+    const kept: Partial<AppUser> = {};
+    if (hasPassword(l)) {
+      kept.passwordHash = l.passwordHash;
+      kept.passwordSalt = l.passwordSalt;
+      kept.passwordIter = l.passwordIter;
+      kept.pinHash = l.pinHash ?? null;
+    }
+    // A PIN-era user's old PIN is no longer uploaded either; keep this device's copy for the one-time sign-in.
+    if (!c.pin && l.pin) kept.pin = l.pin;
+    if (!c.pinHash && l.pinHash) kept.pinHash = l.pinHash;
+    if (l.cloudLinked) kept.cloudLinked = true;
+    byId.set(c.id, { ...c, ...kept });
   });
   const cloudIds = new Set(cloud.map((c) => c.id));
   // Keep cloud order first, then local-only users.
   return [...cloud.map((c) => byId.get(c.id)!), ...local.filter((l) => !cloudIds.has(l.id))];
 };
 
-/** Columns of the Supabase users table (setup.sql + migrate_v16_passwords.sql). Anything else stays local. */
+/**
+ * Columns of the Supabase users table that the app writes. The password hash/salt/iterations and the old
+ * PIN hash are deliberately NOT here (they stay on the device), and the plain PIN is always sent empty, so
+ * nothing that can be used to guess a password is uploaded.
+ */
 export const USER_COLUMNS = [
   'id', 'name', 'role', 'pin', 'active', 'createdAt',
-  'username', 'email', 'roles', 'status', 'pinHash', 'passwordHash', 'passwordSalt', 'passwordIter', 'mustChangePassword',
+  'username', 'email', 'roles', 'status', 'mustChangePassword',
   'failedAttempts', 'lockedUntil', 'lastLoginAt', 'twoFactorEnabled', 'updatedAt',
   'branchId',
 ] as const;
@@ -212,7 +237,7 @@ export const toUserRow = (u: AppUser): Record<string, unknown> => {
     const v = (u as any)[k];
     row[k] = v === undefined ? null : v;
   });
-  if (row.pin == null) row.pin = ''; // older tables declare pin NOT NULL
+  row.pin = ''; // never upload a PIN (older tables declare pin NOT NULL, so it is sent empty)
   return row;
 };
 

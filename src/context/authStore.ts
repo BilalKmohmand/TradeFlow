@@ -6,13 +6,29 @@
  * sessionStorage (until the browser/tab closes). The signed-in user is always looked up in the
  * users list, so a deleted or switched-off account is signed out straight away.
  *
- * Security note: this is client-side sign-in for a local-first app. Password hashes are PBKDF2,
- * but the Supabase users table is reachable with the anon key while RLS is disabled; real
- * database security would need Supabase Auth + RLS (not implemented).
+ * Two layers (see README → "Locking the database"):
+ *   - This device: the password is checked against the PBKDF2 hash cached on the device, so sign-in
+ *     works offline on a device the person has used before. The hash is never uploaded.
+ *   - Supabase Auth (when configured and online): the same username + password also signs in to
+ *     Supabase (src/lib/cloudAuth.ts). That session is what the locked database (supabase/lock.sql)
+ *     requires, and Supabase is the source of truth for the password when it can be reached.
+ *     An existing user without a Supabase login yet gets one at their first sign-in on the updated
+ *     app (grace period, sarmaya_claim_account); new staff and password resets create/update it
+ *     through the owner/admin-only sarmaya_admin_set_login.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppSettings, AppUser, AuditCategory, Permission, RoleDefinition, SecurityPolicySettings, SessionUser, UserRole } from '../types';
 import { hasPermission } from '../lib/auth';
+import {
+  ClaimResult,
+  cloudAdminSetLogin,
+  cloudAuthAvailable,
+  cloudChangeOwnPassword,
+  cloudClaimAccount,
+  cloudSignIn,
+  cloudSignOut,
+  hasCloudSessionFor,
+} from '../lib/cloudAuth';
 import {
   canSignIn,
   clearLockout,
@@ -123,7 +139,39 @@ export interface AuthApi {
   changePassword: (currentPassword: string | null, newPassword: string, confirmPassword?: string) => Promise<AuthResult>;
   addUser: (data: NewStaffInput) => Promise<{ success: boolean; message: string; user?: AppUser }>;
   resetUserPassword: (userId: string, tempPassword: string) => Promise<{ success: boolean; message: string }>;
+  /** The shop's database is locked and this device has no Supabase session: the password is needed to keep syncing. */
+  cloudSignInRequired: boolean;
 }
+
+/** The Supabase side, provided by TradingContext. */
+export interface CloudDeps {
+  /** Supabase is configured for this build. */
+  enabled: boolean;
+  /** The cloud copy has been read in this session. */
+  loaded: boolean;
+  /** The cloud refused this device (database locked and no valid Supabase session). */
+  needsSignIn: boolean;
+  /**
+   * Called after a successful Supabase sign-in: turns cloud sync on, reading the cloud first when it has not
+   * been read yet (or when `reload`). Resolves with the cloud users when it read them, otherwise null.
+   */
+  connect: (opts?: { reload?: boolean }) => Promise<AppUser[] | null>;
+}
+
+const NO_CLOUD: CloudDeps = { enabled: false, loaded: false, needsSignIn: false, connect: async () => null };
+
+/** Plain-English note for a first sign-in that could not create the Supabase login. */
+const claimNotice = (claim: ClaimResult): string | undefined => {
+  switch (claim) {
+    case 'hash_mismatch':
+    case 'no_legacy_password':
+    case 'grace_over':
+    case 'no_account':
+      return 'Signed in on this device only. To sync with the shop, ask the owner to set you a temporary password (Admin → Users → key icon).';
+    default:
+      return undefined;
+  }
+};
 
 interface Deps {
   users: AppUser[];
@@ -134,6 +182,8 @@ interface Deps {
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
   /** True once the cloud users table has been read (or there is no cloud / it failed). */
   cloudSettled: boolean;
+  /** Supabase Auth + cloud state (leave out when there is no cloud). */
+  cloud?: CloudDeps;
   log: (action: string, details: string, severity?: 'info' | 'warning' | 'danger', category?: AuditCategory) => void;
 }
 
@@ -146,7 +196,7 @@ const toSessionUser = (u: AppUser): SessionUser => ({
   roles: u.roles && u.roles.length > 0 ? u.roles : [u.role],
 });
 
-export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings, setSettings, cloudSettled, log }: Deps): AuthApi => {
+export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings, setSettings, cloudSettled, cloud = NO_CLOUD, log }: Deps): AuthApi => {
   const [session, setSessionState] = useState<StoredSession | null>(() => readSession());
   const usersRef = useRef(users);
   usersRef.current = users;
@@ -199,8 +249,11 @@ export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings,
   // Built-in super admin (owner's request): username "Admin", password "1234". Added once, after the
   // cloud copy has loaded, when no account uses that username. It has a fixed id so devices that each
   // add it merge into one record. Change the password in My account whenever the shop is ready.
+  // With a cloud, only after the cloud copy was actually read: a device that could not read it (offline, or the
+  // database is locked) must not invent an admin that would then overwrite the shop's real one.
   useEffect(() => {
     if (!cloudSettled) return;
+    if (cloud.enabled && !cloud.loaded) return;
     const FLAG = 'sarmaya_default_admin_added_v1';
     try {
       if (localStorage.getItem(FLAG)) return; // once per device: deleting it later keeps it deleted
@@ -246,16 +299,36 @@ export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings,
     return () => {
       cancelled = true;
     };
-  }, [cloudSettled, users, setUsers]);
+  }, [cloudSettled, cloud.enabled, cloud.loaded, users, setUsers]);
+
+  // The database was locked (lock.sql) while this device had no Supabase session: ask for the password once,
+  // on the lock screen, so the person signs in to Supabase and sync carries on.
+  const cloudPromptedRef = useRef(false);
+  useEffect(() => {
+    if (!cloud.needsSignIn) {
+      cloudPromptedRef.current = false;
+      return;
+    }
+    if (cloudPromptedRef.current) return;
+    const s = sessionRef.current;
+    if (!s || s.locked) return;
+    cloudPromptedRef.current = true;
+    setSession({ ...s, locked: true });
+  }, [cloud.needsSignIn, setSession]);
 
   const sessionUser = session ? users.find((u) => u.id === session.userId && isAccountActive(u)) : undefined;
-  const anyAccount = users.some(canSignIn);
+  // With a cloud, a user synced from it can sign in (online) even without a password cached on this device.
+  const canSignInHere = (u: AppUser) => canSignIn(u) || (cloud.enabled && isAccountActive(u) && Boolean(normalizeUsername(u.username)));
+  const anyAccount = users.some(canSignInHere);
 
   let authStatus: AuthStatus;
   if (sessionUser && session) {
     authStatus = session.locked ? 'locked' : sessionUser.mustChangePassword || !hasPassword(sessionUser) ? 'change_password' : 'signed_in';
   } else if (anyAccount) authStatus = 'login';
-  else authStatus = cloudSettled ? 'signup' : 'loading';
+  else if (!cloudSettled) authStatus = 'loading';
+  // The shop's cloud could not be read (no internet, or locked until sign-in): never offer "create an account"
+  // here; the first sign-in on this device goes to Supabase.
+  else authStatus = cloud.enabled && !cloud.loaded ? 'login' : 'signup';
 
   const currentUser = useMemo(
     () => (authStatus === 'signed_in' && sessionUser ? toSessionUser(sessionUser) : null),
@@ -276,8 +349,8 @@ export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings,
     setSession({ userId: user.id, expiresAt: Date.now() + hours * 3600_000, persistent });
   };
 
-  /** Check a password for one user, applying the failed-attempt lockout. */
-  const checkPassword = async (user: AppUser, password: string): Promise<AuthResult & { usedLegacy?: boolean }> => {
+  /** Refuse a switched-off or locked-out account before looking at the password. */
+  const preCheck = (user: AppUser): AuthResult | null => {
     const label = `${user.name} (@${user.username || user.id})`;
     if (!isAccountActive(user)) {
       log('Login Blocked', `${label} tried to sign in but the account is switched off.`, 'warning', 'auth');
@@ -293,57 +366,140 @@ export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings,
         error: `Too many wrong attempts. Try again in ${minutesLeft} minute${minutesLeft === 1 ? '' : 's'}, or ask the owner to unlock your account.`,
       };
     }
-    let ok = false;
-    let usedLegacy = false;
-    if (hasPassword(user)) ok = await verifyPassword(password, user);
-    else if (matchesLegacyCredential(user, password, legacyMasterPin)) {
-      ok = true;
-      usedLegacy = true;
-    }
+    return null;
+  };
+
+  /** Count a wrong password (the account locks after the policy limit). */
+  const failAttempt = (user: AppUser, error?: string): AuthResult => {
+    const label = `${user.name} (@${user.username || user.id})`;
     // Re-read: the record may have changed while hashing.
     const latest = usersRef.current.find((u) => u.id === user.id) || user;
-    if (!ok) {
-      const res = registerFailedAttempt(latest, securityPolicy);
-      patchUser(user.id, () => res.user);
-      if (res.locked) {
-        log('Account Locked Out', `${label} was locked for ${res.lockMinutes} minutes after too many wrong passwords.`, 'danger', 'auth');
-        return {
-          success: false,
-          isLocked: true,
-          remainingMinutes: res.lockMinutes,
-          error: `Too many wrong attempts. The account is locked for ${res.lockMinutes} minutes.`,
-        };
-      }
-      log('Login Failed', `Wrong password for ${label}. ${res.attemptsLeft} attempt(s) left.`, 'warning', 'auth');
+    const res = registerFailedAttempt(latest, securityPolicy);
+    patchUser(user.id, () => res.user);
+    if (res.locked) {
+      log('Account Locked Out', `${label} was locked for ${res.lockMinutes} minutes after too many wrong passwords.`, 'danger', 'auth');
       return {
         success: false,
-        attemptsLeft: res.attemptsLeft,
-        error: `Username or password is incorrect. ${res.attemptsLeft} attempt${res.attemptsLeft === 1 ? '' : 's'} left before the account is locked.`,
+        isLocked: true,
+        remainingMinutes: res.lockMinutes,
+        error: `Too many wrong attempts. The account is locked for ${res.lockMinutes} minutes.`,
       };
     }
-    return { success: true, usedLegacy };
+    log('Login Failed', `Wrong password for ${label}. ${res.attemptsLeft} attempt(s) left.`, 'warning', 'auth');
+    return {
+      success: false,
+      attemptsLeft: res.attemptsLeft,
+      error: `${error || 'Username or password is incorrect.'} ${res.attemptsLeft} attempt${res.attemptsLeft === 1 ? '' : 's'} left before the account is locked.`,
+    };
+  };
+
+  /** The password against this device's cached hash (or a one-time old PIN). */
+  const verifyLocal = async (user: AppUser, password: string): Promise<{ ok: boolean; usedLegacy: boolean }> => {
+    if (hasPassword(user)) return { ok: await verifyPassword(password, user), usedLegacy: false };
+    if (matchesLegacyCredential(user, password, legacyMasterPin)) return { ok: true, usedLegacy: true };
+    return { ok: false, usedLegacy: false };
+  };
+
+  type CloudOutcome =
+    /** Signed in to Supabase. */
+    | { kind: 'ok' }
+    /** Supabase says the password is wrong and this device could not vouch for it either. */
+    | { kind: 'wrong' }
+    /** Supabase has a different (newer) password for this user, or the account is switched off there. */
+    | { kind: 'stale'; error: string }
+    /** Supabase could not be used (offline, not set up, no login yet): this device decides. */
+    | { kind: 'local'; notice?: string };
+
+  /**
+   * Sign in to Supabase as this user. If Supabase has no login for them yet and the password matched this
+   * device's hash, create it (first sign-in on the updated app, grace period only).
+   */
+  const signInToCloud = async (username: string, password: string, user: AppUser, localOk: boolean): Promise<CloudOutcome> => {
+    if (!cloud.enabled || !cloudAuthAvailable()) return { kind: 'local' };
+    const first = await cloudSignIn(username, password);
+    if (first.status === 'ok') return { kind: 'ok' };
+    if (first.status === 'unavailable') return { kind: 'local' };
+    if (!localOk || !hasPassword(user)) return { kind: 'wrong' };
+    const claim = await cloudClaimAccount(username, password, user.passwordHash as string);
+    if (claim === 'linked') {
+      const again = await cloudSignIn(username, password);
+      if (again.status !== 'ok') return { kind: 'local' };
+      log('Secure Sign-in Linked', `${user.name} (@${user.username}) now signs in to the shop's cloud too.`, 'info', 'auth');
+      return { kind: 'ok' };
+    }
+    if (claim === 'already_linked') {
+      return { kind: 'stale', error: 'This password was changed (by the owner or on another device). Sign in with your newest password.' };
+    }
+    if (claim === 'inactive') return { kind: 'stale', error: 'This account is switched off in the shop.' };
+    const notice = claimNotice(claim);
+    if (notice) log('Cloud Sign-in Missing', `${user.name} (@${user.username}) signed in on this device only (${claim}).`, 'warning', 'auth');
+    return { kind: 'local', notice };
+  };
+
+  /** After Supabase accepted the password: cache it on this device, remember the link, start syncing. */
+  const afterCloudSignIn = async (user: AppUser, password: string, localOk: boolean) => {
+    const hash = localOk ? null : await hashPassword(password);
+    patchUser(user.id, (u) => ({ ...u, ...(hash || {}), cloudLinked: true }));
+    if (!cloud.loaded || cloud.needsSignIn) void cloud.connect();
   };
 
   const login: AuthApi['login'] = async (username, password, keepSignedIn = true) => {
     const name = normalizeUsername(username);
     if (!name || !password) return { success: false, error: 'Enter your username and password.' };
-    const user = usersRef.current.find((u) => normalizeUsername(u.username) === name);
-    if (!user || !canSignIn(user)) {
-      log('Login Failed', `Sign-in attempt with unknown username "${name}".`, 'warning', 'auth');
-      return { success: false, error: 'Username or password is incorrect.' };
+    let user = usersRef.current.find((u) => normalizeUsername(u.username) === name);
+
+    // Not on this device: only Supabase can check it (the first sign-in on a device needs the internet).
+    if (!user || !canSignInHere(user)) {
+      if (!cloud.enabled) {
+        log('Login Failed', `Sign-in attempt with unknown username "${name}".`, 'warning', 'auth');
+        return { success: false, error: 'Username or password is incorrect.' };
+      }
+      const res = await cloudSignIn(name, password);
+      if (res.status === 'unavailable') {
+        return { success: false, error: 'The first sign-in on this device needs the internet. Connect and try again.' };
+      }
+      if (res.status === 'invalid') {
+        log('Login Failed', `Sign-in attempt with unknown username "${name}".`, 'warning', 'auth');
+        return { success: false, error: 'Username or password is incorrect.' };
+      }
+      const cloudUsers = (await cloud.connect({ reload: true })) || [];
+      user = cloudUsers.find((u) => normalizeUsername(u.username) === name) || usersRef.current.find((u) => normalizeUsername(u.username) === name);
+      if (!user || !isAccountActive(user)) {
+        void cloudSignOut();
+        return { success: false, error: user ? 'This account is switched off. Ask the shop owner to turn it back on.' : 'Could not load your account from the shop. Try again.' };
+      }
+      const hash = await hashPassword(password);
+      const mustChange = Boolean(user.mustChangePassword);
+      patchUser(user.id, (u) => ({ ...clearLockout(u), ...hash, cloudLinked: true, lastLoginAt: nowISO(), mustChangePassword: mustChange }));
+      startSession(user, keepSignedIn);
+      log('User Login', `${user.name} (@${user.username}) signed in (first time on this device).`, 'info', 'auth');
+      return { success: true, mustChangePassword: mustChange };
     }
-    const res = await checkPassword(user, password);
-    if (!res.success) return res;
-    const mustChange = Boolean(res.usedLegacy || user.mustChangePassword || !hasPassword(user));
-    patchUser(user.id, (u) => ({ ...clearLockout(u), lastLoginAt: nowISO(), mustChangePassword: mustChange }));
-    startSession(user, keepSignedIn);
+
+    const blocked = preCheck(user);
+    if (blocked) return blocked;
+    const local = await verifyLocal(user, password);
+    // An old PIN is not a Supabase password: that one-time sign-in stays on this device.
+    const remote: CloudOutcome = local.usedLegacy ? { kind: 'local' } : await signInToCloud(name, password, user, local.ok);
+    if (remote.kind === 'local' && !local.ok && !canSignIn(user)) {
+      // Known from the cloud, but never used on this device and Supabase cannot be reached.
+      return { success: false, error: 'The first sign-in on this device needs the internet. Connect and try again.' };
+    }
+    if (remote.kind === 'wrong' || remote.kind === 'stale' || (remote.kind === 'local' && !local.ok)) {
+      return failAttempt(user, remote.kind === 'stale' ? remote.error : undefined);
+    }
+    if (remote.kind === 'ok') await afterCloudSignIn(user, password, local.ok);
+    const signedIn = user;
+    const mustChange = Boolean(local.usedLegacy || signedIn.mustChangePassword || (!hasPassword(signedIn) && remote.kind !== 'ok'));
+    patchUser(signedIn.id, (u) => ({ ...clearLockout(u), lastLoginAt: nowISO(), mustChangePassword: mustChange }));
+    startSession(signedIn, keepSignedIn);
     log(
       'User Login',
-      `${user.name} (@${user.username}) signed in${res.usedLegacy ? ' with their old PIN and must now choose a password' : ''}.`,
+      `${signedIn.name} (@${signedIn.username}) signed in${local.usedLegacy ? ' with their old PIN and must now choose a password' : ''}${remote.kind !== 'ok' && cloud.enabled ? ' (on this device only, not to the cloud)' : ''}.`,
       'info',
       'auth'
     );
-    return { success: true, mustChangePassword: mustChange };
+    return { success: true, mustChangePassword: mustChange, message: remote.kind === 'local' ? remote.notice : undefined };
   };
 
   const unlockScreen: AuthApi['unlockScreen'] = async (password) => {
@@ -351,12 +507,20 @@ export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings,
     const user = s ? usersRef.current.find((u) => u.id === s.userId) : undefined;
     if (!s || !user) return { success: false, error: 'Please sign in again.' };
     if (!password) return { success: false, error: 'Enter your password.' };
-    const res = await checkPassword(user, password);
-    if (!res.success) return res;
+    const blocked = preCheck(user);
+    if (blocked) return blocked;
+    const local = await verifyLocal(user, password);
+    // Supabase only when needed: no Supabase session on this device yet, or the password did not match here.
+    const needCloud = cloud.enabled && !local.usedLegacy && (!local.ok || cloud.needsSignIn || !(await hasCloudSessionFor(user.username)));
+    const remote: CloudOutcome = needCloud ? await signInToCloud(user.username || '', password, user, local.ok) : { kind: 'local' };
+    if (remote.kind === 'wrong' || remote.kind === 'stale' || (remote.kind === 'local' && !local.ok)) {
+      return failAttempt(user, remote.kind === 'stale' ? remote.error : undefined);
+    }
+    if (remote.kind === 'ok') await afterCloudSignIn(user, password, local.ok);
     patchUser(user.id, (u) => ({ ...clearLockout(u), lastLoginAt: nowISO() }));
     setSession({ ...s, locked: false });
     log('Screen Unlocked', `${user.name} unlocked the screen.`, 'info', 'auth');
-    return { success: true };
+    return { success: true, message: remote.kind === 'local' ? remote.notice : undefined };
   };
 
   const lockScreen = () => {
@@ -372,10 +536,12 @@ export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings,
     const user = s ? usersRef.current.find((u) => u.id === s.userId) : undefined;
     if (user) log('User Logout', `${user.name} (@${user.username}) signed out.`, 'info', 'auth');
     setSession(null);
+    // The next person on this device must sign in to Supabase as themselves.
+    if (cloud.enabled) void cloudSignOut();
   };
 
   const signUpOwner: AuthApi['signUpOwner'] = async ({ shopName, name, username, password, confirmPassword }) => {
-    if (usersRef.current.some(canSignIn)) {
+    if (usersRef.current.some(canSignInHere) || (cloud.enabled && !cloud.loaded)) {
       return { success: false, error: 'This shop already has an account. Please sign in instead.' };
     }
     const cleanName = name.trim();
@@ -424,6 +590,20 @@ export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings,
     if (matchesLegacyCredential(user, newPassword) || (currentPassword && currentPassword === newPassword)) {
       return { success: false, error: 'Choose a new password that is different from the old one.' };
     }
+    // Supabase holds the real password: change it there first. A user who has a Supabase login cannot change
+    // it offline (the two would disagree); a user without one (database not set up yet) changes it here only.
+    if (cloud.enabled) {
+      let session = await hasCloudSessionFor(user.username);
+      if (!session && user.cloudLinked && currentPassword && cloudAuthAvailable()) {
+        session = (await cloudSignIn(user.username || '', currentPassword)).status === 'ok';
+      }
+      if (session) {
+        const res = await cloudChangeOwnPassword(newPassword);
+        if (!res.ok) return { success: false, error: res.message || 'Could not change the password on the server.' };
+      } else if (user.cloudLinked) {
+        return { success: false, error: 'Connect to the internet to change your password (it is also changed on the server).' };
+      }
+    }
     const hash = await hashPassword(newPassword);
     patchUser(user.id, (u) => ({ ...u, ...hash, pin: '', pinHash: null, mustChangePassword: false, updatedAt: nowISO() }));
     log('Password Changed', `${user.name} (@${user.username}) ${forced ? 'set a new password' : 'changed their password'}.`, 'warning', 'auth');
@@ -448,10 +628,17 @@ export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings,
     if (assignedRoles.includes('super_admin') && !currentUser?.roles?.includes('super_admin') && currentUser?.role !== 'super_admin') {
       return { success: false, message: 'Only the owner can create another owner (super admin).' };
     }
+    const id = newId();
+    let cloudNote = '';
+    if (cloud.enabled) {
+      const res = await cloudAdminSetLogin(id, username, data.password);
+      if (!res.ok && res.status !== 'not_installed') return { success: false, message: `Account not created: ${res.message}` };
+      if (!res.ok) cloudNote = ' It works on this device only until the shop database is set up for secure sign-in (supabase/auth_setup.sql).';
+    }
     const hash = await hashPassword(data.password);
     const now = nowISO();
     const user: AppUser = {
-      id: newId(),
+      id,
       name: cleanName,
       username,
       email: data.email?.trim() || undefined,
@@ -468,7 +655,7 @@ export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings,
     };
     setUsers((prev) => [user, ...prev]);
     log('User Created', `${currentUser?.name} created @${username} (${cleanName}) with role [${assignedRoles.join(', ')}] and a temporary password.`, 'warning', 'users');
-    return { success: true, message: `Account @${username} created. Give ${cleanName} the temporary password; they will choose their own at first sign-in.`, user };
+    return { success: true, message: `Account @${username} created. Give ${cleanName} the temporary password; they will choose their own at first sign-in.${cloudNote}`, user };
   };
 
   const resetUserPassword: AuthApi['resetUserPassword'] = async (userId, tempPassword) => {
@@ -477,10 +664,16 @@ export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings,
     if (!user) return { success: false, message: 'User not found.' };
     const pwErr = validateNewPassword(tempPassword, undefined, securityPolicy);
     if (pwErr) return { success: false, message: pwErr };
+    let cloudNote = '';
+    if (cloud.enabled) {
+      const res = await cloudAdminSetLogin(user.id, user.username || '', tempPassword);
+      if (!res.ok && res.status !== 'not_installed') return { success: false, message: `Password not changed: ${res.message}` };
+      if (!res.ok) cloudNote = ' It works on this device only until the shop database is set up for secure sign-in (supabase/auth_setup.sql).';
+    }
     const hash = await hashPassword(tempPassword);
     patchUser(userId, (u) => ({ ...clearLockout(u), ...hash, pin: '', pinHash: null, mustChangePassword: true, updatedAt: nowISO() }));
     log('Password Reset', `${currentUser?.name} set a temporary password for @${user.username} (${user.name}).`, 'warning', 'auth');
-    return { success: true, message: `Temporary password set for @${user.username}. They must choose a new one at next sign-in.` };
+    return { success: true, message: `Temporary password set for @${user.username}. They must choose a new one at next sign-in.${cloudNote}` };
   };
 
   return {
@@ -497,5 +690,6 @@ export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings,
     changePassword,
     addUser,
     resetUserPassword,
+    cloudSignInRequired: cloud.enabled && cloud.needsSignIn,
   };
 };

@@ -246,6 +246,28 @@ const stripLegacy = <T,>(rows: T[]): T[] =>
 /** Tables that may be missing on a project that has not run the migration yet. */
 const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'bank_statement_lines', 'bank_reconciliations', 'godowns', 'stock_batches', 'stock_transfers', 'journal_entries', 'accounts', 'customer_agreed_rates', 'cheques', 'salesmen', 'areas', 'schemes', 'supplier_bills', 'supplier_claims', ...FINANCE_TABLE_NAMES, 'approvals', 'deleted_records', 'branches'];
 
+/**
+ * The cloud refused this device: the database is locked (supabase/lock.sql) and there is no valid Supabase
+ * session for a shop staff member. Sign-in (src/lib/cloudAuth.ts) fixes it; local data is left alone.
+ */
+export class CloudAccessDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CloudAccessDeniedError';
+  }
+}
+
+/** A Supabase/PostgREST error that means "not allowed" (locked database, missing or expired sign-in). */
+export const isAccessDeniedError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as { code?: unknown; message?: unknown; status?: unknown };
+  const code = String(e.code ?? '');
+  if (code === '42501' || code === 'PGRST301' || code === 'PGRST302') return true;
+  const status = Number(e.status ?? 0);
+  if (status === 401 || status === 403) return true;
+  return /permission denied|row-level security|JWT expired|No API key|Invalid API key/i.test(String(e.message ?? ''));
+};
+
 /** Read a whole table in pages (PostgREST caps a single select at 1000 rows). */
 const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { message: string } | null }> => {
   const page = 1000;
@@ -300,6 +322,10 @@ export const loadAllData = async (): Promise<AppData> => {
       fetchAll('deleted_records'),
       fetchAll('branches'),
     ]);
+
+  // Locked database and no staff sign-in on this device: say so (the caller keeps the local data).
+  const denied = [customers, suppliers, products, users, settings].find((r) => isAccessDeniedError(r.error));
+  if (denied) throw new CloudAccessDeniedError(`The shop's database needs a sign-in: ${denied.error?.message}`);
 
   const maybeThrow = (result: { error?: { message: string } | null }, label: TableName) => {
     if (result.error) {
@@ -425,6 +451,11 @@ export const clearTable = async (table: TableName): Promise<void> => {
   }
 };
 
+/**
+ * Empty every cloud table except `users` (factory reset, sample data, restore). The user accounts are kept:
+ * the app keeps them on the device too, and once the database is locked the signed-in person's own users row
+ * is what lets them (and the sync) in, so wiping it would lock the shop out of its own data.
+ */
 export const clearAllTables = async (): Promise<void> => {
-  await Promise.all(ALL_TABLES.map((t) => clearTable(t)));
+  await Promise.all(ALL_TABLES.filter((t) => t !== 'users').map((t) => clearTable(t)));
 };

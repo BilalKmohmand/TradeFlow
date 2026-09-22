@@ -16,6 +16,20 @@
 
 BEGIN;
 
+-- Once the database has been locked (supabase/lock.sql), re-running this file must not switch the
+-- lock off again: row-level security is only turned off while the shop is NOT locked.
+CREATE OR REPLACE FUNCTION pg_temp.sarmaya_rls_off(tbl text) RETURNS void LANGUAGE plpgsql AS $fn$
+DECLARE locked boolean := false;
+BEGIN
+  IF to_regclass('sarmaya_private.config') IS NOT NULL THEN
+    EXECUTE 'SELECT EXISTS (SELECT 1 FROM sarmaya_private.config WHERE key = ''locked_at'')' INTO locked;
+  END IF;
+  IF NOT locked THEN
+    EXECUTE format('ALTER TABLE %I DISABLE ROW LEVEL SECURITY', tbl);
+  END IF;
+END
+$fn$;
+
 -- ============================ 1. Tables ====================================
 -- Creates any table this project does not have yet. Existing tables are left alone.
 
@@ -466,33 +480,33 @@ CREATE TABLE IF NOT EXISTS stock_transfers (
 CREATE INDEX IF NOT EXISTS stock_transfers_date_idx ON stock_transfers (date);
 
 -- Internal tool: RLS disabled so the anon key can read/write. Keep the key private.
-ALTER TABLE customers DISABLE ROW LEVEL SECURITY;
-ALTER TABLE suppliers DISABLE ROW LEVEL SECURITY;
-ALTER TABLE products DISABLE ROW LEVEL SECURITY;
-ALTER TABLE bookings DISABLE ROW LEVEL SECURITY;
-ALTER TABLE dispatches DISABLE ROW LEVEL SECURITY;
-ALTER TABLE purchases DISABLE ROW LEVEL SECURITY;
-ALTER TABLE price_history DISABLE ROW LEVEL SECURITY;
-ALTER TABLE expenses DISABLE ROW LEVEL SECURITY;
-ALTER TABLE trucks DISABLE ROW LEVEL SECURITY;
-ALTER TABLE users DISABLE ROW LEVEL SECURITY;
-ALTER TABLE cash_entries DISABLE ROW LEVEL SECURITY;
-ALTER TABLE settings DISABLE ROW LEVEL SECURITY;
-ALTER TABLE quotations DISABLE ROW LEVEL SECURITY;
-ALTER TABLE purchase_orders DISABLE ROW LEVEL SECURITY;
-ALTER TABLE returns DISABLE ROW LEVEL SECURITY;
-ALTER TABLE stock_adjustments DISABLE ROW LEVEL SECURITY;
-ALTER TABLE tasks DISABLE ROW LEVEL SECURITY;
-ALTER TABLE invoices DISABLE ROW LEVEL SECURITY;
-ALTER TABLE ledger DISABLE ROW LEVEL SECURITY;
-ALTER TABLE whatsapp_messages DISABLE ROW LEVEL SECURITY;
-ALTER TABLE bank_statement_lines DISABLE ROW LEVEL SECURITY;
-ALTER TABLE bank_reconciliations DISABLE ROW LEVEL SECURITY;
-ALTER TABLE godowns DISABLE ROW LEVEL SECURITY;
-ALTER TABLE stock_batches DISABLE ROW LEVEL SECURITY;
-ALTER TABLE stock_transfers DISABLE ROW LEVEL SECURITY;
-ALTER TABLE journal_entries DISABLE ROW LEVEL SECURITY;
-ALTER TABLE accounts DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('customers');
+SELECT pg_temp.sarmaya_rls_off('suppliers');
+SELECT pg_temp.sarmaya_rls_off('products');
+SELECT pg_temp.sarmaya_rls_off('bookings');
+SELECT pg_temp.sarmaya_rls_off('dispatches');
+SELECT pg_temp.sarmaya_rls_off('purchases');
+SELECT pg_temp.sarmaya_rls_off('price_history');
+SELECT pg_temp.sarmaya_rls_off('expenses');
+SELECT pg_temp.sarmaya_rls_off('trucks');
+SELECT pg_temp.sarmaya_rls_off('users');
+SELECT pg_temp.sarmaya_rls_off('cash_entries');
+SELECT pg_temp.sarmaya_rls_off('settings');
+SELECT pg_temp.sarmaya_rls_off('quotations');
+SELECT pg_temp.sarmaya_rls_off('purchase_orders');
+SELECT pg_temp.sarmaya_rls_off('returns');
+SELECT pg_temp.sarmaya_rls_off('stock_adjustments');
+SELECT pg_temp.sarmaya_rls_off('tasks');
+SELECT pg_temp.sarmaya_rls_off('invoices');
+SELECT pg_temp.sarmaya_rls_off('ledger');
+SELECT pg_temp.sarmaya_rls_off('whatsapp_messages');
+SELECT pg_temp.sarmaya_rls_off('bank_statement_lines');
+SELECT pg_temp.sarmaya_rls_off('bank_reconciliations');
+SELECT pg_temp.sarmaya_rls_off('godowns');
+SELECT pg_temp.sarmaya_rls_off('stock_batches');
+SELECT pg_temp.sarmaya_rls_off('stock_transfers');
+SELECT pg_temp.sarmaya_rls_off('journal_entries');
+SELECT pg_temp.sarmaya_rls_off('accounts');
 
 
 -- ======================= 2. Columns on older tables =========================
@@ -546,9 +560,9 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS expenses_date_idx ON expenses (date);
 
-ALTER TABLE expenses DISABLE ROW LEVEL SECURITY;
-ALTER TABLE trucks DISABLE ROW LEVEL SECURITY;
-ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('expenses');
+SELECT pg_temp.sarmaya_rls_off('trucks');
+SELECT pg_temp.sarmaya_rls_off('users');
 
 
 -- ----------------------- from migrate_v4_cashbook.sql -----------------------
@@ -574,8 +588,8 @@ CREATE TABLE IF NOT EXISTS settings (
   "cashOpeningDate" TEXT
 );
 
-ALTER TABLE cash_entries DISABLE ROW LEVEL SECURITY;
-ALTER TABLE settings DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('cash_entries');
+SELECT pg_temp.sarmaya_rls_off('settings');
 
 
 -- ----------------------- from migrate_v5_dispatch_tax_delivery.sql -----------------------
@@ -693,11 +707,11 @@ CREATE TABLE IF NOT EXISTS tasks (
   "doneAt" TEXT
 );
 
-ALTER TABLE quotations DISABLE ROW LEVEL SECURITY;
-ALTER TABLE purchase_orders DISABLE ROW LEVEL SECURITY;
-ALTER TABLE returns DISABLE ROW LEVEL SECURITY;
-ALTER TABLE stock_adjustments DISABLE ROW LEVEL SECURITY;
-ALTER TABLE tasks DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('quotations');
+SELECT pg_temp.sarmaya_rls_off('purchase_orders');
+SELECT pg_temp.sarmaya_rls_off('returns');
+SELECT pg_temp.sarmaya_rls_off('stock_adjustments');
+SELECT pg_temp.sarmaya_rls_off('tasks');
 
 
 -- ----------------------- from migrate_v7_master_pin_sync.sql -----------------------
@@ -751,7 +765,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   "billKind" TEXT
 );
 
-ALTER TABLE invoices DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('invoices');
 
 
 -- ----------------------- from migrate_v9_billing_integrity.sql -----------------------
@@ -807,8 +821,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS accounts_code_idx ON accounts (code);
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS "booksLockedUntil" TEXT;
 
 -- Same convention as every other table in this project.
-ALTER TABLE journal_entries DISABLE ROW LEVEL SECURITY;
-ALTER TABLE accounts DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('journal_entries');
+SELECT pg_temp.sarmaya_rls_off('accounts');
 
 
 -- ----------------------- from migrate_v11_inventory.sql -----------------------
@@ -862,9 +876,9 @@ CREATE TABLE IF NOT EXISTS stock_transfers (
 CREATE INDEX IF NOT EXISTS stock_transfers_date_idx ON stock_transfers (date);
 
 -- Internal tool convention: RLS disabled so the anon key can read/write. Keep the key private.
-ALTER TABLE godowns DISABLE ROW LEVEL SECURITY;
-ALTER TABLE stock_batches DISABLE ROW LEVEL SECURITY;
-ALTER TABLE stock_transfers DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('godowns');
+SELECT pg_temp.sarmaya_rls_off('stock_batches');
+SELECT pg_temp.sarmaya_rls_off('stock_transfers');
 
 -- Stock received without a supplier bill is recorded as an adjustment at its cost.
 ALTER TABLE stock_adjustments ADD COLUMN IF NOT EXISTS "costPerKg" NUMERIC;
@@ -907,8 +921,8 @@ CREATE TABLE IF NOT EXISTS bank_reconciliations (
 );
 
 -- Internal tool: RLS disabled so the anon key can read/write (same as every other table).
-ALTER TABLE bank_statement_lines DISABLE ROW LEVEL SECURITY;
-ALTER TABLE bank_reconciliations DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('bank_statement_lines');
+SELECT pg_temp.sarmaya_rls_off('bank_reconciliations');
 
 -- Bank-reconciliation receipts post to an explicit account (suspense) instead of guessing from bank text.
 ALTER TABLE cash_entries ADD COLUMN IF NOT EXISTS "accountCode" TEXT;
@@ -955,7 +969,7 @@ CREATE TABLE IF NOT EXISTS customer_agreed_rates (
 CREATE INDEX IF NOT EXISTS customer_agreed_rates_customer_idx ON customer_agreed_rates ("customerId");
 
 -- Internal tool: RLS disabled so the anon key can read/write (same as every other table).
-ALTER TABLE customer_agreed_rates DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('customer_agreed_rates');
 
 -- Ledger rows of type 'refund_paid' (money handed back for a return) use the existing columns.
 
@@ -1032,7 +1046,7 @@ CREATE INDEX IF NOT EXISTS cheques_customer_idx ON cheques ("customerId");
 CREATE INDEX IF NOT EXISTS cheques_supplier_idx ON cheques ("supplierId");
 
 -- Internal tool: RLS disabled so the anon key can read/write (same as every other table).
-ALTER TABLE cheques DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('cheques');
 
 
 
@@ -1103,7 +1117,7 @@ CREATE INDEX IF NOT EXISTS users_username_idx ON users (lower(username));
 -- The old shared master PIN is no longer used for sign-in; the app clears it once the owner has a password.
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS "masterPin" TEXT;
 
-ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('users');
 
 
 
@@ -1228,9 +1242,9 @@ ALTER TABLE invoices ADD COLUMN IF NOT EXISTS "freightCharges" NUMERIC DEFAULT 0
 ALTER TABLE ledger ADD COLUMN IF NOT EXISTS "salesmanId" TEXT;
 
 -- Internal tool: RLS disabled so the anon key can read/write (same as every other table).
-ALTER TABLE salesmen DISABLE ROW LEVEL SECURITY;
-ALTER TABLE areas DISABLE ROW LEVEL SECURITY;
-ALTER TABLE schemes DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('salesmen');
+SELECT pg_temp.sarmaya_rls_off('areas');
+SELECT pg_temp.sarmaya_rls_off('schemes');
 
 
 
@@ -1340,8 +1354,8 @@ CREATE INDEX IF NOT EXISTS supplier_claims_supplier_idx ON supplier_claims ("sup
 CREATE INDEX IF NOT EXISTS supplier_claims_status_idx ON supplier_claims (status);
 
 -- Internal tool: RLS disabled so the anon key can read/write (same as every other table).
-ALTER TABLE supplier_bills DISABLE ROW LEVEL SECURITY;
-ALTER TABLE supplier_claims DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('supplier_bills');
+SELECT pg_temp.sarmaya_rls_off('supplier_claims');
 
 
 
@@ -1477,14 +1491,14 @@ ALTER TABLE settings ADD COLUMN IF NOT EXISTS "financialYearStart" TEXT;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS "chequeLayout" JSONB;
 
 -- Same convention as every other table in this project.
-ALTER TABLE fixed_assets DISABLE ROW LEVEL SECURITY;
-ALTER TABLE depreciation_runs DISABLE ROW LEVEL SECURITY;
-ALTER TABLE staff DISABLE ROW LEVEL SECURITY;
-ALTER TABLE staff_advances DISABLE ROW LEVEL SECURITY;
-ALTER TABLE salary_runs DISABLE ROW LEVEL SECURITY;
-ALTER TABLE budgets DISABLE ROW LEVEL SECURITY;
-ALTER TABLE cost_centres DISABLE ROW LEVEL SECURITY;
-ALTER TABLE year_closes DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('fixed_assets');
+SELECT pg_temp.sarmaya_rls_off('depreciation_runs');
+SELECT pg_temp.sarmaya_rls_off('staff');
+SELECT pg_temp.sarmaya_rls_off('staff_advances');
+SELECT pg_temp.sarmaya_rls_off('salary_runs');
+SELECT pg_temp.sarmaya_rls_off('budgets');
+SELECT pg_temp.sarmaya_rls_off('cost_centres');
+SELECT pg_temp.sarmaya_rls_off('year_closes');
 
 
 
@@ -1515,7 +1529,7 @@ CREATE TABLE IF NOT EXISTS approvals (
   "branchId" TEXT,
   "updatedAt" TEXT
 );
-ALTER TABLE approvals DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('approvals');
 
 -- A copy of every deleted record, with who / when / why.
 CREATE TABLE IF NOT EXISTS deleted_records (
@@ -1531,7 +1545,7 @@ CREATE TABLE IF NOT EXISTS deleted_records (
   "restoredAt" TEXT,
   "restoredBy" TEXT
 );
-ALTER TABLE deleted_records DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('deleted_records');
 
 -- Shops / branches (the first one is the main branch).
 CREATE TABLE IF NOT EXISTS branches (
@@ -1543,7 +1557,7 @@ CREATE TABLE IF NOT EXISTS branches (
   "createdAt" TEXT,
   "updatedAt" TEXT
 );
-ALTER TABLE branches DISABLE ROW LEVEL SECURITY;
+SELECT pg_temp.sarmaya_rls_off('branches');
 
 -- Settings: approval rules, number series and their counters (never go down).
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS "approvalRules" JSONB;

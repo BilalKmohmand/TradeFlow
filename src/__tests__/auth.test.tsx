@@ -110,13 +110,16 @@ describe('migration of PIN-era users', () => {
     expect(matchesLegacyCredential(manager, '4455', '4455')).toBe(false);
     expect(matchesLegacyCredential(manager, '1234')).toBe(true);
   });
-  it('users sync as table columns only, with the hash fields', () => {
-    const row = toUserRow({ id: 'u', name: 'N', role: 'operator', active: true, createdAt: 'x', ...hashForTest('pw-pw-pw-pw', 1000), lastLogin: 'junk' } as any);
-    expect(row).toHaveProperty('passwordHash');
-    expect(row).toHaveProperty('passwordSalt');
-    expect(row).toHaveProperty('passwordIter', 1000);
+  it('users sync as table columns only, never the password hash, salt, iterations, PIN or PIN hash', () => {
+    const row = toUserRow({ id: 'u', name: 'N', role: 'operator', active: true, createdAt: 'x', ...hashForTest('pw-pw-pw-pw', 1000), pin: '4455', pinHash: '$2a$04$x', cloudLinked: true, lastLogin: 'junk' } as any);
+    expect(row).not.toHaveProperty('passwordHash');
+    expect(row).not.toHaveProperty('passwordSalt');
+    expect(row).not.toHaveProperty('passwordIter');
+    expect(row).not.toHaveProperty('pinHash');
+    expect(row).not.toHaveProperty('cloudLinked');
     expect(row).not.toHaveProperty('lastLogin');
     expect(row.pin).toBe('');
+    expect(row).toMatchObject({ id: 'u', name: 'N', role: 'operator', active: true });
   });
   it('merges device and cloud users: newer copy wins, local-only users are kept', () => {
     const base = { name: 'A', role: 'operator', active: true, createdAt: 'x' } as const;
