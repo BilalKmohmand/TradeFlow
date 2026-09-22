@@ -785,7 +785,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   taxLabel: 'Sales Tax',
   companyName: 'Sarmaya',
   companyTagline: '',
-  companyAddress: 'Karachi, Pakistan',
+  companyAddress: '',
   companyPhone: '',
   companyTaxId: '',
   companyEmail: '',

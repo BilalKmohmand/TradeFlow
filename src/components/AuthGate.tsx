@@ -434,7 +434,7 @@ export const AuthGate: React.FC = () => {
       </div>
 
       <div className="w-full max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1 text-[11px] text-[#6B7280] dark:text-[#94A3B8] z-10">
-        <span>Sarmaya • Karachi, Pakistan</span>
+        <span>{settings.companyName && settings.companyName !== 'Sarmaya' ? settings.companyName : 'Sarmaya'}</span>
         <span>Passwords are never stored as plain text.</span>
       </div>
     </div>
