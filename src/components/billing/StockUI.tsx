@@ -43,13 +43,14 @@ export const StockUIProvider: React.FC<{ children: React.ReactNode }> = ({ child
     aging: (side = 'customers') => show({ kind: 'aging', side }),
   };
 
-  // Desktop function keys: F2 new bill, F3 receive payment, F4 add expense, F6 receive stock.
+  // Desktop function keys: F2 new bill, F3 receive payment, F4 add expense, F6 receive stock, F9 cash book.
   const { settings, can } = useTrading();
   useBillingShortcuts((settings.appMode || 'billing') === 'billing', {
     newBill: () => billing.newBill(),
     receive: () => billing.receive(),
     expense: () => billing.addExpense(),
     receiveStock: can('products:create') || can('stock:adjust') ? () => api.receiveStock() : undefined,
+    cashBook: () => billing.openReport('cash-book'),
   });
 
   return (

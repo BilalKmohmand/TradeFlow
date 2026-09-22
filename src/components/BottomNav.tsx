@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Gauge, Home, FileText, Coins, MoreHorizontal, Plus, Users, Layers, Tag, CalendarDays, BookOpen, ShieldCheck, Sun, Moon, Sparkles, Bell, KeyRound, Lock, LogOut, ChevronDown, ArrowLeftRight } from 'lucide-react';
+import { Gauge, Home, FileText, Coins, MoreHorizontal, Plus, Users, Layers, Tag, CalendarDays, BookOpen, ShieldCheck, Sun, Moon, Sparkles, Bell, KeyRound, Lock, LogOut, ChevronDown, ArrowLeftRight, PackagePlus, Library } from 'lucide-react';
+import { ClassicMenu } from './billing/classic/ClassicMenu';
 import { useTrading } from '../context/TradingContext';
 import { useTheme, ThemeMode } from '../context/ThemeContext';
 import { useBillingUI } from './billing/BillingUI';
@@ -18,7 +19,7 @@ type Icon = React.FC<{ className?: string }>;
  */
 export const BottomNav: React.FC = () => {
   const {
-    activeScreen, setActiveScreen, can, isScreenVisible, invoices, currentUser, roles, lockScreen, logout, updateSettings,
+    activeScreen, setActiveScreen, can, isScreenVisible, invoices, currentUser, roles, lockScreen, logout, updateSettings, settings,
     products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders,
   } = useTrading();
   const { themeMode, setThemeMode } = useTheme();
@@ -45,13 +46,17 @@ export const BottomNav: React.FC = () => {
     { id: 'suppliers', label: 'Suppliers', icon: Layers, tint: 'text-indigo-600 dark:text-indigo-300' },
     { id: 'products', label: 'Items & Prices', icon: Tag, tint: 'text-amber-600 dark:text-amber-300' },
     { id: 'daily', label: 'Daily Sheet', icon: CalendarDays, tint: 'text-sky-600 dark:text-sky-300' },
+    ...(can('products:create') || can('stock:adjust') || can('suppliers:view') ? [{ id: 'purchases' as ActiveScreen, label: 'Purchase invoices', icon: PackagePlus, tint: 'text-indigo-600 dark:text-indigo-300' }] : []),
+    { id: 'reports-hub', label: 'Reports', icon: Library, tint: 'text-sky-600 dark:text-sky-300' },
     ...(can('view_finance') ? [{ id: 'accounts' as ActiveScreen, label: 'Accounts', icon: BookOpen, tint: 'text-violet-600 dark:text-violet-300' }] : []),
     ...(can('admin_screen') || can('system:admin_screen') ? [{ id: 'admin' as ActiveScreen, label: 'Admin', icon: ShieldCheck, tint: 'text-rose-600 dark:text-rose-300' }] : []),
   ] as { id: ActiveScreen; label: string; icon: Icon; tint: string }[]).filter((s) => isScreenVisible(s.id));
   const moreActive = moreScreens.some((s) => s.id === activeScreen);
 
   const go = (id: ActiveScreen) => {
-    setActiveScreen(id);
+    // "Reports" always opens the Reports menu (also from inside a report).
+    if (id === 'reports-hub') ui.openReport('menu');
+    else setActiveScreen(id);
     setMoreOpen(false);
     window.scrollTo({ top: 0 });
   };
@@ -141,6 +146,13 @@ export const BottomNav: React.FC = () => {
               );
             })}
           </div>
+
+          {settings.classicMenu !== false && (
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Classic menu</div>
+              <ClassicMenu compact onPicked={() => setMoreOpen(false)} />
+            </div>
+          )}
 
           <div>
             <div className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Appearance</div>

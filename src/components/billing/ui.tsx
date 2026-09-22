@@ -26,7 +26,7 @@ export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: stri
     const t = setTimeout(() => {
       // Only if the user hasn't already started typing somewhere in the dialog.
       if (box.current?.contains(document.activeElement)) return;
-      const el = box.current?.querySelector<HTMLElement>('input,select,textarea');
+      const el = box.current?.querySelector<HTMLElement>('input:not([data-skip-autofocus]),select:not([data-skip-autofocus]),textarea:not([data-skip-autofocus])');
       el?.focus();
     }, 50);
     return () => clearTimeout(t);

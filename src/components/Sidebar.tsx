@@ -31,10 +31,13 @@ import {
   Coins,
   Tag,
   BookOpen,
+  PackagePlus as PurchaseIcon,
+  Library,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { computeAlerts } from '../utils/alerts';
 import { ActiveScreen } from '../types';
+import { useBillingUI } from './billing/BillingUI';
 
 interface SidebarProps {
   onReceiveStock: () => void;
@@ -86,6 +89,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReceiveStock }) => {
     invoices,
     updateSettings,
   } = useTrading();
+  // "Reports" always opens the Reports menu (also from inside a report).
+  const billingUI = useBillingUI();
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem('sarmaya_sidebar_collapsed') === '1';
@@ -126,6 +131,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReceiveStock }) => {
     { id: 'customers', label: 'Customers', icon: Users, group: 'People' },
     { id: 'suppliers', label: 'Suppliers', icon: Layers, group: 'People' },
     { id: 'products', label: 'Items & Prices', icon: Tag, group: 'Stock' },
+    ...(can('products:create') || can('stock:adjust') || can('suppliers:view') ? [{ id: 'purchases' as ActiveScreen, label: 'Purchase invoices', icon: PurchaseIcon, group: 'Stock' }] : []),
+    { id: 'reports-hub', label: 'Reports', icon: Library, group: 'Money' },
     { id: 'money', label: 'Money', icon: Coins, group: 'Money' },
     ...(can('view_finance') ? [{ id: 'accounts' as ActiveScreen, label: 'Accounts', icon: BookOpen, group: 'Money' }] : []),
     ...(can('admin_screen') || can('system:admin_screen') ? [{ id: 'admin' as ActiveScreen, label: 'Admin', icon: ShieldCheck, group: 'Administration' }] : []),
@@ -223,7 +230,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReceiveStock }) => {
                   return (
                     <div key={s.id}>
                       <button
-                        onClick={() => setActiveScreen(s.id)}
+                        onClick={() => (s.id === 'reports-hub' ? billingUI.openReport('menu') : setActiveScreen(s.id))}
                         title={s.label}
                         aria-label={s.label}
                         aria-current={active ? 'page' : undefined}

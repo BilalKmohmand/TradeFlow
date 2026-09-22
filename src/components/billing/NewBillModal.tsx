@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, Printer, Save, UserPlus, Percent, SplitSquareHorizontal, Keyboard, Gift } from 'lucide-react';
+import { Plus, Trash2, Printer, Save, UserPlus, Percent, SplitSquareHorizontal, Keyboard, Gift, Search, Truck } from 'lucide-react';
 import { useTrading, BILL_PAYMENT_METHODS, CreateBillItemInput } from '../../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice, rs } from './ui';
 import { todayISO } from '../../utils/stockFlow';
@@ -16,6 +16,14 @@ import { ChequeFieldsInput, ChequeFields, emptyChequeFields } from './ChequeForm
 import { evaluateSchemes } from '../../utils/salesExtras';
 import { CostCentreSelect } from '../finance/common';
 import { isPendingApproval } from '../../context/controlActions';
+import { useBillingUI } from './BillingUI';
+
+/** Find an old bill by its number: exact (INV-12, S-14726) or just the digits (12). */
+export const findBillByNumber = (bills: { id: string; invoiceNumber: string }[], typed: string): { id: string; invoiceNumber: string } | undefined => {
+  const q = typed.trim().toLowerCase();
+  if (!q) return undefined;
+  return bills.find((b) => b.invoiceNumber.toLowerCase() === q) || (/^\d+$/.test(q) ? bills.find((b) => (b.invoiceNumber.match(/(\d+)\s*$/) || [])[1] === String(Number(q))) : undefined);
+};
 
 interface Row {
   key: string;
@@ -56,7 +64,14 @@ interface Props {
  * customer lists can be searched by typing a name or code.
  */
 export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quotationId }) => {
-  const { customers, products, settings, createBill, setPrintRequest, can, godowns, stockBatches, quotations, getCustomerAgreedRate, invoices, ledger, salesmen, areas, schemes, billApprovalReasons, approvalRules, canApprove } = useTrading();
+  const { customers, products, settings, createBill, setPrintRequest, can, godowns, stockBatches, quotations, getCustomerAgreedRate, invoices, ledger, salesmen, areas, schemes, billApprovalReasons, approvalRules, canApprove, previewDocNumber } = useTrading();
+  const ui = useBillingUI();
+  // Apna Accountant fields: memo (book) no., delivery order, and Search for an old bill by number.
+  const [memoNo, setMemoNo] = useState('');
+  const [deliveryOrder, setDeliveryOrder] = useState(false);
+  const [find, setFind] = useState('');
+  /** Line whose item the "Stock in hand" box shows (the one being typed in). */
+  const [focusKey, setFocusKey] = useState<string | null>(null);
   // Set once the bill was sent to a manager (approval rules): nothing is posted until approved.
   const [sentForApproval, setSentForApproval] = useState('');
   const quote = quotationId ? quotations.find((q) => q.id === quotationId) : undefined;
@@ -333,6 +348,8 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
       ...(credit.over ? { allowOverLimit: allowOver, overrideReason: overReason } : approvalWhy && overReason.trim() ? { overrideReason: overReason } : {}),
       godownId: godowns.length > 1 ? godownId : undefined,
       ...(costCentre ? { costCentreId: costCentre } : {}),
+      ...(memoNo.trim() ? { memoNo: memoNo.trim() } : {}),
+      ...(deliveryOrder ? { deliveryOrder: true } : {}),
     });
     if (!result.success) {
       busy.current = false;
@@ -343,6 +360,17 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     onClose();
     if (print && result.invoice) setPrintRequest({ type: 'bill', invoiceId: result.invoice.id });
   };
+
+  /** Search: open an old bill by its number (the new bill is left). */
+  const searchBill = () => {
+    const hit = findBillByNumber(invoices, find);
+    if (!hit) return setError(`No bill “${find.trim()}”. Type the bill number, e.g. ${invoices[0]?.invoiceNumber || 'INV-12'} or just its digits.`);
+    onClose();
+    ui.openBill(hit.id);
+  };
+  const computerNo = previewDocNumber('bill', date);
+  const focused = lines.find((l) => l.key === focusKey && l.product) || lines.find((l) => l.product);
+  const focusedPer = focused?.product && godowns.length > 1 ? stockByGodown(focused.product, stockBatches, godowns) : null;
 
   /** Enter → next field; Ctrl+Enter / F9 → save; "+" / Alt+N → new line. */
   const onKeys = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -411,6 +439,16 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
           </div>
         )}
 
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-2 rounded-2xl border border-dashed border-[#E5E5E1] dark:border-[#203248] px-3.5 py-2" data-testid="bill-computer-no">
+          <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Computer # <strong className="tabular-nums text-sm text-[#111827] dark:text-white" title="Given automatically when you save" data-testid="bill-next-number">{computerNo}</strong></div>
+          <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Computer date <strong className="text-[#111827] dark:text-white">{formatDate(todayISO())}</strong></div>
+          <div className="flex-1 min-w-[12rem] flex gap-1.5 sm:justify-end">
+            <label className="sr-only" htmlFor="bill-search">Search old bill</label>
+            <input id="bill-search" data-skip-autofocus value={find} onChange={(e) => setFind(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); searchBill(); } }} className={`${inputCls} !py-1.5 sm:max-w-[11rem]`} placeholder="Search bill #" />
+            <button type="button" onClick={searchBill} className={`${secondaryBtn} !py-1.5 !px-3 shrink-0`} aria-label="Open old bill"><Search className="w-4 h-4" /></button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="sm:col-span-2">
             <label className={labelCls} htmlFor="bill-customer">Customer</label>
@@ -437,6 +475,16 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
           <div>
             <label className={labelCls} htmlFor="bill-date">Date</label>
             <input id="bill-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+          </div>
+          <div className="sm:col-span-3 grid grid-cols-2 gap-3 items-end">
+            <div>
+              <label className={labelCls} htmlFor="bill-memo">Memo No</label>
+              <input id="bill-memo" value={memoNo} onChange={(e) => setMemoNo(e.target.value)} className={inputCls} placeholder="book / reference no." />
+            </div>
+            <label htmlFor="bill-delivery-order" className="flex items-center gap-2.5 min-h-11 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] px-3 cursor-pointer" title="Goods go out later. Stock is taken now; the bill waits in the Pending Delivery List.">
+              <input id="bill-delivery-order" type="checkbox" checked={deliveryOrder} onChange={(e) => setDeliveryOrder(e.target.checked)} className="w-5 h-5 accent-teal-700" />
+              <span className="text-sm font-semibold text-[#111827] dark:text-white inline-flex items-center gap-1.5"><Truck className="w-4 h-4 text-indigo-600" /> Delivery Order</span>
+            </label>
           </div>
           {selected && snapshot && (
             <div data-testid="bill-customer-info" className="sm:col-span-3 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] px-3.5 py-2.5 text-xs text-[#374151] dark:text-[#CBD5E1] space-y-1">
@@ -508,7 +556,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               const last = p && selected ? lastRateFor(selected.id, p.id, invoices) : null;
               const note = stockNote(l, idx);
               return (
-                <div key={l.key} data-row={l.key} className="grid grid-cols-12 gap-2 items-center rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2 sm:p-1 sm:border-0">
+                <div key={l.key} data-row={l.key} onFocus={() => setFocusKey(l.key)} className="grid grid-cols-12 gap-2 items-center rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2 sm:p-1 sm:border-0">
                   <div className="col-span-12 sm:col-span-5">
                     <QuickSelect aria-label={`Item ${idx + 1}`} data-nav="item" value={l.productId} options={productOptions} onPick={(v) => pickProduct(l.key, v)} className={inputCls} title="Type the item name or code to find it">
                       <option value="">Select item…</option>
@@ -581,6 +629,13 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
             <button type="button" onClick={addRow} title="Add a line (+ or Alt+N)" className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-300 hover:underline"><Plus className="w-4 h-4" /> Add another item</button>
             <ScanButton onPick={(p) => addScanned(p.id)} keepOpen />
           </div>
+          {focused?.product && (
+            <div data-testid="bill-stock-in-hand" className="mt-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] px-3.5 py-2 text-xs text-[#374151] dark:text-[#CBD5E1] flex flex-wrap gap-x-4 gap-y-1">
+              <span><span className="font-bold uppercase tracking-wider text-[10px] text-[#6B7280] dark:text-[#94A3B8]">Stock in hand</span> {focused.product.name}: <strong className={`tabular-nums ${focused.product.stockKg < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#111827] dark:text-white'}`}>{formatPackQty(focused.product.stockKg, focused.product)}</strong></span>
+              {focusedPer && godowns.map((g) => <span key={g.id}>{g.name}: <strong className="tabular-nums">{formatPackQty(focusedPer[g.id] || 0, focused.product!, 'short')}</strong></span>)}
+              {selected && <span>Party balance <strong className="tabular-nums">{rs(selected.totalDue)}</strong></span>}
+            </div>
+          )}
           {products.length === 0 && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">No items yet. Add your products with their prices on the Items screen first.</p>}
           {freeLines.length > 0 && (
             <div className="mt-3 rounded-2xl border border-teal-200 dark:border-teal-900 bg-teal-50/50 dark:bg-teal-950/20 p-2.5 space-y-1.5" data-testid="bill-free-lines">

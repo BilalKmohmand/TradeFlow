@@ -128,7 +128,7 @@ export const filterBills = (invoices: Invoice[], query: string, period: 'today' 
   return billsOnly(invoices)
     .filter((i) => i.issueDate >= from)
     .filter((i) => !unpaidOnly || i.balanceDue > 0)
-    .filter((i) => !q || i.invoiceNumber.toLowerCase().includes(q) || i.customerName.toLowerCase().includes(q) || (i.customerPhone || '').includes(q) || i.items.some((it) => it.productName.toLowerCase().includes(q)))
+    .filter((i) => !q || i.invoiceNumber.toLowerCase().includes(q) || (i.memoNo || '').toLowerCase().includes(q) || i.customerName.toLowerCase().includes(q) || (i.customerPhone || '').includes(q) || i.items.some((it) => it.productName.toLowerCase().includes(q)))
     .sort((a, b) => (a.issueDate < b.issueDate ? 1 : a.issueDate > b.issueDate ? -1 : b.createdAt.localeCompare(a.createdAt)));
 };
 

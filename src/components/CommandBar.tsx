@@ -33,12 +33,14 @@ import {
   BookOpen,
   Scale,
   Undo2,
+  Keyboard,
 } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
 import { useTheme } from '../context/ThemeContext';
 import { formatCurrency, formatKg } from '../utils/formatters';
 import { useBillingUI } from './billing/BillingUI';
 import { useStockUI } from './billing/StockUI';
+import { FUNCTION_KEYS } from './billing/useBillingShortcuts';
 import { ActiveScreen } from '../types';
 
 interface CommandBarProps {
@@ -146,6 +148,11 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     if (can('products:create') || can('stock:adjust')) act('b-return-goods', 'Return goods to supplier', 'Send stock back and make a debit note', Undo2, () => stockUI.purchaseReturn(), 'Supplier');
     act('b-pay-supplier', 'Pay a supplier', 'Money you paid a supplier', CreditCard, () => billingUI.paySupplier(), 'Money out', 'warning');
     act('b-aging', 'Who owes for how long', 'Customers and suppliers by 0–30, 31–60, 61–90, 90+ days', Clock, () => stockUI.aging('customers'), 'Report');
+    if (can('products:create') || can('stock:adjust')) act('b-purchase-invoice', 'Purchase Invoice', "Enter a supplier's bill: stock in, supplier owed", PackagePlus, () => billingUI.newPurchaseInvoice(), 'Purchase', 'success');
+    if (can('view_finance')) act('b-cash-book', 'Cash Book', 'Cash in hand, receipts and payments • F9', BookOpen, () => billingUI.openReport('cash-book'), 'Report');
+    act('b-reports', 'Reports', 'Accounts Reports, Inventory Reports, Pending Delivery List', FileText, () => billingUI.openReport('menu'), 'Report');
+    act('b-pending-delivery', 'Pending Delivery List', 'Delivery orders waiting to go out', FileText, () => billingUI.openReport('pending-delivery'), 'Report');
+    items.push({ id: 'b-keys', category: 'actions', title: 'Keyboard shortcuts', subtitle: FUNCTION_KEYS.map((k) => `${k.key} ${k.label}`).join(' • '), icon: Keyboard, badge: 'F-keys', badgeType: 'default', perform: () => onClose() });
 
     const go = (id: ActiveScreen, title: string, subtitle: string, icon: CommandItem['icon']) => {
       if (!isScreenVisible(id)) return;
@@ -157,6 +164,8 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     go('customers', 'Go to Customers', 'Who they are and what they owe', Users);
     go('suppliers', 'Go to Suppliers', 'What you owe, stock received, returns', Layers);
     go('products', 'Go to Items & Prices', 'Price list and stock', Tag);
+    go('purchases', 'Go to Purchase invoices', 'Every purchase invoice, search by P-number or bill no.', PackagePlus);
+    go('reports-hub', 'Go to Reports', 'The classic reports menu', FileText);
     go('money', 'Go to Money', 'Cash, bank, who owes you and who you owe', Coins);
     if (can('view_finance')) go('accounts', 'Go to Accounts', 'Trial balance, profit & loss, profit by item', BookOpen);
     if (can('admin_screen') || can('system:admin_screen')) go('admin', 'Go to Admin', 'Users, settings, backups, audit log', ShieldCheck);
@@ -666,6 +675,14 @@ export const CommandBar: React.FC<CommandBarProps> = ({
             )}
           </div>
 
+          {/* Function keys (billing): the old program's keys, documented here. */}
+          {isBilling && (
+            <div data-testid="command-bar-fkeys" className="hidden sm:flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2 border-t border-[#E5E5E1] dark:border-[#22354A] text-[10.5px] text-[#6B7280] dark:text-[#94A3B8]">
+              {FUNCTION_KEYS.map((k) => (
+                <span key={k.key} className="inline-flex items-center gap-1"><span className="font-mono bg-white dark:bg-[#111C28] px-1.5 py-0.5 rounded border border-[#E5E5E1] dark:border-[#22354A]">{k.key}</span> {k.label}</span>
+              ))}
+            </div>
+          )}
           {/* Footer Guide */}
           <div className="p-3 px-5 bg-[#FAF9F6] dark:bg-[#0D1520] border-t border-[#E5E5E1] dark:border-[#22354A] flex items-center justify-between text-[11px] text-[#8E9299] dark:text-[#64748B]">
             <div className="flex items-center gap-4">
