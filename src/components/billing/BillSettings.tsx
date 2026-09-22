@@ -13,9 +13,9 @@ export const BillSettingsCard: React.FC = () => {
   const canEdit = can('system:company_settings') || can('admin_screen');
   const [footer, setFooter] = useState(settings.billFooter || '');
   const [saved, setSaved] = useState(false);
-  const toggle = (key: 'showPrevBalanceOnBill' | 'allowNegativeStock', label: string, help: string, id: string) => (
+  const toggle = (key: 'showPrevBalanceOnBill' | 'allowNegativeStock' | 'classicMenu', label: string, help: string, id: string) => (
     <label htmlFor={id} className="flex items-start gap-3 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] px-3.5 py-3 cursor-pointer">
-      <input id={id} type="checkbox" disabled={!canEdit} checked={key === 'allowNegativeStock' ? settings[key] !== false : Boolean(settings[key])} onChange={(e) => updateSettings({ [key]: e.target.checked })} className="mt-0.5 w-5 h-5 shrink-0 accent-teal-700" />
+      <input id={id} type="checkbox" disabled={!canEdit} checked={key === 'allowNegativeStock' || key === 'classicMenu' ? settings[key] !== false : Boolean(settings[key])} onChange={(e) => updateSettings({ [key]: e.target.checked })} className="mt-0.5 w-5 h-5 shrink-0 accent-teal-700" />
       <span>
         <span className="block text-sm font-semibold text-[#111827] dark:text-white">{label}</span>
         <span className="block text-[11px] text-[#6B7280] dark:text-[#94A3B8]">{help}</span>
@@ -46,6 +46,7 @@ export const BillSettingsCard: React.FC = () => {
         </div>
         {toggle('showPrevBalanceOnBill', 'Show previous balance on bill', 'Prints what the customer owed before this bill and the total balance with it.', 'bill-prev-balance')}
         {toggle('allowNegativeStock', 'Allow bills when stock is short', 'Off: a bill that needs more than you have is refused. On: it saves with a warning and the stock goes below zero (shown in red).', 'bill-allow-negative')}
+        {toggle('classicMenu', 'Show the classic menu', 'The 16 big buttons of Apna Accountant (Sale Invoice, Purchase Invoice, Stock In Hand, Books, Trial Balances…) on Home, and under More on a phone.', 'classic-menu-toggle')}
       </div>
     </div>
   );

@@ -21,7 +21,7 @@ interface Props {
 
 /** One bill: its lines, its payments, and the three things you do with it — take money, print, delete. */
 export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
-  const { invoices, customers, payBill, receiveCheque, deleteBill, setPrintRequest, can, currentUser, returns, deleteReturn, salesmen, areas, billDeleteNeedsApproval } = useTrading();
+  const { invoices, customers, payBill, receiveCheque, deleteBill, setPrintRequest, can, currentUser, returns, deleteReturn, salesmen, areas, billDeleteNeedsApproval, markBillDeliveryPending } = useTrading();
   const ui = useBillingUI();
   const inv = invoices.find((i) => i.id === invoiceId) || null;
   const billReturns = inv ? returnsForBill(returns, inv.id) : [];
@@ -119,6 +119,30 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
               </p>
             )}
             {inv.notes && <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Note: {inv.notes}</p>}
+            <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]" data-testid="bill-entered-on">
+              {inv.memoNo && <>Memo No <strong className="text-[#111827] dark:text-white">{inv.memoNo}</strong> • </>}
+              Bill date (your date) <strong className="text-[#111827] dark:text-white">{formatDate(inv.issueDate)}</strong>
+              {(inv.enteredAt || inv.issuedAt) && <> • entered on <strong className="text-[#111827] dark:text-white">{new Date((inv.enteredAt || inv.issuedAt)!).toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' })}</strong></>}
+              {!inv.enteredAt && !inv.issuedAt && inv.createdAt && <> • entered on <strong className="text-[#111827] dark:text-white">{formatDate(inv.createdAt)}</strong></>}
+              {inv.createdBy && <> by {inv.createdBy}</>}
+            </p>
+            {inv.delivery && (
+              <div data-testid="bill-delivery" className={`rounded-2xl border px-4 py-3 flex flex-wrap items-center gap-3 ${inv.delivery.status === 'pending' ? 'border-indigo-200 dark:border-indigo-900 bg-indigo-50/50 dark:bg-indigo-950/20' : 'border-teal-200 dark:border-teal-900 bg-teal-50/40 dark:bg-teal-950/20'}`}>
+                <Truck className={`w-4 h-4 ${inv.delivery.status === 'pending' ? 'text-indigo-600' : 'text-teal-700'}`} />
+                <div className="flex-1 min-w-0 text-sm">
+                  <div className="font-bold text-[#111827] dark:text-white">Delivery order • {inv.delivery.status === 'pending' ? 'waiting for delivery' : 'delivered'}</div>
+                  {inv.delivery.status === 'delivered' && (
+                    <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">On {formatDate(inv.delivery.deliveredOn || '')}{inv.delivery.deliveredBy ? ` by ${inv.delivery.deliveredBy}` : ''}{inv.delivery.vehicle ? ` • vehicle ${inv.delivery.vehicle}` : ''}{inv.delivery.note ? ` • ${inv.delivery.note}` : ''}</div>
+                  )}
+                  {inv.delivery.status === 'pending' && <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Stock was taken when the bill was made; mark it delivered when the goods go out.</div>}
+                </div>
+                {inv.delivery.status === 'pending' ? (
+                  <button type="button" onClick={() => ui.markDelivered(inv.id)} className={primaryBtn}><Truck className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Mark delivered</button>
+                ) : (
+                  <button type="button" onClick={() => setMsg((() => { const r = markBillDeliveryPending(inv.id); return { kind: r.success ? 'ok' as const : 'error' as const, text: r.message }; })())} className={secondaryBtn}>Back to pending</button>
+                )}
+              </div>
+            )}
 
             {challan.open && (
               <div className="rounded-2xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/40 dark:bg-indigo-950/20 p-4 space-y-3">

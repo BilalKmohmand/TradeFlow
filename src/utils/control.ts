@@ -40,6 +40,7 @@ export const DOC_SERIES: { key: DocSeriesKey; label: string; example: string }[]
   { key: 'receipt', label: 'Payment receipts', example: 'PAY-' },
   { key: 'supplier_payment', label: 'Supplier payments', example: 'SUP-PAY-' },
   { key: 'po', label: 'Purchase orders', example: 'PO-' },
+  { key: 'purchase_invoice', label: 'Purchase invoices', example: 'P-' },
 ];
 
 /** Defaults keep the numbers the app always used (INV-1, CN-1, DN-1, QT-1, PO-1…). */
@@ -51,6 +52,7 @@ export const DEFAULT_SERIES: Record<DocSeriesKey, DocSeriesConfig> = {
   receipt: { prefix: 'PAY-', yearly: false, pad: 0 },
   supplier_payment: { prefix: 'SUP-PAY-', yearly: false, pad: 0 },
   po: { prefix: 'PO-', yearly: false, pad: 0 },
+  purchase_invoice: { prefix: 'P-', yearly: false, pad: 0 },
 };
 
 export const seriesConfig = (settings: Pick<AppSettings, 'numberSeries'>, key: DocSeriesKey): DocSeriesConfig => ({

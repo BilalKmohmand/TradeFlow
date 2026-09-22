@@ -75,7 +75,7 @@ export const BillsScreen: React.FC = () => {
       <div className="flex flex-col md:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search bill no., customer, phone or item" className={`${inputCls} pl-10`} aria-label="Search bills" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search bill no., memo no., customer, phone or item" className={`${inputCls} pl-10`} aria-label="Search bills" />
         </div>
         <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">
           {periods.map((p) => (
@@ -103,7 +103,7 @@ export const BillsScreen: React.FC = () => {
                 <button type="button" onClick={() => ui.openBill(i.id)} className="flex-1 min-w-0 flex items-center gap-3 py-1.5 text-left">
                   <div className="min-w-0 flex-1">
                     <div className="font-semibold text-sm text-[#111827] dark:text-white truncate">{i.customerName}</div>
-                    <div className="text-[11px] text-[#6B7280] dark:text-[#8E9299] truncate">{i.invoiceNumber} • {formatDate(i.issueDate)} • {itemsText(i)}</div>
+                    <div className="text-[11px] text-[#6B7280] dark:text-[#8E9299] truncate">{i.invoiceNumber}{i.memoNo ? ` (memo ${i.memoNo})` : ''} • {formatDate(i.issueDate)}{i.delivery?.status === 'pending' ? ' • to deliver' : ''} • {itemsText(i)}</div>
                   </div>
                   <div className="text-right shrink-0">
                     <div className={`${moneyCls} font-bold text-sm text-[#111827] dark:text-white`}>{rs(billNetTotal(i))}</div>
@@ -132,7 +132,7 @@ export const BillsScreen: React.FC = () => {
               <tbody className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
                 {rows.map((i) => (
                   <tr key={i.id} className="hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors">
-                    <td className="px-4 py-3 text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap">{i.invoiceNumber}</td>
+                    <td className="px-4 py-3 text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap">{i.invoiceNumber}{i.memoNo && <div className="text-[10px] font-normal">Memo {i.memoNo}</div>}{i.delivery?.status === 'pending' && <div className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300">To deliver</div>}</td>
                     <td className="px-4 py-3 text-[#374151] dark:text-[#CBD5E1] whitespace-nowrap">{formatDate(i.issueDate)}</td>
                     <td className="px-4 py-2.5 max-w-0 w-full">
                       <button type="button" onClick={() => ui.openBill(i.id)} className="block w-full text-left group">

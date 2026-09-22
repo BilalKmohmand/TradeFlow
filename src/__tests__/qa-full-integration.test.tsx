@@ -417,7 +417,7 @@ describe('QA: one shop, every feature, books always in step', () => {
  */
 const cloudColumns = (): Map<string, Set<string>> => {
   const read = (f: string) => (existsSync(resolve(__dirname, `../../supabase/${f}`)) ? readFileSync(resolve(__dirname, `../../supabase/${f}`), 'utf8') : '');
-  const sql = `${read('setup.sql')}\n${read('migrate_v23_fixes.sql')}`.replace(/--[^\n]*/g, '');
+  const sql = `${read('setup.sql')}\n${read('migrate_v23_fixes.sql')}\n${read('migrate_v25_invoices_reports.sql')}`.replace(/--[^\n]*/g, '');
   const cols = new Map<string, Set<string>>();
   const add = (t: string, c: string) => { if (!cols.has(t)) cols.set(t, new Set()); cols.get(t)!.add(c); };
   const create = /CREATE TABLE IF NOT EXISTS\s+(\w+)\s*\(([\s\S]*?)\n\);/g;

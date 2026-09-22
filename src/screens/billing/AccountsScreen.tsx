@@ -1,6 +1,6 @@
 import { CsvButton } from '../../components/billing/CsvButton';
 import { trialBalanceCsv, generalLedgerCsv, profitLossCsv, balanceSheetCsv } from '../../utils/csvReports';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Printer, Trash2, Lock, Unlock, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../../components/billing/BillingUI';
@@ -70,7 +70,10 @@ export const AccountsScreen: React.FC = () => {
   const [confirmDel, setConfirmDel] = useState<{ title: string; message: string; label: string; action: () => void } | null>(null);
   const { accounts, journal } = useAccounting(allowed);
   const today = todayISO();
-  const [tab, setTab] = useState<Tab>('tb');
+  // The classic menu can open a tab (Accounts Coding → chart of accounts, Account Ledger → general ledger…).
+  const [tab, setTab] = useState<Tab>(() => ui.accountsTabRequest?.tab || 'tb');
+  const tabReq = ui.accountsTabRequest?.n;
+  useEffect(() => { if (ui.accountsTabRequest) setTab(ui.accountsTabRequest.tab); }, [tabReq]); // eslint-disable-line react-hooks/exhaustive-deps
   const [asOf, setAsOf] = useState(today);
   const [from, setFrom] = useState(`${today.slice(0, 7)}-01`);
   const [to, setTo] = useState(today);

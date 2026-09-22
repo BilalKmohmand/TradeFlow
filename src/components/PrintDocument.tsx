@@ -20,6 +20,7 @@ import type { SalesExtrasPrintRequest } from '../context/salesExtrasActions';
 import { PurchasingPrintRequest, isPurchasingPrint, usePurchasingPrint } from './billing/purchasing/PurchasingPrint';
 import { FinancePrintRequest, isFinancePrint, useFinancePrint } from './finance/FinancePrint';
 import { lineDiscountLabel, lineGross, billNetTotal, returnsForBill, returnedQtyByLine, quotationLines, quotationTotal } from '../utils/salesDocs';
+import { ClassicPrintRequest, isClassicPrint, useClassicPrint } from './billing/classic/ClassicPrint';
 
 export type PrintRequest =
   | { type: 'voucher'; ledgerId: string }
@@ -42,7 +43,8 @@ export type PrintRequest =
   | { type: 'cheque_register'; view?: string }
   | SalesExtrasPrintRequest
   | PurchasingPrintRequest
-  | FinancePrintRequest;
+  | FinancePrintRequest
+  | ClassicPrintRequest;
 
 /** One line of a thermal receipt: text on the left, amount on the right. */
 const ThermalRow: React.FC<{ left: string; right: string; bold?: boolean }> = ({ left, right, bold }) => (
@@ -112,6 +114,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
   const salesExtrasReport = useSalesExtrasPrint(request);
   const purchasingDoc = usePurchasingPrint(request);
   const financeDoc = useFinancePrint(request);
+  const classicDoc = useClassicPrint(request);
 
   const content = useMemo(() => {
     if (!request) return null;
@@ -120,6 +123,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
     if (isSalesExtrasPrint(request)) return salesExtrasReport;
     if (isPurchasingPrint(request)) return purchasingDoc;
     if (isFinancePrint(request)) return financeDoc;
+    if (isClassicPrint(request)) return classicDoc;
 
     if (request.type === 'bill') {
       const inv = invoices.find((i) => i.id === request.invoiceId);
@@ -153,6 +157,8 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 <div>Customer: <b>{inv.customerName}</b></div>
                 {(inv.customerPhone || customer?.phone) && <div>Ph: {inv.customerPhone || customer?.phone}</div>}
                 {(salesmanName || areaName) && <div>{[salesmanName && `Salesman: ${salesmanName}`, areaName && `Area: ${areaName}`].filter(Boolean).join(' · ')}</div>}
+                {inv.memoNo && <div>Memo No: {inv.memoNo}</div>}
+                {inv.delivery && <div className="font-bold">DELIVERY ORDER{inv.delivery.status === 'delivered' ? ` - delivered ${formatDate(inv.delivery.deliveredOn || '')}` : ''}</div>}
               </div>
               <ThermalRule />
               {inv.items.map((it) => (
@@ -214,6 +220,12 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 {(salesmanName || areaName) && <div data-testid="print-bill-salesman">{[salesmanName && `Salesman: ${salesmanName}`, areaName && `Area: ${areaName}`].filter(Boolean).join(' · ')}</div>}
               </div>
             </div>
+            {(inv.memoNo || inv.delivery) && (
+              <div className="mt-3 flex flex-wrap gap-x-6 text-xs" data-testid="print-bill-memo">
+                {inv.memoNo && <span>Memo No: <b className="font-mono">{inv.memoNo}</b></span>}
+                {inv.delivery && <span className="font-bold uppercase tracking-wider">Delivery order{inv.delivery.status === 'delivered' ? ` — delivered ${formatDate(inv.delivery.deliveredOn || '')}` : ' — to be delivered'}</span>}
+              </div>
+            )}
             <table className={`w-full text-xs ${paper === 'a5' ? 'mt-4' : 'mt-6'} border-collapse`}>
               <thead>
                 <tr className="bg-gray-800 text-white text-[10px] uppercase tracking-widest">
@@ -307,6 +319,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Delivery</div>
                 <div>Bill: <b className="font-mono">{inv.invoiceNumber}</b> ({formatDate(inv.issueDate)})</div>
+                {inv.memoNo && <div>Memo No: <b className="font-mono">{inv.memoNo}</b></div>}
                 <div>Driver: <b>{request.driver || '____________________'}</b></div>
                 <div>Vehicle no.: <b className="font-mono">{request.vehicle || '____________________'}</b></div>
               </div>
@@ -920,7 +933,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       };
     }
     return null;
-  }, [request, paper, books, billingReport, salesExtrasReport, purchasingDoc, financeDoc, salesmen, areas, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques]);
+  }, [request, paper, books, billingReport, salesExtrasReport, purchasingDoc, financeDoc, classicDoc, salesmen, areas, dispatches, bookings, customers, suppliers, products, ledger, trucks, settings, quotations, purchaseOrders, returns, invoices, expenses, cashEntries, bankStatementLines, bankReconciliations, cheques]);
 
   // On a narrow screen (a phone) the A4 / A5 page is scaled down to fit the width instead of being cut
   // off at the right. Only the preview: print CSS resets the zoom, so the paper is unchanged.

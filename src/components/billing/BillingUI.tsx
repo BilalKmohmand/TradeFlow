@@ -7,6 +7,14 @@ import { ReturnItemsModal } from './ReturnItemsModal';
 import { QuotationModal } from './QuotationModal';
 import { ExpenseCategory } from '../../types';
 import { SalesExtrasModals, SalesView } from './SalesHub';
+import { useTrading } from '../../context/TradingContext';
+import type { ReportId } from '../../utils/classicReports';
+import type { AccountsTab } from '../../utils/classicMenu';
+import { PurchaseInvoiceModal, PurchaseInvoiceDetail } from './classic/PurchaseInvoiceModal';
+import { MarkDeliveredModal } from './classic/DeliveryDialogs';
+
+/** What the Reports hub should show: one report, the Books menu or the whole menu. */
+export type ReportRequest = ReportId | 'books' | 'menu';
 
 interface BillingUI {
   newBill: (customerId?: string | null) => void;
@@ -31,6 +39,18 @@ interface BillingUI {
   peekMoneyTab: () => 'overview' | 'expenses' | 'cashbook' | 'cheques' | 'bank' | null;
   /** Sales & recovery: salesmen / areas, schemes, reports, receive from many, commission, interest ('hub' = the menu). */
   salesExtras: (view?: SalesView) => void;
+  /** Open the Reports hub on a report (or the Books / Reports menu). */
+  openReport: (id: ReportRequest) => void;
+  /** Latest request (the hub follows it; `n` changes on every request). */
+  reportRequest: { id: ReportRequest; n: number } | null;
+  /** Ask the Accounts screen to show a tab (then go to 'accounts'). */
+  openAccountsTab: (tab: AccountsTab) => void;
+  accountsTabRequest: { tab: AccountsTab; n: number } | null;
+  /** New purchase invoice, or look at a saved one. */
+  newPurchaseInvoice: (supplierId?: string | null) => void;
+  openPurchaseInvoice: (id: string) => void;
+  /** Delivery order: mark delivered (date, who, vehicle) and print the challan. */
+  markDelivered: (invoiceId: string) => void;
 }
 
 const Ctx = createContext<BillingUI | null>(null);
@@ -51,6 +71,12 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const bump = () => setNonce((n) => n + 1);
   const [salesView, setSalesView] = useState<SalesView | null>(null);
   const moneyTab = useRef<ReturnType<BillingUI['peekMoneyTab']>>(null);
+  const { setActiveScreen } = useTrading();
+  const [reportRequest, setReportRequest] = useState<BillingUI['reportRequest']>(null);
+  const [accountsTabRequest, setAccountsTabRequest] = useState<BillingUI['accountsTabRequest']>(null);
+  const [purchase, setPurchase] = useState<{ open: boolean; supplierId: string | null }>({ open: false, supplierId: null });
+  const [purchaseId, setPurchaseId] = useState<string | null>(null);
+  const [deliverId, setDeliverId] = useState<string | null>(null);
 
   const api: BillingUI = {
     newBill: (customerId) => { bump(); setBill({ open: true, customerId: customerId || null }); },
@@ -68,6 +94,13 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     openMoneyTab: (tab) => { moneyTab.current = tab; },
     peekMoneyTab: () => moneyTab.current,
     salesExtras: (view = 'hub') => { bump(); setSalesView(view); },
+    openReport: (id) => { setReportRequest((r) => ({ id, n: (r?.n || 0) + 1 })); setActiveScreen('reports-hub'); },
+    reportRequest,
+    openAccountsTab: (tab) => setAccountsTabRequest((r) => ({ tab, n: (r?.n || 0) + 1 })),
+    accountsTabRequest,
+    newPurchaseInvoice: (supplierId) => { bump(); setPurchase({ open: true, supplierId: supplierId || null }); },
+    openPurchaseInvoice: (id) => { bump(); setPurchaseId(id); },
+    markDelivered: (invoiceId) => { bump(); setDeliverId(invoiceId); },
   };
 
   return (
@@ -83,6 +116,9 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       <TransferModal key={`tr-${nonce}`} isOpen={transferOpen} onClose={() => setTransferOpen(false)} />
       <SalesExtrasModals key={`sx-${nonce}`} view={salesView} onView={setSalesView} />
       <ItemModal key={`item-${nonce}`} isOpen={item.open} onClose={() => setItem({ open: false, editId: null })} editId={item.editId} />
+      <PurchaseInvoiceModal key={`pinv-${nonce}`} isOpen={purchase.open} supplierId={purchase.supplierId} onClose={() => setPurchase({ open: false, supplierId: null })} onSaved={(id) => { bump(); setPurchase({ open: false, supplierId: null }); setPurchaseId(id); }} onOpen={(id) => { bump(); setPurchase({ open: false, supplierId: null }); setPurchaseId(id); }} />
+      <PurchaseInvoiceDetail key={`pind-${nonce}`} id={purchaseId} onClose={() => setPurchaseId(null)} />
+      <MarkDeliveredModal key={`dlv-${nonce}`} invoiceId={deliverId} onClose={() => setDeliverId(null)} />
     </Ctx.Provider>
   );
 };

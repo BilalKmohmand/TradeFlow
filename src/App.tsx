@@ -43,6 +43,8 @@ import { AccountsScreen } from './screens/billing/AccountsScreen';
 import { SuppliersBillingScreen } from './screens/billing/SuppliersBillingScreen';
 import { StockUIProvider } from './components/billing/StockUI';
 import { OwnerDashboardScreen } from './screens/billing/OwnerDashboardScreen';
+import { PurchasesScreen } from './screens/billing/PurchasesScreen';
+import { ReportsHubScreen } from './screens/billing/ReportsHubScreen';
 
 function MainApp() {
   const {
@@ -166,6 +168,8 @@ function MainApp() {
             {activeScreen === 'money' && <MoneyScreen />}
             {activeScreen === 'accounts' && <AccountsScreen />}
             {activeScreen === 'owner' && <OwnerDashboardScreen />}
+            {activeScreen === 'purchases' && <PurchasesScreen />}
+            {activeScreen === 'reports-hub' && <ReportsHubScreen />}
             {activeScreen === 'products' && isBilling && <ItemsScreen />}
             {activeScreen === 'dashboard' && !isBilling && (
               <DashboardScreen

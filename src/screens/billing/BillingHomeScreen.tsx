@@ -20,6 +20,8 @@ import { BackupReminder } from '../../components/control/AutoBackups';
 import { SendRemindersPanel } from '../../components/billing/Reminders';
 import { NumberNoticesBanner } from '../../components/control/NumberNotices';
 import { depreciationDue, monthLabel } from '../../utils/financeBooks';
+import { ClassicMenu } from '../../components/billing/classic/ClassicMenu';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 
 /** The first screen every morning: today's numbers, the four buttons you press all day, what needs attention, recent bills. */
 export const BillingHomeScreen: React.FC = () => {
@@ -47,6 +49,9 @@ export const BillingHomeScreen: React.FC = () => {
   const canRunDep = can('finance:view_pnl');
   const depDue = useMemo(() => (canRunDep ? depreciationDue(fixedAssets, depreciationRuns, today) : null), [canRunDep, fixedAssets, depreciationRuns, today]);
   const [depMsg, setDepMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  // Desktop: the classic Apna Accountant buttons (phones get them under More).
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const showClassic = settings.classicMenu !== false && isDesktop;
   const attentionCount = (depDue ? 1 : 0) + (unpaid.length > 0 ? 1 : 0) + (overLimit.length > 0 ? 1 : 0) + (oldDues.length > 0 ? 1 : 0) + (expiring > 0 ? 1 : 0) + Math.min(lowStock.length, 4);
 
   const attnRow = 'group w-full flex items-center gap-3 px-4 sm:px-5 py-3 min-h-12 text-left text-sm hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors';
@@ -66,6 +71,8 @@ export const BillingHomeScreen: React.FC = () => {
       <ApprovalsTile />
       <SendRemindersPanel />
       {depMsg && <Notice kind={depMsg.kind}>{depMsg.text}</Notice>}
+
+      {showClassic && <ClassicMenu />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Tile label="Sales today" value={rs(day.sales)} hint={`${day.billCount} bill${day.billCount === 1 ? '' : 's'}`} onClick={() => setActiveScreen('bills')} />

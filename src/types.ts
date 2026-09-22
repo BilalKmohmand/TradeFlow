@@ -260,7 +260,15 @@ export interface PriceHistoryEntry {
 export type ReportsTab = 'daily' | 'monthly' | 'flow' | 'pnl' | 'aging' | 'balance' | 'cashbook' | 'analytics';
 export type OpsTab = 'fleet' | 'expenses' | 'alerts' | 'tasks';
 
-export type ActiveScreen = 'dashboard' | 'customers' | 'suppliers' | 'products' | 'bookings' | 'billing' | 'reports' | 'ops' | 'admin' | 'bills' | 'daily' | 'money' | 'accounts' | 'owner';
+/**
+ * Every screen the app can show. `purchases` (purchase invoices) and `reports-hub` (the classic
+ * Reports menu) belong to the "Apna Accountant" layer. A screen added later (vouchers, an
+ * any-account ledger, a chart-of-accounts tree, bank accounts, a city-wise report) just adds its
+ * id here: the classic menu and the Reports hub then open it instead of their fallback
+ * (see utils/classicMenu.ts, PARTNER_SCREENS).
+ */
+export const ACTIVE_SCREENS = ['dashboard', 'customers', 'suppliers', 'products', 'bookings', 'billing', 'reports', 'ops', 'admin', 'bills', 'daily', 'money', 'accounts', 'owner', 'purchases', 'reports-hub'] as const;
+export type ActiveScreen = (typeof ACTIVE_SCREENS)[number];
 
 /** Payment methods treated as cash in hand; everything else is the bank account. */
 export const CASH_METHODS = ['Cash', 'Cash at Terminal'];
@@ -382,6 +390,84 @@ export interface Invoice {
   deviceId?: string;
   /** The number the bill had before it was renumbered because another device had already used it. */
   renumberedFrom?: string;
+  /** Memo no.: the shop's own book / reference number written on the bill (printed and searchable). */
+  memoNo?: string;
+  /** Exact date-time the bill was typed in ("entered on"), whatever the bill date ("your date") is. */
+  enteredAt?: string;
+  /** Delivery order: the goods go out later. Stock is still taken when the bill is made. */
+  delivery?: DeliveryInfo;
+}
+
+/** Delivery of a bill marked "Delivery order": pending until someone marks it delivered. */
+export interface DeliveryInfo {
+  status: 'pending' | 'delivered';
+  /** Date the goods were delivered. */
+  deliveredOn?: string;
+  /** Who delivered (driver / staff name). */
+  deliveredBy?: string;
+  vehicle?: string;
+  note?: string;
+  /** Signed-in user who marked it delivered, and when. */
+  markedBy?: string;
+  markedAt?: string;
+}
+
+/** One line of a purchase invoice. Quantities and rates are per base unit (can, tin, kg…). */
+export interface PurchaseInvoiceLine {
+  id: string;
+  productId: string;
+  productName: string;
+  code?: string;
+  unit: string;
+  /** Pack (e.g. carton of 4) the line was typed in, if any: qty = packs × packSize. */
+  packName?: string;
+  packSize?: number;
+  packs?: number;
+  qty: number;
+  /** Rate on the supplier's bill, per base unit. */
+  rate: number;
+  /** qty × rate (before the bill discount / other charges). */
+  amount: number;
+  /** Cost per base unit after the bill discount and other charges are spread over the lines. */
+  landedRate: number;
+  /** Stock receipt made for this line (Purchase id). */
+  purchaseId?: string;
+  batchNo?: string;
+  expiryDate?: string;
+}
+
+/**
+ * Purchase invoice ("Purchase Invoice" in Apna Accountant): the supplier's bill typed in as one
+ * document. Saving it receives every line into stock (one Purchase per line, at the landed cost),
+ * owes the supplier the bill total and records any amount paid now. See context/classicActions.ts.
+ */
+export interface PurchaseInvoice {
+  id: string;
+  /** Our number (series "purchase_invoice", default P-1, P-2…). */
+  invoiceNumber: string;
+  /** Memo no.: the supplier's own bill number. */
+  memoNo?: string;
+  date: string;
+  supplierId: string;
+  supplierName: string;
+  godownId?: string | null;
+  lines: PurchaseInvoiceLine[];
+  /** Σ line amounts. */
+  grossAmount: number;
+  discountPct?: number;
+  discountAmount: number;
+  otherCharges: number;
+  /** gross − discount + other charges: what is owed to the supplier for this bill. */
+  totalAmount: number;
+  paidAmount: number;
+  paidMethod?: string;
+  /** Ledger rows made with the invoice: the payment made now and the paisa rounding difference. */
+  paymentLedgerId?: string | null;
+  roundingLedgerId?: string | null;
+  remarks?: string;
+  createdAt: string;
+  createdBy?: string;
+  branchId?: string | null;
 }
 
 export type AuditCategory = 'auth' | 'roles' | 'users' | 'visibility' | 'data' | 'system' | 'billing';
@@ -757,6 +843,8 @@ export interface AppSettings {
   docCounters?: Record<string, number>;
   /** Automatic payment reminders (off by default): who is listed on Home to be reminded on WhatsApp. */
   reminders?: ReminderSettings;
+  /** Show the classic "Apna Accountant" menu (16 big buttons) on Home. On unless set to false. */
+  classicMenu?: boolean;
 }
 
 /**
@@ -1552,7 +1640,7 @@ export interface DeletedRecord {
   restoredBy?: string | null;
 }
 
-export type DocSeriesKey = 'bill' | 'credit_note' | 'debit_note' | 'quotation' | 'receipt' | 'supplier_payment' | 'po';
+export type DocSeriesKey = 'bill' | 'credit_note' | 'debit_note' | 'quotation' | 'receipt' | 'supplier_payment' | 'po' | 'purchase_invoice';
 
 export interface DocSeriesConfig {
   prefix: string;

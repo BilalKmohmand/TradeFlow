@@ -398,6 +398,8 @@ interface ApiDeps {
   adjustments: StockAdjustment[];
   quotations: Quotation[];
   purchaseOrders: PurchaseOrder[];
+  /** Purchase invoices (classic layer): their numbers belong to the purchase_invoice series. */
+  purchaseInvoices?: { invoiceNumber: string }[];
   manualJournals: { id: string; ref: string; date: string; memo: string }[];
   bookings: Booking[];
   dispatches: Dispatch[];
@@ -1106,6 +1108,7 @@ export const createControlApi = (d: ApiDeps) => {
       case 'receipt': return d.ledger.filter((l) => l.type === 'payment_received').map((l) => l.referenceId);
       case 'supplier_payment': return d.ledger.filter((l) => l.type === 'payment_made').map((l) => l.referenceId);
       case 'po': return d.purchaseOrders.map((p) => p.poNumber);
+      case 'purchase_invoice': return (d.purchaseInvoices || []).map((p) => p.invoiceNumber);
       default: return [];
     }
   };

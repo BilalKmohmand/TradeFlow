@@ -67,6 +67,8 @@ import { buildJournal, combineJournal } from '../utils/accounting';
 import { ControlApi, createControlApi, useControlStore } from './controlActions';
 import { ReminderApi, createReminderApi, computeRemindersDue } from './reminderActions';
 import { NumberGuardApi, useNumberGuard } from './numberGuardActions';
+import { ClassicApi, useClassicStore } from './classicActions';
+import { planDocNumber } from '../utils/control';
 import { chequesBlockingCustomerDelete } from '../utils/cheques';
 import {
   DEFAULT_ROLES,
@@ -110,7 +112,7 @@ import {
   initialWhatsAppMessages,
 } from '../data/initialData';
 
-interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, PurchasingApi, FinanceApi, AuthApi, SalesExtrasApi, ControlApi, ReminderApi, NumberGuardApi {
+interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, PurchasingApi, FinanceApi, AuthApi, SalesExtrasApi, ControlApi, ReminderApi, NumberGuardApi, ClassicApi {
   /** Why this customer can't be deleted right now (cheques still in hand), or null. */
   customerDeleteBlock: (id: string) => string | null;
   customers: Customer[];
@@ -522,6 +524,10 @@ export interface CreateBillInput {
   areaId?: string | null;
   /** Optional cost / profit centre (branch, area, vehicle) for the P&L by cost centre. */
   costCentreId?: string | null;
+  /** Memo no.: the shop's own book / reference number (printed and searchable). */
+  memoNo?: string;
+  /** Delivery order: the goods go out later (stock is still taken now); the bill waits in the Pending Delivery List. */
+  deliveryOrder?: boolean;
 }
 
 /** Payment methods offered on bills. Anything starting with "Cash" counts as cash in hand. */
@@ -933,6 +939,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     inventory.hydrate({ godowns: data.godowns, stockBatches: data.stockBatches, stockTransfers: data.stockTransfers }, { keepLocalIfEmpty: true });
     // Supplier bills and claims: only when the cloud tables exist (migration v20).
     purchasing.hydrate({ supplierBills: data.supplierBills, supplierClaims: data.supplierClaims }, { keepLocalIfEmpty: true });
+    // Purchase invoices: only when the cloud table exists (migration v25).
+    classic.hydrate({ purchaseInvoices: data.purchaseInvoices ?? undefined }, { keepLocalIfEmpty: true });
     // Accounts: only when the cloud tables exist (migration v10); otherwise keep local copies.
     if (data.journalEntries) setManualJournals(cloudOrLocal(data.journalEntries));
     if (data.accounts) setCustomAccounts(cloudOrLocal(data.accounts));
@@ -1189,6 +1197,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     inventory.reset();
     salesExtras.reset();
     purchasing.reset();
+    classic.reset();
     finance.reset();
     controlStore.reset();
     logAuditEvent('Sample Data Loaded', 'All business data replaced with the built-in sample dataset.', 'warning');
@@ -1709,6 +1718,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setWhatsappMessages((prev) => prev.filter((m) => !waIds.includes(m.id)));
     setSuppliers((prev) => prev.filter((s) => s.id !== id));
     purchasing.removeForSupplier(id);
+    classic.removeForSupplier(id);
     const supPoIds = purchaseOrders.filter((p) => p.supplierId === id).map((p) => p.id);
     setPurchaseOrders((prev) => prev.filter((p) => p.supplierId !== id));
     removeRemote('purchase_orders', supPoIds);
@@ -1819,6 +1829,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       bank_reconciliations: () => setBankReconciliations([]),
       ...inventory.purgeSetters,
       ...purchasing.purgeSetters,
+      ...classic.purgeSetters,
       journal_entries: () => setManualJournals([]),
       accounts: () => setCustomAccounts([]),
       customer_agreed_rates: () => setCustomerAgreedRates([]),
@@ -2933,6 +2944,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ...(input.costCentreId ? { costCentreId: input.costCentreId } : {}),
       ...controlStore.branchStamp(),
       deviceId: numberGuard.deviceId,
+      ...(input.memoNo?.trim() ? { memoNo: input.memoNo.trim() } : {}),
+      enteredAt: new Date().toISOString(),
+      ...(input.deliveryOrder ? { delivery: { status: 'pending' as const } } : {}),
     };
     invoicesRef.current = [invoice, ...invoicesRef.current];
     if (fromQuote) setQuotations((prev) => prev.map((q) => (q.id === fromQuote.id ? { ...q, status: 'converted', invoiceId: invoice.id } : q)));
@@ -3777,6 +3791,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ...inventory.backupData(),
       ...salesExtras.backupData(),
       ...purchasing.backupData(),
+      ...classic.backupData(),
       manualJournals,
       customAccounts,
       customerAgreedRates,
@@ -3844,6 +3859,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       inventory.hydrate({ godowns: data.godowns ?? [], stockBatches: data.stockBatches ?? [], stockTransfers: data.stockTransfers ?? [] });
       salesExtras.hydrate({ salesmen: data.salesmen ?? [], areas: data.areas ?? [], schemes: data.schemes ?? [] });
       purchasing.hydrate({ supplierBills: data.supplierBills ?? [], supplierClaims: data.supplierClaims ?? [] });
+      classic.hydrate({ purchaseInvoices: data.purchaseInvoices ?? [] });
       if (Array.isArray(data.manualJournals)) setManualJournals(data.manualJournals);
       if (Array.isArray(data.customAccounts)) setCustomAccounts(data.customAccounts);
       if (Array.isArray(data.customerAgreedRates)) setCustomerAgreedRates(data.customerAgreedRates);
@@ -3886,6 +3902,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     inventory.reset();
     salesExtras.reset();
     purchasing.reset();
+    classic.reset();
     finance.reset();
     controlStore.reset();
     localStorage.removeItem(STORAGE_KEYS.INVOICES);
@@ -3958,6 +3975,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     uid, userName: currentUser?.name, today: todayISO, isCloudSyncReady, syncToSupabase, removeRemote,
     docNumber: (existing) => controlStore.nextDocNumber('po', todayISO(), existing),
   });
+  // Purchase invoices and delivery orders (the "Apna Accountant" layer), see classicActions.ts.
+  const classic = useClassicStore({
+    products, suppliers, setSuppliers, purchases, ledger, setLedger, invoices, setInvoices, settings,
+    can: (p) => can(p as Permission),
+    logAuditEvent, uid, userName: currentUser?.name, today: todayISO, isCloudSyncReady, syncToSupabase, removeRemote,
+    receiveStock: inventory.api.receiveStock, deletePurchase, isBilledReceipt: purchasing.api.isBilledReceipt,
+    docNumber: (date, existing) => controlStore.nextDocNumber('purchase_invoice', date, existing),
+    previewNumber: (date, existing) => planDocNumber({ numberSeries: settings.numberSeries, docCounters: controlStore.counters.current }, 'purchase_invoice', date, existing).number,
+    payNumber: (date) => controlStore.nextDocNumber('supplier_payment', date, ledger.filter((l) => l.type === 'payment_made').map((l) => l.referenceId)),
+    branchStamp: controlStore.branchStamp,
+  });
 
   // Fixed assets, staff & salaries, budgets, cost centres, year-end close (see financeActions.ts / utils/financeBooks.ts).
   const finance = useFinanceStore({
@@ -3987,6 +4015,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     store: controlStore, settings, setSettings, currentUser, users, setUsers,
     can: (p) => can(p as Permission), logAuditEvent, uid,
     invoices, customers, suppliers, products, purchases, expenses, cashEntries, returns, adjustments, quotations, purchaseOrders, manualJournals, bookings, dispatches, ledger, cheques,
+    purchaseInvoices: classic.api.purchaseInvoices,
     stockBatches: inventory.api.stockBatches, godowns: inventory.api.godowns,
     setCustomers, setSuppliers, setProducts, setExpenses, setCashEntries, setInvoices, setLedger,
     isLinkedRecord, planBill: inventory.planBill, importSystemBackup, exportSystemBackup,
@@ -4012,6 +4041,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ...chequeApi,
         ...salesExtras.api,
         ...purchasing.api,
+        ...classic.api,
         ...finance.api,
         ...auth,
         ...reminders,

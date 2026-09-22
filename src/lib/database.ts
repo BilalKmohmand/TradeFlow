@@ -35,6 +35,7 @@ import {
   ApprovalRequest,
   DeletedRecord,
   Branch,
+  PurchaseInvoice,
 } from '../types';
 import type { Account, JournalEntry } from '../utils/accounting';
 
@@ -91,6 +92,8 @@ export interface AppData {
   approvals?: ApprovalRequest[] | null;
   deletedRecords?: DeletedRecord[] | null;
   branches?: Branch[] | null;
+  /** Purchase invoices (migration v25). null when the table does not exist yet. */
+  purchaseInvoices?: PurchaseInvoice[] | null;
 }
 
 export type TableName =
@@ -131,7 +134,8 @@ export type TableName =
   | FinanceTableName
   | 'approvals'
   | 'deleted_records'
-  | 'branches';
+  | 'branches'
+  | 'purchase_invoices';
 
 export const ALL_TABLES: TableName[] = [
   'customers',
@@ -172,6 +176,7 @@ export const ALL_TABLES: TableName[] = [
   'approvals',
   'deleted_records',
   'branches',
+  'purchase_invoices',
 ];
 
 // ---------------------------------------------------------------------------
@@ -244,7 +249,7 @@ const stripLegacy = <T,>(rows: T[]): T[] =>
   });
 
 /** Tables that may be missing on a project that has not run the migration yet. */
-const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'bank_statement_lines', 'bank_reconciliations', 'godowns', 'stock_batches', 'stock_transfers', 'journal_entries', 'accounts', 'customer_agreed_rates', 'cheques', 'salesmen', 'areas', 'schemes', 'supplier_bills', 'supplier_claims', ...FINANCE_TABLE_NAMES, 'approvals', 'deleted_records', 'branches'];
+const OPTIONAL_TABLES: TableName[] = ['purchases', 'price_history', 'expenses', 'trucks', 'users', 'cash_entries', 'settings', 'quotations', 'purchase_orders', 'returns', 'stock_adjustments', 'tasks', 'invoices', 'bank_statement_lines', 'bank_reconciliations', 'godowns', 'stock_batches', 'stock_transfers', 'journal_entries', 'accounts', 'customer_agreed_rates', 'cheques', 'salesmen', 'areas', 'schemes', 'supplier_bills', 'supplier_claims', ...FINANCE_TABLE_NAMES, 'approvals', 'deleted_records', 'branches', 'purchase_invoices'];
 
 /**
  * The cloud refused this device: the database is locked (supabase/lock.sql) and there is no valid Supabase
@@ -282,7 +287,7 @@ const fetchAll = async (table: string): Promise<{ data: any[] | null; error: { m
 };
 
 export const loadAllData = async (): Promise<AppData> => {
-  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, cashEntries, settings, quotations, purchaseOrders, returns, adjustments, tasks, invoices, ledger, whatsappMessages, bankStatementLines, bankReconciliations, godowns, stockBatches, stockTransfers, journalEntries, accounts, agreedRates, cheques, salesmen, areas, schemes, supplierBills, supplierClaims, approvals, deletedRecords, branches] =
+  const [customers, suppliers, products, bookings, dispatches, purchases, priceHistory, expenses, trucks, users, cashEntries, settings, quotations, purchaseOrders, returns, adjustments, tasks, invoices, ledger, whatsappMessages, bankStatementLines, bankReconciliations, godowns, stockBatches, stockTransfers, journalEntries, accounts, agreedRates, cheques, salesmen, areas, schemes, supplierBills, supplierClaims, approvals, deletedRecords, branches, purchaseInvoices] =
     await Promise.all([
       fetchAll('customers'),
       fetchAll('suppliers'),
@@ -321,6 +326,7 @@ export const loadAllData = async (): Promise<AppData> => {
       fetchAll('approvals'),
       fetchAll('deleted_records'),
       fetchAll('branches'),
+      fetchAll('purchase_invoices'),
     ]);
 
   // Locked database and no staff sign-in on this device: say so (the caller keeps the local data).
@@ -369,6 +375,7 @@ export const loadAllData = async (): Promise<AppData> => {
   maybeThrow(approvals, 'approvals');
   maybeThrow(deletedRecords, 'deleted_records');
   maybeThrow(branches, 'branches');
+  maybeThrow(purchaseInvoices, 'purchase_invoices');
   maybeThrow(salesmen, 'salesmen');
   maybeThrow(areas, 'areas');
   maybeThrow(schemes, 'schemes');
@@ -427,6 +434,9 @@ export const loadAllData = async (): Promise<AppData> => {
     approvals: approvals.error ? null : ((approvals.data || []).map((r: any) => ({ ...r, amount: num(r.amount), rules: r.rules || [], reasons: r.reasons || [] })) as ApprovalRequest[]),
     deletedRecords: deletedRecords.error ? null : ((deletedRecords.data || []) as DeletedRecord[]),
     branches: branches.error ? null : ((branches.data || []).map((r: any) => ({ ...r, godownIds: r.godownIds || [] })) as Branch[]),
+    purchaseInvoices: purchaseInvoices.error
+      ? null
+      : ((purchaseInvoices.data || []).map((r: any) => ({ ...r, grossAmount: num(r.grossAmount), discountAmount: num(r.discountAmount), discountPct: r.discountPct == null ? undefined : num(r.discountPct), otherCharges: num(r.otherCharges), totalAmount: num(r.totalAmount), paidAmount: num(r.paidAmount), lines: Array.isArray(r.lines) ? r.lines : [] })) as PurchaseInvoice[]),
   };
 };
 
