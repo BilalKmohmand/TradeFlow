@@ -1,7 +1,7 @@
 import React from 'react';
 import { Books } from '../../hooks/useAccounting';
 import { StatementRow, balanceSheet, profitAndLoss, trialBalance } from '../../utils/accounting';
-import { formatDate } from '../../utils/formatters';
+import { formatDate, moneyText } from '../../utils/formatters';
 import { todayISO } from '../../utils/stockFlow';
 
 export type AccountingPrintRequest =
@@ -12,7 +12,7 @@ export type AccountingPrintRequest =
 export const isAccountingPrint = (r: { type: string } | null | undefined): r is AccountingPrintRequest =>
   !!r && (r.type === 'trial_balance' || r.type === 'profit_loss' || r.type === 'balance_sheet');
 
-const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+const money = (n: number) => moneyText(n);
 
 const Section: React.FC<{ title: string; rows: StatementRow[]; total: number; totalLabel: string }> = ({ title, rows, total, totalLabel }) => (
   <>

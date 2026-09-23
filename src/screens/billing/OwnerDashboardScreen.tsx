@@ -20,8 +20,12 @@ export const OwnerDashboardScreen: React.FC = () => {
   const today = todayISO();
   const [reportDate, setReportDate] = useState<string | null>(null);
   const src: OwnerSources = useMemo(
-    () => ({ invoices: scoped.invoices, ledger: scoped.ledger, expenses: scoped.expenses, cashEntries: scoped.cashEntries, returns: scoped.returns, settings: scoped.settings, customers: t.customers, suppliers: t.suppliers, products: t.products, purchases: t.purchases, cheques: t.cheques }),
-    [scoped, t.customers, t.suppliers, t.products, t.purchases, t.cheques]
+    () => ({
+      invoices: scoped.invoices, ledger: scoped.ledger, expenses: scoped.expenses, cashEntries: scoped.cashEntries, returns: scoped.returns, settings: scoped.settings, customers: t.customers, suppliers: t.suppliers, products: t.products, purchases: t.purchases, cheques: t.cheques,
+      // Stock is the whole shop's, valued as the books value it (same figure as Inventory in the balance sheet).
+      valuation: { settings: t.settings, ledger: t.ledger, expenses: t.expenses, cashEntries: t.cashEntries, products: t.products, purchases: t.purchases, invoices: t.invoices, returns: t.returns, adjustments: t.adjustments, dispatches: t.dispatches },
+    }),
+    [scoped, t.customers, t.suppliers, t.products, t.purchases, t.cheques, t.settings, t.ledger, t.expenses, t.cashEntries, t.invoices, t.returns, t.adjustments, t.dispatches]
   );
   const snap = useMemo(() => ownerSnapshot(src, today), [src, today]);
   const allowed = t.can('finance:view_pnl') || t.can('view_finance');

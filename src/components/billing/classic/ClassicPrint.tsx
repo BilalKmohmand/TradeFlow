@@ -2,9 +2,9 @@ import React, { useMemo } from 'react';
 import { useTrading } from '../../../context/TradingContext';
 import { useReportData } from '../../../hooks/useReportData';
 import { REPORTS, ReportFilter, ReportId } from '../../../utils/classicReports';
-import { formatDate } from '../../../utils/formatters';
+import { formatDate, moneyText } from '../../../utils/formatters';
 import { todayISO } from '../../../utils/stockFlow';
-import { ClassicPage, PrintReport } from './ReportTables';
+import { ClassicPage, PrintReport, reportPaper } from './ReportTables';
 
 /** Printable classic reports and the purchase invoice (shown by PrintDocument). */
 export type ClassicPrintRequest =
@@ -15,7 +15,7 @@ export const isClassicPrint = (r: { type: string } | null | undefined): r is Cla
 
 type Content = { raw: true; title: string; number: string; date: string; body: React.ReactNode; pageCss: string };
 
-const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+const money = (n: number) => moneyText(n);
 const A4 = '@media print { @page { size: A4; margin: 10mm; } }';
 const A5 = '@media print { @page { size: A5; margin: 8mm; } }';
 
@@ -30,14 +30,15 @@ export const useClassicPrint = (request: { type: string } | null): Content | nul
     if (classic.type === 'classic_report') {
       if (!def) return null;
       const report = def.build(data, { ...classic.filter, today: classic.filter.today || todayISO() });
+      const paper = reportPaper(report);
       return {
         raw: true,
         title: report.title,
         number: report.period,
         date: todayISO(),
-        pageCss: A4,
+        pageCss: paper.pageCss,
         body: (
-          <ClassicPage company={company} title={report.title} period={report.period} printedBy={currentUser?.name}>
+          <ClassicPage company={company} title={report.title} period={report.period} printedBy={currentUser?.name} width={paper.width}>
             <PrintReport report={report} />
           </ClassicPage>
         ),

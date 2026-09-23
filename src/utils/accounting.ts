@@ -88,7 +88,7 @@ import {
   Supplier,
   isCashMethod,
 } from '../types';
-import { formatDate } from './formatters';
+import { formatDate, moneyText } from './formatters';
 import { collectCashMovements, costPerKgOn } from './finance';
 
 export type AccountType = 'asset' | 'liability' | 'equity' | 'income' | 'expense';
@@ -383,7 +383,9 @@ export class EntryBuilder {
   }
   /** Signed add: positive = debit, negative = credit. */
   private add(code: string, signed: number, memo?: string) {
-    const amt = round2(signed);
+    // Round the size, not the signed number: Math.round sends -0.5 up to 0, so a debit and a credit
+    // of the same Rs. 93,203.055 would otherwise come out as 93,203.06 and 93,203.05 (entry off by a paisa).
+    const amt = Math.sign(signed) * round2(Math.abs(signed));
     if (Math.abs(amt) < EPS) return;
     this.lines.push(amt > 0 ? { accountCode: code, debit: amt, credit: 0, memo } : { accountCode: code, debit: 0, credit: -amt, memo });
   }
@@ -432,6 +434,58 @@ export const billLineUnitCost = (
   return p?.costPricePerKg != null && p.costPricePerKg > 0 ? p.costPricePerKg : null;
 };
 
+/** Cost of one unit on a date: what it was bought for up to then; the item's current cost price only as a last resort. */
+export const productCostOn = (purchases: Purchase[], products: Product[], productId: string, date: string): number | null => {
+  const dated = costPerKgOn(purchases, productId, date);
+  if (dated != null && dated > 0) return dated;
+  const p = products.find((x) => x.id === productId);
+  return p?.costPricePerKg != null && p.costPricePerKg > 0 ? p.costPricePerKg : null;
+};
+
+/**
+ * Opening stock the books bring in: today's stock of each item with every recorded movement undone,
+ * valued at cost on the first day of the books. Shared by the journal (Dr Inventory / Cr Opening
+ * balance equity) and the stock valuation (utils/stockValuation.ts), so the two always agree.
+ */
+export const openingStock = (src: {
+  settings: Pick<AppSettings, 'cashOpeningDate'>;
+  ledger: Pick<LedgerEntry, 'date'>[];
+  expenses: Pick<Expense, 'date'>[];
+  cashEntries: Pick<CashEntry, 'date'>[];
+  adjustments: StockAdjustment[];
+  purchases: Purchase[];
+  products: Product[];
+  invoices: Invoice[];
+  dispatches: Dispatch[];
+  returns: StockReturn[];
+}): { date: string; rows: { product: Product; qty: number; cost: number }[] } => {
+  const openingDate = src.settings.cashOpeningDate || '1970-01-01';
+  const date = [openingDate, ...src.ledger.map((l) => l.date), ...src.expenses.map((e) => e.date), ...src.cashEntries.map((c) => c.date), ...src.adjustments.map((a) => a.date.slice(0, 10))]
+    .filter(Boolean)
+    .sort()[0];
+  // Net stock movement per product since the start: + came in, − went out.
+  const movedIn = new Map<string, number>();
+  const move = (productId: string, qty: number) => movedIn.set(productId, (movedIn.get(productId) || 0) + (Number(qty) || 0));
+  src.purchases.forEach((x) => move(x.productId, x.kg));
+  // Bills made in the app took stock item by item (trading invoices carry no qty: stock left via dispatches).
+  src.invoices.forEach((i) => i.items.forEach((it) => { if (it.qty != null) move(it.productId, -(it.qty || 0)); }));
+  src.dispatches.forEach((d) => move(d.productId, -d.kg));
+  src.returns.forEach((r) => {
+    if (r.items?.length) r.items.forEach((it) => move(it.productId, r.kind === 'sales' ? it.qty : -it.qty));
+    else move(r.productId, r.kind === 'sales' ? r.kg : -r.kg);
+  });
+  src.adjustments.forEach((a) => move(a.productId, a.deltaKg));
+  const rows: { product: Product; qty: number; cost: number }[] = [];
+  src.products.forEach((p) => {
+    const cost = productCostOn(src.purchases, src.products, p.id, date);
+    if (cost == null) return;
+    const qty = round2((Number(p.stockKg) || 0) - (movedIn.get(p.id) || 0));
+    if (qty <= 0) return;
+    rows.push({ product: p, qty, cost });
+  });
+  return { date, rows };
+};
+
 export const buildJournal = (src: JournalSources): JournalEntry[] => {
   const {
     settings,
@@ -470,13 +524,7 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
   const moneyAccount = (method: string | undefined, date: string, sourceId?: string, bankCode?: string) =>
     date < openingDate ? ACC.OPENING_EQUITY : isCashMethod(method) ? ACC.CASH : (sourceId && bankOf.get(sourceId)) || bankCode || ACC.BANK;
 
-  /** Cost on a date: what it was bought for up to then; the item's current cost price only as a last resort. */
-  const productCost = (productId: string, date: string): number | null => {
-    const dated = costPerKgOn(purchases, productId, date);
-    if (dated != null && dated > 0) return dated;
-    const p = products.find((x) => x.id === productId);
-    return p?.costPricePerKg != null && p.costPricePerKg > 0 ? p.costPricePerKg : null;
-  };
+  const productCost = (productId: string, date: string) => productCostOn(purchases, products, productId, date);
 
   // --- 1. Opening cash and bank -------------------------------------------------------------
   {
@@ -535,10 +583,12 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
             const costOf = (free: boolean) => inv.items.reduce((a, it) => {
               if (Boolean(it.free) !== free) return a;
               const unitCost = billLineUnitCost(it, inv.issueDate, purchases, products);
-              return a + (unitCost ? unitCost * (it.qty ?? it.kg ?? 0) : 0);
+              // Each line rounded to the paisa, as the stock valuation values it (utils/stockValuation.ts).
+              return a + (unitCost ? round2(unitCost * (it.qty ?? it.kg ?? 0)) : 0);
             }, 0);
-            const cogs = costOf(false);
-            const freeGoods = costOf(true);
+            // Rounded before they are added up, so the inventory credit is exactly the two debits.
+            const cogs = round2(costOf(false));
+            const freeGoods = round2(costOf(true));
             b.dr(ACC.COGS, cogs, 'Cost of items sold').dr(ACC.SCHEME_GOODS, freeGoods, 'Free goods (scheme) at cost').cr(ACC.INVENTORY, cogs + freeGoods);
           } else {
             b.cr(ACC.SALES, debit);
@@ -608,10 +658,10 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
             const valueOf = (free: boolean) => r.items!.reduce((a, it) => {
               if (freeLine(it.billLineId) !== free) return a;
               const unitCost = it.costPricePerKg && it.costPricePerKg > 0 ? it.costPricePerKg : productCost(it.productId, r.date);
-              return a + (unitCost ? unitCost * it.qty : 0);
+              return a + (unitCost ? round2(unitCost * it.qty) : 0);
             }, 0);
-            const value = valueOf(false);
-            const freeValue = valueOf(true);
+            const value = round2(valueOf(false));
+            const freeValue = round2(valueOf(true));
             b.dr(ACC.INVENTORY, value + freeValue, 'Returned stock at cost').cr(ACC.COGS, value).cr(ACC.SCHEME_GOODS, freeValue);
           } else if (r) {
             const cost = productCost(r.productId, r.date);
@@ -761,29 +811,11 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
   });
 
   // Opening stock = today's stock with every recorded movement undone, valued at cost.
-  const earliest = [openingDate, ...ledger.map((l) => l.date), ...expenses.map((e) => e.date), ...cashEntries.map((c) => c.date), ...adjustments.map((a) => a.date.slice(0, 10))]
-    .filter(Boolean)
-    .sort()[0];
-  // Net stock movement per product since the start: + came in, − went out.
-  const movedIn = new Map<string, number>();
-  const move = (productId: string, qty: number) => movedIn.set(productId, (movedIn.get(productId) || 0) + (Number(qty) || 0));
-  purchases.forEach((x) => move(x.productId, x.kg));
-  // Bills made in the app took stock item by item (trading invoices carry no qty: stock left via dispatches).
-  (src.stockInvoices || invoices).forEach((i) => i.items.forEach((it) => { if (it.qty != null) move(it.productId, -(it.qty || 0)); }));
-  dispatches.forEach((d) => move(d.productId, -d.kg));
-  (src.stockReturns || returns).forEach((r) => {
-    if (r.items?.length) r.items.forEach((it) => move(it.productId, r.kind === 'sales' ? it.qty : -it.qty));
-    else move(r.productId, r.kind === 'sales' ? r.kg : -r.kg);
-  });
-  adjustments.forEach((a) => move(a.productId, a.deltaKg));
-  products.forEach((p) => {
-    const cost = productCost(p.id, earliest);
-    if (cost == null) return;
-    const openingQty = round2((Number(p.stockKg) || 0) - (movedIn.get(p.id) || 0));
-    if (openingQty <= 0) return;
+  const opening = openingStock({ settings, ledger, expenses, cashEntries, adjustments, purchases, products, dispatches, invoices: src.stockInvoices || invoices, returns: src.stockReturns || returns });
+  opening.rows.forEach(({ product: p, qty: openingQty, cost }) => {
     const b = new EntryBuilder();
     b.dr(ACC.INVENTORY, openingQty * cost, `${openingQty} ${p.unit || 'kg'} ${p.name}`).cr(ACC.OPENING_EQUITY, openingQty * cost);
-    push({ id: `auto-open-stock-${p.id}`, date: earliest, ref: 'OPENING', memo: `Opening stock — ${p.name}`, sourceType: 'opening_stock', sourceId: p.id, builder: b });
+    push({ id: `auto-open-stock-${p.id}`, date: opening.date, ref: 'OPENING', memo: `Opening stock — ${p.name}`, sourceType: 'opening_stock', sourceId: p.id, builder: b });
   });
 
   return out;
@@ -992,4 +1024,4 @@ export const balanceSheet = (entries: JournalEntry[], asOf: string, accounts: Ac
 };
 
 /** "Rs. 1,000 Dr" style label for a debit-positive balance. */
-export const drCr = (n: number) => (Math.abs(n) < EPS ? '0' : `${new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(Math.abs(n))} ${n > 0 ? 'Dr' : 'Cr'}`);
+export const drCr = (n: number) => (Math.abs(n) < EPS ? '0' : `${moneyText(Math.abs(n))} ${n > 0 ? 'Dr' : 'Cr'}`);

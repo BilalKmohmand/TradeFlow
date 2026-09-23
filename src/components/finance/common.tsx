@@ -1,4 +1,5 @@
 import React from 'react';
+import { moneyText } from '../../utils/formatters';
 import { useTrading } from '../../context/TradingContext';
 import { inputCls, labelCls } from '../billing/ui';
 import { FinancialYear, financialYearOf, financialYearsBetween, fyStartOf } from '../../utils/financeBooks';
@@ -7,7 +8,7 @@ import { todayISO } from '../../utils/stockFlow';
 export const fthCls = 'px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap text-left';
 export const ftdCls = 'px-3 py-2 text-sm';
 export const fnumCls = 'px-3 py-2 text-sm text-right tabular-nums whitespace-nowrap';
-export const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+export const money = (n: number) => moneyText(n);
 export const MONEY_METHODS = ['Cash', 'Bank Transfer', 'Easypaisa / JazzCash', 'Cheque'];
 
 /** Optional cost-centre picker (hidden when the shop has no cost centres). */
