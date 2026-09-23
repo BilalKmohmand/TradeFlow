@@ -17,9 +17,14 @@ export const dangerBtn =
 
 const FOCUSABLE = 'input:not([disabled]),select:not([disabled]),textarea:not([disabled]),button:not([disabled]),[href],[tabindex]:not([tabindex="-1"])';
 
-export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; subtitle?: string; wide?: boolean; children: React.ReactNode; footer?: React.ReactNode }> = ({ isOpen, onClose, title, subtitle, wide, children, footer }) => {
+export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; subtitle?: string; wide?: boolean | 'xl'; children: React.ReactNode; footer?: React.ReactNode }> = ({ isOpen, onClose, title, subtitle, wide, children, footer }) => {
   useEscape(isOpen, onClose);
   const box = useRef<HTMLDivElement>(null);
+  // While a closed dialog fades out it is still on the page: swallow clicks / submits on it, so a
+  // double-click (or a second Enter) on Save can't save twice.
+  const openRef = useRef(isOpen);
+  openRef.current = isOpen;
+  const dead = (e: React.SyntheticEvent) => { if (!openRef.current) { e.preventDefault(); e.stopPropagation(); } };
   // Put focus on the first field and keep Tab inside the dialog.
   useEffect(() => {
     if (!isOpen) return;
@@ -48,6 +53,8 @@ export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: stri
           <motion.div
             ref={box}
             onKeyDown={trap}
+            onClickCapture={dead}
+            onSubmitCapture={dead}
             role="dialog"
             aria-modal="true"
             aria-label={title}
@@ -55,7 +62,7 @@ export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: stri
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 24 }}
             transition={{ duration: 0.18 }}
-            className={`relative z-10 w-full ${wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'} max-h-[92dvh] sm:max-h-[90vh] flex flex-col bg-white dark:bg-[#101A26] rounded-t-[28px] sm:rounded-[28px] border border-b-0 sm:border-b border-[#E5E5E1] dark:border-[#203248] shadow-2xl`}
+            className={`relative z-10 w-full ${wide === 'xl' ? 'sm:max-w-5xl' : wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'} max-h-[92dvh] sm:max-h-[90vh] flex flex-col bg-white dark:bg-[#101A26] rounded-t-[28px] sm:rounded-[28px] border border-b-0 sm:border-b border-[#E5E5E1] dark:border-[#203248] shadow-2xl`}
           >
             {/* Grab handle: tells phone users this is a sheet that sits on the page. */}
             <div aria-hidden="true" className="sm:hidden mx-auto mt-2 h-1.5 w-10 rounded-full bg-[#E5E5E1] dark:bg-[#203248]" />

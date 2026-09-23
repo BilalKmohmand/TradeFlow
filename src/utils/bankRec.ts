@@ -61,7 +61,8 @@ export const parseStatementDate = (raw: string): string | null => {
 };
 
 /**
- * Read a money amount: "1,250.50", "Rs. 1,250", "(500)" or "-500" (out), "500 DR" (out), "500 CR" (in).
+ * Read a money amount: "1,250.50", "Rs. 1,250", "(500)" or "-500" (out), "500 DR" (out), "500 CR" (in),
+ * and the decimal-comma forms "1.250,50" / "1250,5" / "1.250.000".
  * Returns null for blank / unreadable cells.
  */
 export const parseAmount = (raw: string): number | null => {
@@ -78,7 +79,14 @@ export const parseAmount = (raw: string): number | null => {
   } else if (/\bcr\.?$/i.test(s)) {
     s = s.replace(/\bcr\.?$/i, '');
   }
-  s = s.replace(/pkr|rs\.?/gi, '').replace(/[,\s]/g, '');
+  s = s.replace(/pkr|rs\.?/gi, '').replace(/\s/g, '');
+  // Decimal comma (files saved by Excel set to a European format, usually ";"-separated): "27.500,00" or "1250,5".
+  const lastComma = s.lastIndexOf(',');
+  const lastDot = s.lastIndexOf('.');
+  if (lastComma > lastDot && (lastDot >= 0 || /^[-+(]?\d+,\d{1,2}[-)]?$/.test(s))) s = s.replace(/\./g, '').replace(',', '.');
+  // Thousands dots with no decimals: "1.250.000".
+  else if (lastComma < 0 && /^[-+]?\d{1,3}(\.\d{3}){2,}-?$/.test(s)) s = s.replace(/\./g, '');
+  s = s.replace(/,/g, '');
   if (s.endsWith('-')) {
     sign = -sign;
     s = s.slice(0, -1);

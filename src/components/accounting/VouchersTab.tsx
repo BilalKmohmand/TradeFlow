@@ -218,23 +218,23 @@ export const VoucherModal: React.FC<{ type: VoucherType; editId?: string; accoun
         Debit <strong>{rs(totals.debit + (info.side === 'receive' ? sideAmt : 0))}</strong> • Credit <strong>{rs(totals.credit + (info.side === 'pay' ? sideAmt : 0))}</strong>
         {!info.money && Math.abs(totals.debit - totals.credit) >= 0.005 && <span className="ml-2 font-bold text-rose-700 dark:text-rose-300">Difference {rs(Math.abs(totals.debit - totals.credit))}</span>}
       </div>
-      <div className="flex gap-2 max-sm:w-full">
-        <button type="button" onClick={onClose} className={`${secondaryBtn} max-sm:flex-1`}>{sent ? 'Close' : 'Cancel'}</button>
-        <button type="button" onClick={() => save(true)} disabled={Boolean(sent)} className={`${secondaryBtn} max-sm:flex-1`}><Printer className="w-4 h-4" /> Save &amp; print</button>
-        <button type="button" onClick={() => save(false)} disabled={Boolean(sent)} className={`${primaryBtn} max-sm:flex-1`}>Save voucher</button>
+      <div className="grid grid-cols-2 sm:flex gap-2 max-sm:w-full">
+        <button type="button" onClick={onClose} className={`${secondaryBtn} whitespace-nowrap`}>{sent ? 'Close' : 'Cancel'}</button>
+        <button type="button" onClick={() => save(true)} disabled={Boolean(sent)} className={`${secondaryBtn} whitespace-nowrap`}><Printer className="w-4 h-4" /> Save &amp; print</button>
+        <button type="button" onClick={() => save(false)} disabled={Boolean(sent)} className={`${primaryBtn} max-sm:col-span-2 max-sm:order-first`}>Save voucher</button>
       </div>
     </div>
   );
 
   return (
-    <Modal isOpen onClose={onClose} title={`${existing ? 'Edit' : 'New'} ${info.label}`} subtitle={info.money ? `The ${info.money === 'cash' ? 'cash' : 'bank'} side is added by itself: just enter who was ${info.side === 'pay' ? 'paid' : 'received from'} and for what.` : 'Debits must equal credits.'} wide footer={footer}>
+    <Modal isOpen onClose={onClose} title={`${existing ? 'Edit' : 'New'} ${info.label}`} subtitle={info.money ? `The ${info.money === 'cash' ? 'cash' : 'bank'} side is added by itself: just enter who was ${info.side === 'pay' ? 'paid' : 'received from'} and for what.` : 'Debits must equal credits.'} wide="xl" footer={footer}>
       <form onSubmit={(e) => { e.preventDefault(); save(false); }} className="space-y-4" aria-label={info.label}>
         {error && <Notice kind="error">{error}</Notice>}
         {sent && <div data-testid="voucher-sent-for-approval"><Notice kind="ok">{sent}</Notice></div>}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="min-w-0">
             <label className={labelCls} htmlFor="vch-number">Voucher no.</label>
-            <input id="vch-number" readOnly value={number} className={`${inputCls} tabular-nums !bg-[#F4F3EF] dark:!bg-[#0D1520]`} title="Given automatically" data-testid="voucher-number" />
+            <input id="vch-number" readOnly data-skip-autofocus tabIndex={-1} value={number} className={`${inputCls} tabular-nums !bg-[#F4F3EF] dark:!bg-[#0D1520]`} title="Given automatically" data-testid="voucher-number" />
           </div>
           <div className="min-w-0">
             <label className={labelCls} htmlFor="vch-date">Date</label>
@@ -248,16 +248,16 @@ export const VoucherModal: React.FC<{ type: VoucherType; editId?: string; accoun
         </div>
 
         <div className="space-y-2" aria-label="Voucher lines">
-          <div className="hidden sm:grid grid-cols-[minmax(0,2.2fr)_7.5rem_7.5rem_minmax(0,1.4fr)_2.5rem] gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
-            <span>Account (type a code or name, F1 to search)</span><span className="text-right">Debit</span><span className="text-right">Credit</span><span>Line narration</span><span />
+          <div className="hidden sm:grid grid-cols-[minmax(0,2.6fr)_8rem_8rem_minmax(0,1.3fr)_2.5rem] gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
+            <span>Code • account (F1 to search)</span><span className="text-right">Debit</span><span className="text-right">Credit</span><span>Line narration</span><span />
           </div>
           {lines.map((l, i) => (
-            <div key={l.key} className="grid grid-cols-2 sm:grid-cols-[minmax(0,2.2fr)_7.5rem_7.5rem_minmax(0,1.4fr)_2.5rem] gap-2 items-start rounded-2xl sm:rounded-none border sm:border-0 border-[#E5E5E1] dark:border-[#203248] p-2 sm:p-0" data-testid="voucher-line">
+            <div key={l.key} className="grid grid-cols-2 sm:grid-cols-[minmax(0,2.6fr)_8rem_8rem_minmax(0,1.3fr)_2.5rem] gap-2 items-start relative rounded-2xl sm:rounded-none border sm:border-0 border-[#E5E5E1] dark:border-[#203248] p-2 sm:p-0" data-testid="voucher-line">
               <AccountPicker id={`vch-acc-${i + 1}`} aria-label={`Line ${i + 1} account`} className="col-span-2 sm:col-span-1" value={l.account} options={options} onPick={(ref) => set(l.key, { account: ref })} />
               <input aria-label={`Line ${i + 1} debit`} type="number" inputMode="decimal" min="0" step="any" value={l.debit} onChange={(e) => set(l.key, { debit: e.target.value, ...(e.target.value ? { credit: '' } : {}) })} className={`${inputCls} tabular-nums text-right ${main === 'debit' ? '' : 'opacity-80'}`} placeholder="Debit" />
               <input aria-label={`Line ${i + 1} credit`} type="number" inputMode="decimal" min="0" step="any" value={l.credit} onChange={(e) => set(l.key, { credit: e.target.value, ...(e.target.value ? { debit: '' } : {}) })} className={`${inputCls} tabular-nums text-right ${main === 'credit' ? '' : 'opacity-80'}`} placeholder="Credit" />
-              <input aria-label={`Line ${i + 1} narration`} value={l.narration} onChange={(e) => set(l.key, { narration: e.target.value })} className={`${inputCls} col-span-2 sm:col-span-1`} placeholder="optional" />
-              <button type="button" onClick={() => setLines((prev) => (prev.length > 1 ? prev.filter((x) => x.key !== l.key) : prev))} aria-label={`Remove line ${i + 1}`} className="col-span-2 sm:col-span-1 justify-self-end p-2.5 rounded-xl text-[#9CA3AF] hover:text-rose-600"><X className="w-4 h-4" /></button>
+              <input aria-label={`Line ${i + 1} narration`} value={l.narration} onChange={(e) => set(l.key, { narration: e.target.value })} className={`${inputCls} col-span-2 sm:col-span-1 max-sm:w-[calc(100%-3rem)]`} placeholder="Line narration (optional)" />
+              <button type="button" onClick={() => setLines((prev) => (prev.length > 1 ? prev.filter((x) => x.key !== l.key) : prev))} aria-label={`Remove line ${i + 1}`} className="max-sm:absolute max-sm:right-2 max-sm:bottom-2 sm:col-span-1 justify-self-end min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 p-2.5 rounded-xl text-[#9CA3AF] hover:text-rose-600 inline-flex items-center justify-center"><X className="w-4 h-4" /></button>
             </div>
           ))}
           <button type="button" onClick={() => setLines((prev) => [...prev, newLine()])} className={secondaryBtn}><Plus className="w-4 h-4" /> Add line</button>

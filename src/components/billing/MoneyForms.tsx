@@ -10,6 +10,7 @@ import { ChequeFieldsInput, emptyChequeFields } from './ChequeForms';
 import { CostCentreSelect } from '../finance/common';
 import { BankSelect, bankOpt } from './BankSelect';
 import { needsBank, MAIN_BANK_CODE } from '../../utils/banks';
+import { PartyPick, customerParties, supplierParties } from './PartyPick';
 
 const EXPENSE_PAID_VIA = ['Cash', 'Bank Transfer', 'Easypaisa / JazzCash', 'Card', 'Credit (unpaid)'];
 
@@ -88,12 +89,12 @@ export const TransferModal: React.FC<{ isOpen: boolean; onClose: () => void }> =
     onClose();
   };
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Cash ↔ Bank" subtitle="Deposit cash into the bank, or withdraw cash from it.">
+    <Modal isOpen={isOpen} onClose={onClose} title="Cash ↔ Bank" subtitle={many ? 'Deposit cash, withdraw cash, or move money between your bank accounts.' : 'Deposit cash into the bank, or withdraw cash from it.'}>
       <form onSubmit={submit} className="space-y-4">
         {error && <Notice kind="error">{error}</Notice>}
         <div className={`grid ${many ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
           <button type="button" onClick={() => setFrom('cash')} className={`rounded-2xl border p-3 text-sm font-bold ${from === 'cash' ? 'border-teal-600 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300' : 'border-[#E5E5E1] dark:border-[#203248] text-[#6B7280]'}`}>Deposit to bank<div className="text-[11px] font-normal">cash in hand {rs(balances.cash)}</div></button>
-          <button type="button" onClick={() => setFrom('bank')} className={`rounded-2xl border p-3 text-sm font-bold ${from === 'bank' ? 'border-teal-600 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300' : 'border-[#E5E5E1] dark:border-[#203248] text-[#6B7280]'}`}>Withdraw cash<div className="text-[11px] font-normal">in bank {rs(balances.bank)}</div></button>
+          <button type="button" onClick={() => setFrom('bank')} className={`rounded-2xl border p-3 text-sm font-bold ${from === 'bank' ? 'border-teal-600 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300' : 'border-[#E5E5E1] dark:border-[#203248] text-[#6B7280]'}`}>Withdraw cash<div className="text-[11px] font-normal">{many ? `in ${bankAccounts.find((b) => b.code === bank)?.name || 'bank'}` : 'in bank'} {rs(many ? bankBal(bank) : balances.bank)}</div></button>
           {many && <button type="button" onClick={() => setFrom('bank2bank')} className={`rounded-2xl border p-3 text-sm font-bold ${from === 'bank2bank' ? 'border-teal-600 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300' : 'border-[#E5E5E1] dark:border-[#203248] text-[#6B7280]'}`}>Bank → bank<div className="text-[11px] font-normal">{bankAccounts.length} accounts</div></button>}
         </div>
         {many && (
@@ -130,6 +131,7 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
   const { customers, recordCustomerPayment, receiveCheque, settings } = useTrading();
   const [cust, setCust] = useState(customerId || '');
   const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(todayISO());
   const [method, setMethod] = useState('Cash');
   const [bank, setBank] = useState('');
   const [note, setNote] = useState('');
@@ -142,29 +144,33 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
     const amt = parseFloat(amount) || 0;
     if (!c) return setError('Pick the customer.');
     if (amt <= 0) return setError('Enter the amount.');
-    const closed = booksLockedFor(settings, todayISO());
+    if (!date) return setError('Enter the date.');
+    if (date > todayISO()) return setError('The date cannot be in the future.');
+    const closed = booksLockedFor(settings, date);
     if (closed) return setError(closed);
     if (amt > c.totalDue + 0.005) return setError(c.totalDue > 0 ? `${c.name} owes only ${rs(c.totalDue)}. Enter up to that amount.` : `${c.name} owes nothing right now. Make a bill first.`);
     if (isCheque) {
       // A cheque goes into the cheque register (in hand until the bank clears it), not straight into the bank.
-      const r = receiveCheque({ customerId: c.id, amount: amt, ...cheque, note: note.trim() || undefined });
+      const r = receiveCheque({ customerId: c.id, amount: amt, ...cheque, date, note: note.trim() || undefined });
       if (!r.success) return setError(r.message);
       return onClose();
     }
-    recordCustomerPayment(c.id, amt, `${method}${note.trim() ? ` - ${note.trim()}` : ''}`, undefined, needsBank(method) ? bankOpt(bank) : {});
+    recordCustomerPayment(c.id, amt, `${method}${note.trim() ? ` - ${note.trim()}` : ''}`, date, needsBank(method) ? bankOpt(bank) : {});
     onClose();
   };
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Receive payment" subtitle="Money received against a customer's account.">
       <form onSubmit={submit} className="space-y-4">
         {error && <Notice kind="error">{error}</Notice>}
-        <div>
-          <label className={labelCls} htmlFor="rc-cust">Customer</label>
-          <select id="rc-cust" value={cust} onChange={(e) => setCust(e.target.value)} className={inputCls}>
-            <option value="">Select customer…</option>
-            {[...customers].sort((a, b) => b.totalDue - a.totalDue).map((x) => <option key={x.id} value={x.id}>{x.code ? `${x.code} • ` : ''}{x.name}{x.totalDue > 0 ? ` (owes Rs. ${x.totalDue.toLocaleString()})` : ''}</option>)}
-          </select>
-        </div>
+        <PartyPick
+          id="rc-cust"
+          label="Customer"
+          parties={customerParties(customers)}
+          value={cust}
+          onPick={(v) => { setCust(v); setError(''); }}
+          placeholder="Select customer…"
+          hint={c && <p className="mt-1 text-[11px] text-[#6B7280] dark:text-[#94A3B8]" data-testid="rc-balance">{c.totalDue > 0.005 ? <>Owes <strong className="tabular-nums">{rs(c.totalDue)}</strong> now</> : c.totalDue < -0.005 ? <>Paid <strong className="tabular-nums">{rs(-c.totalDue)}</strong> in advance</> : 'Owes nothing now'}{c.city ? ` • ${c.city}` : ''}</p>}
+        />
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls} htmlFor="rc-amount">Amount (Rs.)</label>
@@ -179,7 +185,11 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
           </div>
           {needsBank(method) && <BankSelect id="rc-bank" className="col-span-2" label="Into bank" value={bank} onChange={setBank} />}
           {isCheque && <ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="rc-chq" />}
-          <div className="col-span-2">
+          <div>
+            <label className={labelCls} htmlFor="rc-date">{isCheque ? 'Received on' : 'Date'}</label>
+            <input id="rc-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+          </div>
+          <div>
             <label className={labelCls} htmlFor="rc-note">Note</label>
             <input id="rc-note" value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} placeholder="optional" />
           </div>
@@ -239,13 +249,7 @@ export const PaySupplierModal: React.FC<{ isOpen: boolean; onClose: () => void; 
             Needs a manager’s approval: {needsApproval}. Saving sends it to Approvals.
           </p>
         )}
-        <div>
-          <label className={labelCls} htmlFor="ps-sup">Supplier</label>
-          <select id="ps-sup" value={sup} onChange={(e) => setSup(e.target.value)} className={inputCls}>
-            <option value="">Select supplier…</option>
-            {[...suppliers].sort((a, b) => b.totalOwed - a.totalOwed).map((x) => <option key={x.id} value={x.id}>{x.code ? `${x.code} • ` : ''}{x.company || x.name}{x.totalOwed > 0 ? ` (you owe Rs. ${x.totalOwed.toLocaleString()})` : ''}</option>)}
-          </select>
-        </div>
+        <PartyPick id="ps-sup" label="Supplier" parties={supplierParties(suppliers)} value={sup} onPick={setSup} placeholder="Select supplier…" balanceWord="you owe" />
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls} htmlFor="ps-amount">Amount (Rs.)</label>
