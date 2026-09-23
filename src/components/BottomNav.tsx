@@ -293,7 +293,7 @@ export const BottomNav: React.FC = () => {
                   <span className="block text-[11px] text-[#6B7280] dark:text-[#94A3B8] truncate">@{currentUser.username} · {roles.find((r) => r.id === currentUser.role)?.name || currentUser.role}</span>
                 </span>
               </div>
-              {(can('admin_screen') || can('system:admin_screen')) && (
+              {can('system:company_settings') && (
                 <button type="button" onClick={() => { setMoreOpen(false); updateSettings({ appMode: 'trading' }); setActiveScreen('dashboard'); }} className={`${rowCls} text-indigo-800 dark:text-indigo-300`}>
                   <ArrowLeftRight className="w-4.5 h-4.5" /> Full trading suite
                 </button>

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, CornerDownLeft, Compass, Users, Layers, Package, FileText, PackagePlus, ScrollText } from 'lucide-react';
 import { FUNCTION_KEYS } from '../billing/useBillingShortcuts';
 import { FindItem, FindKind, FindSection, useFindAnything } from './useFindAnything';
+import { useNavAccess } from './useNavGo';
+import { targetAllowed } from '../../utils/navMap';
 
 const ICON: Record<FindKind, React.FC<{ className?: string }>> = {
   option: Compass,
@@ -81,6 +83,7 @@ export const FindAnythingDialog: React.FC<{ isOpen: boolean; onClose: () => void
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const sections = useFindAnything(query);
+  const access = useNavAccess();
   const pick = (it: FindItem) => { onClose(); it.run(); };
   const { flat, active, setActive, onKeyDown } = useResultKeys(sections, query, pick);
 
@@ -132,7 +135,7 @@ export const FindAnythingDialog: React.FC<{ isOpen: boolean; onClose: () => void
           )}
         </div>
         <div data-testid="command-bar-fkeys" className="hidden sm:flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 border-t border-[#E5E5E1] dark:border-[#22354A] text-[10.5px] text-[#6B7280] dark:text-[#94A3B8]">
-          {FUNCTION_KEYS.map((k) => (
+          {FUNCTION_KEYS.filter((k) => targetAllowed(k.target, access)).map((k) => (
             <span key={k.key} className="inline-flex items-center gap-1"><kbd className="font-mono bg-white dark:bg-[#111C28] px-1.5 py-0.5 rounded border border-[#E5E5E1] dark:border-[#22354A]">{k.key}</kbd> {k.label}</span>
           ))}
         </div>

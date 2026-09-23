@@ -48,6 +48,10 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
   }, [selectedCustomerId]); // eslint-disable-line react-hooks/exhaustive-deps
   const today = todayISO();
   const canDelete = can('delete_records');
+  const canAdd = can('customers:create');
+  const canEditCust = can('customers:edit');
+  const canReceive = can('finance:record_payment');
+  const canBill = can('data:write');
   const rows = useMemo(() => {
     return filterParties<Customer>(customers, query, city).sort((a, b) => b.totalDue - a.totalDue || a.name.localeCompare(b.name));
   }, [customers, query, city]);
@@ -63,12 +67,12 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
         <button type="button" onClick={() => ui.salesExtras('hub')} className={secondaryBtn}><Route className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Sales &amp; recovery</button>
         <button type="button" onClick={() => setShowBalances(true)} className={secondaryBtn}><MapPin className="w-4 h-4 text-indigo-600 dark:text-indigo-300" /> Receivable by city</button>
         <CsvButton fileName={`customers-${today}.csv`} table={() => ({ headers: ['Code', 'Name', 'Company', 'Phone', 'City', 'Contact person', 'Sales tax #', 'Fax', 'Address', 'Balance (Rs.)', 'Credit limit (Rs.)'], rows: rows.map((c) => [c.code || '', c.name, c.company, c.phone, c.city || '', c.contactPerson || '', c.salesTaxNo || '', c.fax || '', c.address, c.totalDue, c.creditLimit || '']) })} label="Download customers CSV" />
-        <button type="button" onClick={onAdd} className={`${primaryBtn} max-sm:flex-1`}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add customer</button>
+        {canAdd && <button type="button" onClick={onAdd} className={`${primaryBtn} max-sm:flex-1`}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add customer</button>}
       </PageHeader>
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1 min-w-0">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, phone or ID" className={`${inputCls} pl-10`} aria-label="Search customers" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, ID, phone, city or contact" className={`${inputCls} pl-10`} aria-label="Search customers" />
         </div>
         <div className="flex gap-2">
           <CityFilter id="customer-city" value={city} onChange={setCity} />
@@ -80,7 +84,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
           <EmptyState
             icon={<Users className="w-5 h-5" />}
             text={query || city ? 'No customer matches that search.' : 'No customers yet. Add one here, or type a new name while making a bill.'}
-            action={!query && !city && <button type="button" onClick={onAdd} className={secondaryBtn}><Plus className="w-4 h-4" /> Add customer</button>}
+            action={!query && !city && canAdd && <button type="button" onClick={onAdd} className={secondaryBtn}><Plus className="w-4 h-4" /> Add customer</button>}
           />
         ) : (
           <>
@@ -129,8 +133,8 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
                     <div className={`${u.limit > 0 ? '' : 'max-md:hidden'} mt-1.5 md:mt-0`}>{limitCell}</div>
                     {wide && <div>{balance}</div>}
                     <div className="flex items-center justify-end gap-1 mt-1 md:mt-0 md:w-[13.5rem] max-md:-mr-2">
-                      {c.totalDue > 0 && <RowAction label={`Receive payment from ${c.name}`} text="Receive" alwaysText icon={<HandCoins className="w-4 h-4" />} onClick={() => ui.receive(c.id)} />}
-                      <RowAction label={`New bill for ${c.name}`} text="New bill" alwaysText tone="teal" icon={<FilePlus2 className="w-4 h-4" />} onClick={() => ui.newBill(c.id)} />
+                      {c.totalDue > 0 && canReceive && <RowAction label={`Receive payment from ${c.name}`} text="Receive" alwaysText icon={<HandCoins className="w-4 h-4" />} onClick={() => ui.receive(c.id)} />}
+                      {canBill && <RowAction label={`New bill for ${c.name}`} text="New bill" alwaysText tone="teal" icon={<FilePlus2 className="w-4 h-4" />} onClick={() => ui.newBill(c.id)} />}
                     </div>
                   </li>
                 );
@@ -143,12 +147,13 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
       <Modal isOpen={Boolean(open)} onClose={() => setOpenId(null)} title={open?.name || 'Customer'} subtitle={open ? `${open.phone || 'no phone'}${open.address ? ` • ${open.address}` : ''}` : undefined} wide
         footer={open && (
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-              <button type="button" onClick={() => { setOpenId(null); ui.newBill(open.id); }} className={`${primaryBtn} ${open.totalDue > 0 ? "" : "col-span-2"}`}><FilePlus2 className="w-4 h-4 text-teal-400 dark:text-teal-700" /> New bill</button>
-              {open.totalDue > 0 && <button type="button" onClick={() => { setOpenId(null); ui.receive(open.id); }} className={secondaryBtn}><HandCoins className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Receive payment</button>}
-              <div className={`col-span-2 grid ${canDelete ? 'grid-cols-4' : 'grid-cols-3'} gap-2 sm:contents`}>
-                <button type="button" onClick={() => { setOpenId(null); ui.newQuote(open.id); }} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><FileText className="w-4 h-4" /> Quotation</button>
+              {canBill && <button type="button" onClick={() => { setOpenId(null); ui.newBill(open.id); }} className={`${primaryBtn} ${open.totalDue > 0 && canReceive ? "" : "col-span-2"}`}><FilePlus2 className="w-4 h-4 text-teal-400 dark:text-teal-700" /> New bill</button>}
+              {open.totalDue > 0 && canReceive && <button type="button" onClick={() => { setOpenId(null); ui.receive(open.id); }} className={`${secondaryBtn} ${canBill ? "" : "col-span-2"}`}><HandCoins className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Receive payment</button>}
+              {/* Only the buttons this role may use (a viewer gets Statement only). */}
+              <div className={`col-span-2 grid ${['grid-cols-1', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4'][1 + (canBill ? 1 : 0) + (canEditCust ? 1 : 0) + (canDelete ? 1 : 0)]} gap-2 sm:contents`}>
+                {canBill && <button type="button" onClick={() => { setOpenId(null); ui.newQuote(open.id); }} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><FileText className="w-4 h-4" /> Quotation</button>}
                 <button type="button" onClick={() => setPrintRequest({ type: 'statement', customerId: open.id, from: `${today.slice(0, 4)}-01-01`, to: today })} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Printer className="w-4 h-4" /> Statement</button>
-                <button type="button" onClick={() => { setOpenId(null); setEditRequest({ type: 'customer', id: open.id }); }} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Pencil className="w-4 h-4" /> Edit</button>
+                {canEditCust && <button type="button" onClick={() => { setOpenId(null); setEditRequest({ type: 'customer', id: open.id }); }} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Pencil className="w-4 h-4" /> Edit</button>}
                 {canDelete && <button type="button" onClick={() => { const why = customerDeleteBlock(open.id); if (why) setDeleteBlocked(why); else setPendingDelete(open); }} className={`${dangerBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs sm:ml-auto`}><Trash2 className="w-4 h-4" /> Delete</button>}
               </div>
           </div>

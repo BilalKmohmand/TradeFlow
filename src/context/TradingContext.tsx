@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
+import { guardActions } from './accessGuard';
 import { assignMissingCodes, CUSTOMER_CODE_PREFIX, SUPPLIER_CODE_PREFIX } from '../utils/partyCode';
 import {
   Customer,
@@ -1050,6 +1051,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const clearRecentAlert = () => setRecentWhatsAppAlert(null);
 
   const resetToSampleData = () => {
+    if (!can('system:purge_data')) return denied('Only the owner can replace the data with the sample data.');
     if (isCloudSyncReady) void clearAllTables();
     setCustomers(initialCustomers);
     setSuppliers(initialSuppliers);
@@ -1687,6 +1689,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   /** Wipe a whole table (local + cloud) without any cascade or reversal. */
   const purgeTable = (table: TableName) => {
+    if (!can('system:purge_data')) return denied('Only the owner can wipe tables.');
     const setters: Record<TableName, () => void> = {
       customers: () => setCustomers([]),
       suppliers: () => setSuppliers([]),
@@ -2313,6 +2316,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return hasPermission(currentUser, permission, roles, securityPolicy.enableRoleHierarchy);
   };
 
+  /** A refused admin action: logged, nothing changed. */
+  const denied = (message: string) => {
+    logAuditEvent('Action Denied', message, 'danger', 'system');
+    return { success: false, message };
+  };
+
   const isScreenVisible = (screen: ActiveScreen): boolean => {
     if (!currentUser) return true;
     const userRoles = currentUser.roles && currentUser.roles.length > 0 ? currentUser.roles : [currentUser.role];
@@ -2437,6 +2446,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const updateVisibilitySettings = (settingsMap: Record<string, RoleVisibilitySettings>) => {
+    if (!can('visibility:manage')) return denied('Only an admin can change what each role may see.');
     setVisibilitySettings(settingsMap);
     logAuditEvent('Visibility Rules Updated', 'Role-based screen and sensitive field visibility settings updated.', 'warning', 'visibility');
 
@@ -2448,6 +2458,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const updateSecurityPolicy = (policy: Partial<SecurityPolicySettings>) => {
+    if (!can('roles:manage')) return denied('Only an admin can change the security policy.');
     setSecurityPolicy((prev) => ({ ...prev, ...policy }));
     logAuditEvent('Security Policy Changed', 'Updated system password and lockout security parameters.', 'warning', 'system');
 
@@ -2467,6 +2478,17 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   ): { success: boolean; message: string } => {
     const existing = users.find((u) => u.id === id);
     if (!existing) return { success: false, message: 'User not found.' };
+    const own = existing.id === currentUser?.id;
+    if (!own && !can('users:edit')) return { success: false, message: 'You do not have permission to change user accounts.' };
+    if (!own && isOwnerAccount(existing) && !isOwnerAccount(currentUser || { role: 'viewer' })) return { success: false, message: 'Only an owner (super admin) can change an owner account.' };
+    const wantsRoles = data.roles || data.role;
+    if (wantsRoles) {
+      const next = data.roles && data.roles.length ? data.roles : [data.role as string];
+      const same = next.join(',') === (existing.roles && existing.roles.length ? existing.roles : [existing.role]).join(',');
+      if (!same && !can('users:manage_roles') && !can('users:edit')) return { success: false, message: 'You do not have permission to change roles.' };
+      if (!same && own && !isOwnerAccount(currentUser || { role: 'viewer' })) return { success: false, message: 'You cannot change your own role. Ask the owner.' };
+      if (!same && next.includes('super_admin') && !isOwnerAccount(currentUser || { role: 'viewer' })) return { success: false, message: 'Only the owner can make someone owner (super admin).' };
+    }
 
     // Passwords are only ever set through changePassword / resetUserPassword (hashed there).
     const { newPassword: _ignored, pin: _pin, pinHash: _pinHash, passwordHash: _hash, passwordSalt: _salt, passwordIter: _iter, ...rest } = data as any;
@@ -2517,6 +2539,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const deleteUser = (id: string) => {
     const existing = users.find((u) => u.id === id);
     if (!existing) return;
+    if (!can('users:delete') || (isOwnerAccount(existing) && !isOwnerAccount(currentUser || { role: 'viewer' }))) {
+      logAuditEvent('Action Denied', `Deleting ${existing.name} was blocked (no permission).`, 'danger', 'system');
+      return;
+    }
     const otherOwners = users.filter((u) => u.id !== id && isOwnerAccount(u) && u.active !== false).length;
     if (existing.id === currentUser?.id || (isOwnerAccount(existing) && otherOwners === 0)) {
       logAuditEvent('Action Denied', `Deleting ${existing.name} was blocked (your own account or the only owner).`, 'danger', 'system');
@@ -2530,6 +2556,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const unlockUserAccount = (id: string) => {
+    if (!can('users:edit')) return denied('You do not have permission to unlock accounts.');
     setUsers((prev) =>
       prev.map((u) =>
         u.id === id
@@ -3731,6 +3758,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const importSystemBackup = (jsonContent: string): { success: boolean; message: string } => {
+    if (!can('system:backup_restore')) return { success: false, message: 'Only an admin can restore a backup.' };
     try {
       const data = JSON.parse(jsonContent);
       if (!data || typeof data !== 'object') {
@@ -3786,6 +3814,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const factoryResetAllData = () => {
+    if (!can('system:purge_data')) return denied('Only the owner can reset all data.');
     if (isCloudSyncReady) void clearAllTables();
     setCustomers([]);
     setSuppliers([]);
@@ -3956,9 +3985,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
   controlStore.backupBuilder.current = buildSystemBackup;
 
-  return (
-    <TradingContext.Provider
-      value={{
+  const contextValue = {
         ...inventory.api,
         ...stockActions,
         ...chequeApi,
@@ -4121,11 +4148,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // Controls last: the rule-checked / bin-keeping versions replace the plain actions above.
         ...control.api,
         ...control.overrides,
-      }}
-    >
-      {children}
-    </TradingContext.Provider>
-  );
+  };
+  // Role rules on the actions themselves (read-only roles change nothing; no delete right = no deletes).
+  const guardedValue = guardActions(contextValue, {
+    readOnly: Boolean(currentUser) && !can('data:write'),
+    canDelete: !currentUser || can('delete_records'),
+    billDeleteNeedsApproval: control.api.billDeleteNeedsApproval,
+  });
+  return <TradingContext.Provider value={guardedValue}>{children}</TradingContext.Provider>;
 };
 
 export const useTrading = () => {

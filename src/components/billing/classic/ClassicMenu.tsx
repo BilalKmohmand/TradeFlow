@@ -21,8 +21,9 @@ import { useTrading } from '../../../context/TradingContext';
 import { useBillingUI } from '../BillingUI';
 import { ActiveScreen } from '../../../types';
 import { NavTarget, resolveTarget } from '../../../utils/classicMenu';
-import { CLASSIC_BUTTONS, classicEntry } from '../../../utils/navMap';
-import { useNavGo } from '../../nav/useNavGo';
+import { CLASSIC_BUTTONS, classicEntry, entryAllowed } from '../../../utils/navMap';
+import { useNavAccess, useNavGo } from '../../nav/useNavGo';
+import { Lock } from 'lucide-react';
 import { cardCls } from '../ui';
 
 type Icon = React.FC<{ className?: string }>;
@@ -97,16 +98,19 @@ export const useClassicNav = () => {
  */
 export const ClassicMenu: React.FC<{ compact?: boolean; onPicked?: () => void }> = ({ compact, onPicked }) => {
   const nav = useNavGo();
-  const go = (b: (typeof CLASSIC_BUTTONS)[number]) => nav(classicEntry(b).target);
-  const hint = (b: (typeof CLASSIC_BUTTONS)[number]) => { const e = classicEntry(b); return `${e.hint}${e.key ? ` (${e.key})` : ''}`; };
+  const access = useNavAccess();
+  // Same 16 buttons for everyone (like Apna Accountant); the ones this role may not open are locked.
+  const allowed = (b: (typeof CLASSIC_BUTTONS)[number]) => entryAllowed(classicEntry(b), access);
+  const go = (b: (typeof CLASSIC_BUTTONS)[number]) => { if (allowed(b)) nav(classicEntry(b).target); };
+  const hint = (b: (typeof CLASSIC_BUTTONS)[number]) => { if (!allowed(b)) return 'Your role cannot open this. Ask the owner or a manager.'; const e = classicEntry(b); return `${e.hint}${e.key ? ` (${e.key})` : ''}`; };
   if (compact) {
     return (
       <div className="grid grid-cols-4 gap-1.5" data-testid="classic-menu-compact" role="group" aria-label="Classic menu">
         {CLASSIC_BUTTONS.map((b) => {
           const { icon: I, tint } = ICONS[b.id];
           return (
-            <button key={b.id} type="button" title={hint(b)} onClick={() => { onPicked?.(); go(b); }} className="min-h-16 flex flex-col items-center justify-center gap-1 px-1 py-1.5 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] text-[10.5px] font-bold leading-tight text-center text-[#111827] dark:text-white hover:border-teal-500/50">
-              <I className={`w-4 h-4 ${tint}`} />
+            <button key={b.id} type="button" title={hint(b)} disabled={!allowed(b)} onClick={() => { onPicked?.(); go(b); }} className="min-h-16 flex flex-col items-center justify-center gap-1 px-1 py-1.5 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] text-[10.5px] font-bold leading-tight text-center text-[#111827] dark:text-white hover:border-teal-500/50 disabled:opacity-45 disabled:pointer-events-none">
+              {allowed(b) ? <I className={`w-4 h-4 ${tint}`} /> : <Lock className="w-4 h-4 text-[#9CA3AF]" aria-label="Locked" />}
               <span>{b.label}</span>
             </button>
           );
@@ -124,8 +128,8 @@ export const ClassicMenu: React.FC<{ compact?: boolean; onPicked?: () => void }>
         {CLASSIC_BUTTONS.map((b) => {
           const { icon: I, tint } = ICONS[b.id];
           return (
-            <button key={b.id} type="button" title={hint(b)} onClick={() => go(b)} className="min-h-20 flex flex-col items-center justify-center gap-1.5 px-2 py-2 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] text-xs font-bold leading-tight text-center text-[#111827] dark:text-white hover:border-teal-500/60 hover:shadow-sm transition">
-              <I className={`w-5 h-5 ${tint}`} />
+            <button key={b.id} type="button" title={hint(b)} disabled={!allowed(b)} onClick={() => go(b)} className="min-h-20 flex flex-col items-center justify-center gap-1.5 px-2 py-2 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] text-xs font-bold leading-tight text-center text-[#111827] dark:text-white hover:border-teal-500/60 hover:shadow-sm transition disabled:opacity-45 disabled:pointer-events-none">
+              {allowed(b) ? <I className={`w-5 h-5 ${tint}`} /> : <Lock className="w-5 h-5 text-[#9CA3AF]" aria-label="Locked" />}
               <span>{b.label}</span>
             </button>
           );

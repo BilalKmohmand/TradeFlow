@@ -59,6 +59,9 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
   const today = todayISO();
   const canDelete = can('delete_records');
   const canStock = can('products:create') || can('stock:adjust');
+  const canAdd = can('suppliers:create');
+  const canEditSup = can('suppliers:edit');
+  const canPay = can('finance:record_payment');
   const rows = useMemo(() => {
     return filterParties<Supplier>(suppliers, query, city)
       .sort((a, b) => b.totalOwed - a.totalOwed || (a.company || a.name).localeCompare(b.company || b.name));
@@ -87,7 +90,7 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
         <button type="button" onClick={() => stock.aging('suppliers')} className={secondaryBtn}><Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" /> How long owed</button>
         <button type="button" onClick={() => setShowBalances(true)} className={secondaryBtn}><MapPin className="w-4 h-4 text-indigo-600 dark:text-indigo-300" /> Payable by city</button>
         <CsvButton fileName={`suppliers-${todayISO()}.csv`} table={() => ({ headers: ['Code', 'Name', 'Company', 'Phone', 'City', 'Contact person', 'Sales tax #', 'Fax', 'Address', 'You owe (Rs.)'], rows: rows.map((x) => [x.code || '', x.name, x.company, x.phone, x.city || '', x.contactPerson || '', x.salesTaxNo || '', x.fax || '', x.address, x.totalOwed]) })} label="Download suppliers CSV" />
-        <button type="button" onClick={onAdd} className={`${primaryBtn} max-sm:flex-1`}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add supplier</button>
+        {canAdd && <button type="button" onClick={onAdd} className={`${primaryBtn} max-sm:flex-1`}><Plus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Add supplier</button>}
       </PageHeader>
       <div role="tablist" aria-label="Suppliers views" className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">
         {tabBtn('suppliers', 'Suppliers')}
@@ -104,7 +107,7 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1 min-w-0">
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, code, city or phone" className={`${inputCls} pl-10`} aria-label="Search suppliers" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, code, city, phone or contact" className={`${inputCls} pl-10`} aria-label="Search suppliers" />
             </div>
             <CityFilter id="supplier-city" value={city} onChange={setCity} />
           </div>
@@ -113,7 +116,7 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
               <EmptyState
                 icon={<Layers className="w-5 h-5" />}
                 text={query || city ? 'No supplier matches that search.' : 'No suppliers yet. Add the companies you buy stock from.'}
-                action={!query && !city && <button type="button" onClick={onAdd} className={secondaryBtn}><Plus className="w-4 h-4" /> Add supplier</button>}
+                action={!query && !city && canAdd && <button type="button" onClick={onAdd} className={secondaryBtn}><Plus className="w-4 h-4" /> Add supplier</button>}
               />
             ) : (
               <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
@@ -133,7 +136,7 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
                       )}
                     </div>
                     <div className="w-full md:w-auto flex justify-end gap-1 max-md:-mr-2">
-                      {s.totalOwed > 0 && <RowAction label={`Pay ${s.company || s.name}`} text="Pay" alwaysText icon={<HandCoins className="w-4 h-4" />} onClick={() => onPay(s.id)} />}
+                      {s.totalOwed > 0 && canPay && <RowAction label={`Pay ${s.company || s.name}`} text="Pay" alwaysText icon={<HandCoins className="w-4 h-4" />} onClick={() => onPay(s.id)} />}
                       {canStock && <RowAction label={`Receive stock from ${s.company || s.name}`} text="Receive stock" alwaysText tone="teal" icon={<PackagePlus className="w-4 h-4" />} onClick={() => stock.receiveStock({ supplierId: s.id })} />}
                     </div>
                   </li>
@@ -178,14 +181,14 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
         footer={open && (
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
               {canStock && <button type="button" onClick={() => { const id = open.id; setOpenId(null); stock.receiveStock({ supplierId: id }); }} className={primaryBtn}><PackagePlus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Receive stock</button>}
-              <button type="button" onClick={() => { const id = open.id; setOpenId(null); onPay(id); }} className={`${secondaryBtn} ${canStock ? "" : "col-span-2"}`}><HandCoins className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Pay</button>
+              {canPay && <button type="button" onClick={() => { const id = open.id; setOpenId(null); onPay(id); }} className={`${secondaryBtn} ${canStock ? "" : "col-span-2"}`}><HandCoins className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Pay</button>}
               {canStock && <button type="button" onClick={() => { const id = open.id; setOpenId(null); buy.newOrder({ supplierId: id }); }} className={secondaryBtn}><ClipboardList className="w-4 h-4 text-indigo-600 dark:text-indigo-300" /> New order</button>}
               {can('suppliers:edit') && <button type="button" onClick={() => { const id = open.id; setOpenId(null); buy.recordBill({ supplierId: id }); }} className={secondaryBtn}><FileText className="w-4 h-4" /> Supplier bill</button>}
               {can('suppliers:edit') && <button type="button" onClick={() => { const id = open.id; setOpenId(null); buy.newClaim({ supplierId: id }); }} className={`${secondaryBtn} col-span-2 sm:col-span-1`}><ShieldAlert className="w-4 h-4 text-amber-600" /> Claim</button>}
-              <div className={`col-span-2 grid ${(canDelete ? 1 : 0) + (canStock ? 1 : 0) === 2 ? 'grid-cols-4' : (canDelete || canStock) ? 'grid-cols-3' : 'grid-cols-2'} gap-2 sm:contents`}>
+              <div className={`col-span-2 grid ${['grid-cols-1', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4'][1 + (canEditSup ? 1 : 0) + (canDelete ? 1 : 0) + (canStock ? 1 : 0)]} gap-2 sm:contents`}>
                 {canStock && <button type="button" onClick={() => { const id = open.id; setOpenId(null); stock.purchaseReturn({ supplierId: id }); }} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Undo2 className="w-4 h-4 text-rose-600" /> Return goods</button>}
                 <button type="button" onClick={() => setPrintRequest({ type: 'supplier_statement', supplierId: open.id, from: `${today.slice(0, 4)}-01-01`, to: today })} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Printer className="w-4 h-4" /> Statement</button>
-                <button type="button" onClick={() => { const id = open.id; setOpenId(null); setEditRequest({ type: 'supplier', id }); }} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Pencil className="w-4 h-4" /> Edit</button>
+                {canEditSup && <button type="button" onClick={() => { const id = open.id; setOpenId(null); setEditRequest({ type: 'supplier', id }); }} className={`${secondaryBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs`}><Pencil className="w-4 h-4" /> Edit</button>}
                 {canDelete && <button type="button" onClick={() => setPendingDelete(open)} className={`${dangerBtn} max-sm:flex-col max-sm:gap-1 max-sm:px-1 max-sm:py-2 max-sm:text-xs sm:ml-auto`}><Trash2 className="w-4 h-4" /> Delete</button>}
               </div>
           </div>

@@ -4,7 +4,7 @@ import { AppUser, UserRole, UserAccountStatus } from '../../types';
 import { useTrading } from '../../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn } from '../billing/ui';
 import { PasswordInput } from '../AuthGate';
-import { hasLegacyCredential, hasPassword, lockoutMinutesLeft, MIN_PASSWORD_LENGTH, normalizeUsername } from '../../lib/password';
+import { hasLegacyCredential, hasPassword, isOwnerAccount, lockoutMinutesLeft, MIN_PASSWORD_LENGTH, normalizeUsername } from '../../lib/password';
 
 /** A readable temporary password (no 0/O, 1/l/I) from the browser's secure random source. */
 export const generateTempPassword = (length = 10): string => {
@@ -67,6 +67,7 @@ export const UserManagementTab: React.FC = () => {
   const canCreate = can('users:create');
   const canEdit = can('users:edit');
   const canDelete = can('users:delete');
+  const meOwner = Boolean(currentUser && isOwnerAccount(currentUser));
   const ids = { name: useId(), username: useId(), role: useId(), status: useId() };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -236,6 +237,8 @@ export const UserManagementTab: React.FC = () => {
                 filteredUsers.map((user) => {
                   const isLocked = lockoutMinutesLeft(user) > 0;
                   const isSelf = currentUser?.id === user.id;
+                  // Only an owner may touch an owner's account (no admin can take over the owner by resetting the password).
+                  const ownerLocked = isOwnerAccount(user) && !meOwner;
                   const active = user.active !== false && user.status !== 'inactive' && user.status !== 'suspended';
                   return (
                     <tr key={user.id} data-testid={`user-row-${user.username}`} className="hover:bg-[#FAF9F6]/60 dark:hover:bg-[#162436]/40 transition-colors">
@@ -319,40 +322,40 @@ export const UserManagementTab: React.FC = () => {
                               onClick={() => unlockUserAccount(user.id)}
                               title="Unlock account now"
                               aria-label={`Unlock ${user.username}`}
-                              className="p-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100 border border-amber-200 dark:border-amber-800 transition-colors"
+                              className="inline-flex items-center justify-center min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 p-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100 border border-amber-200 dark:border-amber-800 transition-colors"
                             >
                               <Unlock className="w-3.5 h-3.5" />
                             </button>
                           )}
-                          {canEdit && !isSelf && (
+                          {canEdit && !isSelf && !ownerLocked && (
                             <button
                               type="button"
                               onClick={() => openReset(user)}
                               title="Reset password"
                               aria-label={`Reset password for ${user.username}`}
-                              className="p-1.5 rounded-xl bg-[#FAF9F6] dark:bg-[#162436] text-[#6B7280] dark:text-[#94A3B8] hover:text-teal-700 dark:hover:text-teal-300 hover:bg-teal-50 border border-[#E5E5E1] dark:border-[#203248] transition-colors"
+                              className="inline-flex items-center justify-center min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 p-1.5 rounded-xl bg-[#FAF9F6] dark:bg-[#162436] text-[#6B7280] dark:text-[#94A3B8] hover:text-teal-700 dark:hover:text-teal-300 hover:bg-teal-50 border border-[#E5E5E1] dark:border-[#203248] transition-colors"
                             >
                               <Key className="w-3.5 h-3.5" />
                             </button>
                           )}
-                          {canEdit && (
+                          {canEdit && !ownerLocked && (
                             <button
                               type="button"
                               onClick={() => openEdit(user)}
                               title="Edit user"
                               aria-label={`Edit ${user.username}`}
-                              className="p-1.5 rounded-xl bg-[#FAF9F6] dark:bg-[#162436] text-[#6B7280] dark:text-[#94A3B8] hover:text-teal-700 dark:hover:text-teal-300 hover:bg-teal-50 border border-[#E5E5E1] dark:border-[#203248] transition-colors"
+                              className="inline-flex items-center justify-center min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 p-1.5 rounded-xl bg-[#FAF9F6] dark:bg-[#162436] text-[#6B7280] dark:text-[#94A3B8] hover:text-teal-700 dark:hover:text-teal-300 hover:bg-teal-50 border border-[#E5E5E1] dark:border-[#203248] transition-colors"
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
                           )}
-                          {canDelete && !isSelf && (
+                          {canDelete && !isSelf && !ownerLocked && (
                             <button
                               type="button"
                               onClick={() => setPendingDelete(user)}
                               title="Delete user"
                               aria-label={`Delete ${user.username}`}
-                              className="p-1.5 rounded-xl bg-[#FAF9F6] dark:bg-[#162436] text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600 hover:bg-rose-50 border border-[#E5E5E1] dark:border-[#203248] transition-colors"
+                              className="inline-flex items-center justify-center min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 p-1.5 rounded-xl bg-[#FAF9F6] dark:bg-[#162436] text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600 hover:bg-rose-50 border border-[#E5E5E1] dark:border-[#203248] transition-colors"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>

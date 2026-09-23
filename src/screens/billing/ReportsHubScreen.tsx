@@ -11,6 +11,7 @@ import { BOOKS_MENU, MenuEntry, REPORTS_MENU, isSubmenu, resolveTarget } from '.
 import { REPORTS, ReportDef, ReportFilter, ReportId, ReportRow, bookBalances, defaultFilter, reportCsv } from '../../utils/classicReports';
 import { todayISO } from '../../utils/stockFlow';
 import { financialYearOf, fyStartOf } from '../../utils/financeBooks';
+import { fromClassicTarget, targetAllowed } from '../../utils/navMap';
 
 /** Who may open a report: the books and cost / profit figures need finance access. */
 const useReportAllowed = () => {
@@ -149,8 +150,11 @@ const ReportView: React.FC<{ id: ReportId; onBack: () => void; backLabel: string
 /** One menu line: the old name, a key hint, and a lock when the user may not open it. */
 const EntryButton: React.FC<{ entry: MenuEntry; onGo: (e: MenuEntry) => void; indent?: boolean }> = ({ entry, onGo, indent }) => {
   const allowed = useReportAllowed();
+  const { can } = useTrading();
   const t = resolveTarget(entry.target);
-  const locked = t.kind === 'report' ? !allowed(REPORTS[t.report]) : false;
+  // Reports need finance access for the books / profit; links to screens (Chart of Accounts, Account Ledger…)
+  // follow the same rules as the menus.
+  const locked = t.kind === 'report' ? !allowed(REPORTS[t.report]) : !targetAllowed(fromClassicTarget(entry.target), { can });
   return (
     <button type="button" onClick={() => onGo(entry)} disabled={locked} title={locked ? 'Needs finance access' : undefined} className={`group w-full flex items-center gap-2 min-h-11 px-3 rounded-xl text-sm text-left font-semibold text-[#111827] dark:text-white hover:bg-[#F4F3EF] dark:hover:bg-[#162436] disabled:opacity-45 disabled:pointer-events-none ${indent ? 'pl-7' : ''}`}>
       <span className="flex-1 min-w-0">{entry.label}</span>

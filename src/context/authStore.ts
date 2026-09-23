@@ -662,6 +662,10 @@ export const useAuthStore = ({ users, setUsers, roles, securityPolicy, settings,
     if (!can('users:edit')) return { success: false, message: 'You do not have permission to reset passwords.' };
     const user = usersRef.current.find((u) => u.id === userId);
     if (!user) return { success: false, message: 'User not found.' };
+    // An admin must not be able to take over the owner's account by setting its password.
+    if (isOwnerAccount(user) && user.id !== currentUser?.id && !(currentUser && isOwnerAccount(currentUser))) {
+      return { success: false, message: 'Only an owner (super admin) can set a password for an owner account.' };
+    }
     const pwErr = validateNewPassword(tempPassword, undefined, securityPolicy);
     if (pwErr) return { success: false, message: pwErr };
     let cloudNote = '';

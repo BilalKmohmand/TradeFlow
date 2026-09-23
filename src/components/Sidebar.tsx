@@ -282,7 +282,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onReceiveStock }) => {
           {isCloudSyncReady ? <Cloud className="w-3.5 h-3.5 shrink-0" /> : <CloudOff className="w-3.5 h-3.5 shrink-0" />}
           {!collapsed && <span className="truncate">{isCloudSyncReady ? 'Cloud sync live' : isCloudSyncEnabled ? 'Offline • local data' : 'Local only'}</span>}
         </div>
-        {(can('admin_screen') || can('system:admin_screen')) && (
+        {/* The app mode is one setting for the whole shop: only an admin switches it (anyone with Admin can switch back). */}
+        {(isBilling ? can('system:company_settings') : can('admin_screen') || can('system:admin_screen')) && (
           <button
             onClick={() => { updateSettings({ appMode: isBilling ? 'trading' : 'billing' }); setActiveScreen('dashboard'); }}
             title={isBilling ? 'Full trading suite: bookings, dispatches, fleet, stock-flow reports' : 'Back to simple billing'}
