@@ -362,6 +362,15 @@ describe('4. party details, city search and receivable / payable reports', () =>
     expect(filterParties(t.customers, '', 'mardan').map((x) => x.name).sort()).toEqual(['Bismillah Traders', 'Khan Kiryana']);
     expect(filterParties(t.customers, '141454', '').map((x) => x.name)).toEqual(['Zaman Store']);
 
+    // Typed the way staff actually type: shop name, phone with a space, city, wrong case.
+    const rows = [{ name: 'Haji Karim', company: 'Karim General Store', phone: '0300 1234567', code: 'C-0001', city: 'Mingora' }];
+    expect(filterParties(rows, 'karim general', '')).toHaveLength(1);
+    expect(filterParties(rows, '0300 123', '')).toHaveLength(1);
+    expect(filterParties(rows, '03001234567', '')).toHaveLength(1);
+    expect(filterParties(rows, 'mingora', '')).toHaveLength(1);
+    expect(filterParties(rows, 'c-0001', '')).toHaveLength(1);
+    expect(filterParties(rows, 'zzz', '')).toHaveLength(0);
+    expect(filterParties(rows, '12', '')).toHaveLength(0); // too few digits to be a phone search
     run(() => h.result.current.updateCustomer('c2', { totalDue: 700 } as any));
     const both = partyBalanceReport(h.result.current.customers, h.result.current.suppliers, { kind: 'both', cityWise: true });
     expect(both.groups.map((g) => g.city)).toEqual(['Lahore', 'Mardan', 'Peshawar']);

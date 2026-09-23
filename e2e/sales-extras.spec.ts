@@ -139,6 +139,24 @@ test.describe('Sales extras (desktop)', () => {
     await expect(com).toContainText('still owed Rs. 0');
   });
 
+  test('receive from many: the search finds a customer by shop name, phone with spaces, ID or city', async ({ page }) => {
+    await open(page);
+    await goTo(page, 'Money');
+    await page.getByRole('main').getByRole('button', { name: 'Receive from many' }).click();
+    const dlg = page.getByRole('dialog', { name: 'Receive from many' });
+    const box = dlg.getByLabel('Find a customer');
+    const rows = dlg.getByTestId('receive-many-list').getByRole('listitem');
+    await expect(rows).toHaveCount(2);
+    await box.fill('Zaman');
+    await expect(rows).toHaveCount(1);
+    await box.fill('z01');
+    await expect(rows).toHaveCount(1); // ID, any case
+    await box.fill('0344 383');
+    await expect(rows).toHaveCount(1); // phone typed with a space
+    await box.fill('nobody-here');
+    await expect(dlg.getByText(/No customer here matches/)).toBeVisible();
+  });
+
   test('receive from many: tick customers, one save, collection sheet prints; interest preview and post', async ({ page }) => {
     await open(page);
     await goTo(page, 'Money');

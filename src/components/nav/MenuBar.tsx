@@ -272,12 +272,11 @@ export const MenuBar: React.FC = () => {
                   data-testid={`nav-top-${g.id}`}
                   onClick={() => (on && openedBy !== 'hover' ? setOpen(null) : openGroup(g.id, 'click'))}
                   onMouseEnter={() => {
+                    // Only switch between menus while one is already open. A menu never opens just
+                    // because the mouse passed over the bar: that panel would cover the page and
+                    // swallow the next click.
                     if (leaveTimer.current) clearTimeout(leaveTimer.current);
-                    if (open && open !== g.id) openGroup(g.id, openedBy === 'hover' ? 'hover' : openedBy);
-                    else if (!open) {
-                      if (hoverTimer.current) clearTimeout(hoverTimer.current);
-                      hoverTimer.current = setTimeout(() => openGroup(g.id, 'hover'), 180);
-                    }
+                    if (open && open !== g.id) openGroup(g.id, openedBy);
                   }}
                   onMouseLeave={() => { if (hoverTimer.current) clearTimeout(hoverTimer.current); }}
                   onKeyDown={(e) => onTopKey(e, g)}

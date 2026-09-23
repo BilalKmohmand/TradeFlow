@@ -7,6 +7,7 @@ import { Modal, Notice, EmptyState, inputCls, labelCls, primaryBtn, secondaryBtn
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 import { booksLockedFor } from '../../utils/accounting';
+import { filterParties } from '../../utils/vouchers';
 
 /** Recent interest runs / collection sheets with a one-tap Undo (asks once, then reverses the whole run). */
 const RecentRuns: React.FC<{ title: string; runs: PostedRun[]; noun: string; allowed: boolean; onUndo: (id: string) => { success: boolean; message: string }; testId: string }> = ({ title, runs, noun, allowed, onUndo, testId }) => {
@@ -77,9 +78,15 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
     return customers
       .filter((c) => c.totalDue > 0.005)
       .filter((c) => areaFilter === 'all' || (c.areaId || '') === areaFilter)
-      .filter((c) => !q || c.name.toLowerCase().includes(q) || (c.code || '').toLowerCase().includes(q) || c.phone.includes(q))
+      .filter((c) => !q || filterParties([c], q, '').length > 0)
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [customers, query, areaFilter]);
+  // Searching someone who has nothing due must say so, not "nobody owes you".
+  const settled = useMemo(() => {
+    const q = query.trim();
+    if (!q || owing.length > 0) return [] as typeof customers;
+    return filterParties<(typeof customers)[number]>(customers, q, '').filter((c) => c.totalDue <= 0.005).slice(0, 3);
+  }, [customers, query, owing.length]);
   const line = (id: string): Line => lines[id] || { on: false, amount: '', method: 'Cash' };
   const setLine = (id: string, patch: Partial<Line>) => { setError(''); setLines((prev) => ({ ...prev, [id]: { ...line(id), ...patch } })); };
   const ticked = (Object.entries(lines) as [string, Line][]).filter(([, l]) => l.on && (parseFloat(l.amount) || 0) > 0);
@@ -158,7 +165,18 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a customer" className={`${inputCls} pl-10`} aria-label="Find a customer" />
         </div>
-        {owing.length === 0 ? <EmptyState compact text="Nobody owes you money here." /> : (
+        {owing.length === 0 ? (
+          <EmptyState
+            compact
+            text={
+              settled.length
+                ? `${settled.map((c) => c.name).join(', ')} ${settled.length === 1 ? 'has' : 'have'} nothing due. Only customers who owe money are listed here.`
+                : query.trim()
+                  ? `No customer here matches "${query.trim()}". Only customers who owe money are listed.`
+                  : 'Nobody owes you money here.'
+            }
+          />
+        ) : (
           <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248]" data-testid="receive-many-list">
             {owing.map((c) => {
               const l = line(c.id);

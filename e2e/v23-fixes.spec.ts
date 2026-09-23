@@ -62,6 +62,7 @@ test('reminders, depreciation, cartons on quotations and returns, undo collectio
   await expect(wa).toHaveAttribute('href', /^https:\/\/wa\.me\/923443838294\?text=.*Rohail%20Zaman%20Traders/);
   const [chat] = await Promise.all([page.context().waitForEvent('page'), wa.click()]);
   await chat.close();
+  await page.bringToFront(); // the app tab was left in the background: animations pause there
   await expect(panel).toContainText('All reminders for today are done.');
   await goTo(page, 'Customers');
   await page.getByRole('button', { name: /Zaman and Co BTK/ }).first().click();
