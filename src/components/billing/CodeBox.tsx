@@ -39,7 +39,15 @@ export const CodeBox: React.FC<{
   onPick: (id: string) => void;
   placeholder?: string;
   className?: string;
-}> = ({ id, label, items, value, onPick, placeholder = 'Code', className = '' }) => {
+  /**
+   * Enter was pressed: 'found' (an item is picked — move on, e.g. to Qty), 'empty' (nothing typed —
+   * the form may move on or finish the list) or 'miss' (wrong code — stay here). The box stops the
+   * Enter from reaching the form, so the form's own Enter-to-next-field never runs twice.
+   */
+  onEnter?: (result: 'found' | 'empty' | 'miss') => void;
+  /** For the form's keyboard navigation (data-nav). */
+  nav?: string;
+}> = ({ id, label, items, value, onPick, placeholder = 'Code', className = '', onEnter, nav }) => {
   const current = items.find((x) => x.id === value);
   const [text, setText] = useState(current?.code || '');
   const [miss, setMiss] = useState(false);
@@ -50,14 +58,17 @@ export const CodeBox: React.FC<{
     setMiss(false);
   }, [value, current?.code]);
 
-  const commit = () => {
-    if (!text.trim()) return;
+  const commit = (): 'found' | 'empty' | 'miss' => {
+    if (!text.trim()) return 'empty';
     const hit = findByCode(items, text);
     if (hit) {
       setMiss(false);
       if (hit.id !== value) onPick(hit.id);
       else setText(hit.code || text);
-    } else setMiss(true);
+      return 'found';
+    }
+    setMiss(true);
+    return 'miss';
   };
 
   return (
@@ -71,10 +82,12 @@ export const CodeBox: React.FC<{
           if (e.key === 'Enter') {
             e.preventDefault();
             e.stopPropagation();
-            commit();
+            const r = commit();
+            onEnter?.(r);
           }
         }}
-        onBlur={commit}
+        onBlur={() => { commit(); }}
+        data-nav={nav}
         autoCapitalize="characters"
         autoComplete="off"
         spellCheck={false}

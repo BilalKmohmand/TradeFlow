@@ -1245,7 +1245,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         type: 'purchase_received',
         referenceId: receiptNumber,
         date: onDate,
-        description: `Stock received ${receiptNumber}: ${kg.toLocaleString()} kg ${product.name}`,
+        description: `Stock received ${receiptNumber}: ${kg.toLocaleString()} ${product.unit || 'kg'} ${product.name}`,
         debit: amount,
         credit: 0,
         balanceAfter: round2(base + amount),
@@ -2190,8 +2190,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const today = date || new Date().toISOString().split('T')[0];
     const newTotalOwed = Number((supplier.totalOwed - amount).toFixed(2));
 
+    // Take the payment off the LATEST balance: two payments saved before a re-render (a double click,
+    // a bank statement with two lines) must both count, just as both ledger rows do.
     setSuppliers((prev) =>
-      prev.map((s) => (s.id === supplierId ? { ...s, totalOwed: newTotalOwed } : s))
+      prev.map((s) => (s.id === supplierId ? { ...s, totalOwed: Number(((s.totalOwed || 0) - amount).toFixed(2)) } : s))
     );
 
     const payRef = controlStore.nextDocNumber('supplier_payment', today, ledger.filter((l) => l.type === 'payment_made').map((l) => l.referenceId));

@@ -47,14 +47,31 @@ export const landedPosting = (lines: { qty: number; rate: number }[], totals: Pu
   return { rates, posted, rounding: round2(totals.total - posted) };
 };
 
-/** Search purchase invoices by our number, the supplier's memo / bill no., the supplier or an item. */
-export const matchesPurchaseInvoice = (p: { invoiceNumber: string; memoNo?: string; supplierName: string; lines: { productName: string }[] }, query: string): boolean => {
+/**
+ * Search purchase invoices by our number, the supplier's memo / bill no., the supplier or an item.
+ * With the invoice's supplier passed in, its code (S-0003), city and phone find the invoice too, and
+ * an item code (101) finds every invoice with that item.
+ */
+export const matchesPurchaseInvoice = (
+  p: { invoiceNumber: string; memoNo?: string; supplierName: string; lines: { productName: string; code?: string }[] },
+  query: string,
+  supplier?: { code?: string; city?: string; phone?: string; name?: string } | null
+): boolean => {
   const q = query.trim().toLowerCase();
   if (!q) return true;
+  const squash = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+  const qDigits = q.replace(/[^0-9]/g, '');
   return (
     p.invoiceNumber.toLowerCase().includes(q) ||
     (p.memoNo || '').toLowerCase().includes(q) ||
     p.supplierName.toLowerCase().includes(q) ||
-    p.lines.some((l) => l.productName.toLowerCase().includes(q))
+    p.lines.some((l) => l.productName.toLowerCase().includes(q) || (l.code ? squash(l.code) === squash(q) : false)) ||
+    Boolean(
+      supplier &&
+        ((supplier.code ? squash(supplier.code) === squash(q) : false) ||
+          (supplier.city || '').toLowerCase().includes(q) ||
+          (supplier.name || '').toLowerCase().includes(q) ||
+          (qDigits.length >= 4 && qDigits.length === q.replace(/[\s-]/g, '').length && (supplier.phone || '').replace(/[^0-9]/g, '').includes(qDigits)))
+    )
   );
 };

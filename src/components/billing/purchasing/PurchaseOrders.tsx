@@ -288,7 +288,7 @@ export const PurchaseOrdersView: React.FC<{ onNew: () => void; onOpen: (id: stri
     () =>
       purchaseOrders
         .filter((p) => (filter === 'all' ? true : filter === 'active' ? p.status === 'open' || p.status === 'partial' : p.status === filter))
-        .sort((a, b) => ((b.orderDate || b.createdAt) > (a.orderDate || a.createdAt) ? 1 : (b.orderDate || b.createdAt) < (a.orderDate || a.createdAt) ? -1 : b.poNumber.localeCompare(a.poNumber))),
+        .sort((a, b) => ((b.orderDate || b.createdAt) > (a.orderDate || a.createdAt) ? 1 : (b.orderDate || b.createdAt) < (a.orderDate || a.createdAt) ? -1 : b.poNumber.localeCompare(a.poNumber, undefined, { numeric: true }))),
     [purchaseOrders, filter]
   );
   const supName = (id: string) => {

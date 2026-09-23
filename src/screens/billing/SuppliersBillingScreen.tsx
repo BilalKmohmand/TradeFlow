@@ -104,7 +104,7 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1 min-w-0">
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, phone or ID" className={`${inputCls} pl-10`} aria-label="Search suppliers" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, code, city or phone" className={`${inputCls} pl-10`} aria-label="Search suppliers" />
             </div>
             <CityFilter id="supplier-city" value={city} onChange={setCity} />
           </div>
@@ -174,7 +174,7 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
         </div>
       )}
 
-      <Modal isOpen={Boolean(open)} onClose={() => setOpenId(null)} title={open ? open.company || open.name : 'Supplier'} subtitle={open ? `${open.phone || 'no phone'}${open.address ? ` • ${open.address}` : ''}` : undefined} wide
+      <Modal isOpen={Boolean(open)} onClose={() => setOpenId(null)} title={open ? open.company || open.name : 'Supplier'} subtitle={open ? `${open.code ? `${open.code} • ` : ''}${open.phone || 'no phone'}${open.city ? ` • ${open.city}` : ''}${open.address && open.address !== open.city ? ` • ${open.address}` : ''}` : undefined} wide
         footer={open && (
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
               {canStock && <button type="button" onClick={() => { const id = open.id; setOpenId(null); stock.receiveStock({ supplierId: id }); }} className={primaryBtn}><PackagePlus className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Receive stock</button>}

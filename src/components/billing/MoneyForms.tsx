@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
 import { EXPENSE_CATEGORIES, ExpenseCategory } from '../../types';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice } from './ui';
@@ -211,17 +211,23 @@ export const PaySupplierModal: React.FC<{ isOpen: boolean; onClose: () => void; 
   const s = suppliers.find((x) => x.id === sup);
   const amt = parseFloat(amount) || 0;
   const needsApproval = amt > 0 ? supplierPaymentApproval(amt) : null;
+  // A double click on Pay must not pay twice (the dialog is still on screen while it closes).
+  const busy = useRef(false);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (sent) return;
+    if (sent || busy.current) return;
     if (!s) return setError('Pick the supplier.');
     if (amt <= 0) return setError('Enter the amount.');
     const closed = booksLockedFor(settings, todayISO());
     if (closed) return setError(closed);
+    busy.current = true;
     if (isCheque) {
       // A cheque goes into the cheque register (given, paid from the bank when it clears).
       const r = issueCheque({ supplierId: s.id, amount: amt, ...cheque, note: note.trim() || undefined, ...bankOpt(bank) });
-      if (!r.success) return setError(r.message);
+      if (!r.success) {
+        busy.current = false;
+        return setError(r.message);
+      }
       if ('pendingApproval' in r && r.pendingApproval) return setSent(r.message);
       return onClose();
     }
