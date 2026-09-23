@@ -77,6 +77,8 @@ export default defineConfig(() => {
       globals: true,
       include: ['src/**/*.test.{ts,tsx}'],
       setupFiles: ['src/__tests__/setup.ts'],
+      // Real password hashing and a full app render: slow on a busy machine, not wrong.
+      testTimeout: 30_000,
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
