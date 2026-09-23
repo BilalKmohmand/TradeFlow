@@ -5,7 +5,7 @@ import { hasPack, formatPackQty, shortPack } from '../../utils/packUnits';
 import { Printer, Trash2, Wallet, MessageCircle, RotateCcw, Truck } from 'lucide-react';
 import { batchLines } from '../../utils/inventory';
 import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
-import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, Notice, rs } from './ui';
+import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, Notice, rs, bidi } from './ui';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { formatDate } from '../../utils/formatters';
 import { lineQty, linePrice } from '../../utils/billing';
@@ -68,7 +68,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
 
   return (
     <>
-      <Modal isOpen={Boolean(inv)} onClose={onClose} title={inv ? `Bill ${inv.invoiceNumber}` : 'Bill'} subtitle={inv ? `${inv.customerName} • ${formatDate(inv.issueDate)}` : undefined} wide
+      <Modal isOpen={Boolean(inv)} onClose={onClose} title={inv ? `Bill ${inv.invoiceNumber}` : 'Bill'} subtitle={inv ? `${bidi(inv.customerName)} • ${formatDate(inv.issueDate)}` : undefined} wide
         footer={inv && (
           <div className="flex flex-wrap gap-2 justify-between">
             <div className="flex flex-wrap gap-2">

@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import { X, Printer, Truck } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
-import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
+import { formatCurrency, formatKg, formatDate, formatAmount } from '../utils/formatters';
 import { todayISO } from '../utils/stockFlow';
 import { useEscape } from '../hooks/useEscape';
 import { dispatchBilledTotal, EXPENSE_CATEGORIES, BillPrintSize } from '../types';
@@ -134,7 +134,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       const inv = invoices.find((i) => i.id === request.invoiceId);
       if (!inv) return null;
       const customer = customers.find((c) => c.id === inv.customerId);
-      const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+      const money = formatAmount;
       const hasLineDisc = inv.items.some((it) => (it.discountAmount || 0) > 0);
       const span = hasLineDisc ? 4 : 3;
       const lineDisc = inv.items.reduce((a, it) => a + (it.discountAmount || 0), 0);
@@ -305,7 +305,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       if (!inv) return null;
       const customer = customers.find((c) => c.id === inv.customerId);
       const back = returnedQtyByLine(returns, inv.id);
-      const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+      const money = formatAmount;
       const rows = inv.items.map((it) => ({ it, qty: Math.max(0, Math.round((lineQty(it) - (back.get(it.id) || 0)) * 100) / 100) })).filter((r) => r.qty > 0);
       return {
         title: 'DELIVERY CHALLAN',
@@ -671,7 +671,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       if (!q) return null;
       const cust = customers.find((c) => c.id === q.customerId);
       if (q.items?.length) {
-        const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+        const money = formatAmount;
         const lines = quotationLines(q);
         return {
           title: 'QUOTATION',
@@ -740,7 +740,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       if (r.kind === 'sales' && r.items?.length) {
         const inv = invoices.find((i) => i.id === r.invoiceId);
         const cust = customers.find((c) => c.id === r.customerId);
-        const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+        const money = formatAmount;
         const tax = r.taxAmount || 0;
         const refund = r.refundAmount || 0;
         return {

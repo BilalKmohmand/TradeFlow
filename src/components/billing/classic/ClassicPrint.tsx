@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useTrading } from '../../../context/TradingContext';
 import { useReportData } from '../../../hooks/useReportData';
 import { REPORTS, ReportFilter, ReportId } from '../../../utils/classicReports';
-import { formatDate } from '../../../utils/formatters';
+import { formatAmount, formatDate } from '../../../utils/formatters';
 import { todayISO } from '../../../utils/stockFlow';
 import { ClassicPage, PrintReport } from './ReportTables';
 
@@ -15,7 +15,7 @@ export const isClassicPrint = (r: { type: string } | null | undefined): r is Cla
 
 type Content = { raw: true; title: string; number: string; date: string; body: React.ReactNode; pageCss: string };
 
-const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+const money = formatAmount;
 const A4 = '@media print { @page { size: A4; margin: 10mm; } }';
 const A5 = '@media print { @page { size: A5; margin: 8mm; } }';
 

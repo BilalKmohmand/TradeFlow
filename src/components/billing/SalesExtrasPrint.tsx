@@ -1,13 +1,13 @@
 import React, { useMemo } from 'react';
 import { useTrading } from '../../context/TradingContext';
 import type { SalesExtrasPrintRequest } from '../../context/salesExtrasActions';
-import { formatDate } from '../../utils/formatters';
+import { formatAmount, formatDate } from '../../utils/formatters';
 import { todayISO } from '../../utils/stockFlow';
 import { commissionReport, recoveryList, salesByGroup } from '../../utils/salesExtras';
 
 export const isSalesExtrasPrint = (r: { type: string } | null | undefined): r is SalesExtrasPrintRequest => !!r && r.type === 'sales_extras';
 
-const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+const money = formatAmount;
 const th = 'py-2 px-2 text-[10px] uppercase tracking-widest text-gray-600';
 const tdn = 'py-1.5 px-2 text-right font-mono whitespace-nowrap';
 
