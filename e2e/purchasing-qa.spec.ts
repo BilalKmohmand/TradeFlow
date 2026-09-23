@@ -268,7 +268,7 @@ test.describe('Orders and search', () => {
 
     await page.getByRole('tab', { name: 'Suppliers', exact: true }).click();
     const box = page.getByLabel('Search suppliers');
-    await expect(box).toHaveAttribute('placeholder', 'Search by name, code, city or phone');
+    await expect(box).toHaveAttribute('placeholder', 'Search by name, code, city, phone or contact');
     const rows = page.locator('main').getByRole('button', { name: /^S-00/ });
     await box.fill('S-0005');
     await expect(rows).toHaveCount(1);
