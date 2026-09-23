@@ -35,6 +35,7 @@ import { formatDate } from './formatters';
 import { stockByGodown } from './inventory';
 import { formatPackQty, hasPack } from './packUnits';
 import { itemHistory, profitFromBills } from './stockReports';
+import { stockBookValues } from './stockValuation';
 import type { CsvTable } from './csvReports';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -234,7 +235,8 @@ export const DOC_LABEL: Record<string, string> = {
   customer_opening: 'Opening',
   supplier_opening: 'Opening',
 };
-const docLabel = (e: JournalEntry) => (e.source === 'manual' ? 'Journal voucher' : DOC_LABEL[e.sourceType || ''] || (e.sourceType || 'Entry').replace(/_/g, ' '));
+const docLabel = (e: JournalEntry) => (e.closing ? 'Year-end closing' : e.voucherType ? VOUCHER_LABEL[e.voucherType] : e.source === 'manual' ? 'Journal voucher' : DOC_LABEL[e.sourceType || ''] || (e.sourceType || 'Entry').replace(/_/g, ' '));
+const VOUCHER_LABEL: Record<NonNullable<JournalEntry['voucherType']>, string> = { CPV: 'Cash payment voucher', CRV: 'Cash receipt voucher', BPV: 'Bank payment voucher', BRV: 'Bank receipt voucher', JV: 'Journal voucher' };
 
 /** Balance of a customer / supplier on a date: today's balance less everything posted after that date. */
 export const partyBalanceOn = (current: number, ledger: LedgerEntry[], type: 'customer' | 'supplier', id: string, asOf: string) =>
@@ -285,7 +287,8 @@ const moneyBook = (bank: boolean) => (d: ReportData, f: ReportFilter): ReportRes
 
 /** Journal entries of a period listed voucher by voucher: heading row, then account lines. */
 const journalListing = (d: ReportData, title: string, from: string, to: string, period: string, empty: string): ReportResult => {
-  const entries = d.journal.filter((e) => e.date >= from && e.date <= to && !e.closing);
+  // The year-end closing entry is a voucher like any other: it is listed (the P&L reports leave it out).
+  const entries = d.journal.filter((e) => e.date >= from && e.date <= to);
   const rows: ReportRow[] = [];
   let dr = 0;
   let cr = 0;
@@ -655,9 +658,9 @@ export const dailyPurchase = (d: Pick<ReportData, 'purchases' | 'returns' | 'pur
     r.docs.add(invoiceOf.get(p.id) || p.receiptNumber);
     r.purchase += Number(p.amount) || 0;
   });
-  // Paisa rounding of purchase invoices (so a day's purchase equals the invoices' totals).
-  const invNumbers = new Set(d.purchaseInvoices.map((p) => p.invoiceNumber));
-  d.ledger.filter((l) => l.entityType === 'supplier' && l.type === 'purchase_variance' && invNumbers.has(l.referenceId) && l.date >= from && l.date <= to).forEach((l) => (day(l.date).purchase += (Number(l.debit) || 0) - (Number(l.credit) || 0)));
+  // Paisa rounding of purchase invoices (so a day's purchase equals the invoices' totals) and supplier
+  // bills above / below the goods received: what the goods really cost, as in Party-wise Purchase.
+  d.ledger.filter((l) => l.entityType === 'supplier' && l.type === 'purchase_variance' && l.date >= from && l.date <= to).forEach((l) => (day(l.date).purchase += (Number(l.debit) || 0) - (Number(l.credit) || 0)));
   d.returns.filter((x) => x.kind === 'purchase' && x.date >= from && x.date <= to).forEach((x) => (day(x.date).returns += Number(x.amount) || 0));
   const rows = Array.from(days.values())
     .sort((a, b) => (a.date < b.date ? -1 : 1))
@@ -742,15 +745,23 @@ const dailyGrossProfitReport = (d: ReportData, f: ReportFilter): ReportResult =>
 // ---------------------------------------------------------------------------
 // Stock
 // ---------------------------------------------------------------------------
-/** Qty and value of every item on a date (value at cost: what it was bought for up to then). */
-export const stockInHand = (d: ReportData, asOf: string) =>
-  [...d.products]
+/**
+ * Qty and value of every item on a date. The value is the item's book value (utils/stockValuation.ts):
+ * the same figure as Inventory in the balance sheet, so the stock reports and the books never disagree.
+ * The cost rate is value ÷ qty (else what it was bought for up to then, when none is in stock).
+ */
+export const stockInHand = (d: ReportData, asOf: string) => {
+  const values = stockBookValues(d, asOf);
+  return [...d.products]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((p) => {
       const qty = stockOn(d, p.id, asOf);
-      const rate = round2(unitCostOn(d, p, asOf));
-      return { product: p, qty, rate, value: round2(qty * rate) };
+      const book = values.get(p.id) || 0;
+      const value = book;
+      const rate = qty > EPS ? round2(value / qty) : round2(unitCostOn(d, p, asOf));
+      return { product: p, qty, rate, value: round2(value) };
     });
+};
 
 const stockInHandReport = (d: ReportData, f: ReportFilter): ReportResult => {
   const today = f.today || f.asOf;
@@ -759,7 +770,7 @@ const stockInHandReport = (d: ReportData, f: ReportFilter): ReportResult => {
   const rows = stockInHand(d, f.asOf)
     .map((r) => {
       const qty = g ? round2(stockByGodown(r.product, d.stockBatches, d.godowns)[g.id] || 0) : r.qty;
-      return { ...r, qty, value: round2(qty * r.rate) };
+      return { ...r, qty, value: g ? round2(qty * r.rate) : r.value };
     })
     .filter((r) => Math.abs(r.qty) > EPS || !g);
   const total = round2(rows.reduce((a, r) => a + r.value, 0));
@@ -805,7 +816,7 @@ const stockInHandReport = (d: ReportData, f: ReportFilter): ReportResult => {
     ],
     notes: [
       ...(d.godowns.length > 1 && !byGodown ? ['Godown-wise stock is shown for today only; on an earlier date the total of all godowns is shown.'] : []),
-      'Value at cost: what each item was bought for up to that date (else its cost price).',
+      'Value at cost, the same as Inventory in the balance sheet: what the stock in hand cost you (cost rate = value ÷ qty).',
     ],
   };
 };
@@ -1121,7 +1132,13 @@ export const productTotals = (d: Pick<ReportData, 'invoices' | 'returns' | 'purc
 
 const productReport = (side: 'sale' | 'purchase') => (d: ReportData, f: ReportFilter): ReportResult => {
   const rows = productTotals(d, side, f);
-  const total = round2(rows.reduce((a, r) => a + r.amount, 0));
+  // Paisa rounding of purchase invoices belongs to no one item: shown as its own line so the total
+  // equals Daily Purchase and Party-wise Purchase.
+  const rounding =
+    side === 'purchase'
+      ? round2(d.ledger.filter((l) => l.entityType === 'supplier' && l.type === 'purchase_variance' && inRange(l.date, f) && (!f.supplierId || l.entityId === f.supplierId)).reduce((a, l) => a + (Number(l.debit) || 0) - (Number(l.credit) || 0), 0))
+      : 0;
+  const total = round2(rows.reduce((a, r) => a + r.amount, 0) + rounding);
   const who = side === 'sale' ? (f.customerId ? custName(d, f.customerId) : '') : f.supplierId ? supName(d, f.supplierId) : '';
   return {
     title: side === 'sale' ? 'Product-wise Sale' : 'Product-wise Purchase',
@@ -1138,7 +1155,10 @@ const productReport = (side: 'sale' | 'purchase') => (d: ReportData, f: ReportFi
           { key: 'avg', label: 'Avg. rate', align: 'right', money: true },
           { key: 'amount', label: 'Amount', align: 'right', money: true },
         ],
-        rows: rows.map((r) => ({ cells: { code: r.code, name: r.name, unit: r.unit, qty: r.qty, packs: r.product && hasPack(r.product) ? formatPackQty(r.qty, r.product, 'short') : '', avg: r.avg || null, amount: r.amount } })),
+        rows: [
+          ...rows.map((r) => ({ cells: { code: r.code, name: r.name, unit: r.unit, qty: r.qty, packs: r.product && hasPack(r.product) ? formatPackQty(r.qty, r.product, 'short') : '', avg: r.avg || null, amount: r.amount } })),
+          ...(Math.abs(rounding) >= EPS ? [{ cells: { code: '', name: 'Rounding / price differences on supplier bills', unit: '', qty: null, packs: '', avg: null, amount: rounding }, style: 'muted' as const }] : []),
+        ],
         totals: { code: '', name: 'Total', unit: '', qty: null, packs: '', avg: null, amount: total },
         empty: side === 'sale' ? 'Nothing sold in these dates.' : 'Nothing bought in these dates.',
       },

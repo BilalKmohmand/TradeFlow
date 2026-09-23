@@ -31,7 +31,7 @@ import { CostCentresTab } from '../../components/finance/CostCentresTab';
 import { CashFlowTab } from '../../components/finance/CashFlowTab';
 import { YearEndTab } from '../../components/finance/YearEndTab';
 import { useFinancialYears } from '../../components/finance/common';
-import { formatDate } from '../../utils/formatters';
+import { formatDate, moneyText } from '../../utils/formatters';
 import { VouchersTab } from '../../components/accounting/VouchersTab';
 import { AccountLedgerTab } from '../../components/accounting/AccountLedgerTab';
 import { ChartTree } from '../../components/accounting/ChartTree';
@@ -65,7 +65,7 @@ export const ACCOUNTS_TAB_NAMES: Readonly<Record<string, string>> = Object.fromE
 /** Tabs that take a date or date range: they get the "Financial year" shortcut. */
 const DATED_TABS: Tab[] = ['tb', 'gl', 'journal', 'pnl', 'bs', 'ledger'];
 
-const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+const money = (n: number) => moneyText(n);
 const thCls = 'px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] whitespace-nowrap';
 const tdCls = 'px-3 py-2 text-sm';
 const numCls = 'px-3 py-2 text-sm text-right tabular-nums whitespace-nowrap';

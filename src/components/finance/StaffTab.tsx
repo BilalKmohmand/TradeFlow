@@ -227,7 +227,7 @@ export const StaffTab: React.FC<{ flash: Flash }> = ({ flash }) => {
               <li key={r.id} className="px-4 sm:px-5 py-3" data-testid="salary-run">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0"><div className="font-semibold text-sm">{monthLabel(r.month)}</div><div className="text-[11px] text-[#8E9299]">Paid {formatDate(r.date)} by {r.method} • {r.lines.length} staff{r.totalAdvance ? ` • ${rs(r.totalAdvance)} advances recovered` : ''}</div></div>
-                  <div className="tabular-nums font-bold text-sm">{rs(r.totalNet)}</div>
+                  <div className="tabular-nums whitespace-nowrap font-bold text-sm">{rs(r.totalNet)}</div>
                 </div>
                 <div className="flex flex-wrap gap-1 mt-1 -ml-2">
                   <RowAction label={`Print salary sheet ${monthLabel(r.month)}`} text="Sheet" alwaysText icon={<Printer className="w-4 h-4" />} onClick={() => setPrintRequest({ type: 'salary_sheet', runId: r.id })} />
@@ -247,7 +247,7 @@ export const StaffTab: React.FC<{ flash: Flash }> = ({ flash }) => {
             {recentAdvances.map((a) => (
               <li key={a.id} className="px-4 sm:px-5 py-2.5 flex items-center justify-between gap-3">
                 <div className="min-w-0"><div className="text-sm font-semibold">{nameOf(a.staffId)}</div><div className="text-[11px] text-[#8E9299]">{formatDate(a.date)} • {a.method}{a.note ? ` • ${a.note}` : ''}</div></div>
-                <div className="flex items-center gap-1"><span className="tabular-nums font-bold text-sm">{rs(a.amount)}</span>{canRemove && <RowAction label={`Delete advance to ${nameOf(a.staffId)}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => setConfirm({ title: 'Delete this advance?', message: 'It is removed from the staff account and the cash book.', label: 'Delete', action: () => flash(deleteStaffAdvance(a.id)) })} />}</div>
+                <div className="flex items-center gap-1"><span className="tabular-nums whitespace-nowrap font-bold text-sm">{rs(a.amount)}</span>{canRemove && <RowAction label={`Delete advance to ${nameOf(a.staffId)}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => setConfirm({ title: 'Delete this advance?', message: 'It is removed from the staff account and the cash book.', label: 'Delete', action: () => flash(deleteStaffAdvance(a.id)) })} />}</div>
               </li>
             ))}
           </ul>

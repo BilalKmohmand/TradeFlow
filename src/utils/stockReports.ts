@@ -364,7 +364,12 @@ export const profitFromBills = (
  */
 const ageToBalance = (entries: LedgerEntry[], recorded: number, openedOn: string, asOf: string): AgingBuckets => {
   const base = ageLedger(entries, asOf);
-  const diff = round2(recorded - base.total);
+  // Compare with what the history nets to (debits − credits), not with the aged total: when payments in
+  // the history are more than its bills (they paid off opening dues), the aged total is 0 and the extra
+  // credit would otherwise be counted twice.
+  const net = round2(entries.reduce((a, e) => a + (Number(e.debit) || 0) - (Number(e.credit) || 0), 0));
+  if (Math.abs(recorded - base.total) < EPS && Math.abs(recorded - net) < EPS) return base;
+  const diff = round2(recorded - net);
   if (Math.abs(diff) < EPS) return base;
   const firstDate = [...entries].map((e) => e.date).sort()[0];
   const opened = /^\d{4}-\d{2}-\d{2}/.test(openedOn) ? openedOn.slice(0, 10) : asOf;
@@ -377,29 +382,39 @@ const ageToBalance = (entries: LedgerEntry[], recorded: number, openedOn: string
   return ageLedger([...entries, { id: 'writeoff', entityType: 'customer', entityId: '', type: 'payment_received', referenceId: '', date: asOf, description: '', debit: 0, credit: -diff, balanceAfter: 0 }], asOf);
 };
 
+/**
+ * A customer's / supplier's balance at the end of a date: today's balance less everything posted after
+ * that date. The aging and recovery reports "as of" an earlier day use it, so they show what was owed
+ * then, not today's balance spread over that day's bills.
+ */
+export const balanceOn = (current: number, ledger: LedgerEntry[], type: 'customer' | 'supplier', id: string, asOf: string) =>
+  round2((Number(current) || 0) - ledger.filter((l) => l.entityType === type && l.entityId === id && l.date > asOf).reduce((a, l) => a + (Number(l.debit) || 0) - (Number(l.credit) || 0), 0));
+
 export const billingReceivablesAging = (customers: Customer[], ledger: LedgerEntry[], asOf: string): AgingRow[] =>
   customers
-    .filter((c) => c.totalDue > EPS)
-    .map((c) => ({
+    .map((c) => ({ c, due: balanceOn(c.totalDue, ledger, 'customer', c.id, asOf) }))
+    .filter(({ due }) => due > EPS)
+    .map(({ c, due }) => ({
       entityId: c.id,
       name: c.name,
       company: c.company,
       phone: c.phone,
-      recordedBalance: c.totalDue,
-      ...ageToBalance(ledger.filter((l) => l.entityType === 'customer' && l.entityId === c.id && l.date <= asOf), c.totalDue, c.createdAt, asOf),
+      recordedBalance: due,
+      ...ageToBalance(ledger.filter((l) => l.entityType === 'customer' && l.entityId === c.id && l.date <= asOf), due, c.createdAt, asOf),
     }))
     .sort((a, b) => b.d90plus - a.d90plus || b.d61_90 - a.d61_90 || b.total - a.total);
 
 export const billingPayablesAging = (suppliers: Supplier[], ledger: LedgerEntry[], asOf: string): AgingRow[] =>
   suppliers
-    .filter((s) => s.totalOwed > EPS)
-    .map((s) => ({
+    .map((s) => ({ s, owed: balanceOn(s.totalOwed, ledger, 'supplier', s.id, asOf) }))
+    .filter(({ owed }) => owed > EPS)
+    .map(({ s, owed }) => ({
       entityId: s.id,
       name: s.company || s.name,
       company: s.company,
       phone: s.phone,
-      recordedBalance: s.totalOwed,
-      ...ageToBalance(ledger.filter((l) => l.entityType === 'supplier' && l.entityId === s.id && l.date <= asOf), s.totalOwed, s.createdAt, asOf),
+      recordedBalance: owed,
+      ...ageToBalance(ledger.filter((l) => l.entityType === 'supplier' && l.entityId === s.id && l.date <= asOf), owed, s.createdAt, asOf),
     }))
     .sort((a, b) => b.d90plus - a.d90plus || b.d61_90 - a.d61_90 || b.total - a.total);
 

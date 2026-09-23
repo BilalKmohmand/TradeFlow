@@ -159,7 +159,7 @@ const PROFIT_BY: { id: ProfitBy; label: string; col: string; count: string }[] =
   { id: 'brand', label: 'By brand', col: 'Brand', count: 'Items' },
   { id: 'customer', label: 'By customer', col: 'Customer', count: 'Bills' },
 ];
-const ProfitTable: React.FC<{ rows: ProfitRow[]; kind: ProfitBy; testId: string }> = ({ rows, kind, testId }) => (
+const ProfitTable: React.FC<{ rows: ProfitRow[]; kind: ProfitBy; testId: string; totals: { sales: number; cost: number; profit: number; marginPct: number | null; bills: number } }> = ({ rows, kind, testId, totals }) => (
   <div className="overflow-x-auto">
     <table className="w-full min-w-[560px]" data-testid={testId}>
       <thead className="bg-[#FAF9F6] dark:bg-[#162436]"><tr><th className={`${th} text-left`}>{PROFIT_BY.find((x) => x.id === kind)!.col}</th><th className={`${th} text-right`}>{PROFIT_BY.find((x) => x.id === kind)!.count}</th><th className={`${th} text-right`}>Sales</th><th className={`${th} text-right`}>Cost</th><th className={`${th} text-right`}>Profit</th><th className={`${th} text-right`}>Margin</th></tr></thead>
@@ -175,6 +175,16 @@ const ProfitTable: React.FC<{ rows: ProfitRow[]; kind: ProfitBy; testId: string 
           </tr>
         ))}
       </tbody>
+      <tfoot>
+        <tr className="border-t-2 border-[#111827] dark:border-white font-extrabold" data-testid={`${testId}-total`}>
+          <td className={td}>Total</td>
+          <td className={tdNum}>{kind === 'customer' ? totals.bills : ''}</td>
+          <td className={tdNum}>{money(totals.sales)}</td>
+          <td className={tdNum}>{money(totals.cost)}</td>
+          <td className={tdNum}>{money(totals.profit)}</td>
+          <td className={tdNum}>{totals.marginPct == null ? '—' : `${totals.marginPct}%`}</td>
+        </tr>
+      </tfoot>
     </table>
   </div>
 );
@@ -190,7 +200,7 @@ export const ProfitView: React.FC = () => {
   const rows = view === 'item' ? report.byItem : view === 'customer' ? report.byCustomer : profitByAttribute(report.byItem, products, view);
   const by = PROFIT_BY.find((x) => x.id === view)!;
   const exportCsv = () =>
-    downloadCsvFile(`sarmaya-profit-by-${view}-${from}-to-${to}.csv`, [by.col, by.count, 'Unit', 'Sales', 'Cost', 'Profit', 'Margin %'], rows.map((r) => [r.name, view === 'item' ? r.qty || 0 : r.bills || 0, view === 'item' ? r.unit || '' : '', r.sales, r.cost, r.profit, r.marginPct ?? '']));
+    downloadCsvFile(`sarmaya-profit-by-${view}-${from}-to-${to}.csv`, [by.col, by.count, 'Unit', 'Sales', 'Cost', 'Profit', 'Margin %'], [...rows.map((r) => [r.name, view === 'item' ? r.qty || 0 : r.bills || 0, view === 'item' ? r.unit || '' : '', r.sales, r.cost, r.profit, r.marginPct ?? '']), ['Total', view === 'customer' ? report.totals.bills : '', '', report.totals.sales, report.totals.cost, report.totals.profit, report.totals.marginPct ?? '']]);
   return (
     <div className="space-y-4" data-testid="profit-report">
       <div className="flex flex-wrap items-end gap-3">
@@ -213,7 +223,7 @@ export const ProfitView: React.FC = () => {
         {PROFIT_BY.map((x) => <button key={x.id} type="button" role="tab" aria-selected={view === x.id} onClick={() => setView(x.id)} className={chip(view === x.id)}>{x.label}</button>)}
       </div>
       <div className={`${cardCls} overflow-hidden`}>
-        {rows.length === 0 ? <p className="p-8 text-center text-sm text-[#8E9299]">No bills in these dates.</p> : <ProfitTable rows={rows} kind={view} testId={`profit-by-${view}`} />}
+        {rows.length === 0 ? <p className="p-8 text-center text-sm text-[#8E9299]">No bills in these dates.</p> : <ProfitTable rows={rows} kind={view} testId={`profit-by-${view}`} totals={report.totals} />}
       </div>
     </div>
   );

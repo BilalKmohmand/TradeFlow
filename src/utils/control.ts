@@ -26,6 +26,7 @@ import { billsOnly, buildDailySheet } from './billing';
 import { profitFromBills, overdueCustomers } from './stockReports';
 import { chequeTotals } from './cheques';
 import { shiftDate } from './stockFlow';
+import { ValuationSources, stockBookValueTotal } from './stockValuation';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -232,6 +233,8 @@ export interface OwnerSources {
   returns: StockReturn[];
   cheques: Cheque[];
   settings: AppSettings;
+  /** Whole-shop records for valuing the stock (default: the records above). */
+  valuation?: ValuationSources;
 }
 
 export const stockValue = (products: Product[], purchases: Purchase[], today: string): number =>
@@ -275,8 +278,13 @@ export const ownerSnapshot = (src: OwnerSources, today: string): OwnerSnapshot =
   const pMonth = profitFromBills(profitSrc, monthStart, today);
   const movements = collectCashMovements(src.ledger, src.expenses, src.cashEntries, src.customers, src.suppliers);
   const balances = accountBalancesOn(movements, src.settings, today);
-  const position = positionSummary(src.customers, src.suppliers, src.expenses, balances);
-  const overdue = overdueCustomers(src.customers, src.ledger, today).filter((o) => o.oldAmount > 0);
+  // Balances at the end of `today` (the daily business report can be for an earlier day): today's
+  // balance with everything posted after that day taken off, and only expenses entered by then.
+  const later = (type: 'customer' | 'supplier', id: string) => src.ledger.filter((l) => l.entityType === type && l.entityId === id && l.date > today).reduce((a, l) => a + (Number(l.debit) || 0) - (Number(l.credit) || 0), 0);
+  const customers = src.customers.map((c) => ({ ...c, totalDue: round2((Number(c.totalDue) || 0) - later('customer', c.id)) }));
+  const suppliers = src.suppliers.map((x) => ({ ...x, totalOwed: round2((Number(x.totalOwed) || 0) - later('supplier', x.id)) }));
+  const position = positionSummary(customers, suppliers, src.expenses.filter((e) => e.date <= today), balances);
+  const overdue = overdueCustomers(customers, src.ledger, today).filter((o) => o.oldAmount > 0);
   const trend: OwnerSnapshot['trend'] = [];
   for (let i = 29; i >= 0; i--) {
     const d = shiftDate(today, -i);
@@ -296,7 +304,7 @@ export const ownerSnapshot = (src: OwnerSources, today: string): OwnerSnapshot =
     overdue60: round2(overdue.reduce((a, o) => a + o.oldAmount, 0)),
     overdueCount: overdue.length,
     payables: position.payables,
-    stockValue: stockValue(src.products, src.purchases, today),
+    stockValue: stockBookValueTotal(src.valuation || src, today),
     chequesDue: chequeTotals(src.cheques, today).dueThisWeek,
     topCustomers: [...pMonth.byCustomer].sort((a, b) => b.sales - a.sales).slice(0, 5).map((r) => ({ key: r.key, name: r.name, sales: r.sales, profit: r.profit })),
     topItems: [...pMonth.byItem].sort((a, b) => b.sales - a.sales).slice(0, 5).map((r) => ({ key: r.key, name: r.name, sales: r.sales, qty: r.qty, unit: r.unit, profit: r.profit })),
@@ -309,7 +317,9 @@ export const dailyBusinessReport = (src: OwnerSources, date: string) => {
   const sheet = buildDailySheet({ invoices: src.invoices, ledger: src.ledger, expenses: src.expenses, cashEntries: src.cashEntries, customers: src.customers, suppliers: src.suppliers, settings: src.settings, cheques: src.cheques }, date);
   const profit = profitFromBills({ invoices: src.invoices, returns: src.returns, purchases: src.purchases, products: src.products, customers: src.customers }, date, date);
   const snap = ownerSnapshot(src, date);
-  const cashSales = round2(sheet.bills.filter((b) => b.balanceDue === 0).reduce((a, b) => a + b.totalAmount, 0));
+  // Paid in full by the close of that day (a bill paid off later was still a credit sale that day).
+  const paidBy = (b: Invoice) => (b.payments || []).filter((p) => (p.date || date) <= date).reduce((a, p) => a + (Number(p.amount) || 0), 0);
+  const cashSales = round2(sheet.bills.filter((b) => paidBy(b) >= b.totalAmount - 0.005).reduce((a, b) => a + b.totalAmount, 0));
   return {
     date,
     sheet,

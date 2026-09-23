@@ -4,6 +4,7 @@
  * the postings in utils/accounting.ts (see the "Sales extras" block in its header).
  */
 import { Customer, Expense, Invoice, LedgerEntry, SalesArea, Salesman, Scheme, StockReturn } from '../types';
+import { balanceOn } from './stockReports';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const EPS = 0.005;
@@ -212,7 +213,8 @@ export const openItems = (customer: Customer, ledger: LedgerEntry[], asOf: strin
   const net = round2(rows.reduce((a, l) => a + (Number(l.debit) || 0) - (Number(l.credit) || 0), 0));
   const items: OpenItem[] = [];
   let credit = 0;
-  const diff = round2((Number(customer.totalDue) || 0) - net);
+  // What they owed at the end of that day (today's balance less anything posted later).
+  const diff = round2(balanceOn(customer.totalDue, ledger, 'customer', customer.id, asOf) - net);
   if (diff > EPS) {
     const created = (customer.createdAt || '').slice(0, 10);
     const first = rows[0]?.date;
@@ -261,20 +263,21 @@ export const recoveryList = (
   const list = by === 'salesman' ? names.salesmen : names.areas;
   const groups = new Map<string, RecoveryGroup>();
   customers
-    .filter((c) => (Number(c.totalDue) || 0) > EPS)
-    .forEach((c) => {
+    .map((c) => ({ c, due: balanceOn(c.totalDue, ledger, 'customer', c.id, asOf) }))
+    .filter(({ due }) => due > EPS)
+    .forEach(({ c, due }) => {
       const gid = (by === 'salesman' ? c.salesmanId : c.areaId) || NONE;
       if (filterId != null && filterId !== 'all' && gid !== filterId) return;
       const items = openItems(c, ledger, asOf);
       const oldest = items[0]?.date || null;
-      const pays = ledger.filter((l) => l.entityType === 'customer' && l.entityId === c.id && l.credit > 0 && (l.type === 'payment_received' || l.type === 'cheque_received')).map((l) => l.date).sort();
+      const pays = ledger.filter((l) => l.entityType === 'customer' && l.entityId === c.id && l.date <= asOf && l.credit > 0 && (l.type === 'payment_received' || l.type === 'cheque_received')).map((l) => l.date).sort();
       let g = groups.get(gid);
       if (!g) {
         g = { id: gid, name: gid ? list.find((x) => x.id === gid)?.name || 'Removed' : by === 'salesman' ? 'No salesman' : 'No area', rows: [], total: 0 };
         groups.set(gid, g);
       }
-      g.rows.push({ customer: c, due: round2(c.totalDue), oldestDate: oldest, oldestDays: oldest ? Math.max(0, daysBetween(oldest, asOf)) : 0, lastPaymentDate: pays.length ? pays[pays.length - 1] : null });
-      g.total = round2(g.total + c.totalDue);
+      g.rows.push({ customer: c, due, oldestDate: oldest, oldestDays: oldest ? Math.max(0, daysBetween(oldest, asOf)) : 0, lastPaymentDate: pays.length ? pays[pays.length - 1] : null });
+      g.total = round2(g.total + due);
     });
   const out = Array.from(groups.values());
   out.forEach((g) => g.rows.sort((a, b) => (a.oldestDate || '9999').localeCompare(b.oldestDate || '9999') || b.due - a.due));
