@@ -6,6 +6,16 @@ import { useEscape } from '../../hooks/useEscape';
 /** Shared look for the simple-billing screens: one card style, one input style, one modal shell. */
 export const inputCls =
   'w-full bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] rounded-2xl px-3.5 py-2.5 text-base sm:text-sm font-semibold text-[#111827] dark:text-white focus:outline-hidden focus:border-teal-600 focus:ring-1 focus:ring-teal-600 placeholder:font-normal placeholder:text-[#9CA3AF]';
+/**
+ * A number box in a table-like line (qty, rate, amount): digits line up, no browser spin arrows eating the
+ * width, a little less side padding, so "12345678.50" still fits a narrow column.
+ */
+export const numInputCls = `${inputCls} tabular-nums !px-2.5 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`;
+/**
+ * Keep a name (often Urdu, right-to-left) in its own direction inside an English line, so
+ * "حاجی عبدالرحمن • 23 Sept 2026" does not come out scrambled as "23 • حاجی … Sept 2026".
+ */
+export const bidi = (s: string | undefined | null) => (s ? `\u2068${s}\u2069` : '');
 export const labelCls = 'block text-[11px] font-bold text-[#6B7280] dark:text-[#94A3B8] mb-1.5 uppercase tracking-wider';
 export const cardCls = 'bg-white dark:bg-[#101A26] rounded-[24px] border border-[#E5E5E1] dark:border-[#203248] shadow-xs';
 export const primaryBtn =
@@ -17,11 +27,7 @@ export const dangerBtn =
 
 const FOCUSABLE = 'input:not([disabled]),select:not([disabled]),textarea:not([disabled]),button:not([disabled]),[href],[tabindex]:not([tabindex="-1"])';
 
-/**
- * A dialog (a bottom sheet on phones). `wide` fits a two-column form; `xwide` is for a data-entry grid
- * such as the Purchase Invoice lines (up to 72rem on a big screen, still the full width on a small one).
- */
-export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; subtitle?: string; wide?: boolean; xwide?: boolean; children: React.ReactNode; footer?: React.ReactNode }> = ({ isOpen, onClose, title, subtitle, wide, xwide, children, footer }) => {
+export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; subtitle?: string; /** true: a wider sheet; 'xl': wider still on a desktop (bill / invoice lines). */ xwide?: boolean; wide?: boolean | 'xl'; children: React.ReactNode; footer?: React.ReactNode }> = ({ isOpen, onClose, title, subtitle, wide, xwide, children, footer }) => {
   useEscape(isOpen, onClose);
   const box = useRef<HTMLDivElement>(null);
   // When this dialog opened. A double click on the button that opened it (e.g. "Save" on a form that
@@ -69,7 +75,7 @@ export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: stri
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 24 }}
             transition={{ duration: 0.18 }}
-            className={`relative z-10 w-full ${xwide ? 'sm:max-w-3xl lg:max-w-6xl' : wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'} max-h-[92dvh] sm:max-h-[90vh] flex flex-col bg-white dark:bg-[#101A26] rounded-t-[28px] sm:rounded-[28px] border border-b-0 sm:border-b border-[#E5E5E1] dark:border-[#203248] shadow-2xl`}
+            className={`relative z-10 w-full ${xwide ? 'sm:max-w-3xl lg:max-w-6xl' : wide === 'xl' ? 'sm:max-w-3xl lg:max-w-5xl' : wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'} max-h-[92dvh] sm:max-h-[90vh] flex flex-col bg-white dark:bg-[#101A26] rounded-t-[28px] sm:rounded-[28px] border border-b-0 sm:border-b border-[#E5E5E1] dark:border-[#203248] shadow-2xl`}
           >
             {/* Grab handle: tells phone users this is a sheet that sits on the page. */}
             <div aria-hidden="true" className="sm:hidden mx-auto mt-2 h-1.5 w-10 rounded-full bg-[#E5E5E1] dark:bg-[#203248]" />

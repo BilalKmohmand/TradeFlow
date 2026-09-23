@@ -2,6 +2,7 @@
  * Sales documents around a bill (billing mode): line discounts, sales returns / credit notes,
  * quotations and delivery challans. Pure helpers — the context does the saving.
  */
+import { formatAmount } from './formatters';
 import { BatchAllocation, Invoice, InvoiceItem, Quotation, QuotationLine, ReturnLine, StockReturn } from '../types';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -28,7 +29,7 @@ export const lineGross = (it: Pick<InvoiceItem, 'qty' | 'kg' | 'unitPrice' | 'ra
 /** Short printed label of a line discount, e.g. "5%" or "Rs. 200". */
 export const lineDiscountLabel = (it: Pick<InvoiceItem, 'discountType' | 'discountValue' | 'discountAmount'>): string => {
   if (!it.discountAmount) return '';
-  return it.discountType === 'pct' ? `${it.discountValue}%` : `Rs. ${new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(it.discountAmount)}`;
+  return it.discountType === 'pct' ? `${it.discountValue}%` : `Rs. ${formatAmount(it.discountAmount)}`;
 };
 
 // ---------------------------------------------------------------------------

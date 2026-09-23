@@ -244,7 +244,7 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
           <div className="col-span-2">
             <label className={labelCls} htmlFor="pi-supplier">Supplier</label>
             <div className="flex gap-2">
-              <CodeBox id="pi-supplier-code" label="Supplier code" items={sortedSuppliers} value={supplierId} onPick={setSupplierId} className="w-28 shrink-0" nav="supplier-code" onEnter={(r) => { if (r === 'found') focusId('pi-memo'); else if (r === 'empty') focusId('pi-supplier'); }} />
+              <CodeBox id="pi-supplier-code" label="Supplier code" items={sortedSuppliers} value={supplierId} onPick={setSupplierId} className="w-28 shrink-0" nav="supplier-code" onEnterResult={(r) => { if (r === 'found') focusId('pi-memo'); else if (r === 'empty') focusId('pi-supplier'); }} />
               <div className="flex-1 min-w-0">
                 <QuickSelect id="pi-supplier" data-nav="supplier" value={supplierId} options={supplierOptions} onPick={setSupplierId} className={inputCls} title="Type a name or code to find the supplier">
                   <option value="">Select supplier…</option>
@@ -297,7 +297,7 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
                 // Phone / tablet: a card (code + name, unit, Qty and Rate side by side, then the amount).
                 // Wide screen (lg): one row per line under the column headings.
                 <div key={l.key} data-testid="pi-line" data-row={i} className="grid grid-cols-12 lg:grid-cols-[6.5rem_minmax(10rem,1fr)_9rem_7.5rem_8.5rem_9.5rem_2.25rem] gap-2 items-center rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2 lg:p-1 lg:border-0">
-                  <CodeBox id={id('code')} label={`Product code ${i + 1}`} items={sortedProducts} value={l.pid} onPick={(v) => pick(l.key, v)} className="col-span-4 sm:col-span-3 lg:col-auto" nav="code" onEnter={(r) => lineCodeEnter(i, r)} />
+                  <CodeBox id={id('code')} label={`Product code ${i + 1}`} items={sortedProducts} value={l.pid} onPick={(v) => pick(l.key, v)} className="col-span-4 sm:col-span-3 lg:col-auto" nav="code" onEnterResult={(r) => lineCodeEnter(i, r)} />
                   <div className="col-span-8 sm:col-span-9 lg:col-auto flex gap-1 min-w-0">
                     <div className="flex-1 min-w-0">
                       <QuickSelect id={id('item')} data-nav="item" aria-label={`Product ${i + 1}`} value={l.pid} options={productOptions} onPick={(v) => pick(l.key, v)} className={inputCls} title={p ? p.name : 'Type the product name or code'}>

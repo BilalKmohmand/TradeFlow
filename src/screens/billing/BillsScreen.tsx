@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { FilePlus2, Search, Printer, Download, FileText } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useWideLayout } from '../../hooks/useMediaQuery';
@@ -22,7 +22,7 @@ type Period = 'today' | 'week' | 'month' | 'all';
 export const BILLS_TABS = ['bills', 'returns', 'quotes'] as const;
 
 export const BillsScreen: React.FC = () => {
-  const { setPrintRequest, returns, quotations } = useTrading();
+  const { setPrintRequest, returns, quotations, customers } = useTrading();
   const { invoices } = useBranchScoped();
   const ui = useBillingUI();
   const wide = useWideLayout();
@@ -35,7 +35,21 @@ export const BillsScreen: React.FC = () => {
   const [period, setPeriod] = useState<Period>('today');
   const [unpaidOnly, setUnpaidOnly] = useState(false);
   const today = todayISO();
-  const rows = useMemo(() => filterBills(invoices, query, period, today, unpaidOnly), [invoices, query, period, today, unpaidOnly]);
+  const codeOf = useMemo(() => { const m = new Map(customers.map((c) => [c.id, c.code])); return (id: string) => m.get(id); }, [customers]);
+  const rows = useMemo(() => filterBills(invoices, query, period, today, unpaidOnly, codeOf), [invoices, query, period, today, unpaidOnly, codeOf]);
+  // Starting a search looks through every date (an old bill must be found while "Today" is picked); the
+  // period can still be narrowed while searching, and clearing the search brings the old period back.
+  const periodBeforeSearch = useRef<Period | null>(null);
+  const search = (text: string) => {
+    if (!query.trim() && text.trim() && period !== 'all') {
+      periodBeforeSearch.current = period;
+      setPeriod('all');
+    } else if (query.trim() && !text.trim() && periodBeforeSearch.current) {
+      setPeriod(periodBeforeSearch.current);
+      periodBeforeSearch.current = null;
+    }
+    setQuery(text);
+  };
   const total = rows.reduce((a, i) => a + billNetTotal(i), 0);
   const due = rows.reduce((a, i) => a + i.balanceDue, 0);
 
@@ -80,11 +94,11 @@ export const BillsScreen: React.FC = () => {
       <div className="flex flex-col md:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search bill no., memo no., customer, phone or item" className={`${inputCls} pl-10`} aria-label="Search bills" />
+          <input value={query} onChange={(e) => search(e.target.value)} placeholder="Search bill no., memo no., customer, code, phone, item or amount" className={`${inputCls} pl-10`} aria-label="Search bills" />
         </div>
         <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">
           {periods.map((p) => (
-            <button key={p.id} type="button" aria-pressed={period === p.id} onClick={() => setPeriod(p.id)} className={pillCls(period === p.id)}>{p.label}</button>
+            <button key={p.id} type="button" aria-pressed={period === p.id} onClick={() => { setPeriod(p.id); periodBeforeSearch.current = null; }} className={pillCls(period === p.id)}>{p.label}</button>
           ))}
           <button type="button" aria-pressed={unpaidOnly} onClick={() => setUnpaidOnly((v) => !v)} className={pillCls(unpaidOnly, 'amber')}>Unpaid</button>
           <button type="button" onClick={exportCsv} className={`${secondaryBtn} min-h-11 sm:min-h-9 py-0 px-3 shrink-0`} aria-label="Download as CSV" title="Download as CSV"><Download className="w-4 h-4" /><span className="hidden sm:inline text-xs font-bold">CSV</span></button>

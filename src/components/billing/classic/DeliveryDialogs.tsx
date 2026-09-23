@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Printer, Truck } from 'lucide-react';
 import { useTrading } from '../../../context/TradingContext';
-import { Modal, Notice, inputCls, labelCls, primaryBtn, secondaryBtn, rs } from '../ui';
+import { Modal, Notice, inputCls, labelCls, primaryBtn, secondaryBtn, rs, bidi } from '../ui';
 import { todayISO } from '../../../utils/stockFlow';
 import { formatDate } from '../../../utils/formatters';
 
@@ -31,7 +31,7 @@ export const MarkDeliveredModal: React.FC<{ invoiceId: string | null; onClose: (
       isOpen={Boolean(inv)}
       onClose={onClose}
       title={inv ? `Mark delivered: ${inv.invoiceNumber}` : 'Mark delivered'}
-      subtitle={inv ? `${inv.customerName} • bill of ${formatDate(inv.issueDate)} • ${rs(inv.totalAmount)}` : undefined}
+      subtitle={inv ? `${bidi(inv.customerName)} • bill of ${formatDate(inv.issueDate)} • ${rs(inv.totalAmount)}` : undefined}
       footer={
         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
           <button type="button" onClick={() => save(false)} className={secondaryBtn}><Truck className="w-4 h-4 text-indigo-600" /> Mark delivered</button>

@@ -15,8 +15,9 @@ export interface ChequeFields {
 }
 export const emptyChequeFields = (): ChequeFields => ({ chequeNumber: '', bankName: '', chequeDate: todayISO() });
 
-export const ChequeFieldsInput: React.FC<{ value: ChequeFields; onChange: (v: ChequeFields) => void; idPrefix: string; direction?: 'received' | 'issued' }> = ({ value, onChange, idPrefix, direction = 'received' }) => (
-  <div className="col-span-full grid grid-cols-2 sm:grid-cols-3 gap-3 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 p-3">
+/** `narrow`: two columns at every size (the bill's payment box is only half the dialog wide, so three squeeze the date). */
+export const ChequeFieldsInput: React.FC<{ value: ChequeFields; onChange: (v: ChequeFields) => void; idPrefix: string; direction?: 'received' | 'issued'; narrow?: boolean }> = ({ value, onChange, idPrefix, direction = 'received', narrow }) => (
+  <div className={`col-span-full grid grid-cols-2 ${narrow ? '' : 'sm:grid-cols-3'} gap-3 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 p-3`}>
     <div>
       <label className={labelCls} htmlFor={`${idPrefix}-no`}>Cheque no.</label>
       <input id={`${idPrefix}-no`} value={value.chequeNumber} onChange={(e) => onChange({ ...value, chequeNumber: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="e.g. 10045521" inputMode="numeric" />
@@ -25,7 +26,7 @@ export const ChequeFieldsInput: React.FC<{ value: ChequeFields; onChange: (v: Ch
       <label className={labelCls} htmlFor={`${idPrefix}-bank`}>Bank</label>
       <input id={`${idPrefix}-bank`} value={value.bankName} onChange={(e) => onChange({ ...value, bankName: e.target.value })} className={inputCls} placeholder="e.g. HBL" list="cheque-banks" />
     </div>
-    <div className="col-span-2 sm:col-span-1">
+    <div className={narrow ? 'col-span-2' : 'col-span-2 sm:col-span-1'}>
       <label className={labelCls} htmlFor={`${idPrefix}-date`}>Date on cheque</label>
       <input id={`${idPrefix}-date`} type="date" value={value.chequeDate} onChange={(e) => onChange({ ...value, chequeDate: e.target.value })} className={inputCls} />
     </div>

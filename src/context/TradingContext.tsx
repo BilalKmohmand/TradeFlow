@@ -58,6 +58,7 @@ import {
 import { lineDiscountAmount, planReturn, maxRefund, returnsForBill, billBalance, quotationTotal, ReturnPick } from '../utils/salesDocs';
 import { creditCheck } from '../utils/credit';
 import { collectCashMovements, costPerKgOn } from '../utils/finance';
+import { needsBank, MAIN_BANK_CODE } from '../utils/banks';
 import { BankRecApi, createBankRecApi } from './bankRecActions';
 import { ChequeApi, createChequeApi } from './chequeActions';
 import { SalesExtrasApi, SalesExtrasPrintRequest, useSalesExtrasStore } from './salesExtrasActions';
@@ -500,6 +501,8 @@ export interface ReturnBillInput {
   /** 'refund' = money back now (up to what they paid), 'credit' = take it off what they owe. */
   settle: 'refund' | 'credit';
   refundMethod?: string;
+  /** Bank account (chart code) the refund is paid from when it goes by bank / wallet; empty = the main bank. */
+  refundBankCode?: string;
   reason?: string;
   date?: string;
 }
@@ -3096,7 +3099,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       { id: uid('led'), entityType: 'customer', entityId: inv.customerId, type: 'credit_note', referenceId: r.returnNumber, sourceId: r.id, date, description: `Credit note ${r.returnNumber} for bill ${inv.invoiceNumber}: ${what} returned — ${reason}`, debit: 0, credit: plan.total, balanceAfter: dueAfterCredit, kg: qty },
     ];
     if (refund > 0) {
-      rows.push({ id: uid('led'), entityType: 'customer', entityId: inv.customerId, type: 'refund_paid', referenceId: r.returnNumber, sourceId: r.id, method, date, description: `Refund paid: ${method} - ${r.returnNumber} (bill ${inv.invoiceNumber})`, debit: refund, credit: 0, balanceAfter: round2(dueAfterCredit + refund) });
+      const refundBank = needsBank(method) && input.refundBankCode && input.refundBankCode !== MAIN_BANK_CODE ? { bankCode: input.refundBankCode } : {};
+      rows.push({ id: uid('led'), entityType: 'customer', entityId: inv.customerId, type: 'refund_paid', referenceId: r.returnNumber, sourceId: r.id, method, date, description: `Refund paid: ${method} - ${r.returnNumber} (bill ${inv.invoiceNumber})`, debit: refund, credit: 0, balanceAfter: round2(dueAfterCredit + refund), ...refundBank });
     }
     setLedger((prev) => [...rows, ...prev]);
     setInvoices((prev) => prev.map((i) => (i.id === inv.id ? billAfter(i, { returnedAmount: round2((i.returnedAmount || 0) + plan.total), refundedAmount: round2((i.refundedAmount || 0) + refund) }) : i)));

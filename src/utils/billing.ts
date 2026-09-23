@@ -121,14 +121,28 @@ export const buildDailySheet = (src: DailySheetSources, date: string): DailyShee
   };
 };
 
-/** Bills grouped for the list screen: a quick text search plus a period filter. */
-export const filterBills = (invoices: Invoice[], query: string, period: 'today' | 'week' | 'month' | 'all', today: string, unpaidOnly = false): Invoice[] => {
+/**
+ * Bills grouped for the list screen: a quick text search plus a period filter. The search takes the bill
+ * no., memo no., customer name / phone / code (C-0004, via `customerCodeOf`), an item name, or an amount
+ * (12345 or 12,345.50 finds a bill with that total or balance).
+ */
+export const filterBills = (invoices: Invoice[], query: string, period: 'today' | 'week' | 'month' | 'all', today: string, unpaidOnly = false, customerCodeOf?: (customerId: string) => string | undefined): Invoice[] => {
   const q = query.trim().toLowerCase();
   const from = period === 'today' ? today : period === 'week' ? shiftDate(today, -6) : period === 'month' ? today.slice(0, 7) + '-01' : '0000-00-00';
+  const money = /^rs\.?\s*/.test(q) || /^[\d,]+(\.\d+)?$/.test(q) ? parseFloat(q.replace(/^rs\.?\s*/, '').replace(/,/g, '')) : NaN;
+  const phoneQ = q.replace(/[\s-]/g, '');
+  const matches = (i: Invoice) =>
+    i.invoiceNumber.toLowerCase().includes(q) ||
+    (i.memoNo || '').toLowerCase().includes(q) ||
+    i.customerName.toLowerCase().includes(q) ||
+    (phoneQ !== '' && (i.customerPhone || '').replace(/[\s-]/g, '').includes(phoneQ)) ||
+    (customerCodeOf?.(i.customerId) || '').toLowerCase() === q ||
+    i.items.some((it) => it.productName.toLowerCase().includes(q)) ||
+    (Number.isFinite(money) && money > 0 && (Math.abs(i.totalAmount - money) < 0.005 || Math.abs(i.balanceDue - money) < 0.005));
   return billsOnly(invoices)
     .filter((i) => i.issueDate >= from)
     .filter((i) => !unpaidOnly || i.balanceDue > 0)
-    .filter((i) => !q || i.invoiceNumber.toLowerCase().includes(q) || (i.memoNo || '').toLowerCase().includes(q) || i.customerName.toLowerCase().includes(q) || (i.customerPhone || '').includes(q) || i.items.some((it) => it.productName.toLowerCase().includes(q)))
+    .filter((i) => !q || matches(i))
     .sort((a, b) => (a.issueDate < b.issueDate ? 1 : a.issueDate > b.issueDate ? -1 : b.createdAt.localeCompare(a.createdAt)));
 };
 
