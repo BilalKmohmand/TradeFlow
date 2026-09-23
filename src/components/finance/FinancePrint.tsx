@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useTrading } from '../../context/TradingContext';
 import { ASSET_CATEGORIES, Cheque, ChequeLayout } from '../../types';
-import { formatDate } from '../../utils/formatters';
+import { formatDate, moneyText } from '../../utils/formatters';
 import { todayISO } from '../../utils/stockFlow';
 import { assetRegister, monthLabel, staffLedger } from '../../utils/financeBooks';
 import { CASH_FLOW_LINES, cashFlowStatement } from '../../utils/financeReports';
@@ -20,7 +20,7 @@ export type FinancePrintRequest =
 const TYPES = ['asset_register', 'salary_sheet', 'payslip', 'staff_ledger', 'cash_flow', 'cheque_print'];
 export const isFinancePrint = (r: { type: string } | null | undefined): r is FinancePrintRequest => !!r && TYPES.includes(r.type);
 
-const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+const money = (n: number) => moneyText(n);
 const th = 'py-2 px-2 text-[10px] uppercase tracking-widest text-gray-600';
 const td = 'py-1.5 px-2';
 const tdn = 'py-1.5 px-2 text-right font-mono whitespace-nowrap';

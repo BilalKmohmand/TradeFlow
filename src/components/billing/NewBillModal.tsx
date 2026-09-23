@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Trash2, Printer, Save, UserPlus, Percent, SplitSquareHorizontal, Keyboard, Gift, Search, Truck } from 'lucide-react';
 import { useTrading, BILL_PAYMENT_METHODS, CreateBillItemInput } from '../../context/TradingContext';
-import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice, rs } from './ui';
+import { Modal, inputCls, numInputCls, labelCls, primaryBtn, secondaryBtn, Notice, rs, moneyCls, bidi } from './ui';
+import { CodeBox } from './CodeBox';
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 import { creditCheck } from '../../utils/credit';
@@ -10,8 +11,7 @@ import { planBillStock, batchLines, stockByGodown } from '../../utils/inventory'
 import { lineDiscountAmount, quotationLines } from '../../utils/salesDocs';
 import { customerSnapshot, lastRateFor, resolveBillPayments, PaymentPart } from '../../utils/billing';
 import { hasPack, formatPackQty, plural, baseToPacks } from '../../utils/packUnits';
-import { QuickSelect, PickOption } from './QuickPick';
-import { CodeBox } from './CodeBox';
+import { QuickSelect, PickOption, findOption } from './QuickPick';
 import { ScanButton } from './purchasing/Barcodes';
 import { ChequeFieldsInput, ChequeFields, emptyChequeFields } from './ChequeForms';
 import { evaluateSchemes } from '../../utils/salesExtras';
@@ -22,8 +22,6 @@ import { needsBank } from '../../utils/banks';
 import { allCities, filterParties } from '../../utils/vouchers';
 import { useBillingUI } from './BillingUI';
 
-/** Bill line columns on wider screens: Code · Item · Qty · Price · Amount · remove. */
-const LINE_COLS = 'sm:grid-cols-[6.5rem_minmax(10rem,1fr)_6.5rem_7.5rem_8rem_2.5rem]';
 
 /** Find an old bill by its number: exact (INV-12, S-14726) or just the digits (12). */
 export const findBillByNumber = (bills: { id: string; invoiceNumber: string }[], typed: string): { id: string; invoiceNumber: string } | undefined => {
@@ -52,6 +50,11 @@ const newRow = (patch: Partial<Row> = {}): Row => ({ key: Math.random().toString
 /** Methods for the non-cash part of a split payment (the cheque has its own box). */
 const BANK_METHODS = BILL_PAYMENT_METHODS.filter((m) => m !== 'Cash' && m !== 'Cheque');
 const num4 = (n: number) => String(Math.round(n * 10000) / 10000);
+/**
+ * Bill line columns from a tablet up: Code | Item | Qty | Price | Amount | remove. Qty and Price are wide
+ * enough for "12345.25" / "12345678.50", and Amount grows to fit "Rs. 12,345,678.50" (the item name gives way).
+ */
+const LINE_COLS = 'md:grid-cols-[5.5rem_minmax(0,1fr)_6.5rem_8rem_minmax(8rem,max-content)_2.5rem]';
 
 interface Props {
   isOpen: boolean;
@@ -209,16 +212,48 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   };
   useEffect(() => {
     if (!focusRow.current) return;
-    const el = box.current?.querySelector<HTMLElement>(`[data-row="${focusRow.current}"] [data-nav="item"]`);
+    // Someone working from the Code boxes (as in the old program) gets the next line's Code box.
+    const el = box.current?.querySelector<HTMLElement>(`[data-row="${focusRow.current}"] ${codeFlow.current ? '[data-code]' : '[data-nav="item"]'}`);
     focusRow.current = null;
     el?.focus();
   }, [rows.length]);
+  /** True while the shopkeeper picks items by typing codes in the Code boxes (Enter then goes Code → Qty → Price → next Code). */
+  const codeFlow = useRef(false);
+  const focusIn = (selector: string) => {
+    const el = box.current?.querySelector<HTMLElement>(selector);
+    if (!el) return;
+    el.focus();
+    if (el instanceof HTMLInputElement) el.select();
+  };
+  /** Enter in a line's Code box: picked → its Qty; empty → "Paid now" when the bill has items (else the item list). */
+  const onLineCodeEnter = (key: string, picked: string | undefined, typed: string) => {
+    if (picked) {
+      codeFlow.current = true;
+      return focusIn(`[data-row="${key}"] [data-nav="qty"]`);
+    }
+    if (typed) return; // no such code: stay, the box says so
+    if (rows.some((r) => r.productId)) return focusIn('[data-nav="paid"]');
+    focusIn(`[data-row="${key}"] [data-nav="item"]`);
+  };
+  /** Enter in the customer Code box: picked → the first line's Code box; empty → the customer list. */
+  const onCustomerCodeEnter = (picked: string | undefined, typed: string) => {
+    if (picked) {
+      codeFlow.current = true;
+      const empty = rows.find((r) => !r.productId) || rows[0];
+      return focusIn(`[data-row="${empty.key}"] [data-code]`);
+    }
+    if (!typed) focusIn('#bill-customer');
+  };
+  const productByName = (typed: string) => findOption(productOptions, typed)?.value;
+  const customerByName = (typed: string) => findOption(customerOptions, typed)?.value;
 
   const baseLines = rows.map((r) => {
     const p = products.find((x) => x.id === r.productId);
     const pack = r.inPack && hasPack(p) ? p.packSize : 1;
     // What was typed (per pack or per unit) …
-    const typedQty = parseFloat(r.qty) || 0;
+    // A minus qty is refused on Save (returns go through Return items); until then it counts as 0, so the total
+    // shown is never less than what would be saved.
+    const typedQty = Math.max(0, parseFloat(r.qty) || 0);
     const typedPrice = parseFloat(r.price) || 0;
     // … and what is stored: always the base unit.
     const qty = typedQty * pack;
@@ -327,6 +362,8 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     if (newCustomer && !newCustomer.name.trim()) return setError('Enter the new customer name.');
     if (!newCustomer && !customer) return setError('Pick a customer (or add a new one).');
     if (lines.some((l) => l.productId && l.price < 0)) return setError('A price cannot be negative.');
+    const minusAt = rows.findIndex((r) => r.productId && (parseFloat(r.qty) || 0) < 0);
+    if (minusAt >= 0) return setError(`Line ${minusAt + 1}: the quantity cannot be below zero. For goods coming back, open the bill and use Return items.`);
     if (total <= 0) return setError('The bill total must be more than zero.');
     const items = lines.filter((l) => l.productId && l.qty > 0);
     if (items.length === 0) return setError('Add at least one item with a quantity.');
@@ -439,7 +476,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     </div>
   );
 
-  const smallLabel = 'sm:hidden block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1';
+  const smallLabel = 'md:hidden block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1';
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="New Bill" subtitle={quote ? `From quotation ${quote.quoteNumber} — check the items and prices, then save.` : 'Pick the customer, add items, enter what was paid.'} wide="xl" footer={footer}>
@@ -464,8 +501,8 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-span-3">
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_10.5rem] gap-3">
+          <div className="min-w-0">
             <label className={labelCls} htmlFor="bill-customer">Customer</label>
             {newCustomer ? (
               <div className="grid grid-cols-2 gap-2">
@@ -474,10 +511,9 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                 <button type="button" onClick={() => setNewCustomer(null)} className="col-span-2 text-xs font-semibold text-[#6B7280] hover:text-[#111827] dark:hover:text-white text-left">← Choose an existing customer instead</button>
               </div>
             ) : (
-              // Code box + name list on one line; the city filter and "New" wrap below them on a phone.
               <div className="flex flex-wrap gap-2">
-                <CodeBox id="bill-customer-code" label="Customer code" items={sortedCustomers} value={customer} onPick={pickCustomer} pairId="bill-customer" nextId="bill-date" skipAutofocus className="w-24 sm:w-28 shrink-0" />
-                <div className="flex-1 min-w-[10rem]">
+                <CodeBox id="bill-customer-code" label="Customer code" items={customers} value={customer} onPick={pickCustomer} fallback={customerByName} onEnter={onCustomerCodeEnter} skipAutofocus className="w-24 sm:w-28 shrink-0" />
+                <div className="flex-1 min-w-[11rem]">
                   <QuickSelect id="bill-customer" data-nav="customer" value={customer} options={customerOptions} onPick={pickCustomer} className={inputCls} title="Type a name, code or phone to find the customer">
                     <option value="">Select customer…</option>
                     {sortedCustomers.map((c) => (
@@ -485,15 +521,13 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                     ))}
                   </QuickSelect>
                 </div>
-                <div className="flex gap-2 max-sm:w-full">
-                  {cityList.length > 0 && (
-                    <select aria-label="Customer city" data-testid="bill-customer-city" value={billCity} onChange={(e) => setBillCity(e.target.value)} className={`${inputCls} sm:!w-36 max-sm:flex-1`} title="Search party by city">
-                      <option value="">All cities</option>
-                      {cityList.map((c) => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  )}
-                  <button type="button" onClick={() => setNewCustomer({ name: '', phone: '' })} className={`${secondaryBtn} shrink-0 px-3`} title="Add a new customer"><UserPlus className="w-4 h-4" /><span>New</span></button>
-                </div>
+                {cityList.length > 0 && (
+                  <select aria-label="Customer city" data-testid="bill-customer-city" value={billCity} onChange={(e) => setBillCity(e.target.value)} className={`${inputCls} !w-auto min-w-[7rem] max-w-[10rem] shrink-0 max-sm:flex-1 max-sm:max-w-none`} title="Search party by city">
+                    <option value="">All cities</option>
+                    {cityList.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                )}
+                <button type="button" onClick={() => setNewCustomer({ name: '', phone: '' })} className={`${secondaryBtn} shrink-0 px-3`} title="Add a new customer"><UserPlus className="w-4 h-4" /><span>New</span></button>
               </div>
             )}
           </div>
@@ -501,7 +535,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
             <label className={labelCls} htmlFor="bill-date">Date</label>
             <input id="bill-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
           </div>
-          <div className="sm:col-span-2 grid grid-cols-2 gap-3 items-end">
+          <div className="sm:col-span-full grid grid-cols-2 gap-3 items-end">
             <div>
               <label className={labelCls} htmlFor="bill-memo">Memo No</label>
               <input id="bill-memo" value={memoNo} onChange={(e) => setMemoNo(e.target.value)} className={inputCls} placeholder="book / ref. no." />
@@ -512,7 +546,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
             </label>
           </div>
           {selected && snapshot && (
-            <div data-testid="bill-customer-info" className="sm:col-span-3 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] px-3.5 py-2.5 text-xs text-[#374151] dark:text-[#CBD5E1] space-y-1">
+            <div data-testid="bill-customer-info" className="sm:col-span-full rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] px-3.5 py-2.5 text-xs text-[#374151] dark:text-[#CBD5E1] space-y-1">
               <div className="flex flex-wrap gap-x-4 gap-y-1">
                 <span>Balance <strong className={`tabular-nums ${selected.totalDue > 0 ? 'text-amber-700 dark:text-amber-300' : selected.totalDue < 0 ? 'text-teal-700 dark:text-teal-300' : ''}`}>{rs(selected.totalDue)}</strong>{selected.totalDue < 0 ? ' (advance)' : ''}</span>
                 <span>Credit left <strong className="tabular-nums">{credit.hasLimit ? rs(credit.available) : 'no limit'}</strong></span>
@@ -529,20 +563,21 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
             </div>
           )}
           {credit.hasLimit && (
-            <div className="sm:col-span-3 sm:order-last">
+            <div className="sm:col-span-full sm:order-last">
               <BillCreditPanel check={credit} canOverride={canOverride} allow={allowOver} onAllow={setAllowOver} reason={overReason} onReason={setOverReason} />
             </div>
           )}
-          {godowns.length > 1 && (
-            <div className="sm:col-span-3">
-              <label className={labelCls} htmlFor="bill-godown">From godown</label>
-              <select id="bill-godown" value={godownId} onChange={(e) => setGodownId(e.target.value)} className={inputCls}>
-                {godowns.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </select>
-            </div>
-          )}
-          {(salesmen.length > 0 || areas.length > 0) && (
-            <div className="sm:col-span-3 grid grid-cols-2 gap-3">
+          {(godowns.length > 1 || salesmen.length > 0 || areas.length > 0) && (
+            // Godown, salesman and area share one row on a tablet / desktop, so the item lines stay in view.
+            <div className="sm:col-span-full grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {godowns.length > 1 && (
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={labelCls} htmlFor="bill-godown">From godown</label>
+                  <select id="bill-godown" value={godownId} onChange={(e) => setGodownId(e.target.value)} className={inputCls}>
+                    {godowns.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                </div>
+              )}
               {salesmen.length > 0 && (
                 <div>
                   <label className={labelCls} htmlFor="bill-salesman">Salesman</label>
@@ -566,7 +601,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
         </div>
 
         <div>
-          <div className={`hidden sm:grid ${LINE_COLS} gap-2 px-1 mb-1 text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]`}>
+          <div className={`hidden md:grid ${LINE_COLS} gap-2 px-1 mb-1 text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]`}>
             <div>Code</div>
             <div>Item</div>
             <div>Qty</div>
@@ -582,30 +617,35 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               const last = p && selected ? lastRateFor(selected.id, p.id, invoices) : null;
               const note = stockNote(l, idx);
               return (
-                <div key={l.key} data-row={l.key} onFocus={() => setFocusKey(l.key)} className={`grid grid-cols-12 ${LINE_COLS} gap-2 items-center rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2 sm:p-1 sm:border-0`}>
-                  <CodeBox id={`bill-code-${idx + 1}`} label={`Item code ${idx + 1}`} items={sortedProducts} value={l.productId} onPick={(v) => pickProduct(l.key, v)} nextId={`bill-qty-${idx + 1}`} className="col-span-4 sm:col-auto" />
-                  <div className="col-span-7 sm:col-auto min-w-0">
-                    <QuickSelect aria-label={`Item ${idx + 1}`} data-nav="item" value={l.productId} options={productOptions} onPick={(v) => pickProduct(l.key, v)} className={inputCls} title="Type the item name or code to find it">
-                      <option value="">Select item…</option>
-                      {sortedProducts.map((x) => (
-                        <option key={x.id} value={x.id}>{x.code ? `${x.code} • ` : ''}{x.name} — {rs(x.unitPricePerKg)}/{x.unit || 'pcs'}</option>
-                      ))}
-                    </QuickSelect>
+                <div key={l.key} data-row={l.key} data-testid="bill-line" onFocus={() => setFocusKey(l.key)} className={`grid grid-cols-12 ${LINE_COLS} gap-2 items-center rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2 md:p-1 md:border-0`}>
+                  <CodeBox id={`bill-code-${idx + 1}`} label={`Code ${idx + 1}`} items={sortedProducts} value={l.productId} onPick={(v) => pickProduct(l.key, v)} fallback={productByName} onEnter={(hit, typed) => onLineCodeEnter(l.key, hit, typed)} className="col-span-4 md:col-auto" />
+                  <div className="col-span-8 md:col-auto flex gap-1 min-w-0">
+                    <div className="flex-1 min-w-0">
+                      <QuickSelect aria-label={`Item ${idx + 1}`} data-nav="item" value={l.productId} options={productOptions} onPick={(v) => { codeFlow.current = false; pickProduct(l.key, v); }} className={inputCls} title="Type the item name or code to find it">
+                        <option value="">Select item…</option>
+                        {sortedProducts.map((x) => (
+                          <option key={x.id} value={x.id}>{x.name} — {rs(x.unitPricePerKg)}/{x.unit || 'pcs'}{x.code ? ` • ${x.code}` : ''}</option>
+                        ))}
+                      </QuickSelect>
+                    </div>
+                    <button type="button" onClick={() => removeRow(l.key)} aria-label={`Remove item ${idx + 1}`} className="md:hidden shrink-0 p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-30" disabled={rows.length === 1}><Trash2 className="w-4 h-4" /></button>
                   </div>
-                  {/* Phones: the bin sits beside the item name; wider screens: its own last column. */}
-                  <div className="col-span-1 flex justify-end sm:col-start-6 sm:row-start-1">
-                    <button type="button" onClick={() => removeRow(l.key)} aria-label={`Remove item ${idx + 1}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-30" disabled={rows.length === 1}><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                  <div className="col-span-4 sm:col-auto">
+                  <div className="col-span-6 md:col-auto min-w-0">
                     <span className={smallLabel}>Qty{p ? ` (${plural(unitWord, 2)})` : ''}</span>
-                    <input id={`bill-qty-${idx + 1}`} aria-label={`Quantity ${idx + 1}`} data-nav="qty" type="number" inputMode="decimal" min="0" step="any" value={l.rawQty} onChange={(e) => setRow(l.key, { qty: e.target.value })} className={`${inputCls} tabular-nums max-sm:!px-2.5`} placeholder="Qty" />
+                    <input aria-label={`Quantity ${idx + 1}`} data-nav="qty" type="number" inputMode="decimal" min="0" step="any" value={l.rawQty} onChange={(e) => setRow(l.key, { qty: e.target.value })} className={numInputCls} placeholder="Qty" />
                   </div>
-                  <div className="col-span-4 sm:col-auto">
+                  <div className="col-span-6 md:col-auto min-w-0">
                     <span className={smallLabel}>Price{p ? ` per ${unitWord}` : ''}</span>
-                    <input aria-label={`Price ${idx + 1}`} data-nav="price" type="number" inputMode="decimal" min="0" step="any" value={l.rawPrice} onChange={(e) => setRow(l.key, { price: e.target.value, priceFrom: 'typed' })} className={`${inputCls} tabular-nums max-sm:!px-2.5`} placeholder="Price" />
+                    <input aria-label={`Price ${idx + 1}`} data-nav="price" type="number" inputMode="decimal" min="0" step="any" value={l.rawPrice} onChange={(e) => setRow(l.key, { price: e.target.value, priceFrom: 'typed' })} className={numInputCls} placeholder={p ? `per ${unitWord}` : 'Price'} />
                     {l.priceFrom === 'customer' && <span data-testid={`customer-rate-${idx + 1}`} className="block mt-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Customer rate</span>}
                   </div>
-                  <div className="col-span-4 sm:col-auto text-right tabular-nums font-bold text-sm text-[#111827] dark:text-white whitespace-nowrap"><span className={`${smallLabel} font-sans`}>Amount</span>{rs(l.amount)}</div>
+                  <div className="col-span-full md:col-auto flex md:block items-baseline justify-between gap-2 text-right px-1 md:px-0">
+                    <span className="md:hidden text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Amount</span>
+                    <span data-testid={`line-amount-${idx + 1}`} className={`${moneyCls} font-bold text-sm text-[#111827] dark:text-white`}>{rs(l.amount)}</span>
+                  </div>
+                  <div className="hidden md:flex justify-end">
+                    <button type="button" onClick={() => removeRow(l.key)} aria-label={`Remove item ${idx + 1}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-30" disabled={rows.length === 1}><Trash2 className="w-4 h-4" /></button>
+                  </div>
                   {p && (
                     <div data-testid={`line-info-${idx + 1}`} className="col-span-full flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6B7280] dark:text-[#94A3B8] px-1">
                       {packable && (
@@ -636,7 +676,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                   {l.showDisc ? (
                     <div className="col-span-full flex flex-wrap items-center gap-2">
                       <label htmlFor={`disc-${l.key}`} className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Discount on this item</label>
-                      <div className="w-28"><input id={`disc-${l.key}`} aria-label={`Discount ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.disc} onChange={(e) => setRow(l.key, { disc: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="0" /></div>
+                      <div className="w-28"><input id={`disc-${l.key}`} aria-label={`Discount ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.disc} onChange={(e) => setRow(l.key, { disc: e.target.value })} className={numInputCls} placeholder="0" /></div>
                       <div className="inline-flex rounded-2xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden text-xs font-bold" role="group" aria-label={`Discount type ${idx + 1}`}>
                         {(['rs', 'pct'] as const).map((t) => (
                           <button key={t} type="button" aria-pressed={l.discType === t} onClick={() => setRow(l.key, { discType: t })} className={`px-3 py-2 ${l.discType === t ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : 'text-[#6B7280] dark:text-[#94A3B8]'}`}>{t === 'rs' ? 'Rs.' : '%'}</button>
@@ -755,7 +795,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                 <button type="button" onClick={() => { setSplit(true); if (method === 'Cheque') setSplitCheque(paidNow); else if (method === 'Cash') setSplitCash(paidNow); else { setSplitBankMethod(BANK_METHODS.includes(method) ? method : BANK_METHODS[0]); setSplitBank(paidNow); } setPaidNow(''); }} className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:underline"><SplitSquareHorizontal className="w-3 h-3" /> Split: cash + bank + cheque</button>
               </>
             )}
-            {hasCheque && <div className="grid grid-cols-2 gap-2"><ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="bill-chq" /></div>}
+            {hasCheque && <div className="grid grid-cols-2 gap-2"><ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="bill-chq" narrow /></div>}
             {payment.error && <p role="alert" className="text-[11px] font-bold text-rose-700 dark:text-rose-300">{payment.error}</p>}
             {split && payment.paid > 0 && !payment.error && <div className="flex justify-between text-xs text-[#6B7280] dark:text-[#94A3B8]"><span>Paid now</span><span className="tabular-nums">{rs(payment.paid)}</span></div>}
             <div className="flex justify-between text-xs font-bold pt-1 text-[#111827] dark:text-white"><span className={balance > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}>{balance > 0 ? 'Balance (credit)' : 'Balance'}</span><span className="tabular-nums">{rs(balance)}</span></div>

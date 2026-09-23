@@ -99,6 +99,12 @@ export const createVoucherApi = (d: Deps): VoucherApi => {
     return null;
   };
 
+  /** A bank's opening balance counts in every day from the opening date: it can't change inside a closed period. */
+  const openingLocked = () => {
+    const locked = booksLockedFor(d.settings, d.settings.cashOpeningDate || '0000-01-01');
+    return locked ? `The opening balance can't be changed: ${locked}` : null;
+  };
+
   const addBankAccount: VoucherApi['addBankAccount'] = (input) => {
     if (!canManageBanks()) return fail('Only a manager or admin can add bank accounts.');
     const bankName = (input.bankName || '').trim();
@@ -109,6 +115,7 @@ export const createVoucherApi = (d: Deps): VoucherApi => {
     const code = nextBankCode(accounts.map((a) => a.code));
     if (!code) return fail('No more bank account codes are free (1011 to 1099).');
     const opening = round2(Number(input.openingBalance) || 0);
+    if (opening !== 0 && openingLocked()) return fail(openingLocked()!);
     const account: Account = {
       id: `acc-${code}`,
       code,
@@ -135,6 +142,7 @@ export const createVoucherApi = (d: Deps): VoucherApi => {
     const bank = banks.find((b) => b.code === code);
     if (!bank) return fail('Bank account not found.');
     const opening = patch.openingBalance != null ? round2(Number(patch.openingBalance) || 0) : undefined;
+    if (opening != null && opening !== round2(bank.openingBalance) && openingLocked()) return fail(openingLocked()!);
     if (bank.isMain) {
       const name = (patch.bankName ?? bank.name).trim();
       d.setSettings((prev) => ({ ...prev, mainBankName: name || undefined, ...(opening != null ? { openingBankBalance: opening } : {}) }));

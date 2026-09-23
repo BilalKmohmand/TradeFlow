@@ -123,28 +123,22 @@ export const buildDailySheet = (src: DailySheetSources, date: string): DailyShee
 };
 
 /**
- * Bills grouped for the list screen: a quick text search plus a period filter. The search (utils/search.ts)
- * takes the bill / memo number, the customer's name, shop name, phone (with spaces), and — when the customer
- * list is given — their code and city, and any item on the bill.
+ * Bills grouped for the list screen: a quick text search plus a period filter. The search takes the bill
+ * no., memo no., customer name / phone / code (C-0004, via `customerCodeOf`), an item name, or an amount
+ * (12345 or 12,345.50 finds a bill with that total or balance).
  */
-export const filterBills = (
-  invoices: Invoice[],
-  query: string,
-  period: 'today' | 'week' | 'month' | 'all',
-  today: string,
-  unpaidOnly = false,
-  customers: Pick<Customer, 'id' | 'code' | 'city' | 'company' | 'phone'>[] = []
-): Invoice[] => {
-  const m = matcher(query);
-  const byId = new Map(customers.map((c) => [c.id, c]));
+export const filterBills = (invoices: Invoice[], query: string, period: 'today' | 'week' | 'month' | 'all', today: string, unpaidOnly = false, customerCodeOf?: (customerId: string) => string | undefined): Invoice[] => {
+  const q = query.trim().toLowerCase();
   const from = period === 'today' ? today : period === 'week' ? shiftDate(today, -6) : period === 'month' ? today.slice(0, 7) + '-01' : '0000-00-00';
+  const money = /^rs\.?\s*/.test(q) || /^[\d,]+(\.\d+)?$/.test(q) ? parseFloat(q.replace(/^rs\.?\s*/, '').replace(/,/g, '')) : NaN;
+  const m = matcher(query);
+  const matches = (i: Invoice) =>
+    m([i.invoiceNumber, i.memoNo, i.customerName, i.customerCompany, customerCodeOf?.(i.customerId), ...i.items.map((it) => it.productName)], [i.customerPhone]) ||
+    (Number.isFinite(money) && money > 0 && (Math.abs(i.totalAmount - money) < 0.005 || Math.abs(i.balanceDue - money) < 0.005));
   return billsOnly(invoices)
     .filter((i) => i.issueDate >= from)
     .filter((i) => !unpaidOnly || i.balanceDue > 0)
-    .filter((i) => {
-      const c = byId.get(i.customerId);
-      return m([i.invoiceNumber, i.memoNo, i.customerName, i.customerCompany, c?.company, c?.code, c?.city, ...i.items.map((it) => it.productName)], [i.customerPhone, c?.phone]);
-    })
+    .filter((i) => !q || matches(i))
     .sort((a, b) => (a.issueDate < b.issueDate ? 1 : a.issueDate > b.issueDate ? -1 : b.createdAt.localeCompare(a.createdAt)));
 };
 

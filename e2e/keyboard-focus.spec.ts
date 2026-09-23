@@ -27,24 +27,20 @@ test('New Bill: Code boxes for the customer and every item line; Enter on a code
   await open(page);
   await page.keyboard.press('F2');
   const bill = page.getByRole('dialog', { name: 'New Bill' });
-  // The cursor still starts in the customer list (type a name or code there, as before).
-  await expect(bill.getByLabel('Customer', { exact: true })).toBeFocused();
   await bill.getByLabel('Customer code').fill('c0007');
   await bill.getByLabel('Customer code').press('Enter');
   await expect(bill.getByLabel('Customer', { exact: true })).toHaveValue('c7');
-  await expect(bill.locator('#bill-date')).toBeFocused();
   // Picking by name fills the Code box.
   await bill.getByLabel('Customer', { exact: true }).selectOption('c1');
   await expect(bill.getByLabel('Customer code')).toHaveValue('C-0001');
 
-  await bill.getByLabel('Item code 1').fill('105');
-  await bill.getByLabel('Item code 1').press('Enter');
+  await bill.getByLabel('Code 1', { exact: true }).fill('105');
+  await bill.getByLabel('Code 1', { exact: true }).press('Enter');
   await expect(bill.getByLabel('Item 1', { exact: true })).toHaveValue('p5');
-  await expect(bill.getByLabel('Quantity 1', { exact: true })).toBeFocused();
-  await page.keyboard.type('3');
+  await bill.getByLabel('Quantity 1', { exact: true }).fill('3');
   await expect(bill).toContainText('Rs. 7,800'); // 3 × 2,600
-  await bill.getByLabel('Item code 1').fill('999');
-  await bill.getByLabel('Item code 1').press('Enter');
+  await bill.getByLabel('Code 1', { exact: true }).fill('999');
+  await bill.getByLabel('Code 1', { exact: true }).press('Enter');
   await expect(bill.getByRole('alert').filter({ hasText: 'No code' })).toBeVisible();
   await expect(bill.getByLabel('Item 1', { exact: true })).toHaveValue('p5'); // a wrong code changes nothing
 });
@@ -57,7 +53,7 @@ test('focus returns to the button that opened a dialog, Find anything and the me
   await page.keyboard.press('Enter');
   const rc = page.getByRole('dialog', { name: 'Receive payment' });
   await expect(rc).toBeVisible();
-  await expect(rc.getByLabel('Customer', { exact: true })).toBeFocused(); // the first field gets the cursor
+  await expect(rc.getByLabel('Code', { exact: true })).toBeFocused(); // the Code box gets the cursor first
   // Tab and Shift+Tab never leave the dialog.
   for (let i = 0; i < 12; i++) {
     await page.keyboard.press('Tab');

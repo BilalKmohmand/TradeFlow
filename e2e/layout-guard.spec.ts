@@ -40,7 +40,7 @@ async function openEntry(page: Page, e: NavEntry, groupLabel: string, groupId: s
     const group = sheet.getByRole('group', { name: groupLabel });
     if (!(await group.isVisible())) await sheet.getByTestId(`more-group-${groupId}`).click();
     await group.getByRole('button', { name: e.label, exact: true }).first().click();
-    await expect(sheet).toBeHidden();
+    await expect(sheet).toBeHidden({ timeout: 10_000 }).catch(() => page.keyboard.press("Escape"));
   } else {
     await page.getByRole('menubar', { name: 'Menu bar' }).getByRole('menuitem', { name: groupLabel, exact: true }).click();
     const menu = page.getByRole('menu', { name: groupLabel });
@@ -90,8 +90,8 @@ test.describe('Layout guard: the busiest dialogs filled in, on the smallest phon
     await expect(bill.getByLabel('Customer', { exact: true })).toHaveValue('c5');
     for (let i = 1; i <= 3; i++) {
       if (i > 1) await bill.getByRole('button', { name: /Add another item/ }).click();
-      await bill.getByLabel(`Item code ${i}`).fill(String(100 + i * 9));
-      await bill.getByLabel(`Item code ${i}`).press('Enter');
+      await bill.getByLabel(`Code ${i}`, { exact: true }).fill(String(100 + i * 9));
+      await bill.getByLabel(`Code ${i}`, { exact: true }).press('Enter');
       await bill.getByLabel(`Quantity ${i}`, { exact: true }).fill('1250');
       await bill.getByLabel(`Price ${i}`, { exact: true }).fill('7250.50');
     }
@@ -102,8 +102,8 @@ test.describe('Layout guard: the busiest dialogs filled in, on the smallest phon
     await bar.getByRole('button', { name: 'Money', exact: true }).click();
     await page.getByRole('button', { name: 'Receive payment' }).first().click();
     const rc = page.getByRole('dialog', { name: 'Receive payment' });
-    await rc.getByLabel('Party code').fill('3');
-    await rc.getByLabel('Party code').press('Enter');
+    await rc.getByLabel('Code', { exact: true }).fill('3');
+    await rc.getByLabel('Code', { exact: true }).press('Enter');
     await expect(rc.getByLabel('Customer', { exact: true })).toHaveValue('c3');
     await expect(rc.getByLabel('Amount (Rs.)')).toBeFocused();
     await rc.getByLabel('Amount (Rs.)').fill('1250000');

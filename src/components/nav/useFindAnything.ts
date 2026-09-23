@@ -8,6 +8,7 @@ import { matcher } from '../../utils/search';
 import type { Customer, Supplier } from '../../types';
 import { filterParties } from '../../utils/vouchers';
 import { useNavAccess, useNavGo } from './useNavGo';
+import { matchesSearch } from '../../utils/search';
 
 export type FindKind = 'option' | 'customer' | 'supplier' | 'item' | 'bill' | 'purchase' | 'voucher';
 
@@ -93,7 +94,7 @@ export const useFindAnything = (query: string): FindSection[] => {
         label: 'Suppliers',
         items: sup.map((s) => ({ id: `supplier-${s.id}`, kind: 'supplier', title: s.company || s.name, subtitle: `Supplier${s.code ? ` ${s.code}` : ''} • ${s.phone || 'no phone'}${s.city ? ` • ${s.city}` : ''}`, badge: s.totalOwed > 0 ? `You owe ${formatCurrency(s.totalOwed)}` : 'Clear', run: () => { setSelectedSupplierId(s.id); setActiveScreen('suppliers'); } })),
       });
-    const items = products.filter((p) => has(p.name, p.code, p.barcode, p.category, p.brand)).slice(0, PER_KIND);
+    const items = products.filter((p) => matchesSearch(q, [p.name, p.code, p.barcode, p.category, p.brand])).slice(0, PER_KIND);
     if (items.length)
       sections.push({
         id: 'items',

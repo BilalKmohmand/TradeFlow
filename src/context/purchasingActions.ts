@@ -318,7 +318,9 @@ export const usePurchasingStore = (d: Deps) => {
     });
     d.setPurchaseOrders((prev) => [...orders, ...prev]);
     d.logAuditEvent('Purchase Orders Created', `${orders.map((o) => o.poNumber).join(', ')} from the re-order report`, 'info');
-    return { success: true, message: `${orders.length} purchase order${orders.length === 1 ? '' : 's'} made: ${orders.map((o) => `${o.poNumber} (${supName(o.supplierId)})`).join(', ')}.`, orders };
+    // Up to 4 orders are named with their supplier; more would fill the screen, so give the number range.
+    const named = orders.length <= 4 ? orders.map((o) => `${o.poNumber} (${supName(o.supplierId)})`).join(', ') : `${orders[0].poNumber} to ${orders[orders.length - 1].poNumber} for ${orders.length} suppliers — see Suppliers → Orders`;
+    return { success: true, message: `${orders.length} purchase order${orders.length === 1 ? '' : 's'} made: ${named}.`, orders };
   };
 
   // ---------------------------------------------------------------------------

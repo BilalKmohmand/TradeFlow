@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { Modal, inputCls } from '../billing/ui';
 import { QuickSelect, PickOption } from '../billing/QuickPick';
+import { CodeBox } from '../billing/CodeBox';
 import { AccountOption, searchAccounts } from '../../utils/vouchers';
 
 const GROUP_ORDER: AccountOption['group'][] = ['Customer', 'Supplier', 'Cash', 'Bank', 'Expense', 'Income', 'Asset', 'Liability', 'Equity'];
@@ -12,8 +13,9 @@ const GROUP_LABEL: Record<AccountOption['group'], string> = {
 export const optionText = (o: AccountOption) => `${o.code ? `${o.code} • ` : ''}${o.name}${o.city ? ` (${o.city})` : ''}`;
 
 /**
- * Pick any account: a customer, a supplier, a bank, cash, an expense, income… Type a code or a name to jump
- * to it, or press F1 (or the search button) to search by code, name or city, as in the old program.
+ * Pick any account: a customer, a supplier, a bank, cash, an expense, income… Type its code in the Code box
+ * and press Enter, type a code or a name in the list to jump to it, or press F1 (or the search button) to
+ * search by code, name or city, as in the old program.
  */
 export const AccountPicker: React.FC<{
   id: string;
@@ -27,8 +29,11 @@ export const AccountPicker: React.FC<{
   const [searching, setSearching] = useState(false);
   const pickOptions: PickOption[] = useMemo(() => options.map((o) => ({ value: o.ref, name: o.name, code: o.code, extra: [o.company, o.phone, o.city, o.group].filter(Boolean).join(' ') })), [options]);
   const groups = useMemo(() => GROUP_ORDER.map((g) => ({ g, rows: options.filter((o) => o.group === g) })).filter((x) => x.rows.length), [options]);
+  const codeItems = useMemo(() => options.map((o) => ({ id: o.ref, code: o.code })), [options]);
   return (
     <div className={`flex gap-1 min-w-0 ${className || ''}`}>
+      {/* The old program's code box: type 141454 or 6000 and press Enter. */}
+      <CodeBox id={`${id}-code`} label={`Code for ${rest['aria-label'] || id}`} items={codeItems} value={value} onPick={onPick} className="w-[5.5rem] shrink-0" />
       <div className="flex-1 min-w-0">
         <QuickSelect
           id={id}

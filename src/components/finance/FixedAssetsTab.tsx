@@ -240,7 +240,7 @@ export const FixedAssetsTab: React.FC<{ flash: Flash }> = ({ flash }) => {
               <li key={r.id} className="px-4 sm:px-5 py-2.5 flex items-center justify-between gap-3" data-testid="dep-run">
                 <div className="min-w-0"><div className="text-sm font-semibold">{/^\d{4}-\d{2}$/.test(r.period) ? monthLabel(r.period) : r.period}</div><div className="text-[11px] text-[#8E9299]">Booked {formatDate(r.date)} • {r.lines.length} asset{r.lines.length === 1 ? '' : 's'} • {r.months.length} month{r.months.length === 1 ? '' : 's'}</div></div>
                 <div className="flex items-center gap-1">
-                  <span className="tabular-nums font-bold text-sm">{rs(r.total)}</span>
+                  <span className="tabular-nums whitespace-nowrap shrink-0 font-bold text-sm">{rs(r.total)}</span>
                   {canRemove && <RowAction label={`Undo depreciation ${r.period}`} tone="danger" icon={<Undo2 className="w-4 h-4" />} onClick={() => setConfirm({ title: `Undo depreciation for ${r.period}?`, message: `${rs(r.total)} of depreciation will be taken out of the books.`, label: 'Undo run', action: () => flash(undoDepreciationRun(r.id)) })} />}
                 </div>
               </li>

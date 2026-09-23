@@ -143,11 +143,13 @@ describe('nav map: permissions', () => {
       expect(e.perm, e.id).toBeUndefined();
       expect(e.anyPerm, e.id).toBeUndefined();
     });
-    expect(open.map((e) => e.id)).toEqual(expect.arrayContaining(['new-bill', 'receive', 'customers', 'items', 'rep-daily-sale']));
+    // Nothing that makes or changes data is open to a role without rights (a viewer).
+    expect(open.map((e) => e.id)).toEqual(expect.arrayContaining(['customers', 'items', 'rep-daily-sale']));
+    expect(open.map((e) => e.id)).not.toContain('new-bill');
   });
 
   it('books, vouchers and Accounts tabs need finance access; System needs the admin screen', () => {
-    const op = only('finance:record_payment', 'reports:view', 'products:create');
+    const op = only('finance:record_payment', 'reports:view', 'products:create', 'data:write');
     const ids = (a: { can: (p: Permission) => boolean }) => new Set(NAV_ENTRIES.filter((e) => entryAllowed(e, a)).map((e) => e.id));
     const seen = ids(op);
     ['vouchers', 'cpv', 'account-ledger', 'chart-of-accounts', 'rep-trial-balance', 'rep-cash-book', 'bank-rec', 'profit-by-item', 'users', 'backups', 'owner'].forEach((id) => expect(seen.has(id), id).toBe(false));
@@ -155,7 +157,8 @@ describe('nav map: permissions', () => {
     const acct = ids(only('view_finance', 'finance:record_payment'));
     expect(acct.has('cpv')).toBe(true);
     expect(acct.has('jv')).toBe(false); // JV needs finance:view_pnl
-    expect(ids(only('system:admin_screen')).has('users')).toBe(true);
+    expect(ids(only('system:admin_screen', 'users:view')).has('users')).toBe(true);
+    expect(ids(only('system:admin_screen')).has('backups')).toBe(false);
     // A screen an admin hid (Admin → Visibility) drops its options.
     const hidden = new Set(NAV_ENTRIES.filter((e) => entryAllowed(e, { can: () => true, isScreenVisible: (s) => s !== 'money' })).map((e) => e.id));
     expect(hidden.has('cheques')).toBe(false);

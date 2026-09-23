@@ -56,5 +56,12 @@ export const matchesPurchaseInvoice = (
   p: { invoiceNumber: string; memoNo?: string; supplierName: string; lines: { productName: string; code?: string }[] },
   query: string,
   supplier?: { code?: string; name?: string; company?: string; city?: string; phone?: string }
-): boolean =>
-  matcher(query)([p.invoiceNumber, p.memoNo, p.supplierName, supplier?.code, supplier?.name, supplier?.company, supplier?.city, ...p.lines.flatMap((l) => [l.productName, l.code])], [supplier?.phone]);
+): boolean => {
+  if (!query.trim()) return true;
+  const squash = (x: string) => x.replace(/[\s\-_./]+/g, '').toLowerCase();
+  const q = squash(query);
+  // Codes must match whole (S-0003 is not S-0033, item 101 is not 10); everything else by the shared word rule.
+  if (supplier?.code && squash(supplier.code) === q) return true;
+  if (p.lines.some((l) => l.code && squash(l.code) === q)) return true;
+  return matcher(query)([p.invoiceNumber, p.memoNo, p.supplierName, supplier?.name, supplier?.company, supplier?.city, ...p.lines.map((l) => l.productName)], [supplier?.phone]);
+};

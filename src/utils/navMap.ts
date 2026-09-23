@@ -146,7 +146,7 @@ const CODING: { label: string; entries: Raw[] }[] = [
     label: 'Accounts setup',
     entries: [
       { id: 'chart-of-accounts', label: 'Chart of accounts', aka: ['Accounts Coding'], hint: 'The account heads money is sorted into; add your own', keywords: ['hisab', 'hisaab', 'account head', 'coa', 'coding'], perm: FIN, target: scr('accounts', 'coa') },
-      { id: 'bank-accounts', label: 'Bank accounts', hint: 'Meezan, HBL…: add a bank and see each balance', keywords: ['bank', 'account', 'meezan', 'hbl', 'ubl', 'mcb'], target: scr('money', 'overview', { anchor: 'bank-accounts' }) },
+      { id: 'bank-accounts', label: 'Bank accounts', hint: 'Meezan, HBL…: add a bank and see each balance', keywords: ['bank', 'account', 'meezan', 'hbl', 'ubl', 'mcb'], perm: FIN, target: scr('money', 'overview', { anchor: 'bank-accounts' }) },
       { id: 'opening-balances', label: 'Opening cash & bank', hint: 'Cash and bank on the day you started', keywords: ['opening', 'shuru', 'balance', 'cash', 'bank'], target: scr('money', 'opening', { anchor: 'opening' }) },
     ],
   },
@@ -347,15 +347,64 @@ export const fromClassicTarget = (t: ClassicTarget): NavTarget => {
   }
 };
 
+/** Makes or changes something: never for a read-only role (Auditor / Viewer). */
+const WRITE: Permission[] = ['data:write'];
+const EXPENSES: Permission[] = ['manage_expenses', 'finance:manage_expenses'];
+
+/**
+ * What each dialog needs, wherever it is opened from (menus, "Find anything", the function keys, Home).
+ * perm = all of these; anyPerm = at least one.
+ */
+export const ACTION_ACCESS: Record<NavAction, { perm?: Permission[]; anyPerm?: Permission[] }> = {
+  newBill: { perm: WRITE },
+  newQuote: { perm: WRITE },
+  newPurchaseInvoice: { perm: WRITE, anyPerm: STOCK_IN },
+  receive: { perm: ['finance:record_payment'] },
+  receiveMany: { perm: ['finance:record_payment'] },
+  paySupplier: { perm: ['finance:record_payment'] },
+  addExpense: { perm: WRITE, anyPerm: EXPENSES },
+  transfer: { perm: WRITE },
+  interest: { perm: ['finance:view_pnl'] },
+  newItem: { perm: ['products:create'] },
+  receiveStock: { perm: WRITE, anyPerm: STOCK_IN },
+  adjustStock: { perm: ['stock:adjust'] },
+  purchaseReturn: { perm: WRITE, anyPerm: STOCK_IN },
+  newOrder: { perm: WRITE, anyPerm: STOCK_IN },
+  reorder: {},
+  labels: {},
+  agingCustomers: {},
+  agingSuppliers: {},
+  salesHub: {},
+  salesTeam: {},
+  schemes: {},
+  salesReport: {},
+  recovery: {},
+  commission: {},
+  tradingSuite: { anyPerm: ADMIN, perm: ['system:company_settings'] },
+  lock: {},
+};
+
 /** Permission a target needs by itself (screens gate themselves; the map mirrors that). */
-const targetPerm = (t: NavTarget): Permission[] | undefined => {
+const targetPerm = (t: NavTarget): { perm?: Permission[]; anyPerm?: Permission[] } => {
   if (t.kind === 'report' && t.report !== 'books' && t.report !== 'menu') {
     const d = REPORTS[t.report];
-    return d.books || d.finance ? FIN : undefined;
+    return d.books || d.finance ? { perm: FIN } : {};
   }
-  if (t.kind === 'screen' && t.screen === 'accounts') return t.view === 'profit' ? ['view_finance', 'finance:view_pnl'] : FIN;
-  if (t.kind === 'screen' && t.screen === 'money' && t.view === 'bank') return FIN;
-  return undefined;
+  if (t.kind === 'action') return ACTION_ACCESS[t.action] || {};
+  if (t.kind === 'screen' && t.screen === 'accounts') return { perm: t.view === 'profit' ? ['view_finance', 'finance:view_pnl'] : FIN };
+  if (t.kind === 'screen' && t.screen === 'money' && (t.view === 'bank' || t.view === 'opening')) return { perm: t.view === 'opening' ? [...FIN, ...WRITE] : FIN };
+  if (t.kind === 'screen' && t.screen === 'customers' && t.view === 'add') return { perm: ['customers:create'] };
+  if (t.kind === 'screen' && t.screen === 'suppliers' && t.view === 'add') return { perm: ['suppliers:create'] };
+  if (t.kind === 'screen' && t.screen === 'products' && (t.view === 'godowns' || t.view === 'move')) return { perm: WRITE };
+  return {};
+};
+
+/** May this user open the target (a dialog, screen view or report), wherever it is opened from? */
+export const targetAllowed = (t: NavTarget, a: Pick<NavAccess, 'can'>): boolean => {
+  const need = targetPerm(t);
+  if (need.perm && !need.perm.every((p) => a.can(p))) return false;
+  if (need.anyPerm && !need.anyPerm.some((p) => a.can(p))) return false;
+  return true;
 };
 
 const reportSections = (): { label: string; entries: Raw[] }[] =>
@@ -391,34 +440,34 @@ const SYSTEM: { label: string; entries: Raw[] }[] = [
   {
     label: 'Shop & bills',
     entries: [
-      { id: 'shop-details', label: 'Shop details', hint: 'Shop name, address, phone, NTN and logo on bills', keywords: ['dukan', 'shop', 'company', 'logo', 'address', 'ntn', 'naam'], anyPerm: ADMIN, target: admin('system', 'company') },
-      { id: 'bill-settings', label: 'Bill settings', hint: 'Paper size, bill footer, previous balance, short stock, classic menu', keywords: ['print', 'a4', 'thermal', 'footer', 'parchi', 'bill'], anyPerm: ADMIN, target: admin('system', 'bill-settings') },
-      { id: 'reminder-settings', label: 'Payment reminders', hint: 'WhatsApp reminders to customers who owe', keywords: ['whatsapp', 'sms', 'yaad', 'reminder', 'udhaar'], anyPerm: ADMIN, target: admin('system', 'reminders') },
-      { id: 'doc-numbers', label: 'Document numbers', hint: 'Bill, voucher and invoice number series', keywords: ['number', 'series', 'numbering', 'serial'], anyPerm: ADMIN, target: admin('controls', 'doc-numbers') },
-      { id: 'branches', label: 'Branches', hint: 'More than one shop: branches and each person’s branch', keywords: ['shakh', 'branch', 'dukan'], anyPerm: ADMIN, target: admin('controls', 'branches') },
+      { id: 'shop-details', label: 'Shop details', hint: 'Shop name, address, phone, NTN and logo on bills', keywords: ['dukan', 'shop', 'company', 'logo', 'address', 'ntn', 'naam'], anyPerm: ADMIN, perm: ['system:company_settings'], target: admin('system', 'company') },
+      { id: 'bill-settings', label: 'Bill settings', hint: 'Paper size, bill footer, previous balance, short stock, classic menu', keywords: ['print', 'a4', 'thermal', 'footer', 'parchi', 'bill'], anyPerm: ADMIN, perm: ['system:company_settings'], target: admin('system', 'bill-settings') },
+      { id: 'reminder-settings', label: 'Payment reminders', hint: 'WhatsApp reminders to customers who owe', keywords: ['whatsapp', 'sms', 'yaad', 'reminder', 'udhaar'], anyPerm: ADMIN, perm: ['system:company_settings'], target: admin('system', 'reminders') },
+      { id: 'doc-numbers', label: 'Document numbers', hint: 'Bill, voucher and invoice number series', keywords: ['number', 'series', 'numbering', 'serial'], anyPerm: ADMIN, perm: ['system:company_settings'], target: admin('controls', 'doc-numbers') },
+      { id: 'branches', label: 'Branches', hint: 'More than one shop: branches and each person’s branch', keywords: ['shakh', 'branch', 'dukan'], anyPerm: ADMIN, perm: ['system:company_settings'], target: admin('controls', 'branches') },
     ],
   },
   {
     label: 'Users & security',
     entries: [
-      { id: 'users', label: 'Users & passwords', hint: 'Who can sign in, their passwords and roles', keywords: ['password', 'login', 'user', 'staff', 'mulazim'], anyPerm: ADMIN, target: admin('users') },
-      { id: 'roles', label: 'Roles & permissions', hint: 'What each role may see and do', keywords: ['rights', 'ijazat', 'permission', 'role'], anyPerm: ADMIN, target: admin('roles') },
-      { id: 'visibility', label: 'Screen visibility & masking', hint: 'Hide screens or figures from some roles', keywords: ['hide', 'chupana', 'mask'], anyPerm: ADMIN, target: admin('visibility') },
-      { id: 'security-policy', label: 'Security policies', hint: 'Password rules, lock-out', keywords: ['password', 'security', 'lock'], anyPerm: ADMIN, target: admin('policy') },
+      { id: 'users', label: 'Users & passwords', hint: 'Who can sign in, their passwords and roles', keywords: ['password', 'login', 'user', 'staff', 'mulazim'], anyPerm: ADMIN, perm: ['users:view'], target: admin('users') },
+      { id: 'roles', label: 'Roles & permissions', hint: 'What each role may see and do', keywords: ['rights', 'ijazat', 'permission', 'role'], anyPerm: ADMIN, perm: ['roles:view'], target: admin('roles') },
+      { id: 'visibility', label: 'Screen visibility & masking', hint: 'Hide screens or figures from some roles', keywords: ['hide', 'chupana', 'mask'], anyPerm: ADMIN, perm: ['visibility:manage'], target: admin('visibility') },
+      { id: 'security-policy', label: 'Security policies', hint: 'Password rules, lock-out', keywords: ['password', 'security', 'lock'], anyPerm: ADMIN, perm: ['roles:manage'], target: admin('policy') },
       { id: 'sign-in-settings', label: 'Sign-in & session', hint: 'Auto-lock and staying signed in', keywords: ['session', 'auto lock', 'login'], anyPerm: ADMIN, target: admin('system', 'sign-in') },
-      { id: 'approval-rules', label: 'Approval rules', hint: 'Big discounts, payments or adjustments need a manager', keywords: ['manzoori', 'approval', 'limit', 'rule'], anyPerm: ADMIN, target: admin('controls', 'approval-rules') },
-      { id: 'approvals', label: 'Approvals inbox', hint: 'Documents waiting for a manager', keywords: ['manzoori', 'approve', 'pending'], anyPerm: ADMIN, target: admin('approvals') },
-      { id: 'audit', label: 'Audit log', hint: 'Who did what, and when', keywords: ['record', 'history', 'kisne', 'audit', 'log'], anyPerm: ADMIN, target: admin('audit') },
+      { id: 'approval-rules', label: 'Approval rules', hint: 'Big discounts, payments or adjustments need a manager', keywords: ['manzoori', 'approval', 'limit', 'rule'], anyPerm: ADMIN, perm: ['system:company_settings'], target: admin('controls', 'approval-rules') },
+      { id: 'approvals', label: 'Approvals inbox', hint: 'Documents waiting for a manager', keywords: ['manzoori', 'approve', 'pending'], anyPerm: ADMIN, perm: ['approvals:approve'], target: admin('approvals') },
+      { id: 'audit', label: 'Audit log', hint: 'Who did what, and when', keywords: ['record', 'history', 'kisne', 'audit', 'log'], anyPerm: ADMIN, perm: ['system:audit_view'], target: admin('audit') },
       { id: 'lock', label: 'Lock screen', hint: 'Your password is needed to open again', keywords: ['lock', 'band', 'tala'], target: act('lock') },
     ],
   },
   {
     label: 'Data',
     entries: [
-      { id: 'backups', label: 'Backup & restore', hint: 'Download a backup file, or restore one', keywords: ['backup', 'restore', 'mehfooz', 'download', 'data'], anyPerm: ADMIN, target: admin('system', 'backups') },
-      { id: 'auto-backups', label: 'Automatic backups', hint: 'Backups kept on this device every day', keywords: ['backup', 'auto', 'mehfooz'], anyPerm: ADMIN, target: admin('system', 'auto-backups') },
-      { id: 'data-import', label: 'Data import', hint: 'Bring customers, items and balances from Excel / CSV', keywords: ['excel', 'csv', 'import', 'purana data'], anyPerm: ADMIN, target: admin('import') },
-      { id: 'data-export', label: 'Data export (CSV)', hint: 'Download customers, items, bills… as CSV', keywords: ['excel', 'csv', 'export', 'download'], anyPerm: ADMIN, target: admin('system', 'exports') },
+      { id: 'backups', label: 'Backup & restore', hint: 'Download a backup file, or restore one', keywords: ['backup', 'restore', 'mehfooz', 'download', 'data'], anyPerm: ADMIN, perm: ['system:backup_restore'], target: admin('system', 'backups') },
+      { id: 'auto-backups', label: 'Automatic backups', hint: 'Backups kept on this device every day', keywords: ['backup', 'auto', 'mehfooz'], anyPerm: ADMIN, perm: ['system:backup_restore'], target: admin('system', 'auto-backups') },
+      { id: 'data-import', label: 'Data import', hint: 'Bring customers, items and balances from Excel / CSV', keywords: ['excel', 'csv', 'import', 'purana data'], anyPerm: ADMIN, perm: ['system:backup_restore'], target: admin('import') },
+      { id: 'data-export', label: 'Data export (CSV)', hint: 'Download customers, items, bills… as CSV', keywords: ['excel', 'csv', 'export', 'download'], anyPerm: ADMIN, perm: ['reports:export'], target: admin('system', 'exports') },
       { id: 'deleted', label: 'Deleted records', hint: 'Everything deleted, and bring it back', keywords: ['delete', 'bin', 'wapas', 'restore', 'undo'], anyPerm: ADMIN, target: admin('deleted') },
     ],
   },
@@ -451,8 +500,9 @@ export const NAV_GROUPS: NavGroup[] = GROUP_META.map((g) => ({
     label: s.label,
     entries: s.entries.map((e) => {
       const own = targetPerm(e.target);
-      const perm = Array.from(new Set([...(e.perm || []), ...(own || [])]));
-      return { ...e, keywords: e.keywords || [], group: g.id, section: s.label, ...(perm.length ? { perm } : {}) } as NavEntry;
+      const perm = Array.from(new Set([...(e.perm || []), ...(own.perm || [])]));
+      const anyPerm = e.anyPerm || own.anyPerm;
+      return { ...e, keywords: e.keywords || [], group: g.id, section: s.label, ...(perm.length ? { perm } : {}), ...(anyPerm ? { anyPerm } : {}) } as NavEntry;
     }),
   })),
 }));

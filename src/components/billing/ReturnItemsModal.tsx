@@ -1,11 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { RotateCcw, Printer } from 'lucide-react';
 import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
-import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice, rs } from './ui';
+import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice, rs, bidi } from './ui';
 import { planReturn, returnableQty, maxRefund, billNetTotal } from '../../utils/salesDocs';
 import { lineQty } from '../../utils/billing';
 import { todayISO } from '../../utils/stockFlow';
 import { hasPack, formatQtyWithPacks, formatPackQty, baseToPacks, packsToBase } from '../../utils/packUnits';
+import { BankSelect } from './BankSelect';
+import { needsBank } from '../../utils/banks';
 
 interface Props {
   invoiceId: string | null;
@@ -26,6 +28,7 @@ export const ReturnItemsModal: React.FC<Props> = ({ invoiceId, onClose, onDone }
   const [inPack, setInPack] = useState<Record<string, boolean>>({});
   const [settle, setSettle] = useState<'refund' | 'credit' | null>(null);
   const [method, setMethod] = useState('Cash');
+  const [bank, setBank] = useState('');
   const [reason, setReason] = useState('');
   const [date, setDate] = useState(todayISO());
   const [error, setError] = useState('');
@@ -54,7 +57,7 @@ export const ReturnItemsModal: React.FC<Props> = ({ invoiceId, onClose, onDone }
     if (!inv || busy.current) return;
     setError('');
     busy.current = true;
-    const r = returnBillItems({ invoiceId: inv.id, lines: picks, settle: mode, refundMethod: method, reason, date });
+    const r = returnBillItems({ invoiceId: inv.id, lines: picks, settle: mode, refundMethod: method, ...(needsBank(method) && bank ? { refundBankCode: bank } : {}), reason, date });
     if (!r.success) {
       busy.current = false;
       return setError(r.message);
@@ -70,7 +73,7 @@ export const ReturnItemsModal: React.FC<Props> = ({ invoiceId, onClose, onDone }
       isOpen={Boolean(inv)}
       onClose={onClose}
       title={inv ? `Return items — Bill ${inv.invoiceNumber}` : 'Return items'}
-      subtitle={inv ? `${inv.customerName} • enter how many came back` : undefined}
+      subtitle={inv ? `${bidi(inv.customerName)} • enter how many came back` : undefined}
       wide
       footer={inv && (
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -159,6 +162,7 @@ export const ReturnItemsModal: React.FC<Props> = ({ invoiceId, onClose, onDone }
                 <select id="ret-method" value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}>{BILL_PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}</select>
               </div>
             )}
+            {mode === 'refund' && needsBank(method) && <BankSelect id="ret-bank" className="sm:col-span-3" label="Paid from bank" value={bank} onChange={setBank} />}
             <div>
               <label className={labelCls} htmlFor="ret-date">Date</label>
               <input id="ret-date" type="date" value={date} min={inv.issueDate} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />

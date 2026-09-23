@@ -8,6 +8,8 @@ import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 import { booksLockedFor } from '../../utils/accounting';
 import { filterParties } from '../../utils/vouchers';
+import { BankSelect } from './BankSelect';
+import { needsBank } from '../../utils/banks';
 
 /** Recent interest runs / collection sheets with a one-tap Undo (asks once, then reverses the whole run). */
 const RecentRuns: React.FC<{ title: string; runs: PostedRun[]; noun: string; allowed: boolean; onUndo: (id: string) => { success: boolean; message: string }; testId: string }> = ({ title, runs, noun, allowed, onUndo, testId }) => {
@@ -55,6 +57,8 @@ interface Line {
   on: boolean;
   amount: string;
   method: string;
+  /** Bank account for bank methods ('' = the main bank). */
+  bank: string;
 }
 
 /**
@@ -87,7 +91,7 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
     if (!q || owing.length > 0) return [] as typeof customers;
     return filterParties<(typeof customers)[number]>(customers, q, '').filter((c) => c.totalDue <= 0.005).slice(0, 3);
   }, [customers, query, owing.length]);
-  const line = (id: string): Line => lines[id] || { on: false, amount: '', method: 'Cash' };
+  const line = (id: string): Line => lines[id] || { on: false, amount: '', method: 'Cash', bank: '' };
   const setLine = (id: string, patch: Partial<Line>) => { setError(''); setLines((prev) => ({ ...prev, [id]: { ...line(id), ...patch } })); };
   const ticked = (Object.entries(lines) as [string, Line][]).filter(([, l]) => l.on && (parseFloat(l.amount) || 0) > 0);
   const total = ticked.reduce((a, [, l]) => a + (parseFloat(l.amount) || 0), 0);
@@ -97,7 +101,7 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
     setError('');
     const closed = booksLockedFor(settings, date);
     if (closed) return setError(closed);
-    const r = receiveMany({ date, salesmanId: salesmanId || null, note, rows: ticked.map(([customerId, l]) => ({ customerId, amount: parseFloat(l.amount) || 0, method: l.method })) });
+    const r = receiveMany({ date, salesmanId: salesmanId || null, note, rows: ticked.map(([customerId, l]) => ({ customerId, amount: parseFloat(l.amount) || 0, method: l.method, ...(needsBank(l.method) && l.bank ? { bankCode: l.bank } : {}) })) });
     if (!r.success || !r.sheetNo) return setError(r.message);
     setDone({ sheetNo: r.sheetNo, message: r.message });
     if (print) setPrintRequest({ type: 'sales_extras', report: 'collection', sheetNo: r.sheetNo });
@@ -186,13 +190,14 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
                     <input type="checkbox" aria-label={`Received from ${c.name}`} checked={l.on} onChange={(e) => setLine(c.id, { on: e.target.checked, amount: e.target.checked && !l.amount ? String(Math.round(c.totalDue * 100) / 100) : l.amount })} className="w-5 h-5 accent-teal-700 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold truncate text-[#111827] dark:text-white">{c.code ? `${c.code} • ` : ''}{c.name}</div>
-                      <div className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">owes <span className={moneyCls}>{rs(c.totalDue)}</span>{c.areaId ? ` • ${areas.find((a) => a.id === c.areaId)?.name || ''}` : ''}</div>
+                      <div className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">owes <span className={moneyCls}>{rs(c.totalDue)}</span>{c.city ? ` • ${c.city}` : ''}{c.areaId ? ` • ${areas.find((a) => a.id === c.areaId)?.name || ''}` : ''}</div>
                     </div>
                   </div>
                   {l.on && (
                     <div className="grid grid-cols-2 gap-2 mt-2 pl-8">
                       <input aria-label={`Amount from ${c.name}`} type="number" inputMode="decimal" min="0" step="any" value={l.amount} onChange={(e) => setLine(c.id, { amount: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="Amount" />
                       <select aria-label={`Method for ${c.name}`} value={l.method} onChange={(e) => setLine(c.id, { method: e.target.value })} className={inputCls}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select>
+                      {needsBank(l.method) && <BankSelect id={`rm-bank-${c.id}`} className="col-span-2" label={`Into bank (${c.name})`} value={l.bank} onChange={(v) => setLine(c.id, { bank: v })} />}
                     </div>
                   )}
                 </li>

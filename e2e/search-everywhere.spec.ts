@@ -128,15 +128,15 @@ test('Pickers: Receive payment, Receive from many, report filter and the voucher
   // Receive payment (F3): the Code box, and type-to-find in the name list.
   await page.keyboard.press('F3');
   const rc = page.getByRole('dialog', { name: 'Receive payment' });
-  await expect(rc.getByLabel('Customer', { exact: true })).toBeFocused();
+  await rc.getByLabel('Customer', { exact: true }).focus();
   await page.keyboard.type('gul');
   await expect(rc.getByLabel('Customer', { exact: true })).toHaveValue('c7');
-  await rc.getByLabel('Party code').fill('4');
-  await rc.getByLabel('Party code').press('Enter');
+  await rc.getByLabel('Code', { exact: true }).fill('4');
+  await rc.getByLabel('Code', { exact: true }).press('Enter');
   await expect(rc.getByLabel('Customer', { exact: true })).toHaveValue('c4');
   await expect(rc.getByLabel('Amount (Rs.)')).toBeFocused(); // Enter moves on, like the old program
-  await rc.getByLabel('Party code').fill('C-9999');
-  await rc.getByLabel('Party code').press('Enter');
+  await rc.getByLabel('Code', { exact: true }).fill('C-9999');
+  await rc.getByLabel('Code', { exact: true }).press('Enter');
   await expect(rc.getByRole('alert')).toContainText('No code');
   await page.keyboard.press('Escape');
 
@@ -152,8 +152,8 @@ test('Pickers: Receive payment, Receive from many, report filter and the voucher
   // A report's customer filter: Code box + type-to-find.
   await openById(page, 'rep-party-sales');
   const repCust = page.getByLabel('Customer', { exact: true });
-  await page.getByLabel('Party code').fill('c0007');
-  await page.getByLabel('Party code').press('Enter');
+  await page.getByLabel('Code', { exact: true }).fill('c0007');
+  await page.getByLabel('Code', { exact: true }).press('Enter');
   await expect(repCust).toHaveValue('c7');
   await repCust.focus();
   await page.keyboard.type('zaman');

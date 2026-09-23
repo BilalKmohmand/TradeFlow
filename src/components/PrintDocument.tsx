@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import { X, Printer, Truck } from 'lucide-react';
 import { useTrading } from '../context/TradingContext';
-import { formatCurrency, formatKg, formatDate } from '../utils/formatters';
+import { formatCurrency, formatKg, formatDate, formatAmount } from '../utils/formatters';
 import { todayISO } from '../utils/stockFlow';
 import { useEscape } from '../hooks/useEscape';
 import { dispatchBilledTotal, EXPENSE_CATEGORIES, BillPrintSize } from '../types';
@@ -134,7 +134,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       const inv = invoices.find((i) => i.id === request.invoiceId);
       if (!inv) return null;
       const customer = customers.find((c) => c.id === inv.customerId);
-      const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+      const money = formatAmount;
       const hasLineDisc = inv.items.some((it) => (it.discountAmount || 0) > 0);
       const span = hasLineDisc ? 4 : 3;
       const lineDisc = inv.items.reduce((a, it) => a + (it.discountAmount || 0), 0);
@@ -305,7 +305,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       if (!inv) return null;
       const customer = customers.find((c) => c.id === inv.customerId);
       const back = returnedQtyByLine(returns, inv.id);
-      const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+      const money = formatAmount;
       const rows = inv.items.map((it) => ({ it, qty: Math.max(0, Math.round((lineQty(it) - (back.get(it.id) || 0)) * 100) / 100) })).filter((r) => r.qty > 0);
       return {
         title: 'DELIVERY CHALLAN',
@@ -671,7 +671,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       if (!q) return null;
       const cust = customers.find((c) => c.id === q.customerId);
       if (q.items?.length) {
-        const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+        const money = formatAmount;
         const lines = quotationLines(q);
         return {
           title: 'QUOTATION',
@@ -740,7 +740,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       if (r.kind === 'sales' && r.items?.length) {
         const inv = invoices.find((i) => i.id === r.invoiceId);
         const cust = customers.find((c) => c.id === r.customerId);
-        const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+        const money = formatAmount;
         const tax = r.taxAmount || 0;
         const refund = r.refundAmount || 0;
         return {
@@ -865,9 +865,14 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       const entity = isCustomer ? customers.find((c) => c.id === request.customerId) : suppliers.find((s) => s.id === request.supplierId);
       if (!entity) return null;
       const entityId = entity.id;
+      // The ledger is kept newest first, so on the same date the row further down the list came first
+      // (goods received before the payment made on them): the running balance never dips below zero by mistake.
       const rows = ledger
-        .filter((l) => l.entityType === (isCustomer ? 'customer' : 'supplier') && l.entityId === entityId)
-        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+        .map((l, i) => ({ l, i }))
+        .filter(({ l }) => l.entityType === (isCustomer ? 'customer' : 'supplier') && l.entityId === entityId)
+        .sort((a, b) => (a.l.date < b.l.date ? -1 : a.l.date > b.l.date ? 1 : b.i - a.i))
+        .map(({ l }) => l);
+      const billingMode = settings.appMode === 'billing';
       const opening = rows.filter((l) => l.date < request.from).reduce((a, l) => a + l.debit - l.credit, 0);
       const inRange = rows.filter((l) => l.date >= request.from && l.date <= request.to);
       let running = opening;
@@ -900,8 +905,8 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
             <table className="w-full text-xs mt-6 border-collapse">
               <thead>
                 <tr className="border-b-2 border-gray-900 text-[10px] uppercase tracking-widest text-gray-600">
-                  <th className="text-left py-2">Date</th>
-                  <th className="text-left py-2">Reference</th>
+                  <th className="text-left py-2 pr-3">Date</th>
+                  <th className="text-left py-2 pr-3">Reference</th>
                   <th className="text-left py-2">Description</th>
                   <th className="text-right py-2">Debit</th>
                   <th className="text-right py-2">Credit</th>
@@ -918,9 +923,9 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 ) : (
                   lines.map((l) => (
                     <tr key={l.id} className="border-b border-gray-100">
-                      <td className="py-2 font-mono whitespace-nowrap">{formatDate(l.date)}</td>
-                      <td className="py-2 font-mono">{l.referenceId}</td>
-                      <td className="py-2">{l.description}{l.kg ? ` (${formatKg(l.kg)})` : ''}</td>
+                      <td className="py-2 pr-3 font-mono whitespace-nowrap">{formatDate(l.date)}</td>
+                      <td className="py-2 pr-3 font-mono whitespace-nowrap">{l.referenceId}</td>
+                      <td className="py-2 pr-2">{l.description}{l.kg && !billingMode ? ` (${formatKg(l.kg)})` : ''}</td>
                       <td className="py-2 text-right font-mono">{l.debit > 0 ? formatCurrency(l.debit) : ''}</td>
                       <td className="py-2 text-right font-mono">{l.credit > 0 ? formatCurrency(l.credit) : ''}</td>
                       <td className="py-2 text-right font-mono font-bold">{formatCurrency(l.running)}</td>
@@ -1005,7 +1010,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               <div className="mt-6">{content.body}</div>
               <div className="mt-10 pt-3 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-500">
                 <span>Generated by {COMPANY.name} on {formatDate(todayISO())}{currentUser ? ` by ${currentUser.name}` : ''}</span>
-                <span>{request.type === 'bill' || request.type === 'bill_challan' || (request.type === 'note' && returns.find((x) => x.id === request.returnId)?.items?.length) || (request.type === 'quotation' && quotations.find((x) => x.id === request.quotationId)?.items?.length) || request.type === 'daily_sheet' || request.type === 'bank_reconciliation' || request.type === 'cheque_register' || isAccountingPrint(request) || isBillingPrint(request) || isSalesExtrasPrint(request) || isPurchasingPrint(request) || isFinancePrint(request) ? 'All amounts in PKR (Rs.)' : 'All quantities in kg • amounts in PKR'}</span>
+                <span>{request.type === 'bill' || request.type === 'bill_challan' || (request.type === 'note' && returns.find((x) => x.id === request.returnId)?.items?.length) || (request.type === 'quotation' && quotations.find((x) => x.id === request.quotationId)?.items?.length) || request.type === 'daily_sheet' || request.type === 'bank_reconciliation' || request.type === 'cheque_register' || isAccountingPrint(request) || isBillingPrint(request) || isSalesExtrasPrint(request) || isPurchasingPrint(request) || isFinancePrint(request) || (settings.appMode === 'billing' && (request.type === 'statement' || request.type === 'supplier_statement')) ? 'All amounts in PKR (Rs.)' : 'All quantities in kg • amounts in PKR'}</span>
               </div>
             </>
           ) : (

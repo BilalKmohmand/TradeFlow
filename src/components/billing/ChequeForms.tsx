@@ -6,6 +6,7 @@ import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, Notice,
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 import { billsOnly } from '../../utils/billing';
+import { PartyPick, customerParties, supplierParties } from './PartyPick';
 
 /** Cheque no. / bank / date fields, shared by the cheque form and the "Receive payment" forms. */
 export interface ChequeFields {
@@ -15,8 +16,9 @@ export interface ChequeFields {
 }
 export const emptyChequeFields = (): ChequeFields => ({ chequeNumber: '', bankName: '', chequeDate: todayISO() });
 
-export const ChequeFieldsInput: React.FC<{ value: ChequeFields; onChange: (v: ChequeFields) => void; idPrefix: string; direction?: 'received' | 'issued' }> = ({ value, onChange, idPrefix, direction = 'received' }) => (
-  <div className="col-span-full grid grid-cols-2 sm:grid-cols-3 gap-3 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 p-3">
+/** `narrow`: two columns at every size (the bill's payment box is only half the dialog wide, so three squeeze the date). */
+export const ChequeFieldsInput: React.FC<{ value: ChequeFields; onChange: (v: ChequeFields) => void; idPrefix: string; direction?: 'received' | 'issued'; narrow?: boolean }> = ({ value, onChange, idPrefix, direction = 'received', narrow }) => (
+  <div className={`col-span-full grid grid-cols-2 ${narrow ? '' : 'sm:grid-cols-3'} gap-3 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 p-3`}>
     <div>
       <label className={labelCls} htmlFor={`${idPrefix}-no`}>Cheque no.</label>
       <input id={`${idPrefix}-no`} value={value.chequeNumber} onChange={(e) => onChange({ ...value, chequeNumber: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="e.g. 10045521" inputMode="numeric" />
@@ -25,7 +27,7 @@ export const ChequeFieldsInput: React.FC<{ value: ChequeFields; onChange: (v: Ch
       <label className={labelCls} htmlFor={`${idPrefix}-bank`}>Bank</label>
       <input id={`${idPrefix}-bank`} value={value.bankName} onChange={(e) => onChange({ ...value, bankName: e.target.value })} className={inputCls} placeholder="e.g. HBL" list="cheque-banks" />
     </div>
-    <div className="col-span-2 sm:col-span-1">
+    <div className={narrow ? 'col-span-2' : 'col-span-2 sm:col-span-1'}>
       <label className={labelCls} htmlFor={`${idPrefix}-date`}>Date on cheque</label>
       <input id={`${idPrefix}-date`} type="date" value={value.chequeDate} onChange={(e) => onChange({ ...value, chequeDate: e.target.value })} className={inputCls} />
     </div>
@@ -67,15 +69,16 @@ export const ChequeFormModal: React.FC<{ isOpen: boolean; onClose: () => void; d
         {error && <Notice kind="error">{error}</Notice>}
         {sent && <Notice kind="ok">{sent}</Notice>}
         <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <label className={labelCls} htmlFor="chq-party">{received ? 'Customer' : 'Supplier'}</label>
-            <select id="chq-party" value={party} onChange={(e) => { setParty(e.target.value); setBillId(''); }} className={inputCls}>
-              <option value="">{received ? 'Select customer…' : 'Select supplier…'}</option>
-              {received
-                ? [...customers].sort((a, b) => b.totalDue - a.totalDue).map((x) => <option key={x.id} value={x.id}>{x.name}{x.totalDue > 0 ? ` (owes Rs. ${x.totalDue.toLocaleString()})` : ''}</option>)
-                : [...suppliers].sort((a, b) => b.totalOwed - a.totalOwed).map((x) => <option key={x.id} value={x.id}>{x.company || x.name}{x.totalOwed > 0 ? ` (you owe Rs. ${x.totalOwed.toLocaleString()})` : ''}</option>)}
-            </select>
-          </div>
+          <PartyPick
+            id="chq-party"
+            className="col-span-2"
+            label={received ? 'Customer' : 'Supplier'}
+            parties={received ? customerParties(customers) : supplierParties(suppliers)}
+            value={party}
+            onPick={(v) => { setParty(v); setBillId(''); setError(''); }}
+            placeholder={received ? 'Select customer…' : 'Select supplier…'}
+            balanceWord={received ? 'owes' : 'you owe'}
+          />
           <div>
             <label className={labelCls} htmlFor="chq-amount">Amount (Rs.)</label>
             <input id="chq-amount" type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />

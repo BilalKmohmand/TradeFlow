@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useTrading } from '../../context/TradingContext';
-import { formatDate } from '../../utils/formatters';
+import { formatDate, moneyText } from '../../utils/formatters';
 import { todayISO } from '../../utils/stockFlow';
 import { sumAging } from '../../utils/finance';
 import { billingPayablesAging, billingReceivablesAging, itemHistory, profitFromBills, purchaseRegister } from '../../utils/stockReports';
@@ -16,7 +16,7 @@ export type BillingPrintRequest =
 
 export const isBillingPrint = (r: { type: string } | null | undefined): r is BillingPrintRequest => !!r && (r.type === 'billing_report' || r.type === 'debit_note');
 
-const money = (n: number) => new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(n);
+const money = (n: number) => moneyText(n);
 const num = (n: number) => n.toLocaleString('en-PK', { maximumFractionDigits: 2 });
 const th = 'py-2 px-2 text-[10px] uppercase tracking-widest text-gray-600';
 const tdn = 'py-1.5 px-2 text-right font-mono whitespace-nowrap';

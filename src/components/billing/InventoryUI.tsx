@@ -128,6 +128,24 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
   const supplier = suppliers.find((x) => x.id === supplierId);
 
   const setLine = (key: number, patch: Partial<ReceiveLine>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  /**
+   * Switch a line between the base unit and packs (cartons). What is typed is converted, so 8 cans at
+   * Rs. 2,000 become 2 cartons at Rs. 8,000 — never 8 cartons (32 cans) by surprise.
+   */
+  const togglePack = (key: number, toPack: boolean) =>
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.key !== key || Boolean(l.inPack) === toPack) return l;
+        const p = products.find((x) => x.id === l.pid);
+        if (!p || !hasPack(p)) return l;
+        const size = p.packSize || 1;
+        const q = parseFloat(l.qty);
+        const c = parseFloat(l.cost);
+        const r4 = (n: number) => String(Math.round(n * 10000) / 10000);
+        return { ...l, inPack: toPack, qty: Number.isFinite(q) ? r4(toPack ? q / size : q * size) : l.qty, cost: Number.isFinite(c) ? r4(toPack ? c * size : c / size) : l.cost };
+      })
+    );
+  const sortedSuppliers = useMemo(() => [...suppliers].sort((a, b) => (a.company || a.name).localeCompare(b.company || b.name)), [suppliers]);
   const used = lines.filter((l) => l.pid || l.qty.trim());
   const total = used.reduce((a, l) => a + (parseFloat(l.qty) || 0) * (parseFloat(l.cost) || 0), 0);
   /** Packs typed on a line → base units stored (qty × pack size, cost ÷ pack size). */
@@ -146,12 +164,13 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
     for (const [i, l] of used.entries()) {
       const p = products.find((x) => x.id === l.pid);
       const where = used.length > 1 ? `Line ${i + 1}: ` : '';
-      if (!p) return setError(`${where}pick an item.`);
-      if (!(parseFloat(l.qty) > 0)) return setError(`${where}enter the quantity of ${p.name}.`);
+      const say = (t: string) => setError(where ? `${where}${t}` : t.charAt(0).toUpperCase() + t.slice(1));
+      if (!p) return say('pick an item.');
+      if (!(parseFloat(l.qty) > 0)) return say(`enter the quantity of ${p.name}.`);
       if (supplierId && !(parseFloat(l.cost) > 0)) {
-        return setError(`${where}enter the cost per ${p.unit || 'unit'} of ${p.name} so it is added to what you owe ${supplier?.company || supplier?.name || 'the supplier'} — or leave the supplier empty.`);
+        return say(`enter the cost per ${p.unit || 'unit'} of ${p.name} so it is added to what you owe ${supplier?.company || supplier?.name || 'the supplier'} — or leave the supplier empty.`);
       }
-      if (p.trackBatches && l.expiry && l.expiry < date) return setError(`${where}the expiry date of ${p.name} is before the date received.`);
+      if (p.trackBatches && l.expiry && l.expiry < date) return say(`the expiry date of ${p.name} is before the date received.`);
     }
     busy.current = true;
     setTimeout(() => { busy.current = false; }, 800);
@@ -188,7 +207,7 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
             <label className={labelCls} htmlFor="rs-supplier">Supplier (optional)</label>
             <select id="rs-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className={inputCls} disabled={Boolean(order)}>
               <option value="">None</option>
-              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.code ? `${s.code} • ` : ''}{s.name}{s.company && s.company !== s.name ? ` • ${s.company}` : ''}</option>)}
+              {sortedSuppliers.map((s) => <option key={s.id} value={s.id}>{s.code ? `${s.code} • ` : ''}{s.company || s.name}</option>)}
             </select>
           </div>
           <div className="col-span-2 sm:col-span-1">
@@ -254,7 +273,7 @@ export const ReceiveStockModal: React.FC<{ isOpen: boolean; onClose: () => void;
                   <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#6B7280] dark:text-[#94A3B8]">
                     <span className="inline-flex rounded-xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden font-bold" role="group" aria-label={`Unit for item ${i + 1}`}>
                       {[false, true].map((packMode) => (
-                        <button key={String(packMode)} type="button" aria-pressed={Boolean(l.inPack) === packMode} onClick={() => setLine(l.key, { inPack: packMode })} className={`px-2 py-0.5 ${Boolean(l.inPack) === packMode ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : ''}`}>
+                        <button key={String(packMode)} type="button" aria-pressed={Boolean(l.inPack) === packMode} onClick={() => togglePack(l.key, packMode)} className={`px-2 py-0.5 ${Boolean(l.inPack) === packMode ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : ''}`}>
                           {packMode ? `${p.packName} (${p.packSize})` : p.unit || 'pcs'}
                         </button>
                       ))}

@@ -134,10 +134,12 @@ export const useClassicStore = (d: Deps) => {
     for (const [i, l] of lines.entries()) {
       const p = d.products.find((x) => x.id === l.productId);
       const where = lines.length > 1 ? `Line ${i + 1}: ` : '';
-      if (!p) return fail(`${where}item not found.`);
-      if (!(Number(l.qty) > 0)) return fail(`${where}enter the quantity of ${p.name}.`);
-      if (!(Number(l.rate) > 0)) return fail(`${where}enter the rate of ${p.name}.`);
-      if (l.expiryDate && l.expiryDate < date) return fail(`${where}the expiry date of ${p.name} is before the invoice date.`);
+      // "Line 2: enter the rate…", or on its own "Enter the rate…" (a sentence starts with a capital).
+      const say = (t: string) => fail(where ? `${where}${t}` : t.charAt(0).toUpperCase() + t.slice(1));
+      if (!p) return say('item not found.');
+      if (!(Number(l.qty) > 0)) return say(`enter the quantity of ${p.name}.`);
+      if (!(Number(l.rate) > 0)) return say(`enter the rate of ${p.name}.`);
+      if (l.expiryDate && l.expiryDate < date) return say(`the expiry date of ${p.name} is before the invoice date.`);
     }
     const memoNo = (input.memoNo || '').trim();
     if (memoNo && purchaseInvoices.some((p) => p.supplierId === supplier.id && (p.memoNo || '').trim().toLowerCase() === memoNo.toLowerCase())) {

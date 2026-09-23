@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Trash2, Save, Printer, Search, Keyboard } from 'lucide-react';
 import { useTrading } from '../../../context/TradingContext';
 import { PURCHASE_PAY_METHODS } from '../../../context/classicActions';
@@ -77,8 +77,15 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
         if (l.key !== key) return l;
         const p = products.find((x) => x.id === pid);
         const inPack = Boolean(p && hasPack(p) && l.inPack);
-        const base = p?.costPricePerKg && p.costPricePerKg > 0 ? p.costPricePerKg : 0;
-        return { ...l, pid, inPack, rate: l.rate || !base ? l.rate : String(round4(inPack && p ? base * p.packSize! : base)) };
+        const suggest = (x: typeof p, packed: boolean) => {
+          const base = x?.costPricePerKg && x.costPricePerKg > 0 ? x.costPricePerKg : 0;
+          return base ? String(round4(packed && x && hasPack(x) ? base * x.packSize! : base)) : '';
+        };
+        // Another item picked on the line: its cost price replaces the one filled in for the old item
+        // (a pouch's Rs. 450 must not stay on a 16 L tin). A rate the user typed is kept.
+        const old = products.find((x) => x.id === l.pid);
+        const autoRate = !l.rate || (old ? l.rate === suggest(old, l.inPack) : false);
+        return { ...l, pid, inPack, rate: autoRate ? suggest(p, inPack) || l.rate : l.rate };
       })
     );
   const togglePack = (key: number, toPack: boolean) =>
@@ -139,11 +146,66 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
     onOpen(hit.id);
   };
 
-  /** Ctrl+Enter or F9 saves, as on the sale invoice. */
+  // ---- Keyboard: Enter moves to the next field, like the old desktop program and the sale invoice ----
+  const box = useRef<HTMLDivElement>(null);
+  /** A field to focus once it is on screen (a new line needs one render first). */
+  const pendingFocus = useRef<string | null>(null);
+  const focusId = (fid: string) => {
+    const el = box.current?.querySelector<HTMLElement>(`#${fid}`);
+    if (!el) return false;
+    el.focus();
+    if (el instanceof HTMLInputElement) el.select();
+    return true;
+  };
+  useEffect(() => {
+    if (pendingFocus.current && focusId(pendingFocus.current)) pendingFocus.current = null;
+  });
+  const lineId = (i: number, f: string) => (i === 0 ? `pi-${f}` : `pi-${f}-${i + 1}`);
+  const addLine = () => {
+    pendingFocus.current = lineId(lines.length, 'code');
+    setLines((ls) => [...ls, blank()]);
+  };
+  /** After the item lines: the discount. */
+  const toTotals = () => focusId('pi-disc-pct');
+  const lineCodeEnter = (i: number, r: 'found' | 'empty' | 'miss') => {
+    if (r === 'found') return void focusId(lineId(i, 'qty'));
+    if (r === 'empty') {
+      // An empty code: pick by name instead, or (an empty line after items) finish the list.
+      if (!lines[i]?.pid && lines.some((l) => l.pid)) return void toTotals();
+      return void focusId(lineId(i, 'item'));
+    }
+  };
+
+  /** Enter → next field; Ctrl+Enter / F9 → save; "+" in Qty / Rate or Alt+N → new line. */
   const onKeys = (e: React.KeyboardEvent) => {
     if ((e.key === 'Enter' && (e.ctrlKey || e.metaKey)) || e.key === 'F9') {
       e.preventDefault();
       submit(false);
+      return;
+    }
+    const t = e.target as HTMLElement;
+    const tag = t.tagName;
+    const isNumber = tag === 'INPUT' && (t as HTMLInputElement).type === 'number';
+    if ((e.altKey && (e.key === 'n' || e.key === 'N' || e.code === 'KeyN')) || (e.key === '+' && isNumber && t.closest('[data-testid="pi-line"]'))) {
+      e.preventDefault();
+      addLine();
+      return;
+    }
+    if (e.key !== 'Enter' || e.shiftKey || e.altKey || tag === 'TEXTAREA' || tag === 'BUTTON' || !box.current) return;
+    const nav = t.getAttribute('data-nav');
+    if (!nav) return;
+    const navs = (Array.from(box.current.querySelectorAll('[data-nav]')) as HTMLElement[]).filter((n) => n.offsetParent !== null || n === t);
+    const at = navs.indexOf(t);
+    if (at < 0) return;
+    e.preventDefault();
+    const row = Number(t.closest('[data-row]')?.getAttribute('data-row') ?? -1);
+    if (nav === 'item' && !(t as HTMLSelectElement).value && lines.some((l) => l.pid)) return void toTotals();
+    if (nav === 'rate' && row === lines.length - 1 && lines[row]?.pid) return addLine();
+    if (nav === 'method') return;
+    const next = navs[at + 1];
+    if (next) {
+      next.focus();
+      if (next instanceof HTMLInputElement) next.select();
     }
   };
 
@@ -152,7 +214,7 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
       <div className="flex-1 text-sm">
         <span className="text-[#6B7280] dark:text-[#94A3B8]">Bill total </span>
         <span className="tabular-nums font-extrabold text-lg text-[#111827] dark:text-white" data-testid="pi-total">{rs(totals.total)}</span>
-        <span className="hidden lg:inline-flex items-center gap-1 ml-3 text-[10px] text-[#8E9299]"><Keyboard className="w-3 h-3" /> F9 save</span>
+        <span className="hidden lg:inline-flex items-center gap-1 ml-3 text-[10px] text-[#8E9299]" title="Enter: next field • Ctrl+Enter or F9: save • + or Alt+N: new line • type a code and Enter"><Keyboard className="w-3 h-3" /> Enter next • F9 save • + line</span>
       </div>
       <div className="flex flex-wrap gap-2">
         <label className="sr-only" htmlFor="pi-paper">Print on</label>
@@ -167,8 +229,8 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Purchase Invoice" subtitle="Enter the supplier’s bill: the goods go into stock and the supplier is owed the bill total." wide footer={footer}>
-      <div className="space-y-5" onKeyDown={onKeys} data-testid="purchase-invoice-form">
+    <Modal isOpen={isOpen} onClose={onClose} title="Purchase Invoice" subtitle="Enter the supplier’s bill: the goods go into stock and the supplier is owed the bill total." xwide footer={footer}>
+      <div className="space-y-5" onKeyDown={onKeys} data-testid="purchase-invoice-form" ref={box}>
         {error && <Notice kind="error">{error}</Notice>}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div>
@@ -177,14 +239,14 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
           </div>
           <div>
             <label className={labelCls} htmlFor="pi-date">Date (your date)</label>
-            <input id="pi-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+            <input id="pi-date" data-skip-autofocus type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
           </div>
           <div className="col-span-2">
             <label className={labelCls} htmlFor="pi-supplier">Supplier</label>
             <div className="flex gap-2">
-              <CodeBox id="pi-supplier-code" label="Supplier code" items={sortedSuppliers} value={supplierId} onPick={setSupplierId} className="w-28 shrink-0" />
+              <CodeBox id="pi-supplier-code" label="Supplier code" items={sortedSuppliers} value={supplierId} onPick={setSupplierId} className="w-28 shrink-0" nav="supplier-code" onEnterResult={(r) => { if (r === 'found') focusId('pi-memo'); else if (r === 'empty') focusId('pi-supplier'); }} />
               <div className="flex-1 min-w-0">
-                <QuickSelect id="pi-supplier" value={supplierId} options={supplierOptions} onPick={setSupplierId} className={inputCls} title="Type a name or code to find the supplier">
+                <QuickSelect id="pi-supplier" data-nav="supplier" value={supplierId} options={supplierOptions} onPick={setSupplierId} className={inputCls} title="Type a name or code to find the supplier">
                   <option value="">Select supplier…</option>
                   {sortedSuppliers.map((s) => <option key={s.id} value={s.id}>{s.code ? `${s.code} • ` : ''}{s.company || s.name}</option>)}
                 </QuickSelect>
@@ -193,13 +255,13 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
             {supplier && <p className="mt-1 text-[11px] text-[#6B7280] dark:text-[#94A3B8]" data-testid="pi-supplier-balance">You owe them <strong className="tabular-nums">{rs(supplier.totalOwed)}</strong> now • <strong className="tabular-nums">{rs(supplier.totalOwed + balance)}</strong> after this bill</p>}
           </div>
           <div>
-            <label className={labelCls} htmlFor="pi-memo">Memo No (supplier bill no.)</label>
-            <input id="pi-memo" value={memo} onChange={(e) => setMemo(e.target.value)} className={inputCls} placeholder="e.g. 4471" />
+            <label className={labelCls} htmlFor="pi-memo" title="The supplier’s own bill number">Memo No (bill no.)</label>
+            <input id="pi-memo" data-nav="memo" aria-label="Memo No (supplier bill no.)" value={memo} onChange={(e) => setMemo(e.target.value)} className={inputCls} placeholder="e.g. 4471" />
           </div>
           {godowns.length > 1 && (
             <div>
               <label className={labelCls} htmlFor="pi-godown">Store name</label>
-              <select id="pi-godown" value={godownId} onChange={(e) => setGodownId(e.target.value)} className={inputCls}>
+              <select id="pi-godown" data-nav="godown" value={godownId} onChange={(e) => setGodownId(e.target.value)} className={inputCls}>
                 {godowns.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
             </div>
@@ -214,36 +276,42 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
         </div>
 
         <div>
-          <div className="hidden md:grid md:grid-cols-[7rem_minmax(11rem,1fr)_8.5rem_7rem_8rem_8.5rem] gap-2 px-1 mb-1 text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">
+          <div className="hidden lg:grid lg:grid-cols-[6.5rem_minmax(10rem,1fr)_9rem_7.5rem_8.5rem_9.5rem_2.25rem] gap-2 px-1 mb-1 text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">
             <div>Code</div>
             <div>Product name</div>
             <div>Unit / packing</div>
             <div>Qty</div>
             <div>Rate</div>
             <div className="text-right">Amount</div>
+            <div />
           </div>
           <div className="space-y-2">
             {calc.map((l, i) => {
               const p = l.p;
-              const id = (f: string) => (i === 0 ? `pi-${f}` : `pi-${f}-${i + 1}`);
+              const id = (f: string) => lineId(i, f);
               const unitWord = p ? (l.pack > 1 ? p.packName! : p.unit || 'pcs') : '';
+              const remove = (cls: string) => (
+                <button type="button" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : ls))} disabled={lines.length === 1} aria-label={`Remove line ${i + 1}`} className={`${cls} shrink-0 p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 disabled:opacity-30`}><Trash2 className="w-4 h-4" /></button>
+              );
               return (
-                <div key={l.key} data-testid="pi-line" className="grid grid-cols-12 md:grid-cols-[7rem_minmax(11rem,1fr)_8.5rem_7rem_8rem_8.5rem] gap-2 items-center rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2 md:p-1 md:border-0">
-                  <CodeBox id={id('code')} label={`Product code ${i + 1}`} items={sortedProducts} value={l.pid} onPick={(v) => pick(l.key, v)} className="col-span-4 md:col-auto" />
-                  <div className="col-span-8 md:col-auto flex gap-1">
+                // Phone / tablet: a card (code + name, unit, Qty and Rate side by side, then the amount).
+                // Wide screen (lg): one row per line under the column headings.
+                <div key={l.key} data-testid="pi-line" data-row={i} className="grid grid-cols-12 lg:grid-cols-[6.5rem_minmax(10rem,1fr)_9rem_7.5rem_8.5rem_9.5rem_2.25rem] gap-2 items-center rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2 lg:p-1 lg:border-0">
+                  <CodeBox id={id('code')} label={`Product code ${i + 1}`} items={sortedProducts} value={l.pid} onPick={(v) => pick(l.key, v)} className="col-span-4 sm:col-span-3 lg:col-auto" nav="code" onEnterResult={(r) => lineCodeEnter(i, r)} />
+                  <div className="col-span-8 sm:col-span-9 lg:col-auto flex gap-1 min-w-0">
                     <div className="flex-1 min-w-0">
-                      <QuickSelect id={id('item')} aria-label={`Product ${i + 1}`} value={l.pid} options={productOptions} onPick={(v) => pick(l.key, v)} className={inputCls} title="Type the product name or code">
+                      <QuickSelect id={id('item')} data-nav="item" aria-label={`Product ${i + 1}`} value={l.pid} options={productOptions} onPick={(v) => pick(l.key, v)} className={inputCls} title={p ? p.name : 'Type the product name or code'}>
                         <option value="">Product…</option>
                         {sortedProducts.map((x) => <option key={x.id} value={x.id}>{x.code ? `${x.code} • ` : ''}{x.name}</option>)}
                       </QuickSelect>
                     </div>
-                    <button type="button" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : ls))} disabled={lines.length === 1} aria-label={`Remove line ${i + 1}`} className="md:hidden shrink-0 p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 disabled:opacity-30"><Trash2 className="w-4 h-4" /></button>
+                    {remove('lg:hidden')}
                   </div>
-                  <div className="col-span-12 md:col-auto text-[11px] text-[#6B7280] dark:text-[#94A3B8]">
+                  <div className="col-span-12 lg:col-auto text-[11px] text-[#6B7280] dark:text-[#94A3B8] min-w-0">
                     {p && hasPack(p) ? (
-                      <span className="inline-flex rounded-xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden font-bold" role="group" aria-label={`Unit for line ${i + 1}`}>
+                      <span className="inline-flex max-w-full rounded-xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden font-bold" role="group" aria-label={`Unit for line ${i + 1}`}>
                         {[false, true].map((packMode) => (
-                          <button key={String(packMode)} type="button" aria-pressed={l.inPack === packMode} onClick={() => togglePack(l.key, packMode)} className={`px-2 py-1 ${l.inPack === packMode ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : ''}`}>
+                          <button key={String(packMode)} type="button" aria-pressed={l.inPack === packMode} onClick={() => togglePack(l.key, packMode)} className={`px-2 py-1 whitespace-nowrap ${l.inPack === packMode ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : ''}`}>
                             {packMode ? `${p.packName} (${p.packSize})` : p.unit || 'pcs'}
                           </button>
                         ))}
@@ -252,18 +320,21 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
                       <span className="font-semibold">{p ? p.unit || 'pcs' : ''}</span>
                     )}
                   </div>
-                  <div className="col-span-4 md:col-auto">
-                    <input id={id('qty')} aria-label={`Qty ${i + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="Qty" />
+                  <div className="col-span-6 sm:col-span-4 lg:col-auto min-w-0">
+                    <label htmlFor={id('qty')} className="lg:hidden block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1">Qty{p ? ` (${unitWord})` : ''}</label>
+                    <input id={id('qty')} data-nav="qty" aria-label={`Qty ${i + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} className={`${inputCls} tabular-nums !px-2.5`} placeholder="Qty" />
                   </div>
-                  <div className="col-span-4 md:col-auto">
-                    <input id={id('rate')} aria-label={`Rate ${i + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.rate} onChange={(e) => setLine(l.key, { rate: e.target.value })} className={`${inputCls} tabular-nums`} placeholder={p ? `per ${unitWord}` : 'Rate'} />
+                  <div className="col-span-6 sm:col-span-4 lg:col-auto min-w-0">
+                    <label htmlFor={id('rate')} className="lg:hidden block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1">Rate{p ? ` per ${unitWord}` : ''}</label>
+                    <input id={id('rate')} data-nav="rate" aria-label={`Rate ${i + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.rate} onChange={(e) => setLine(l.key, { rate: e.target.value })} className={`${inputCls} tabular-nums !px-2.5`} placeholder={p ? `per ${unitWord}` : 'Rate'} />
                   </div>
-                  <div className="col-span-4 md:col-auto flex items-center justify-end gap-1">
-                    <span className="tabular-nums font-bold text-sm text-[#111827] dark:text-white" data-testid={`pi-amount-${i + 1}`}>{rs(l.amount)}</span>
-                    <button type="button" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : ls))} disabled={lines.length === 1} aria-label={`Remove line ${i + 1}`} className="hidden md:inline-flex p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 disabled:opacity-30"><Trash2 className="w-4 h-4" /></button>
+                  <div className="col-span-12 sm:col-span-4 lg:col-auto min-w-0 flex items-baseline justify-between sm:justify-end gap-2 lg:block lg:text-right">
+                    <span className="lg:hidden text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Amount</span>
+                    <span className="tabular-nums font-bold text-sm text-[#111827] dark:text-white break-all" data-testid={`pi-amount-${i + 1}`}>{rs(l.amount)}</span>
                   </div>
+                  <div className="hidden lg:flex justify-center">{remove('')}</div>
                   {p && (
-                    <div className="col-span-12 md:col-span-full flex flex-wrap gap-x-3 text-[11px] text-[#6B7280] dark:text-[#94A3B8] px-1">
+                    <div className="col-span-12 lg:col-span-full flex flex-wrap gap-x-3 text-[11px] text-[#6B7280] dark:text-[#94A3B8] px-1">
                       {l.pack > 1 && l.typedQty > 0 && <span>= {formatPackQty(l.qty, p)} at {rs(Math.round(l.rate * 100) / 100)}/{p.unit || 'pcs'}</span>}
                       <span>Stock in hand <strong className="tabular-nums">{formatPackQty(p.stockKg, p, 'short')}</strong></span>
                       {(() => {
@@ -273,16 +344,16 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
                     </div>
                   )}
                   {p?.trackBatches && (
-                    <div className="col-span-12 md:col-span-full grid grid-cols-2 gap-2">
-                      <input aria-label={`Batch no. ${i + 1}`} value={l.batchNo} onChange={(e) => setLine(l.key, { batchNo: e.target.value })} className={inputCls} placeholder="Batch no. (auto if empty)" />
-                      <input aria-label={`Expiry ${i + 1}`} type="date" value={l.expiry} onChange={(e) => setLine(l.key, { expiry: e.target.value })} className={inputCls} />
+                    <div className="col-span-12 lg:col-span-full grid grid-cols-2 gap-2 min-w-0">
+                      <input aria-label={`Batch no. ${i + 1}`} value={l.batchNo} onChange={(e) => setLine(l.key, { batchNo: e.target.value })} className={`${inputCls} min-w-0`} placeholder="Batch no. (auto if empty)" />
+                      <input aria-label={`Expiry ${i + 1}`} type="date" value={l.expiry} onChange={(e) => setLine(l.key, { expiry: e.target.value })} className={`${inputCls} min-w-0`} />
                     </div>
                   )}
                 </div>
               );
             })}
           </div>
-          <button type="button" onClick={() => setLines((ls) => [...ls, blank()])} className="mt-2 inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-300 hover:underline"><Plus className="w-4 h-4" /> Add another item</button>
+          <button type="button" onClick={addLine} title="Alt+N, or + in Qty / Rate" className="mt-2 inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-300 hover:underline"><Plus className="w-4 h-4" /> Add another item</button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -290,20 +361,20 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className={labelCls} htmlFor="pi-disc-pct">Discount %</label>
-                <input id="pi-disc-pct" type="number" inputMode="decimal" min="0" max="100" step="any" value={discPct} onChange={(e) => { setDiscPct(e.target.value); if (e.target.value) setDiscAmt(''); }} className={`${inputCls} tabular-nums`} placeholder="0" />
+                <input id="pi-disc-pct" data-nav="disc-pct" type="number" inputMode="decimal" min="0" max="100" step="any" value={discPct} onChange={(e) => { setDiscPct(e.target.value); if (e.target.value) setDiscAmt(''); }} className={`${inputCls} tabular-nums`} placeholder="0" />
               </div>
               <div>
                 <label className={labelCls} htmlFor="pi-disc-amt">Discount (Rs.)</label>
-                <input id="pi-disc-amt" type="number" inputMode="decimal" min="0" step="any" value={discPct ? String(totals.discount) : discAmt} readOnly={Boolean(discPct)} onChange={(e) => setDiscAmt(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
+                <input id="pi-disc-amt" data-nav="disc-amt" type="number" inputMode="decimal" min="0" step="any" value={discPct ? String(totals.discount) : discAmt} readOnly={Boolean(discPct)} onChange={(e) => setDiscAmt(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
               </div>
             </div>
             <div>
               <label className={labelCls} htmlFor="pi-charges">Other charges (Rs.)</label>
-              <input id="pi-charges" type="number" inputMode="decimal" min="0" step="any" value={charges} onChange={(e) => setCharges(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0 (freight, loading on the bill)" />
+              <input id="pi-charges" data-nav="charges" type="number" inputMode="decimal" min="0" step="any" value={charges} onChange={(e) => setCharges(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0 (freight, loading on the bill)" />
             </div>
             <div>
               <label className={labelCls} htmlFor="pi-remarks">Remarks</label>
-              <input id="pi-remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} className={inputCls} placeholder="optional" />
+              <input id="pi-remarks" data-nav="remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} className={inputCls} placeholder="optional" />
             </div>
           </div>
           <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] p-4 space-y-2 text-sm">
@@ -315,13 +386,13 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
               <div>
                 <label className={labelCls} htmlFor="pi-paid">Paid now</label>
                 <div className="flex gap-1">
-                  <input id="pi-paid" type="number" inputMode="decimal" min="0" step="any" value={paid} onChange={(e) => setPaid(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
+                  <input id="pi-paid" data-nav="paid" type="number" inputMode="decimal" min="0" step="any" value={paid} onChange={(e) => setPaid(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
                   <button type="button" tabIndex={-1} onClick={() => setPaid(String(totals.total))} className="shrink-0 px-2.5 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-[11px] font-bold text-teal-700 dark:text-teal-300" title="Paid in full">Full</button>
                 </div>
               </div>
               <div>
                 <label className={labelCls} htmlFor="pi-method">Paid from</label>
-                <select id="pi-method" value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}>
+                <select id="pi-method" data-nav="method" value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}>
                   {PURCHASE_PAY_METHODS.map((m) => <option key={m}>{m}</option>)}
                 </select>
               </div>
