@@ -1,5 +1,5 @@
 import { AutoBackupsPanel } from '../control/AutoBackups';
-import { downloadCsvText } from '../../utils/listTools';
+import { downloadCsvFile, downloadCsvText } from '../../utils/listTools';
 import React, { useRef, useState } from 'react';
 import {
   KeyRound,
@@ -28,6 +28,7 @@ import { ConfirmDialog } from '../ConfirmDialog';
 import { BillSettingsCard } from '../billing/BillSettings';
 import { RemindersSettingsCard } from '../billing/Reminders';
 import { TableName } from '../../lib/database';
+import { inputCls as sharedInputCls } from '../billing/ui';
 
 type PendingAction =
   | { kind: 'purge'; table: TableName; label: string; count: number }
@@ -35,8 +36,8 @@ type PendingAction =
   | { kind: 'sample' }
   | null;
 
-const inputCls =
-  'w-full px-3.5 py-2.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-mono text-[#111827] dark:text-white focus:outline-hidden focus:ring-2 focus:ring-teal-500/50';
+/** The same field look as every other form (readable size, body font; not the old small monospace). */
+const inputCls = `${sharedInputCls} disabled:opacity-60`;
 
 const cardCls =
   'bg-white dark:bg-[#101A26] rounded-[28px] border border-[#E5E5E1] dark:border-[#203248] p-6 shadow-xs space-y-4';
@@ -71,6 +72,7 @@ export const SystemDataTab: React.FC = () => {
     resetToSampleData,
     purgeTable,
     can,
+    isFieldVisible,
     stockBatches,
     stockTransfers,
   } = useTrading();
@@ -101,6 +103,7 @@ export const SystemDataTab: React.FC = () => {
 
   const saveCompany = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!can('system:company_settings')) return;
     updateSettings({
       companyName: company.companyName.trim() || 'Sarmaya',
       companyTagline: company.companyTagline.trim(),
@@ -136,30 +139,17 @@ export const SystemDataTab: React.FC = () => {
 
   const downloadCsv = (name: string, csv: string) => downloadCsvText(name, csv);
   const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  // Same columns as the Customers / Suppliers screens' downloads (with the ID, city, contact…), so a file
+  // exported here can be imported again on another device as it is.
   const exportCustomers = () =>
-    downloadCsv(
-      'sarmaya-customers.csv',
-      'Name,Company,Phone,Email,Address,Outstanding (Rs.),Credit limit (Rs.),Since\n' +
-        customers
-          .map((c) => [q(c.name), q(c.company), q(c.phone), q(c.email), q(c.address), c.totalDue, c.creditLimit, q(c.createdAt)].join(','))
-          .join('\n')
-    );
+    downloadCsvFile('sarmaya-customers.csv', ['Code', 'Name', 'Company', 'Phone', 'City', 'Contact person', 'Sales tax #', 'Fax', 'Email', 'Address', 'Balance (Rs.)', 'Credit limit (Rs.)', 'Since'],
+      customers.map((c) => [c.code || '', c.name, c.company, c.phone, c.city || '', c.contactPerson || '', c.salesTaxNo || '', c.fax || '', c.email, c.address, c.totalDue, c.creditLimit || '', c.createdAt]));
   const exportSuppliers = () =>
-    downloadCsv(
-      'sarmaya-suppliers.csv',
-      'Name,Company,Phone,Email,Category,Address,Payable (Rs.),Since\n' +
-        suppliers
-          .map((s) => [q(s.name), q(s.company), q(s.phone), q(s.email), q(s.materialCategory), q(s.address), s.totalOwed, q(s.createdAt)].join(','))
-          .join('\n')
-    );
+    downloadCsvFile('sarmaya-suppliers.csv', ['Code', 'Name', 'Company', 'Phone', 'City', 'Contact person', 'Sales tax #', 'Fax', 'Email', 'Category', 'Address', 'You owe (Rs.)', 'Since'],
+      suppliers.map((x) => [x.code || '', x.name, x.company, x.phone, x.city || '', x.contactPerson || '', x.salesTaxNo || '', x.fax || '', x.email, x.materialCategory, x.address, x.totalOwed, x.createdAt]));
   const exportProducts = () =>
-    downloadCsv(
-      'sarmaya-products.csv',
-      'Name,Category,Price (Rs./kg),Stock (kg),Reorder level (kg),Supplier\n' +
-        products
-          .map((p) => [q(p.name), q(p.category), p.unitPricePerKg, p.stockKg, p.minThresholdKg, q(suppliers.find((s) => s.id === p.supplierId)?.company || '')].join(','))
-          .join('\n')
-    );
+    downloadCsvFile('sarmaya-items.csv', ['Code', 'Name', 'Group', 'Brand', 'Unit', 'Price', ...(isFieldVisible('purchase_costs') ? ['Cost'] : []), 'Stock', 'Reorder level', 'Barcode', 'Pack', 'Pack size', 'Supplier'],
+      products.map((p) => [p.code || '', p.name, p.category, p.brand || '', p.unit || 'pcs', p.unitPricePerKg, ...(isFieldVisible('purchase_costs') ? [p.costPricePerKg ?? ''] : []), p.stockKg, p.minThresholdKg, p.barcode || '', p.packName || '', p.packSize || '', suppliers.find((s) => s.id === p.supplierId)?.company || '']));
   const exportLedger = () =>
     downloadCsv(
       'sarmaya-ledger.csv',
@@ -211,6 +201,9 @@ export const SystemDataTab: React.FC = () => {
     setPending(null);
   };
 
+  // Backups replace everything, demo data wipes it, the shop profile prints on every bill: admins only.
+  const canBackup = can('system:backup_restore');
+  const canCompany = can('system:company_settings');
   return (
     <div className="space-y-6">
       <div data-nav-anchor="auto-backups"><AutoBackupsPanel /></div>
@@ -252,7 +245,7 @@ export const SystemDataTab: React.FC = () => {
         </div>
 
         {/* Backup & Restore */}
-        <div className={cardCls} data-nav-anchor="backups">
+        {canBackup && <div className={cardCls} data-nav-anchor="backups">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-900">
               <Database className="w-5 h-5" />
@@ -281,14 +274,14 @@ export const SystemDataTab: React.FC = () => {
               <span>Import Backup</span>
             </button>
             <input ref={fileInputRef} type="file" accept="application/json,.json" onChange={handleImportFile} className="hidden" />
-            <button
+            {can('system:purge_data') && <button
               type="button"
               onClick={() => setPending({ kind: 'sample' })}
               className="px-4 py-3 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] flex items-center justify-center gap-1.5"
             >
               <FlaskConical className="w-3.5 h-3.5 text-teal-600" />
               <span>Load Demo Data</span>
-            </button>
+            </button>}
             {can('system:purge_data') && (
               <button
                 type="button"
@@ -313,7 +306,7 @@ export const SystemDataTab: React.FC = () => {
               <span>{importFeedback.message}</span>
             </div>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* Company & Invoicing */}
@@ -328,7 +321,9 @@ export const SystemDataTab: React.FC = () => {
           </div>
         </div>
 
+        {!canCompany && <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Only an admin can change the shop details.</p>}
         <form onSubmit={saveCompany} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <fieldset disabled={!canCompany} className="contents">
           <div className="lg:col-span-2">
             <label className="block text-xs font-semibold text-[#111827] dark:text-white mb-1.5">Company name</label>
             <input value={company.companyName} onChange={(e) => setCompany({ ...company, companyName: e.target.value })} className={inputCls} />
@@ -404,6 +399,7 @@ export const SystemDataTab: React.FC = () => {
               {companySaved ? <><CheckCircle2 className="w-3.5 h-3.5 text-teal-400 dark:text-teal-700" /> Saved</> : 'Save profile'}
             </button>
           </div>
+          </fieldset>
         </form>
       </div>
 

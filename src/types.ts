@@ -691,7 +691,9 @@ export type Permission =
   | 'manage_expenses'
   | 'admin_screen'
   | 'purge_data'
-  | 'manage_users';
+  | 'manage_users'
+  /** Worked out, never stored on a role: the user holds at least one right that changes data (not only "view"). */
+  | 'data:write';
 
 export interface RoleDefinition {
   id: string; // role identifier key, e.g. 'super_admin', 'admin', 'manager', 'editor', 'viewer'

@@ -5,6 +5,7 @@ import { AgingModal } from './BillingReports';
 import { useBillingUI } from './BillingUI';
 import { useTrading } from '../../context/TradingContext';
 import { useBillingShortcuts } from './useBillingShortcuts';
+import { NavTarget, targetAllowed } from '../../utils/navMap';
 import { PurchasingUIProvider } from './purchasing/PurchasingUI';
 
 interface StockUI {
@@ -44,13 +45,15 @@ export const StockUIProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   // Desktop function keys: F2 new bill, F3 receive payment, F4 add expense, F6 receive stock, F9 cash book.
+  // A key the signed-in role may not use does nothing (same rules as the menus: navMap ACTION_ACCESS).
   const { settings, can } = useTrading();
+  const may = (t: NavTarget) => targetAllowed(t, { can });
   useBillingShortcuts((settings.appMode || 'billing') === 'billing', {
-    newBill: () => billing.newBill(),
-    receive: () => billing.receive(),
-    expense: () => billing.addExpense(),
-    receiveStock: can('products:create') || can('stock:adjust') ? () => api.receiveStock() : undefined,
-    cashBook: () => billing.openReport('cash-book'),
+    newBill: may({ kind: 'action', action: 'newBill' }) ? () => billing.newBill() : undefined,
+    receive: may({ kind: 'action', action: 'receive' }) ? () => billing.receive() : undefined,
+    expense: may({ kind: 'action', action: 'addExpense' }) ? () => billing.addExpense() : undefined,
+    receiveStock: may({ kind: 'action', action: 'receiveStock' }) ? () => api.receiveStock() : undefined,
+    cashBook: may({ kind: 'report', report: 'cash-book' }) ? () => billing.openReport('cash-book') : undefined,
   });
 
   return (

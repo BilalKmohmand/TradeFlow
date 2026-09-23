@@ -5,6 +5,7 @@ import { useStockUI } from '../billing/StockUI';
 import { formatCurrency } from '../../utils/formatters';
 import { NavEntry, navEntry, navGroup, normalize, searchNav, entryAllowed } from '../../utils/navMap';
 import { useNavAccess, useNavGo } from './useNavGo';
+import { matchesSearch } from '../../utils/search';
 
 export type FindKind = 'option' | 'customer' | 'supplier' | 'item' | 'bill' | 'purchase' | 'voucher';
 
@@ -74,21 +75,21 @@ export const useFindAnything = (query: string): FindSection[] => {
     const low = q.toLowerCase();
     const exactNo = (n?: string) => Boolean(n) && n!.toLowerCase() === low;
 
-    const cust = customers.filter((c) => has(c.name, c.company, c.code, c.phone, c.city)).slice(0, PER_KIND);
+    const cust = customers.filter((c) => matchesSearch(q, [c.name, c.company, c.code, c.city, c.contactPerson]) || has(c.phone)).slice(0, PER_KIND);
     if (cust.length)
       sections.push({
         id: 'customers',
         label: 'Customers',
         items: cust.map((c) => ({ id: `customer-${c.id}`, kind: 'customer', title: c.name, subtitle: `Customer${c.code ? ` ${c.code}` : ''} • ${c.phone || 'no phone'}${c.city ? ` • ${c.city}` : ''}`, badge: c.totalDue > 0 ? `Owes ${formatCurrency(c.totalDue)}` : 'Clear', run: () => { setSelectedCustomerId(c.id); setActiveScreen('customers'); } })),
       });
-    const sup = suppliers.filter((s) => has(s.company, s.name, s.code, s.phone, s.city)).slice(0, PER_KIND);
+    const sup = suppliers.filter((s) => matchesSearch(q, [s.company, s.name, s.code, s.city, s.contactPerson]) || has(s.phone)).slice(0, PER_KIND);
     if (sup.length)
       sections.push({
         id: 'suppliers',
         label: 'Suppliers',
         items: sup.map((s) => ({ id: `supplier-${s.id}`, kind: 'supplier', title: s.company || s.name, subtitle: `Supplier${s.code ? ` ${s.code}` : ''} • ${s.phone || 'no phone'}`, badge: s.totalOwed > 0 ? `You owe ${formatCurrency(s.totalOwed)}` : 'Clear', run: () => { setSelectedSupplierId(s.id); setActiveScreen('suppliers'); } })),
       });
-    const items = products.filter((p) => has(p.name, p.code, p.barcode, p.category, p.brand)).slice(0, PER_KIND);
+    const items = products.filter((p) => matchesSearch(q, [p.name, p.code, p.barcode, p.category, p.brand])).slice(0, PER_KIND);
     if (items.length)
       sections.push({
         id: 'items',

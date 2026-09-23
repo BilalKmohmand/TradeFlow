@@ -37,6 +37,7 @@
 import { AppSettings, CashEntry, Customer, DocSeriesKey, Expense, ExpenseCategory, LedgerEntry, Supplier } from '../types';
 import { ACC, Account, EXPENSE_ACCOUNT, JournalEntry, JournalLine, booksLockedFor, generalLedger, drCr } from './accounting';
 import { MAIN_BANK_CODE } from './finance';
+import { matchesWords, searchHaystack, searchWords } from './search';
 
 export type VoucherType = 'CPV' | 'CRV' | 'BPV' | 'BRV' | 'JV';
 
@@ -566,21 +567,22 @@ export const allCities = (settings: Pick<AppSettings, 'cities'>, customers: { ci
   return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
 };
 
-/** Search parties by city (exact, case-insensitive; '' = any) and by ID / name / phone. */
-export const filterParties = <T extends { name: string; code?: string; phone?: string; city?: string; company?: string }>(rows: T[], query: string, city: string): T[] => {
-  const q = query.trim().toLowerCase();
+/**
+ * Search parties by city (exact, case-insensitive; '' = any) and by ID / name / shop / city / contact person /
+ * phone. Every word must match (any order); Urdu typed on an Arabic keyboard still finds Urdu names.
+ */
+export const filterParties = <T extends { name: string; code?: string; phone?: string; city?: string; company?: string; contactPerson?: string }>(rows: T[], query: string, city: string): T[] => {
   const c = cityKey(city || '');
-  const qDigits = q.replace(/[^0-9]/g, '');
+  const words = searchWords(query);
+  const qDigits = query.replace(/[^0-9]/g, '');
   return rows.filter(
     (r) =>
       (!c || cityKey(r.city || '') === c) &&
-      (!q ||
-        r.name.toLowerCase().includes(q) ||
-        (r.code || '').toLowerCase().includes(q) ||
-        (r.company || '').toLowerCase().includes(q) ||
-        (r.city || '').toLowerCase().includes(q) ||
-        // A phone typed with spaces or dashes still matches: "0300 123" → 0300123. At least 3 digits,
-        // so a code like "Z01" is not also matched by every phone number containing "01".
+      (words.length === 0 ||
+        // The phone takes part only when the search has 3+ digits, so a code like "Z01" is not also
+        // matched by every phone number containing "01".
+        matchesWords(words, searchHaystack([r.name, r.code, r.company, r.city, r.contactPerson, qDigits.length >= 3 ? (r.phone || '').replace(/[^0-9]/g, '') : ''])) ||
+        // A phone typed with spaces or dashes still matches: "0300 123" → 0300123.
         Boolean(qDigits.length >= 3 && (r.phone || '').replace(/[^0-9]/g, '').includes(qDigits)))
   );
 };

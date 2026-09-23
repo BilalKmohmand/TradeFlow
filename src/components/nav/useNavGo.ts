@@ -4,7 +4,7 @@ import { useBillingUI } from '../billing/BillingUI';
 import { useStockUI } from '../billing/StockUI';
 import { usePurchasingUI } from '../billing/purchasing/PurchasingUI';
 import type { AccountsTab } from '../../utils/classicMenu';
-import { NavAccess, NavGroupId, NavTarget, navGroupsFor } from '../../utils/navMap';
+import { NavAccess, NavGroupId, NavTarget, navGroupsFor, targetAllowed } from '../../utils/navMap';
 
 /** Ask the desktop menu bar (or, on a phone, the More sheet) to open a group. */
 export const OPEN_MENU_EVENT = 'sarmaya:open-menu';
@@ -65,6 +65,8 @@ export const useNavGo = () => {
   const stock = useStockUI();
   const buy = usePurchasingUI();
   return (target: NavTarget) => {
+    // Whatever opens it (menu, Find anything, classic button, breadcrumb), a role never gets what it may not use.
+    if (!targetAllowed(target, { can: t.can })) return;
     switch (target.kind) {
       case 'report':
         ui.openReport(target.report);

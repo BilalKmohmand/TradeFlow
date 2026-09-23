@@ -1,4 +1,6 @@
-import { downloadCsvText } from '../../utils/listTools';
+import { downloadCsvText, toCsv } from '../../utils/listTools';
+import { importNumber, mapColumns, planImport } from '../../utils/masterImport';
+import { foldText } from '../../utils/search';
 import React, { useRef, useState } from 'react';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -6,9 +8,9 @@ import { useTrading } from '../../context/TradingContext';
 type Kind = 'customers' | 'suppliers' | 'products';
 
 const TEMPLATES: Record<Kind, { headers: string[]; sample: string[] }> = {
-  customers: { headers: ['name', 'company', 'phone', 'email', 'address', 'creditLimit', 'openingDue', 'code', 'city', 'contactPerson', 'salesTaxNo', 'fax'], sample: ['Ali Raza', 'Raza Traders', '+92 300 1234567', 'ali@raza.pk', 'Karachi', '500000', '0', 'C-215', 'Karachi', 'Ali Raza', '32-77-8761-123-45', '021-1234567'] },
-  suppliers: { headers: ['name', 'company', 'phone', 'email', 'materialCategory', 'address', 'openingOwed', 'code', 'city', 'contactPerson', 'salesTaxNo', 'fax'], sample: ['Iftikhar', 'Tajj Mill', '+92 300 7654321', '', 'Ghee & oil', 'Peshawar', '0', 'S-104', 'Peshawar', 'Iftikhar', '', ''] },
-  products: { headers: ['name', 'category', 'unitPricePerKg', 'stockKg', 'minThresholdKg', 'supplierCompany', 'description'], sample: ['OPC Cement', 'Construction & Cement', '25', '480000', '100000', 'Lucky Cement', 'Grade 53'] },
+  customers: { headers: ['code', 'name', 'company', 'phone', 'city', 'contactPerson', 'salesTaxNo', 'fax', 'email', 'address', 'creditLimit', 'openingDue'], sample: ['C-0215', 'Ali Raza', 'Raza Traders', '0300 1234567', 'Batkhela', 'Ali Raza', '32-77-8761-123-45', '0932-412345', '', 'Main Bazar', '500000', '0'] },
+  suppliers: { headers: ['code', 'name', 'company', 'phone', 'city', 'contactPerson', 'salesTaxNo', 'fax', 'email', 'materialCategory', 'address', 'openingOwed'], sample: ['S-0104', 'Iftikhar', 'Tajj Mill', '0300 7654321', 'Peshawar', 'Iftikhar', '', '', '', 'Ghee & oil', 'Hayatabad', '0'] },
+  products: { headers: ['code', 'name', 'category', 'brand', 'unit', 'unitPricePerKg', 'costPricePerKg', 'stockKg', 'minThresholdKg', 'barcode', 'packName', 'packSize', 'supplierCompany'], sample: ['DT16', 'Dalda 16 kg tin', 'Ghee', 'Dalda', 'tin', '7200', '6900', '40', '10', '', 'carton', '1', 'Dalda Foods'] },
 };
 
 /**
@@ -63,7 +65,7 @@ export const DataImportTab: React.FC = () => {
 
   const downloadTemplate = () => {
     const t = TEMPLATES[kind];
-    const csv = `${t.headers.join(',')}\n${t.sample.join(',')}\n`;
+    const csv = `${toCsv(t.headers, [t.sample])}\n`;
     downloadCsvText(`sarmaya-${kind}-template.csv`, csv);
   };
 
@@ -77,9 +79,8 @@ export const DataImportTab: React.FC = () => {
         setPreview({ headers: [], rows: [], problems: ['The file needs a header row and at least one data row.'] });
         return;
       }
-      const headers = rows[0].map((h) => h.trim());
-      const required = TEMPLATES[kind].headers.slice(0, 2);
-      const problems = required.filter((h) => !headers.includes(h)).map((h) => `Missing required column "${h}".`);
+      const headers = rows[0].map((h) => h.replace(/^\uFEFF/, '').trim());
+      const problems = mapColumns(kind, headers).missing.map(() => 'The file needs a Name column (name, Name, Party Name or Item name).');
       setPreview({ headers, rows: rows.slice(1), problems });
       setResult(null);
     };
@@ -87,85 +88,49 @@ export const DataImportTab: React.FC = () => {
     e.target.value = '';
   };
 
-  const col = (row: string[], name: string) => {
-    const i = preview!.headers.indexOf(name);
-    return i >= 0 ? (row[i] || '').trim() : '';
-  };
-  const num = (v: string) => Math.max(0, parseFloat(v.replace(/[^0-9.\-]/g, '')) || 0);
-  const digits = (v: string) => v.replace(/[^0-9]/g, '');
-  /** City / town, contact person, sales tax # and fax (optional columns; also "City/Town", "Sales Tax #"). */
-  const partyExtraCols = (row: string[]) => {
-    const any = (...names: string[]) => names.map((n) => col(row, n)).find(Boolean) || '';
-    const out = { city: any('city', 'City', 'City/Town', 'town'), contactPerson: any('contactPerson', 'Contact person', 'contact'), salesTaxNo: any('salesTaxNo', 'Sales Tax #', 'STRN', 'stn'), fax: any('fax', 'Fax') };
-    return Object.fromEntries(Object.entries(out).filter(([, v]) => v)) as { city?: string; contactPerson?: string; salesTaxNo?: string; fax?: string };
-  };
-
   const runImport = () => {
     if (!preview || preview.problems.length > 0) return;
+    const existing = kind === 'customers' ? customers : kind === 'suppliers' ? suppliers : products;
+    const plan = planImport(kind, preview.headers, preview.rows, existing as { name: string; phone?: string; code?: string; barcode?: string }[]);
+    const errors = plan.skipped.map((x) => `Line ${x.line}: ${x.reason}`);
     let added = 0;
-    let skipped = 0;
-    const errors: string[] = [];
-    preview.rows.forEach((row, idx) => {
-      const line = idx + 2;
+    plan.add.forEach(({ line, values: v }) => {
       try {
+        const extra = Object.fromEntries(Object.entries({ city: v.city, contactPerson: v.contactPerson, salesTaxNo: v.salesTaxNo, fax: v.fax }).filter(([, x]) => x)) as { city?: string; contactPerson?: string; salesTaxNo?: string; fax?: string };
         if (kind === 'customers') {
-          const name = col(row, 'name');
-          const company = col(row, 'company') || name;
-          const phone = col(row, 'phone');
-          if (!name || !phone) {
-            skipped++;
-            errors.push(`Line ${line}: name and phone are required.`);
-            return;
-          }
-          if (customers.some((c) => digits(c.phone) === digits(phone))) {
-            skipped++;
-            errors.push(`Line ${line}: ${name} skipped, phone already exists.`);
-            return;
-          }
-          const c = addCustomer({ name, company, phone, email: col(row, 'email'), address: col(row, 'address'), creditLimit: num(col(row, 'creditLimit')), code: col(row, 'code') || undefined, ...partyExtraCols(row) });
-          const opening = num(col(row, 'openingDue'));
+          const c = addCustomer({ name: v.name!, company: v.company || v.name!, phone: v.phone || '', email: v.email || '', address: v.address || '', creditLimit: importNumber(v.creditLimit), code: v.code || undefined, ...extra });
+          const opening = importNumber(v.openingDue);
           if (opening > 0) updateCustomer(c.id, { totalDue: opening });
-          added++;
         } else if (kind === 'suppliers') {
-          const name = col(row, 'name');
-          const company = col(row, 'company') || name;
-          const phone = col(row, 'phone');
-          if (!name || !phone) {
-            skipped++;
-            errors.push(`Line ${line}: name and phone are required.`);
-            return;
-          }
-          if (suppliers.some((s) => digits(s.phone) === digits(phone))) {
-            skipped++;
-            errors.push(`Line ${line}: ${company} skipped, phone already exists.`);
-            return;
-          }
-          const s = addSupplier({ name, company, phone, email: col(row, 'email'), materialCategory: col(row, 'materialCategory') || 'General', address: col(row, 'address'), code: col(row, 'code') || undefined, ...partyExtraCols(row) });
-          const opening = num(col(row, 'openingOwed'));
-          if (opening > 0) updateSupplier(s.id, { totalOwed: opening });
-          added++;
+          const x = addSupplier({ name: v.name!, company: v.company || v.name!, phone: v.phone || '', email: v.email || '', materialCategory: v.materialCategory || 'General', address: v.address || '', code: v.code || undefined, ...extra });
+          const opening = importNumber(v.openingOwed);
+          if (opening > 0) updateSupplier(x.id, { totalOwed: opening });
         } else {
-          const name = col(row, 'name');
-          if (!name) {
-            skipped++;
-            errors.push(`Line ${line}: name is required.`);
-            return;
-          }
-          if (products.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
-            skipped++;
-            errors.push(`Line ${line}: ${name} skipped, product already exists.`);
-            return;
-          }
-          const supplierCompany = col(row, 'supplierCompany').toLowerCase();
-          const supplier = supplierCompany ? suppliers.find((s) => s.company.toLowerCase() === supplierCompany) : undefined;
-          addProduct({ name, category: col(row, 'category') || 'General', unitPricePerKg: num(col(row, 'unitPricePerKg')), stockKg: num(col(row, 'stockKg')), minThresholdKg: num(col(row, 'minThresholdKg')), supplierId: supplier?.id, description: col(row, 'description') || undefined });
-          added++;
+          const supplierCompany = foldText(v.supplierCompany);
+          const supplier = supplierCompany ? suppliers.find((s) => foldText(s.company) === supplierCompany || foldText(s.name) === supplierCompany) : undefined;
+          const packSize = importNumber(v.packSize);
+          addProduct({
+            name: v.name!,
+            category: v.category || 'General',
+            unit: v.unit || 'pcs',
+            unitPricePerKg: importNumber(v.unitPricePerKg),
+            ...(v.costPricePerKg ? { costPricePerKg: importNumber(v.costPricePerKg) } : {}),
+            stockKg: importNumber(v.stockKg),
+            minThresholdKg: importNumber(v.minThresholdKg),
+            supplierId: supplier?.id ?? null,
+            ...(v.description ? { description: v.description } : {}),
+            ...(v.code ? { code: v.code } : {}),
+            ...(v.brand ? { brand: v.brand } : {}),
+            ...(v.barcode ? { barcode: v.barcode } : {}),
+            ...(v.packName && packSize > 1 ? { packName: v.packName, packSize } : {}),
+          });
         }
+        added++;
       } catch (err: any) {
-        skipped++;
         errors.push(`Line ${line}: ${err?.message || 'could not import'}`);
       }
     });
+    const skipped = errors.length;
     logAuditEvent('CSV Import', `${added} ${kind} imported, ${skipped} skipped.`, 'warning');
     setResult({ added, skipped, errors });
     setPreview(null);
@@ -180,7 +145,7 @@ export const DataImportTab: React.FC = () => {
           <div className="p-2.5 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-teal-700 dark:text-teal-400"><FileSpreadsheet className="w-5 h-5" /></div>
           <div>
             <h3 className="text-base font-bold text-[#111827] dark:text-white">Import from CSV / Excel</h3>
-            <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">Bring existing customers, suppliers and products across in one go. Export your sheet as CSV, match the template columns, and upload. Duplicates (same phone or product name) are skipped.</p>
+            <p className="text-xs text-[#6B7280] dark:text-[#94A3B8] mt-0.5">Bring existing customers, suppliers and products across in one go. Export your sheet as CSV, match the template columns, and upload. A file downloaded from the Customers or Suppliers screen can be imported as it is; Urdu names are kept (save from Excel as “CSV UTF-8”). Only the name is required. Rows whose phone, ID / item code, barcode or item name is already used are skipped and listed.</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">

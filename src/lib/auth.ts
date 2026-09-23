@@ -299,6 +299,13 @@ export const computeEffectivePermissions = (
   return Array.from(permSet);
 };
 
+/**
+ * Rights that only let a person look (view a list, a report, the ledgers, the audit log, download a CSV).
+ * A role made only of these is read-only: it may change nothing (see context/accessGuard.ts).
+ */
+export const isViewOnlyPermission = (p: Permission): boolean =>
+  p.endsWith(':view') || p.includes(':view_') || p === 'view_finance' || p === 'reports:export' || p === 'system:audit_view';
+
 export const hasPermission = (
   user: { role: string; roles?: string[] } | null | undefined,
   permission: Permission,
@@ -310,6 +317,7 @@ export const hasPermission = (
   if (roles.includes('super_admin')) return true;
 
   const effective = computeEffectivePermissions(roles, allRoles, enableHierarchy);
+  if (permission === 'data:write') return effective.some((p) => !isViewOnlyPermission(p));
   if (effective.includes(permission)) return true;
 
   // Backwards compatibility legacy mapping

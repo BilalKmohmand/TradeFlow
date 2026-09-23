@@ -36,9 +36,24 @@ export const AdminScreen: React.FC = () => {
   const { currentUser, can, users, roles, auditLogs, settings, updateSettings, setActiveScreen, approvals, deletedRecords } = useTrading();
   const waiting = approvals.filter((a) => a.status === 'pending').length;
   const ui = useBillingUI();
-  const [activeTab, setActiveTab] = useState<AdminTab>(() => { const v = ui.peekView('admin'); return (ADMIN_TABS as readonly string[]).includes(v || '') ? (v as AdminTab) : 'users'; });
+  // Each tab only for the roles that may use it (a manager sees the users list, the audit trail, approvals,
+  // deleted records and the rules, but not roles, visibility, security policy, backups or data import).
+  const tabAllowed = (id: AdminTab): boolean => {
+    switch (id) {
+      case 'users': return can('users:view');
+      case 'roles': return can('roles:view');
+      case 'visibility': return can('visibility:manage');
+      case 'policy': return can('roles:manage');
+      case 'audit': return can('system:audit_view');
+      case 'import': return can('system:backup_restore');
+      default: return true;
+    }
+  };
+  const firstTab = ADMIN_TABS.find(tabAllowed) || 'approvals';
+  const pickTab = (v: string | null | undefined): AdminTab => ((ADMIN_TABS as readonly string[]).includes(v || '') && tabAllowed(v as AdminTab) ? (v as AdminTab) : firstTab);
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => pickTab(ui.peekView('admin')));
   // The System menu opens a tab here (Users & passwords, Document numbers, Backups…).
-  useRequestedView('admin', (v) => { if ((ADMIN_TABS as readonly string[]).includes(v)) setActiveTab(v as AdminTab); });
+  useRequestedView('admin', (v) => { if ((ADMIN_TABS as readonly string[]).includes(v)) setActiveTab(pickTab(v)); });
   useCurrentView('admin', activeTab);
 
   const hasAccess = can('system:admin_screen') || can('admin_screen') || currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
@@ -59,7 +74,7 @@ export const AdminScreen: React.FC = () => {
     );
   }
 
-  const tabs: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number | string }[] = [
+  const allTabs: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number | string }[] = [
     {
       id: 'users',
       label: 'User Accounts & Auth',
@@ -116,6 +131,8 @@ export const AdminScreen: React.FC = () => {
       icon: <Upload className="w-4 h-4" />,
     },
   ];
+  const tabs = allTabs.filter((t) => tabAllowed(t.id));
+  const shownTab: AdminTab = tabAllowed(activeTab) ? activeTab : firstTab;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-200">
@@ -147,7 +164,7 @@ export const AdminScreen: React.FC = () => {
       {/* Main Tab Navigation Bar */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
         {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
+          const isActive = shownTab === tab.id;
           return (
             <button
               key={tab.id}
@@ -180,16 +197,16 @@ export const AdminScreen: React.FC = () => {
 
       {/* Tab Panels */}
       <div>
-        {activeTab === 'users' && <UserManagementTab />}
-        {activeTab === 'roles' && <RolesAndMatrixTab />}
-        {activeTab === 'visibility' && <VisibilitySettingsTab />}
-        {activeTab === 'policy' && <SecurityPolicyTab />}
-        {activeTab === 'audit' && <AuditLogTab />}
-        {activeTab === 'system' && <SystemDataTab />}
-        {activeTab === 'import' && <DataImportTab />}
-        {activeTab === 'approvals' && <ApprovalsInbox />}
-        {activeTab === 'deleted' && <DeletedRecordsTab />}
-        {activeTab === 'controls' && <ControlSettingsTab />}
+        {shownTab === 'users' && <UserManagementTab />}
+        {shownTab === 'roles' && <RolesAndMatrixTab />}
+        {shownTab === 'visibility' && <VisibilitySettingsTab />}
+        {shownTab === 'policy' && <SecurityPolicyTab />}
+        {shownTab === 'audit' && <AuditLogTab />}
+        {shownTab === 'system' && <SystemDataTab />}
+        {shownTab === 'import' && <DataImportTab />}
+        {shownTab === 'approvals' && <ApprovalsInbox />}
+        {shownTab === 'deleted' && <DeletedRecordsTab />}
+        {shownTab === 'controls' && <ControlSettingsTab />}
       </div>
     </div>
   );

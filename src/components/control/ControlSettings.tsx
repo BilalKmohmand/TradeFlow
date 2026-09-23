@@ -4,6 +4,7 @@ import { useTrading } from '../../context/TradingContext';
 import { ApprovalRules, DocSeriesConfig, DocSeriesKey } from '../../types';
 import { Notice, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, RowAction } from '../billing/ui';
 import { DOC_SERIES, formatDocNumber } from '../../utils/control';
+import { ConfirmDialog } from '../ConfirmDialog';
 
 type Msg = { kind: 'ok' | 'error'; text: string } | null;
 const Section: React.FC<{ icon: React.ReactNode; title: string; text: string; anchor?: string; children: React.ReactNode }> = ({ icon, title, text, anchor, children }) => (
@@ -62,18 +63,42 @@ export const ApprovalRulesForm: React.FC = () => {
   );
 };
 
+/**
+ * What was typed in "Next no.": the number and the prefix to use. "14727" keeps the prefix; "S-14727" or
+ * "cpv 1064" sets the prefix from the letters in front ("CPV 1064" → "CPV-" when the old prefix ended in "-").
+ */
+export const splitDocNumber = (typed: string, prefix: string): { prefix: string; number: number | null } => {
+  const t = typed.trim();
+  if (!t) return { prefix, number: null };
+  const m = /^(.*?)(\d+)$/.exec(t);
+  if (!m) return { prefix, number: null };
+  const n = parseInt(m[2], 10);
+  let head = m[1].trim();
+  if (!head) return { prefix, number: n };
+  // Letters typed with a space ("CPV 1064") take the old prefix's separator, else "-".
+  if (/[A-Za-z0-9]$/.test(head)) head += /[^A-Za-z0-9]$/.test(prefix) ? prefix.slice(-1) : '-';
+  return { prefix: head.toUpperCase() === head ? head : head.toUpperCase(), number: n };
+};
+
 // ---------------------------------------------------------------------------
 const SeriesRow: React.FC<{ k: DocSeriesKey; label: string; onMsg: (m: Msg) => void }> = ({ k, label, onMsg }) => {
   const { numberSeries, updateNumberSeries, previewDocNumber } = useTrading();
   const cfg = numberSeries[k];
   const [f, setF] = useState({ prefix: cfg.prefix, yearly: Boolean(cfg.yearly), pad: String(cfg.pad ?? 0), start: '' });
   const year = new Date().toISOString().slice(0, 4);
-  const sample = formatDocNumber({ prefix: f.prefix || '?', yearly: f.yearly, pad: f.yearly && !(parseInt(f.pad) > 0) ? 4 : parseInt(f.pad) || 0 }, parseInt(f.start) || 1, year);
+  // "Next no." takes a plain number (14727) or the whole number as printed on the old books (S-14727):
+  // then the letters in front become the prefix.
+  const typed = splitDocNumber(f.start, f.prefix);
+  const sample = formatDocNumber({ prefix: typed.prefix || '?', yearly: f.yearly, pad: f.yearly && !(parseInt(f.pad) > 0) ? 4 : parseInt(f.pad) || 0 }, typed.number || 1, year);
   const save = () => {
-    const next: DocSeriesConfig = { prefix: f.prefix, yearly: f.yearly, pad: parseInt(f.pad) || 0, startAt: f.start.trim() ? parseInt(f.start) : null };
+    if (f.start.trim() && !typed.number) {
+      onMsg({ kind: 'error', text: `${label}: type the next number, e.g. 14727 or ${f.prefix || 'INV-'}14727.` });
+      return;
+    }
+    const next: DocSeriesConfig = { prefix: typed.prefix, yearly: f.yearly, pad: parseInt(f.pad) || 0, startAt: typed.number };
     const r = updateNumberSeries(k, next);
     onMsg({ kind: r.success ? 'ok' : 'error', text: `${label}: ${r.message}` });
-    if (r.success) setF((x) => ({ ...x, start: '' }));
+    if (r.success) setF((x) => ({ ...x, prefix: typed.prefix, start: '' }));
   };
   const id = `series-${k}`;
   return (
@@ -92,13 +117,13 @@ const SeriesRow: React.FC<{ k: DocSeriesKey; label: string; onMsg: (m: Msg) => v
       </div>
       <div>
         <label className={labelCls} htmlFor={`${id}-start`}>Next no.</label>
-        <input id={`${id}-start`} type="number" min="1" value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} className={inputCls} placeholder="same" />
+        <input id={`${id}-start`} type="text" inputMode="text" autoComplete="off" value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="same" title={`A number (14727) or the whole number (${f.prefix || 'INV-'}14727)`} />
       </div>
       <label className="flex items-center gap-2 text-xs font-semibold text-[#374151] dark:text-[#CBD5E1] min-h-11 cursor-pointer" htmlFor={`${id}-yearly`}>
         <input id={`${id}-yearly`} type="checkbox" checked={f.yearly} onChange={(e) => setF({ ...f, yearly: e.target.checked })} className="w-5 h-5 accent-teal-700" /> New series each year
       </label>
       <div className="col-span-2 sm:col-span-1 flex items-center gap-2 justify-end">
-        <span className="text-[11px] text-[#6B7280] dark:text-[#8E9299] sm:hidden">e.g. {sample}</span>
+        <span className="text-[11px] text-[#6B7280] dark:text-[#8E9299] tabular-nums" data-testid={`${id}-sample`}>e.g. {sample}</span>
         <button type="button" onClick={save} className={secondaryBtn} aria-label={`Save ${label} numbers`}><Save className="w-4 h-4" /> Save</button>
       </div>
     </li>
@@ -121,6 +146,7 @@ export const NumberSeriesForm: React.FC = () => {
 export const BranchesForm: React.FC = () => {
   const { branches, addBranch, updateBranch, deleteBranch, mainBranchId, users, setUserBranch, godowns, setGodownBranch, branchesEnabled } = useTrading();
   const [f, setF] = useState({ name: '', address: '' });
+  const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
   const [msg, setMsg] = useState<Msg>(null);
   const show = (r: { success: boolean; message: string }) => setMsg({ kind: r.success ? 'ok' : 'error', text: r.message });
   const add = (e: React.FormEvent) => {
@@ -139,7 +165,7 @@ export const BranchesForm: React.FC = () => {
             <li key={b.id} className="flex items-center gap-2 px-3 py-2">
               <input defaultValue={b.name} onBlur={(e) => e.target.value.trim() !== b.name && show(updateBranch(b.id, { name: e.target.value }))} className={`${inputCls} flex-1`} aria-label={`Name of branch ${b.name}`} />
               {b.id === mainBranchId && <span className="shrink-0 px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 text-[10px] font-bold">Main</span>}
-              <RowAction label={`Remove branch ${b.name}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => show(deleteBranch(b.id))} />
+              <RowAction label={`Remove branch ${b.name}`} tone="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => setRemoving({ id: b.id, name: b.name })} />
             </li>
           ))}
         </ul>
@@ -156,6 +182,14 @@ export const BranchesForm: React.FC = () => {
         <button type="submit" className={primaryBtn}><Plus className="w-4 h-4" /> Add branch</button>
       </form>
 
+      <ConfirmDialog
+        isOpen={Boolean(removing)}
+        title={`Remove branch ${removing?.name || ''}?`}
+        message="It goes from the list and the branch filter. A branch that already has bills or money entries cannot be removed."
+        confirmLabel="Remove branch"
+        onCancel={() => setRemoving(null)}
+        onConfirm={() => { if (removing) show(deleteBranch(removing.id)); setRemoving(null); }}
+      />
       {branchesEnabled && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div>
@@ -192,11 +226,18 @@ export const BranchesForm: React.FC = () => {
   );
 };
 
-/** Admin → Controls: approval rules, document numbers, branches. */
-export const ControlSettingsTab: React.FC = () => (
-  <div className="space-y-5">
-    <ApprovalRulesForm />
-    <NumberSeriesForm />
-    <BranchesForm />
-  </div>
-);
+/** Admin → Controls: approval rules, document numbers, branches (a manager can look; only an admin changes them). */
+export const ControlSettingsTab: React.FC = () => {
+  const { can } = useTrading();
+  const canEdit = can('system:company_settings');
+  return (
+    <div className="space-y-5">
+      {!canEdit && <Notice kind="error">Only an admin can change the approval rules, document numbers and branches. You can see them here.</Notice>}
+      <fieldset disabled={!canEdit} className="space-y-5 min-w-0" aria-label="Rules, numbers and branches">
+        <ApprovalRulesForm />
+        <NumberSeriesForm />
+        <BranchesForm />
+      </fieldset>
+    </div>
+  );
+};

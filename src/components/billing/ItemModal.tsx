@@ -18,7 +18,11 @@ interface Props {
 
 /** Add or edit an item: name, unit, fixed selling price, stock on hand, low-stock alert level. */
 export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
-  const { products, addProduct, updateProduct, adjustStock, can, stockBatches } = useTrading();
+  const { products, addProduct, updateProduct, adjustStock, can, stockBatches, isFieldVisible } = useTrading();
+  // Roles that may not see purchase costs (operator, viewer) never see or change the cost price.
+  const showCosts = isFieldVisible('purchase_costs');
+  // Changing the stock figure of an existing item is a stock count: only for roles that may adjust stock.
+  const canCount = !editId || can('stock:adjust');
   const editing = editId ? products.find((p) => p.id === editId) : undefined;
   const [name, setName] = useState(editing?.name || '');
   const [unit, setUnit] = useState(editing?.unit || 'pcs');
@@ -57,10 +61,12 @@ export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    // A second click while the first save is still closing the form does nothing (no double items). A
+    // refused save does not count: after fixing the field, Save works straight away.
     if (busy.current) return;
-    busy.current = true;
-    setTimeout(() => { busy.current = false; }, 800);
     if (!name.trim()) return setError('Give the item a name.');
+    const sameName = products.find((x) => x.id !== editing?.id && x.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (sameName) return setError(`An item named ${sameName.name} already exists${sameName.code ? ` (code ${sameName.code})` : ''}.`);
     const p = parseFloat(price);
     if (!Number.isFinite(p) || p < 0) return setError('Enter the selling price.');
     const size = parseFloat(packSize);
@@ -81,8 +87,8 @@ export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
       category: group.trim() || (editing && !itemGroup(editing) ? editing.category || 'General' : 'General'),
       unit,
       unitPricePerKg: can('edit_prices') || !editing ? p : editing.unitPricePerKg,
-      costPricePerKg: cost.trim() ? parseFloat(cost) || 0 : undefined,
-      stockKg: parseFloat(stock) || 0,
+      costPricePerKg: showCosts ? (cost.trim() ? parseFloat(cost) || 0 : undefined) : editing?.costPricePerKg,
+      stockKg: canCount ? parseFloat(stock) || 0 : editing?.stockKg || 0,
       minThresholdKg: parseFloat(minStock) || 0,
       // Only write the flag when it is (or was) on, so shops that never use batches keep their data shape.
       ...(trackBatches || editing?.trackBatches != null ? { trackBatches } : {}),
@@ -95,13 +101,14 @@ export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
       ...(photo ? { photo } : editing?.photo ? { photo: '' } : {}),
       ...(rq > 0 ? { reorderQty: rq } : editing?.reorderQty ? { reorderQty: 0 } : {}),
     };
+    busy.current = true;
+    setTimeout(() => { busy.current = false; }, 800);
     if (editing) {
       // A changed stock figure is kept as a stock-count record, so the books and history can explain it.
       const { stockKg, ...rest } = data;
       updateProduct(editing.id, rest);
       if (Math.abs(stockKg - editing.stockKg) > 0.0001) adjustStock(editing.id, stockKg, 'count', 'Changed on the item form');
     }
-    else if (products.some((x) => x.name.toLowerCase() === data.name.toLowerCase())) return setError('An item with this name already exists.');
     else addProduct({ ...data, supplierId: null });
     onClose();
   };
@@ -123,13 +130,13 @@ export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
             <label className={labelCls} htmlFor="item-price">Selling price (Rs.)</label>
             <input id="item-price" type="number" inputMode="decimal" min="0" step="any" value={price} onChange={(e) => setPrice(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" disabled={Boolean(editing) && !can('edit_prices')} />
           </div>
-          <div>
+          {showCosts && <div>
             <label className={labelCls} htmlFor="item-cost">Cost price (optional)</label>
             <input id="item-cost" type="number" inputMode="decimal" min="0" step="any" value={cost} onChange={(e) => setCost(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="for profit reports" />
-          </div>
+          </div>}
           <div>
             <label className={labelCls} htmlFor="item-stock">Stock on hand</label>
-            <input id="item-stock" type="number" inputMode="decimal" min="0" step="any" value={stock} onChange={(e) => setStock(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
+            <input id="item-stock" type="number" inputMode="decimal" min="0" step="any" value={stock} onChange={(e) => setStock(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" disabled={!canCount} title={canCount ? undefined : 'Only a manager can change the stock count (Adjust stock).'} />
             {heldElsewhere > 0 && <p className="text-[11px] text-[#8E9299] mt-1">Total of all godowns; {heldElsewhere} is in batches or other godowns. Use Receive stock to add a batch.</p>}
           </div>
           <div>
