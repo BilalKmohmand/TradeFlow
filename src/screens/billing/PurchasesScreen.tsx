@@ -12,19 +12,18 @@ type Period = 'month' | 'all';
 
 /** Every purchase invoice, newest first; search by our number (P-…), the supplier's bill no., supplier or item. */
 export const PurchasesScreen: React.FC = () => {
-  const { purchaseInvoices, can } = useTrading();
+  const { purchaseInvoices, suppliers, can } = useTrading();
   const ui = useBillingUI();
   const [q, setQ] = useState('');
   const [period, setPeriod] = useState<Period>('all');
   const today = todayISO();
-  const rows = useMemo(
-    () =>
-      purchaseInvoices
+  const rows = useMemo(() => {
+    const byId = new Map(suppliers.map((s) => [s.id, s]));
+    return purchaseInvoices
         .filter((p) => period === 'all' || p.date >= `${today.slice(0, 7)}-01`)
-        .filter((p) => matchesPurchaseInvoice(p, q))
-        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.createdAt.localeCompare(a.createdAt))),
-    [purchaseInvoices, q, period, today]
-  );
+        .filter((p) => matchesPurchaseInvoice(p, q, byId.get(p.supplierId)))
+        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.createdAt.localeCompare(a.createdAt)));
+  }, [purchaseInvoices, suppliers, q, period, today]);
   const total = rows.reduce((a, p) => a + p.totalAmount, 0);
   const canEnter = can('products:create') || can('stock:adjust');
 

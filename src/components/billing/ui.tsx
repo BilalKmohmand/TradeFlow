@@ -11,15 +11,35 @@ export const cardCls = 'bg-white dark:bg-[#101A26] rounded-[24px] border border-
 export const primaryBtn =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap max-sm:min-h-11 px-5 py-3 rounded-2xl bg-[#111827] dark:bg-white text-white dark:text-[#111827] text-sm font-bold shadow-xs hover:opacity-90 active:scale-[0.98] transition disabled:opacity-40 disabled:pointer-events-none';
 export const secondaryBtn =
-  'inline-flex items-center justify-center gap-2 max-sm:min-h-11 px-4 py-2.5 rounded-2xl bg-white dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-sm font-semibold text-[#111827] dark:text-white hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] active:scale-[0.98] transition disabled:opacity-40 disabled:pointer-events-none';
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap max-sm:min-h-11 px-4 py-2.5 rounded-2xl bg-white dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] text-sm font-semibold text-[#111827] dark:text-white hover:bg-[#F4F3EF] dark:hover:bg-[#1E2E40] active:scale-[0.98] transition disabled:opacity-40 disabled:pointer-events-none';
 export const dangerBtn =
-  'inline-flex items-center justify-center gap-2 max-sm:min-h-11 px-4 py-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-sm font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-950/70 transition';
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap max-sm:min-h-11 px-4 py-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-sm font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-950/70 transition';
+
+/**
+ * While a dialog is open, remember what had focus before it (the button that opened it); when it closes,
+ * put focus back there so the keyboard user carries on where they were (and never lands on <body>).
+ */
+export const useReturnFocus = (isOpen: boolean) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const before = document.activeElement as HTMLElement | null;
+    return () => {
+      // After the close has rendered: only if focus was lost (nothing else took it) and the opener still exists.
+      setTimeout(() => {
+        const now = document.activeElement;
+        if (before && before !== document.body && before.isConnected && (!now || now === document.body)) before.focus({ preventScroll: true });
+      }, 0);
+    };
+  }, [isOpen]);
+};
 
 const FOCUSABLE = 'input:not([disabled]),select:not([disabled]),textarea:not([disabled]),button:not([disabled]),[href],[tabindex]:not([tabindex="-1"])';
 
-export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; subtitle?: string; wide?: boolean; children: React.ReactNode; footer?: React.ReactNode }> = ({ isOpen, onClose, title, subtitle, wide, children, footer }) => {
+/** `wide`: forms with a row of columns (bill lines); `wide="xl"` for the biggest ones (New Bill, with a Code column). */
+export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; subtitle?: string; wide?: boolean | 'xl'; children: React.ReactNode; footer?: React.ReactNode }> = ({ isOpen, onClose, title, subtitle, wide, children, footer }) => {
   useEscape(isOpen, onClose);
   const box = useRef<HTMLDivElement>(null);
+  useReturnFocus(isOpen);
   // Put focus on the first field and keep Tab inside the dialog.
   useEffect(() => {
     if (!isOpen) return;
@@ -55,7 +75,7 @@ export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: stri
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 24 }}
             transition={{ duration: 0.18 }}
-            className={`relative z-10 w-full ${wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'} max-h-[92dvh] sm:max-h-[90vh] flex flex-col bg-white dark:bg-[#101A26] rounded-t-[28px] sm:rounded-[28px] border border-b-0 sm:border-b border-[#E5E5E1] dark:border-[#203248] shadow-2xl`}
+            className={`relative z-10 w-full ${wide === 'xl' ? 'sm:max-w-5xl' : wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'} max-h-[92dvh] sm:max-h-[90vh] flex flex-col bg-white dark:bg-[#101A26] rounded-t-[28px] sm:rounded-[28px] border border-b-0 sm:border-b border-[#E5E5E1] dark:border-[#203248] shadow-2xl`}
           >
             {/* Grab handle: tells phone users this is a sheet that sits on the page. */}
             <div aria-hidden="true" className="sm:hidden mx-auto mt-2 h-1.5 w-10 rounded-full bg-[#E5E5E1] dark:bg-[#203248]" />

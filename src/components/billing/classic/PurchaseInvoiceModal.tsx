@@ -156,7 +156,7 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
       </div>
       <div className="flex flex-wrap gap-2">
         <label className="sr-only" htmlFor="pi-paper">Print on</label>
-        <select id="pi-paper" value={paper} onChange={(e) => setPaper(e.target.value as 'a4' | 'a5')} className={`${inputCls} !w-auto`} title="Paper for Save & Print">
+        <select id="pi-paper" value={paper} onChange={(e) => setPaper(e.target.value as 'a4' | 'a5')} className={`${inputCls} !w-auto min-w-[5.5rem]`} title="Paper for Save & Print">
           <option value="a4">A4</option>
           <option value="a5">A5</option>
         </select>
@@ -233,7 +233,7 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
                   <div className="col-span-8 md:col-auto flex gap-1">
                     <div className="flex-1 min-w-0">
                       <QuickSelect id={id('item')} aria-label={`Product ${i + 1}`} value={l.pid} options={productOptions} onPick={(v) => pick(l.key, v)} className={inputCls} title="Type the product name or code">
-                        <option value="">Select product…</option>
+                        <option value="">Product…</option>
                         {sortedProducts.map((x) => <option key={x.id} value={x.id}>{x.code ? `${x.code} • ` : ''}{x.name}</option>)}
                       </QuickSelect>
                     </div>
@@ -311,7 +311,7 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
             {totals.discount > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>Discount{num(discPct) > 0 ? ` ${num(discPct)}%` : ''}</span><span className="tabular-nums">− {rs(totals.discount)}</span></div>}
             {totals.charges > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>Other charges</span><span className="tabular-nums">{rs(totals.charges)}</span></div>}
             <div className="flex justify-between font-extrabold text-[#111827] dark:text-white border-t border-[#E5E5E1] dark:border-[#203248] pt-2"><span>Bill total</span><span className="tabular-nums">{rs(totals.total)}</span></div>
-            <div className="grid grid-cols-2 gap-2 pt-1">
+            <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2 pt-1">
               <div>
                 <label className={labelCls} htmlFor="pi-paid">Paid now</label>
                 <div className="flex gap-1">

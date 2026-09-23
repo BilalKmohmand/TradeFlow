@@ -1,5 +1,6 @@
 import { Cheque, ChequeStatus } from '../types';
 import { shiftDate } from './stockFlow';
+import { matcher } from './search';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -48,8 +49,8 @@ const byChequeDate = (a: Cheque, b: Cheque) => (a.chequeDate < b.chequeDate ? -1
 
 /** Cheques for one list of the register, oldest cheque date first ("All" is newest first). */
 export const filterCheques = (cheques: Cheque[], view: ChequeView, today: string, query = ''): Cheque[] => {
-  const q = query.trim().toLowerCase();
-  const match = (c: Cheque) => !q || c.partyName.toLowerCase().includes(q) || c.chequeNumber.toLowerCase().includes(q) || c.bankName.toLowerCase().includes(q);
+  const m = matcher(query);
+  const match = (c: Cheque) => m([c.partyName, c.chequeNumber, c.bankName, c.note, c.amount]);
   let rows: Cheque[];
   if (view === 'due') rows = chequesDueThisWeek(cheques, today);
   else if (view === 'in_hand') rows = cheques.filter((c) => c.direction === 'received' && c.status === 'in_hand');

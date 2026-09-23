@@ -83,8 +83,8 @@ export const CostCentresTab: React.FC<{ journal: JournalEntry[]; accounts: Accou
         {canEdit && (
           <form onSubmit={(e) => { e.preventDefault(); const r = addCostCentre({ name, kind }); flash(r); if (r.success) setName(''); }} className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 border-t border-[#E5E5E1] dark:border-[#203248]">
             <div className="col-span-2 min-w-0"><label className={labelCls} htmlFor="cc-name">New cost centre</label><input id="cc-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mardan branch" className={inputCls} /></div>
-            <div className="min-w-0"><label className={labelCls} htmlFor="cc-kind">Kind</label><select id="cc-kind" value={kind} onChange={(e) => setKind(e.target.value as CostCentreKind)} className={inputCls}>{KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}</select></div>
-            <div className="flex items-end"><button type="submit" className={`${primaryBtn} w-full`}><Plus className="w-4 h-4" /> Add</button></div>
+            <div className="col-span-2 sm:col-span-1 min-w-0"><label className={labelCls} htmlFor="cc-kind">Kind</label><select id="cc-kind" value={kind} onChange={(e) => setKind(e.target.value as CostCentreKind)} className={inputCls}>{KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}</select></div>
+            <div className="col-span-2 sm:col-span-1 flex items-end"><button type="submit" className={`${primaryBtn} w-full`}><Plus className="w-4 h-4" /> Add</button></div>
           </form>
         )}
       </div>

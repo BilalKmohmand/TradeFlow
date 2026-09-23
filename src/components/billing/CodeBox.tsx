@@ -26,9 +26,22 @@ export const findByCode = <T extends CodeItem>(items: T[], typed: string): T | u
   return byNumber.length === 1 ? byNumber[0] : undefined;
 };
 
+/** Focus the field after `from` in its dialog / form (skipping `skipId`, the name list it is paired with). */
+const focusNextField = (from: HTMLElement, skipId?: string) => {
+  const scope = from.closest('[role="dialog"], form') || document.body;
+  const list = (Array.from(scope.querySelectorAll('input:not([disabled]):not([type="hidden"]):not([type="checkbox"]),select:not([disabled]),textarea:not([disabled])')) as HTMLElement[]).filter(
+    (n) => n === from || (n.offsetParent !== null && n.id !== skipId)
+  );
+  const next = list[list.indexOf(from) + 1];
+  next?.focus();
+  if (next instanceof HTMLInputElement) next.select();
+};
+
 /**
  * A small "Code" box beside a name picker. Type a code and press Enter or Tab (or leave the box):
  * the matching supplier / customer / product is picked. Picking by name fills the box with its code.
+ * Enter on a code that was found moves on, like the old program: to `nextId` when given, else to the next
+ * field after the paired name list (`pairId`).
  */
 export const CodeBox: React.FC<{
   id: string;
@@ -39,7 +52,13 @@ export const CodeBox: React.FC<{
   onPick: (id: string) => void;
   placeholder?: string;
   className?: string;
-}> = ({ id, label, items, value, onPick, placeholder = 'Code', className = '' }) => {
+  /** Field to jump to after Enter found the code. */
+  nextId?: string;
+  /** Id of the name list this box sits beside (skipped when moving on with Enter). */
+  pairId?: string;
+  /** Let a dialog put the cursor in the name list first (it finds codes too), not in this box. */
+  skipAutofocus?: boolean;
+}> = ({ id, label, items, value, onPick, placeholder = 'Code', className = '', nextId, pairId, skipAutofocus }) => {
   const current = items.find((x) => x.id === value);
   const [text, setText] = useState(current?.code || '');
   const [miss, setMiss] = useState(false);
@@ -50,14 +69,17 @@ export const CodeBox: React.FC<{
     setMiss(false);
   }, [value, current?.code]);
 
-  const commit = () => {
-    if (!text.trim()) return;
+  const commit = (): boolean => {
+    if (!text.trim()) return false;
     const hit = findByCode(items, text);
     if (hit) {
       setMiss(false);
       if (hit.id !== value) onPick(hit.id);
       else setText(hit.code || text);
-    } else setMiss(true);
+      return true;
+    }
+    setMiss(true);
+    return false;
   };
 
   return (
@@ -65,13 +87,23 @@ export const CodeBox: React.FC<{
       <input
         id={id}
         aria-label={label}
+        data-skip-autofocus={skipAutofocus || undefined}
         value={text}
         onChange={(e) => { setText(e.target.value); setMiss(false); }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
             e.stopPropagation();
-            commit();
+            const el = e.currentTarget;
+            if (!commit()) return;
+            // After React has shown the pick (the next field may only appear once something is picked).
+            setTimeout(() => {
+              const target = nextId ? document.getElementById(nextId) : null;
+              if (target) {
+                target.focus();
+                if (target instanceof HTMLInputElement) target.select();
+              } else focusNextField(el, pairId);
+            }, 0);
           }
         }}
         onBlur={commit}

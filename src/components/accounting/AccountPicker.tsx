@@ -25,7 +25,7 @@ export const AccountPicker: React.FC<{
   'aria-label'?: string;
 }> = ({ id, value, options, onPick, placeholder = 'Pick an account…', className, ...rest }) => {
   const [searching, setSearching] = useState(false);
-  const pickOptions: PickOption[] = useMemo(() => options.map((o) => ({ value: o.ref, name: o.name, code: o.code, extra: `${o.city || ''} ${o.group}` })), [options]);
+  const pickOptions: PickOption[] = useMemo(() => options.map((o) => ({ value: o.ref, name: o.name, code: o.code, extra: [o.company, o.phone, o.city, o.group].filter(Boolean).join(' ') })), [options]);
   const groups = useMemo(() => GROUP_ORDER.map((g) => ({ g, rows: options.filter((o) => o.group === g) })).filter((x) => x.rows.length), [options]);
   return (
     <div className={`flex gap-1 min-w-0 ${className || ''}`}>
@@ -66,7 +66,7 @@ export const AccountSearch: React.FC<{ options: AccountOption[]; onPick: (ref: s
   const [q, setQ] = useState('');
   const hits = useMemo(() => searchAccounts(options, q, 40), [options, q]);
   return (
-    <Modal isOpen onClose={onClose} title="Find account" subtitle="Search by code, name or city.">
+    <Modal isOpen onClose={onClose} title="Find account" subtitle="Search by code, name, shop name, phone or city.">
       <div className="space-y-3">
         <input
           autoFocus

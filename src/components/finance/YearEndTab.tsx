@@ -72,7 +72,7 @@ export const YearEndTab: React.FC<{ journal: JournalEntry[]; accounts: Account[]
         {!isAdmin && <Notice kind="error">Only an admin (with admin mode unlocked) can close a year.</Notice>}
         {openYears.length === 0 ? <p className="text-sm text-[#8E9299]">No finished year is waiting to be closed.</p> : (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:w-fit">
+            <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:w-fit">
               <div className="min-w-0"><label className={labelCls} htmlFor="close-fy">Year</label><select id="close-fy" value={pick} onChange={(e) => setPick(e.target.value)} className={inputCls}>{openYears.map((y) => <option key={y.start} value={y.start}>{y.label}</option>)}</select></div>
               <div className="min-w-0"><label className={labelCls} htmlFor="close-to">Move profit to</label><select id="close-to" value={toAccount} onChange={(e) => setToAccount(e.target.value)} className={inputCls}><option value={ACC.RETAINED_EARNINGS}>Retained earnings</option><option value={ACC.CAPITAL}>Owner's capital</option></select></div>
             </div>

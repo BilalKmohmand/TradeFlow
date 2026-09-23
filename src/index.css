@@ -138,3 +138,28 @@
   border-radius: 24px;
   transition: outline-color 0.4s ease;
 }
+
+/*
+ * Date / month / time boxes: the whole date ("23/09/2026") must stay readable in a half-width box on a
+ * 360px phone. The calendar icon and the side padding are trimmed so the year is never cut ("01/09/202").
+ * Unlayered, so it wins over the px-3.5 of inputCls (an explicit !px-… on a field still wins).
+ */
+input[type="date"],
+input[type="month"],
+input[type="time"],
+input[type="datetime-local"] {
+  padding-left: 0.625rem;
+  padding-right: 0.5rem;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+input::-webkit-datetime-edit,
+input::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+}
+input::-webkit-calendar-picker-indicator {
+  margin-left: 2px;
+  padding: 2px;
+  width: 14px;
+  height: 14px;
+}

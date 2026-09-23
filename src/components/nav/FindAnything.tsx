@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, CornerDownLeft, Compass, Users, Layers, Package, FileText, PackagePlus, ScrollText } from 'lucide-react';
 import { FUNCTION_KEYS } from '../billing/useBillingShortcuts';
+import { useReturnFocus } from '../billing/ui';
 import { FindItem, FindKind, FindSection, useFindAnything } from './useFindAnything';
 
 const ICON: Record<FindKind, React.FC<{ className?: string }>> = {
@@ -37,7 +38,7 @@ export const FindResults: React.FC<{ sections: FindSection[]; active: number; on
                   role="option"
                   aria-selected={on}
                   data-index={idx}
-                  onMouseEnter={() => onHover?.(idx)}
+                  onMouseMove={() => { if (!on) onHover?.(idx); }}
                   onClick={() => onPick(it)}
                   className={`flex items-center gap-3 rounded-2xl cursor-pointer ${compact ? 'px-2.5 py-2 min-h-12' : 'px-3 py-2.5'} ${on ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : 'hover:bg-[#FAF9F6] dark:hover:bg-[#18283A] text-[#111827] dark:text-white'}`}
                 >
@@ -81,6 +82,7 @@ export const FindAnythingDialog: React.FC<{ isOpen: boolean; onClose: () => void
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const sections = useFindAnything(query);
+  useReturnFocus(isOpen);
   const pick = (it: FindItem) => { onClose(); it.run(); };
   const { flat, active, setActive, onKeyDown } = useResultKeys(sections, query, pick);
 

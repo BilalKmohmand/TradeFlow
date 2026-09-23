@@ -11,6 +11,8 @@ import { BOOKS_MENU, MenuEntry, REPORTS_MENU, isSubmenu, resolveTarget } from '.
 import { REPORTS, ReportDef, ReportFilter, ReportId, ReportRow, bookBalances, defaultFilter, reportCsv } from '../../utils/classicReports';
 import { todayISO } from '../../utils/stockFlow';
 import { financialYearOf, fyStartOf } from '../../utils/financeBooks';
+import { PartyPicker } from '../../components/billing/PartyPicker';
+import type { Customer, Supplier } from '../../types';
 
 /** Who may open a report: the books and cost / profit figures need finance access. */
 const useReportAllowed = () => {
@@ -87,21 +89,15 @@ const ReportView: React.FC<{ id: ReportId; onBack: () => void; backLabel: string
             </div>
           )}
           {def.filters?.includes('customer') && (
-            <div className="w-full sm:w-56">
+            <div className="w-full sm:w-80">
               <label className={labelCls} htmlFor="rep-customer">Customer</label>
-              <select id="rep-customer" value={filter.customerId || ''} onChange={(e) => set({ customerId: e.target.value || undefined })} className={inputCls}>
-                <option value="">All customers</option>
-                {sortedCustomers.map((c) => <option key={c.id} value={c.id}>{c.code ? `${c.code} • ` : ''}{c.name}</option>)}
-              </select>
+              <PartyPicker<Customer> id="rep-customer" parties={sortedCustomers} value={filter.customerId || ''} onChange={(id) => set({ customerId: id || undefined })} placeholder="All customers" />
             </div>
           )}
           {def.filters?.includes('supplier') && (
-            <div className="w-full sm:w-56">
+            <div className="w-full sm:w-80">
               <label className={labelCls} htmlFor="rep-supplier">Supplier</label>
-              <select id="rep-supplier" value={filter.supplierId || ''} onChange={(e) => set({ supplierId: e.target.value || undefined })} className={inputCls}>
-                <option value="">All suppliers</option>
-                {[...suppliers].sort((a, b) => (a.company || a.name).localeCompare(b.company || b.name)).map((s) => <option key={s.id} value={s.id}>{s.code ? `${s.code} • ` : ''}{s.company || s.name}</option>)}
-              </select>
+              <PartyPicker<Supplier> id="rep-supplier" parties={[...suppliers].sort((a, b) => (a.company || a.name).localeCompare(b.company || b.name))} value={filter.supplierId || ''} onChange={(id) => set({ supplierId: id || undefined })} placeholder="All suppliers" nameOf={(x) => x.company || x.name} />
             </div>
           )}
           {def.filters?.includes('product') && (

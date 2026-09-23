@@ -22,7 +22,7 @@ type Period = 'today' | 'week' | 'month' | 'all';
 export const BILLS_TABS = ['bills', 'returns', 'quotes'] as const;
 
 export const BillsScreen: React.FC = () => {
-  const { setPrintRequest, returns, quotations } = useTrading();
+  const { setPrintRequest, returns, quotations, customers } = useTrading();
   const { invoices } = useBranchScoped();
   const ui = useBillingUI();
   const wide = useWideLayout();
@@ -35,7 +35,7 @@ export const BillsScreen: React.FC = () => {
   const [period, setPeriod] = useState<Period>('today');
   const [unpaidOnly, setUnpaidOnly] = useState(false);
   const today = todayISO();
-  const rows = useMemo(() => filterBills(invoices, query, period, today, unpaidOnly), [invoices, query, period, today, unpaidOnly]);
+  const rows = useMemo(() => filterBills(invoices, query, period, today, unpaidOnly, customers), [invoices, query, period, today, unpaidOnly, customers]);
   const total = rows.reduce((a, i) => a + billNetTotal(i), 0);
   const due = rows.reduce((a, i) => a + i.balanceDue, 0);
 

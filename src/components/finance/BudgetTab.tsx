@@ -67,7 +67,7 @@ export const BudgetTab: React.FC<{ journal: JournalEntry[]; accounts: Account[];
 
       {mode === 'compare' && (
         <>
-          <div className={`${cardCls} p-4 grid grid-cols-2 gap-3 sm:w-fit`}>
+          <div className={`${cardCls} p-4 grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:w-fit`}>
             <div className="min-w-0"><label className={labelCls} htmlFor="bud-scope-month">Month</label><input id="bud-scope-month" type="month" value={/^\d{4}-\d{2}$/.test(scope) ? scope : ''} onChange={(e) => e.target.value && setScope(e.target.value)} className={inputCls} /></div>
             <div className="min-w-0"><label className={labelCls} htmlFor="bud-scope-fy">or whole year</label><select id="bud-scope-fy" value={/^\d{4}-\d{2}$/.test(scope) ? '' : scope} onChange={(e) => e.target.value && setScope(e.target.value)} className={inputCls}><option value="">—</option>{years.map((y) => <option key={y.start} value={y.start}>{y.label}</option>)}</select></div>
           </div>

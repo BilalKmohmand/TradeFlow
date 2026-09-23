@@ -185,7 +185,7 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
                   <div className="flex items-center gap-3">
                     <input type="checkbox" aria-label={`Received from ${c.name}`} checked={l.on} onChange={(e) => setLine(c.id, { on: e.target.checked, amount: e.target.checked && !l.amount ? String(Math.round(c.totalDue * 100) / 100) : l.amount })} className="w-5 h-5 accent-teal-700 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold truncate">{c.code ? `${c.code} • ` : ''}{c.name}</div>
+                      <div className="text-sm font-semibold truncate text-[#111827] dark:text-white">{c.code ? `${c.code} • ` : ''}{c.name}</div>
                       <div className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">owes <span className={moneyCls}>{rs(c.totalDue)}</span>{c.areaId ? ` • ${areas.find((a) => a.id === c.areaId)?.name || ''}` : ''}</div>
                     </div>
                   </div>

@@ -2,6 +2,7 @@ import { Invoice, Expense, CashEntry, LedgerEntry, Customer, Supplier, AppSettin
 import { ChequeEvent, chequeEventsOn } from './cheques';
 import { collectCashMovements, accountBalancesOn, CashMovement, AccountBalances } from './finance';
 import { shiftDate } from './stockFlow';
+import { matcher } from './search';
 
 const round2 = (n: number) => Number(n.toFixed(2));
 
@@ -121,14 +122,29 @@ export const buildDailySheet = (src: DailySheetSources, date: string): DailyShee
   };
 };
 
-/** Bills grouped for the list screen: a quick text search plus a period filter. */
-export const filterBills = (invoices: Invoice[], query: string, period: 'today' | 'week' | 'month' | 'all', today: string, unpaidOnly = false): Invoice[] => {
-  const q = query.trim().toLowerCase();
+/**
+ * Bills grouped for the list screen: a quick text search plus a period filter. The search (utils/search.ts)
+ * takes the bill / memo number, the customer's name, shop name, phone (with spaces), and — when the customer
+ * list is given — their code and city, and any item on the bill.
+ */
+export const filterBills = (
+  invoices: Invoice[],
+  query: string,
+  period: 'today' | 'week' | 'month' | 'all',
+  today: string,
+  unpaidOnly = false,
+  customers: Pick<Customer, 'id' | 'code' | 'city' | 'company' | 'phone'>[] = []
+): Invoice[] => {
+  const m = matcher(query);
+  const byId = new Map(customers.map((c) => [c.id, c]));
   const from = period === 'today' ? today : period === 'week' ? shiftDate(today, -6) : period === 'month' ? today.slice(0, 7) + '-01' : '0000-00-00';
   return billsOnly(invoices)
     .filter((i) => i.issueDate >= from)
     .filter((i) => !unpaidOnly || i.balanceDue > 0)
-    .filter((i) => !q || i.invoiceNumber.toLowerCase().includes(q) || (i.memoNo || '').toLowerCase().includes(q) || i.customerName.toLowerCase().includes(q) || (i.customerPhone || '').includes(q) || i.items.some((it) => it.productName.toLowerCase().includes(q)))
+    .filter((i) => {
+      const c = byId.get(i.customerId);
+      return m([i.invoiceNumber, i.memoNo, i.customerName, i.customerCompany, c?.company, c?.code, c?.city, ...i.items.map((it) => it.productName)], [i.customerPhone, c?.phone]);
+    })
     .sort((a, b) => (a.issueDate < b.issueDate ? 1 : a.issueDate > b.issueDate ? -1 : b.createdAt.localeCompare(a.createdAt)));
 };
 

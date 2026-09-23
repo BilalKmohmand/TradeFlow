@@ -180,13 +180,13 @@ export const QuotationModal: React.FC<Props> = ({ isOpen, onClose, editId, custo
                   </select>
                 </div>
                 <div className="col-span-4 sm:col-span-2">
-                  <input aria-label={`Quote qty ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={rows[idx].qty} onChange={(e) => setRow(l.key, { qty: e.target.value })} className={`${inputCls} tabular-nums`} placeholder={l.pack > 1 ? p?.packName || 'Packs' : 'Qty'} />
+                  <input aria-label={`Quote qty ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={rows[idx].qty} onChange={(e) => setRow(l.key, { qty: e.target.value })} className={`${inputCls} tabular-nums max-sm:!px-2.5`} placeholder={l.pack > 1 ? p?.packName || 'Packs' : 'Qty'} />
                 </div>
                 <div className="col-span-4 sm:col-span-2">
-                  <input aria-label={`Quote price ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={rows[idx].price} onChange={(e) => setRow(l.key, { price: e.target.value, customerRate: false })} className={`${inputCls} tabular-nums`} placeholder={l.pack > 1 ? `Per ${p?.packName}` : 'Price'} />
+                  <input aria-label={`Quote price ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={rows[idx].price} onChange={(e) => setRow(l.key, { price: e.target.value, customerRate: false })} className={`${inputCls} tabular-nums max-sm:!px-2.5`} placeholder={l.pack > 1 ? `Per ${p?.packName}` : 'Price'} />
                   {l.customerRate && <span className="block mt-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Customer rate</span>}
                 </div>
-                <div className="col-span-3 sm:col-span-2 text-right tabular-nums font-bold text-sm text-[#111827] dark:text-white">{rs(l.amount)}</div>
+                <div className="col-span-3 sm:col-span-2 text-right tabular-nums font-bold text-sm text-[#111827] dark:text-white whitespace-nowrap">{rs(l.amount)}</div>
                 <div className="col-span-1 flex justify-end">
                   <button type="button" onClick={() => setRows((prev) => (prev.length > 1 ? prev.filter((r) => r.key !== l.key) : prev))} disabled={rows.length === 1} aria-label={`Remove quote item ${idx + 1}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 disabled:opacity-30"><Trash2 className="w-4 h-4" /></button>
                 </div>

@@ -15,6 +15,7 @@ import { usePurchasingUI } from '../../components/billing/purchasing/PurchasingU
 import { ScanButton } from '../../components/billing/purchasing/Barcodes';
 import { itemBrands, itemGroup, itemGroups, reorderReport } from '../../utils/purchasing';
 import { ClipboardList, Barcode } from 'lucide-react';
+import { matcher } from '../../utils/search';
 
 /** Your price list: every item with its fixed price and how many are left. */
 export const ItemsScreen: React.FC = () => {
@@ -43,9 +44,10 @@ export const ItemsScreen: React.FC = () => {
   const canStock = can('products:create') || can('stock:adjust');
   const canGodowns = can('stock:adjust');
   const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    // Name, code, barcode, group or brand; words in any order, any case (utils/search.ts).
+    const m = matcher(query);
     return products
-      .filter((p) => !q || p.name.toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q) || (p.barcode || '').toLowerCase() === q || (p.brand || '').toLowerCase().includes(q))
+      .filter((p) => m([p.name, p.code, p.barcode, itemGroup(p), p.brand]))
       .filter((p) => (!group || itemGroup(p) === group) && (!brand || (p.brand || '') === brand))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [products, query, group, brand]);
@@ -84,7 +86,7 @@ export const ItemsScreen: React.FC = () => {
       <div className="flex gap-2">
         <div className="relative flex-1">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search items, code or barcode" className={`${inputCls} pl-10`} aria-label="Search items" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Name, code or barcode" className={`${inputCls} pl-10`} aria-label="Search items" />
         </div>
         <ScanButton onPick={(p) => { setGroup(''); setBrand(''); setQuery(p.barcode || p.code || p.name); }} />
       </div>

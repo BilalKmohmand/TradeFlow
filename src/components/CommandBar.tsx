@@ -604,7 +604,7 @@ export const CommandBar: React.FC<CommandBarProps> = ({
                     key={item.id}
                     data-index={idx}
                     onClick={() => item.perform()}
-                    onMouseEnter={() => setSelectedIndex(idx)}
+                    onMouseMove={() => setSelectedIndex(idx)}
                     className={`p-3 sm:p-3.5 rounded-2xl cursor-pointer flex items-center justify-between gap-3 transition-all ${
                       isSelected
                         ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] shadow-sm'

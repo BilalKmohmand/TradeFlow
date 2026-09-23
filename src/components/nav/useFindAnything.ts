@@ -3,7 +3,10 @@ import { useTrading } from '../../context/TradingContext';
 import { useBillingUI } from '../billing/BillingUI';
 import { useStockUI } from '../billing/StockUI';
 import { formatCurrency } from '../../utils/formatters';
-import { NavEntry, navEntry, navGroup, normalize, searchNav, entryAllowed } from '../../utils/navMap';
+import { NavEntry, navEntry, navGroup, searchNav, entryAllowed } from '../../utils/navMap';
+import { matcher } from '../../utils/search';
+import type { Customer, Supplier } from '../../types';
+import { filterParties } from '../../utils/vouchers';
 import { useNavAccess, useNavGo } from './useNavGo';
 
 export type FindKind = 'option' | 'customer' | 'supplier' | 'item' | 'bill' | 'purchase' | 'voucher';
@@ -69,24 +72,26 @@ export const useFindAnything = (query: string): FindSection[] => {
     const options = searchNav(q, access, 10).map((e) => option(e));
     if (options.length) sections.push({ id: 'options', label: 'Menu options', items: options });
 
-    const nq = normalize(q);
-    const has = (...fields: (string | undefined | null)[]) => fields.some((f) => f && normalize(f).includes(nq));
+    // The same matching rules as every list in the app (utils/search.ts): words in any order, any case,
+    // "c0007" for "C-0007", a phone typed with spaces or +92, Urdu letter variants.
+    const m = matcher(q);
+    const has = (...fields: (string | undefined | null)[]) => m(fields);
     const low = q.toLowerCase();
     const exactNo = (n?: string) => Boolean(n) && n!.toLowerCase() === low;
 
-    const cust = customers.filter((c) => has(c.name, c.company, c.code, c.phone, c.city)).slice(0, PER_KIND);
+    const cust = filterParties<Customer>(customers, q, '').slice(0, PER_KIND);
     if (cust.length)
       sections.push({
         id: 'customers',
         label: 'Customers',
         items: cust.map((c) => ({ id: `customer-${c.id}`, kind: 'customer', title: c.name, subtitle: `Customer${c.code ? ` ${c.code}` : ''} • ${c.phone || 'no phone'}${c.city ? ` • ${c.city}` : ''}`, badge: c.totalDue > 0 ? `Owes ${formatCurrency(c.totalDue)}` : 'Clear', run: () => { setSelectedCustomerId(c.id); setActiveScreen('customers'); } })),
       });
-    const sup = suppliers.filter((s) => has(s.company, s.name, s.code, s.phone, s.city)).slice(0, PER_KIND);
+    const sup = filterParties<Supplier>(suppliers, q, '').slice(0, PER_KIND);
     if (sup.length)
       sections.push({
         id: 'suppliers',
         label: 'Suppliers',
-        items: sup.map((s) => ({ id: `supplier-${s.id}`, kind: 'supplier', title: s.company || s.name, subtitle: `Supplier${s.code ? ` ${s.code}` : ''} • ${s.phone || 'no phone'}`, badge: s.totalOwed > 0 ? `You owe ${formatCurrency(s.totalOwed)}` : 'Clear', run: () => { setSelectedSupplierId(s.id); setActiveScreen('suppliers'); } })),
+        items: sup.map((s) => ({ id: `supplier-${s.id}`, kind: 'supplier', title: s.company || s.name, subtitle: `Supplier${s.code ? ` ${s.code}` : ''} • ${s.phone || 'no phone'}${s.city ? ` • ${s.city}` : ''}`, badge: s.totalOwed > 0 ? `You owe ${formatCurrency(s.totalOwed)}` : 'Clear', run: () => { setSelectedSupplierId(s.id); setActiveScreen('suppliers'); } })),
       });
     const items = products.filter((p) => has(p.name, p.code, p.barcode, p.category, p.brand)).slice(0, PER_KIND);
     if (items.length)
@@ -96,7 +101,7 @@ export const useFindAnything = (query: string): FindSection[] => {
         items: items.map((p) => ({ id: `product-${p.id}`, kind: 'item', title: p.name, subtitle: `Item${p.code ? ` ${p.code}` : ''} • ${formatCurrency(p.unitPricePerKg)} per ${p.unit || 'pcs'} • stock history`, badge: `Stock ${p.stockKg.toLocaleString()} ${p.unit || 'pcs'}`, run: () => stock.itemHistory(p.id) })),
       });
     const bills = invoices
-      .filter((i) => has(i.invoiceNumber, i.memoNo) || (q.length >= 3 && has(i.customerName)))
+      .filter((i) => has(i.invoiceNumber, i.memoNo) || (q.length >= 3 && m([i.customerName, i.customerCompany], [i.customerPhone])))
       .sort((a, b) => Number(exactNo(b.invoiceNumber)) - Number(exactNo(a.invoiceNumber)) || (a.issueDate < b.issueDate ? 1 : -1))
       .slice(0, PER_KIND);
     if (bills.length)
@@ -115,7 +120,7 @@ export const useFindAnything = (query: string): FindSection[] => {
         });
     }
     if (can('view_finance')) {
-      const vs = (vouchers || []).filter((v) => has(v.ref)).slice(0, PER_KIND);
+      const vs = (vouchers || []).filter((v) => has(v.ref) || (q.length >= 3 && has(v.memo))).slice(0, PER_KIND);
       if (vs.length)
         sections.push({
           id: 'vouchers',

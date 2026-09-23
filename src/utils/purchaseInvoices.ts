@@ -14,6 +14,7 @@
  *  - Paid now: a normal supplier payment (Dr Payable / Cr Cash 1000 or Bank 1010 by method).
  * Every entry is balanced, so the trial balance stays balanced.
  */
+import { matcher } from './search';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -47,14 +48,13 @@ export const landedPosting = (lines: { qty: number; rate: number }[], totals: Pu
   return { rates, posted, rounding: round2(totals.total - posted) };
 };
 
-/** Search purchase invoices by our number, the supplier's memo / bill no., the supplier or an item. */
-export const matchesPurchaseInvoice = (p: { invoiceNumber: string; memoNo?: string; supplierName: string; lines: { productName: string }[] }, query: string): boolean => {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return (
-    p.invoiceNumber.toLowerCase().includes(q) ||
-    (p.memoNo || '').toLowerCase().includes(q) ||
-    p.supplierName.toLowerCase().includes(q) ||
-    p.lines.some((l) => l.productName.toLowerCase().includes(q))
-  );
-};
+/**
+ * Search purchase invoices by our number, the supplier's memo / bill no., the supplier (name, and when given
+ * their code, contact name, city and phone) or an item (name / code). Rules: utils/search.ts.
+ */
+export const matchesPurchaseInvoice = (
+  p: { invoiceNumber: string; memoNo?: string; supplierName: string; lines: { productName: string; code?: string }[] },
+  query: string,
+  supplier?: { code?: string; name?: string; company?: string; city?: string; phone?: string }
+): boolean =>
+  matcher(query)([p.invoiceNumber, p.memoNo, p.supplierName, supplier?.code, supplier?.name, supplier?.company, supplier?.city, ...p.lines.flatMap((l) => [l.productName, l.code])], [supplier?.phone]);

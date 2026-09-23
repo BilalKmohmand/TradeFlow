@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { PartyPicker } from './PartyPicker';
 import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
-import { EXPENSE_CATEGORIES, ExpenseCategory } from '../../types';
+import { EXPENSE_CATEGORIES, ExpenseCategory, Customer, Supplier } from '../../types';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice } from './ui';
 import { todayISO } from '../../utils/stockFlow';
 import { collectCashMovements, accountBalancesOn } from '../../utils/finance';
@@ -137,6 +138,7 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
   const [error, setError] = useState('');
   const isCheque = method === 'Cheque';
   const c = customers.find((x) => x.id === cust);
+  const sortedCustomers = useMemo(() => [...customers].sort((a, b) => b.totalDue - a.totalDue), [customers]);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount) || 0;
@@ -160,10 +162,7 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
         {error && <Notice kind="error">{error}</Notice>}
         <div>
           <label className={labelCls} htmlFor="rc-cust">Customer</label>
-          <select id="rc-cust" value={cust} onChange={(e) => setCust(e.target.value)} className={inputCls}>
-            <option value="">Select customer…</option>
-            {[...customers].sort((a, b) => b.totalDue - a.totalDue).map((x) => <option key={x.id} value={x.id}>{x.code ? `${x.code} • ` : ''}{x.name}{x.totalDue > 0 ? ` (owes Rs. ${x.totalDue.toLocaleString()})` : ''}</option>)}
-          </select>
+          <PartyPicker<Customer> id="rc-cust" parties={sortedCustomers} value={cust} onChange={setCust} nextId="rc-amount" placeholder="Select customer…" optionText={(x) => `${x.name}${x.totalDue > 0 ? ` (owes Rs. ${x.totalDue.toLocaleString()})` : ''}`} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -209,6 +208,7 @@ export const PaySupplierModal: React.FC<{ isOpen: boolean; onClose: () => void; 
   const [sent, setSent] = useState('');
   const isCheque = method === 'Cheque';
   const s = suppliers.find((x) => x.id === sup);
+  const sortedSuppliers = useMemo(() => [...suppliers].sort((a, b) => b.totalOwed - a.totalOwed), [suppliers]);
   const amt = parseFloat(amount) || 0;
   const needsApproval = amt > 0 ? supplierPaymentApproval(amt) : null;
   const submit = (e: React.FormEvent) => {
@@ -241,10 +241,7 @@ export const PaySupplierModal: React.FC<{ isOpen: boolean; onClose: () => void; 
         )}
         <div>
           <label className={labelCls} htmlFor="ps-sup">Supplier</label>
-          <select id="ps-sup" value={sup} onChange={(e) => setSup(e.target.value)} className={inputCls}>
-            <option value="">Select supplier…</option>
-            {[...suppliers].sort((a, b) => b.totalOwed - a.totalOwed).map((x) => <option key={x.id} value={x.id}>{x.code ? `${x.code} • ` : ''}{x.company || x.name}{x.totalOwed > 0 ? ` (you owe Rs. ${x.totalOwed.toLocaleString()})` : ''}</option>)}
-          </select>
+          <PartyPicker<Supplier> id="ps-sup" parties={sortedSuppliers} value={sup} onChange={setSup} nextId="ps-amount" placeholder="Select supplier…" nameOf={(x) => x.company || x.name} optionText={(x) => `${x.company || x.name}${x.totalOwed > 0 ? ` (you owe Rs. ${x.totalOwed.toLocaleString()})` : ''}`} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

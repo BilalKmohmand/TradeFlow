@@ -11,6 +11,7 @@ import { lineDiscountAmount, quotationLines } from '../../utils/salesDocs';
 import { customerSnapshot, lastRateFor, resolveBillPayments, PaymentPart } from '../../utils/billing';
 import { hasPack, formatPackQty, plural, baseToPacks } from '../../utils/packUnits';
 import { QuickSelect, PickOption } from './QuickPick';
+import { CodeBox } from './CodeBox';
 import { ScanButton } from './purchasing/Barcodes';
 import { ChequeFieldsInput, ChequeFields, emptyChequeFields } from './ChequeForms';
 import { evaluateSchemes } from '../../utils/salesExtras';
@@ -20,6 +21,9 @@ import { BankSelect, bankOpt } from './BankSelect';
 import { needsBank } from '../../utils/banks';
 import { allCities, filterParties } from '../../utils/vouchers';
 import { useBillingUI } from './BillingUI';
+
+/** Bill line columns on wider screens: Code · Item · Qty · Price · Amount · remove. */
+const LINE_COLS = 'sm:grid-cols-[6.5rem_minmax(10rem,1fr)_6.5rem_7.5rem_8rem_2.5rem]';
 
 /** Find an old bill by its number: exact (INV-12, S-14726) or just the digits (12). */
 export const findBillByNumber = (bills: { id: string; invoiceNumber: string }[], typed: string): { id: string; invoiceNumber: string } | undefined => {
@@ -438,7 +442,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const smallLabel = 'sm:hidden block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1';
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="New Bill" subtitle={quote ? `From quotation ${quote.quoteNumber} — check the items and prices, then save.` : 'Pick the customer, add items, enter what was paid.'} wide footer={footer}>
+    <Modal isOpen={isOpen} onClose={onClose} title="New Bill" subtitle={quote ? `From quotation ${quote.quoteNumber} — check the items and prices, then save.` : 'Pick the customer, add items, enter what was paid.'} wide="xl" footer={footer}>
       <div className="space-y-5" ref={box} onKeyDown={onKeys}>
         {error && <Notice kind="error">{error}</Notice>}
         {sentForApproval && <div data-testid="bill-sent-for-approval"><Notice kind="ok">{sentForApproval}</Notice></div>}
@@ -461,7 +465,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-3">
             <label className={labelCls} htmlFor="bill-customer">Customer</label>
             {newCustomer ? (
               <div className="grid grid-cols-2 gap-2">
@@ -470,8 +474,10 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                 <button type="button" onClick={() => setNewCustomer(null)} className="col-span-2 text-xs font-semibold text-[#6B7280] hover:text-[#111827] dark:hover:text-white text-left">← Choose an existing customer instead</button>
               </div>
             ) : (
-              <div className="flex gap-2">
-                <div className="flex-1 min-w-0">
+              // Code box + name list on one line; the city filter and "New" wrap below them on a phone.
+              <div className="flex flex-wrap gap-2">
+                <CodeBox id="bill-customer-code" label="Customer code" items={sortedCustomers} value={customer} onPick={pickCustomer} pairId="bill-customer" nextId="bill-date" skipAutofocus className="w-24 sm:w-28 shrink-0" />
+                <div className="flex-1 min-w-[10rem]">
                   <QuickSelect id="bill-customer" data-nav="customer" value={customer} options={customerOptions} onPick={pickCustomer} className={inputCls} title="Type a name, code or phone to find the customer">
                     <option value="">Select customer…</option>
                     {sortedCustomers.map((c) => (
@@ -479,13 +485,15 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                     ))}
                   </QuickSelect>
                 </div>
-                {cityList.length > 0 && (
-                  <select aria-label="Customer city" data-testid="bill-customer-city" value={billCity} onChange={(e) => setBillCity(e.target.value)} className={`${inputCls} !w-28 shrink-0 max-sm:!w-24`} title="Search party by city">
-                    <option value="">All cities</option>
-                    {cityList.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                )}
-                <button type="button" onClick={() => setNewCustomer({ name: '', phone: '' })} className={`${secondaryBtn} shrink-0 px-3`} title="Add a new customer"><UserPlus className="w-4 h-4" /><span>New</span></button>
+                <div className="flex gap-2 max-sm:w-full">
+                  {cityList.length > 0 && (
+                    <select aria-label="Customer city" data-testid="bill-customer-city" value={billCity} onChange={(e) => setBillCity(e.target.value)} className={`${inputCls} sm:!w-36 max-sm:flex-1`} title="Search party by city">
+                      <option value="">All cities</option>
+                      {cityList.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  )}
+                  <button type="button" onClick={() => setNewCustomer({ name: '', phone: '' })} className={`${secondaryBtn} shrink-0 px-3`} title="Add a new customer"><UserPlus className="w-4 h-4" /><span>New</span></button>
+                </div>
               </div>
             )}
           </div>
@@ -493,10 +501,10 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
             <label className={labelCls} htmlFor="bill-date">Date</label>
             <input id="bill-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
           </div>
-          <div className="sm:col-span-3 grid grid-cols-2 gap-3 items-end">
+          <div className="sm:col-span-2 grid grid-cols-2 gap-3 items-end">
             <div>
               <label className={labelCls} htmlFor="bill-memo">Memo No</label>
-              <input id="bill-memo" value={memoNo} onChange={(e) => setMemoNo(e.target.value)} className={inputCls} placeholder="book / reference no." />
+              <input id="bill-memo" value={memoNo} onChange={(e) => setMemoNo(e.target.value)} className={inputCls} placeholder="book / ref. no." />
             </div>
             <label htmlFor="bill-delivery-order" className="flex items-center gap-2.5 min-h-11 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] px-3 cursor-pointer" title="Goods go out later. Stock is taken now; the bill waits in the Pending Delivery List.">
               <input id="bill-delivery-order" type="checkbox" checked={deliveryOrder} onChange={(e) => setDeliveryOrder(e.target.checked)} className="w-5 h-5 accent-teal-700" />
@@ -558,12 +566,13 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
         </div>
 
         <div>
-          <div className="hidden sm:grid grid-cols-12 gap-2 px-1 mb-1 text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">
-            <div className="col-span-5">Item</div>
-            <div className="col-span-2">Qty</div>
-            <div className="col-span-2">Price</div>
-            <div className="col-span-2 text-right">Amount</div>
-            <div className="col-span-1" />
+          <div className={`hidden sm:grid ${LINE_COLS} gap-2 px-1 mb-1 text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]`}>
+            <div>Code</div>
+            <div>Item</div>
+            <div>Qty</div>
+            <div>Price</div>
+            <div className="text-right">Amount</div>
+            <div />
           </div>
           <div className="space-y-2">
             {lines.map((l, idx) => {
@@ -573,8 +582,9 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               const last = p && selected ? lastRateFor(selected.id, p.id, invoices) : null;
               const note = stockNote(l, idx);
               return (
-                <div key={l.key} data-row={l.key} onFocus={() => setFocusKey(l.key)} className="grid grid-cols-12 gap-2 items-center rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2 sm:p-1 sm:border-0">
-                  <div className="col-span-12 sm:col-span-5">
+                <div key={l.key} data-row={l.key} onFocus={() => setFocusKey(l.key)} className={`grid grid-cols-12 ${LINE_COLS} gap-2 items-center rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2 sm:p-1 sm:border-0`}>
+                  <CodeBox id={`bill-code-${idx + 1}`} label={`Item code ${idx + 1}`} items={sortedProducts} value={l.productId} onPick={(v) => pickProduct(l.key, v)} nextId={`bill-qty-${idx + 1}`} className="col-span-4 sm:col-auto" />
+                  <div className="col-span-7 sm:col-auto min-w-0">
                     <QuickSelect aria-label={`Item ${idx + 1}`} data-nav="item" value={l.productId} options={productOptions} onPick={(v) => pickProduct(l.key, v)} className={inputCls} title="Type the item name or code to find it">
                       <option value="">Select item…</option>
                       {sortedProducts.map((x) => (
@@ -582,21 +592,22 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                       ))}
                     </QuickSelect>
                   </div>
-                  <div className="col-span-4 sm:col-span-2">
-                    <span className={smallLabel}>Qty{p ? ` (${plural(unitWord, 2)})` : ''}</span>
-                    <input aria-label={`Quantity ${idx + 1}`} data-nav="qty" type="number" inputMode="decimal" min="0" step="any" value={l.rawQty} onChange={(e) => setRow(l.key, { qty: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="Qty" />
-                  </div>
-                  <div className="col-span-4 sm:col-span-2">
-                    <span className={smallLabel}>Price{p ? ` per ${unitWord}` : ''}</span>
-                    <input aria-label={`Price ${idx + 1}`} data-nav="price" type="number" inputMode="decimal" min="0" step="any" value={l.rawPrice} onChange={(e) => setRow(l.key, { price: e.target.value, priceFrom: 'typed' })} className={`${inputCls} tabular-nums`} placeholder="Price" />
-                    {l.priceFrom === 'customer' && <span data-testid={`customer-rate-${idx + 1}`} className="block mt-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Customer rate</span>}
-                  </div>
-                  <div className="col-span-3 sm:col-span-2 text-right tabular-nums font-bold text-sm text-[#111827] dark:text-white"><span className={`${smallLabel} font-sans`}>Amount</span>{rs(l.amount)}</div>
-                  <div className="col-span-1 flex justify-end">
+                  {/* Phones: the bin sits beside the item name; wider screens: its own last column. */}
+                  <div className="col-span-1 flex justify-end sm:col-start-6 sm:row-start-1">
                     <button type="button" onClick={() => removeRow(l.key)} aria-label={`Remove item ${idx + 1}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-30" disabled={rows.length === 1}><Trash2 className="w-4 h-4" /></button>
                   </div>
+                  <div className="col-span-4 sm:col-auto">
+                    <span className={smallLabel}>Qty{p ? ` (${plural(unitWord, 2)})` : ''}</span>
+                    <input id={`bill-qty-${idx + 1}`} aria-label={`Quantity ${idx + 1}`} data-nav="qty" type="number" inputMode="decimal" min="0" step="any" value={l.rawQty} onChange={(e) => setRow(l.key, { qty: e.target.value })} className={`${inputCls} tabular-nums max-sm:!px-2.5`} placeholder="Qty" />
+                  </div>
+                  <div className="col-span-4 sm:col-auto">
+                    <span className={smallLabel}>Price{p ? ` per ${unitWord}` : ''}</span>
+                    <input aria-label={`Price ${idx + 1}`} data-nav="price" type="number" inputMode="decimal" min="0" step="any" value={l.rawPrice} onChange={(e) => setRow(l.key, { price: e.target.value, priceFrom: 'typed' })} className={`${inputCls} tabular-nums max-sm:!px-2.5`} placeholder="Price" />
+                    {l.priceFrom === 'customer' && <span data-testid={`customer-rate-${idx + 1}`} className="block mt-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Customer rate</span>}
+                  </div>
+                  <div className="col-span-4 sm:col-auto text-right tabular-nums font-bold text-sm text-[#111827] dark:text-white whitespace-nowrap"><span className={`${smallLabel} font-sans`}>Amount</span>{rs(l.amount)}</div>
                   {p && (
-                    <div data-testid={`line-info-${idx + 1}`} className="col-span-12 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6B7280] dark:text-[#94A3B8] px-1">
+                    <div data-testid={`line-info-${idx + 1}`} className="col-span-full flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6B7280] dark:text-[#94A3B8] px-1">
                       {packable && (
                         <span className="inline-flex rounded-xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden font-bold" role="group" aria-label={`Unit for item ${idx + 1}`}>
                           {[false, true].map((packMode) => (
@@ -616,14 +627,14 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                     </div>
                   )}
                   {l.schemePct && (
-                    <div data-testid={`scheme-pct-${idx + 1}`} className="col-span-12 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-teal-700 dark:text-teal-300">
+                    <div data-testid={`scheme-pct-${idx + 1}`} className="col-span-full flex flex-wrap items-center gap-2 text-[11px] font-semibold text-teal-700 dark:text-teal-300">
                       <Gift className="w-3.5 h-3.5" /> Scheme “{l.schemePct.schemeName}”: {l.schemePct.pct}% off (− {rs(l.lineDisc)})
                       <button type="button" tabIndex={-1} onClick={() => drop(`pct|${l.schemePct!.schemeId}|${l.key}`)} className="underline text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600" aria-label={`Remove scheme discount on item ${idx + 1}`}>remove</button>
                     </div>
                   )}
-                  {note && <div data-testid={`stock-note-${idx + 1}`} className={`col-span-12 text-[11px] font-semibold ${note.block ? 'text-rose-700 dark:text-rose-300' : note.warn ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{note.text}</div>}
+                  {note && <div data-testid={`stock-note-${idx + 1}`} className={`col-span-full text-[11px] font-semibold ${note.block ? 'text-rose-700 dark:text-rose-300' : note.warn ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{note.text}</div>}
                   {l.showDisc ? (
-                    <div className="col-span-12 flex flex-wrap items-center gap-2">
+                    <div className="col-span-full flex flex-wrap items-center gap-2">
                       <label htmlFor={`disc-${l.key}`} className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Discount on this item</label>
                       <div className="w-28"><input id={`disc-${l.key}`} aria-label={`Discount ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.disc} onChange={(e) => setRow(l.key, { disc: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="0" /></div>
                       <div className="inline-flex rounded-2xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden text-xs font-bold" role="group" aria-label={`Discount type ${idx + 1}`}>
@@ -634,7 +645,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                       {l.lineDisc > 0 && <span className="text-[11px] font-semibold text-[#6B7280] dark:text-[#94A3B8]">− {rs(l.lineDisc)}</span>}
                     </div>
                   ) : (
-                    <div className="col-span-12 -mt-1">
+                    <div className="col-span-full -mt-1">
                       <button type="button" tabIndex={-1} onClick={() => setRow(l.key, { showDisc: true })} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#6B7280] dark:text-[#94A3B8] hover:text-teal-700" aria-label={`Add discount to item ${idx + 1}`}><Percent className="w-3 h-3" /> Discount</button>
                     </div>
                   )}
@@ -725,7 +736,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2 pt-1">
                   <div>
                     <label className={labelCls} htmlFor="bill-paid">Paid now</label>
                     <div className="flex gap-1">
@@ -739,7 +750,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                       {BILL_PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
                     </select>
                   </div>
-                  {needsBank(method) && <BankSelect id="bill-bank" className="col-span-2" label="Into bank" value={bank} onChange={setBank} />}
+                  {needsBank(method) && <BankSelect id="bill-bank" className="col-span-full" label="Into bank" value={bank} onChange={setBank} />}
                 </div>
                 <button type="button" onClick={() => { setSplit(true); if (method === 'Cheque') setSplitCheque(paidNow); else if (method === 'Cash') setSplitCash(paidNow); else { setSplitBankMethod(BANK_METHODS.includes(method) ? method : BANK_METHODS[0]); setSplitBank(paidNow); } setPaidNow(''); }} className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:underline"><SplitSquareHorizontal className="w-3 h-3" /> Split: cash + bank + cheque</button>
               </>

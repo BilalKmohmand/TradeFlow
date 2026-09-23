@@ -37,6 +37,7 @@
 import { AppSettings, CashEntry, Customer, DocSeriesKey, Expense, ExpenseCategory, LedgerEntry, Supplier } from '../types';
 import { ACC, Account, EXPENSE_ACCOUNT, JournalEntry, JournalLine, booksLockedFor, generalLedger, drCr } from './accounting';
 import { MAIN_BANK_CODE } from './finance';
+import { foldText, matcher } from './search';
 
 export type VoucherType = 'CPV' | 'CRV' | 'BPV' | 'BRV' | 'JV';
 
@@ -76,6 +77,9 @@ export interface AccountOption {
   /** What kind of account (shown as a small tag in the picker). */
   group: 'Customer' | 'Supplier' | 'Bank' | 'Cash' | 'Expense' | 'Income' | 'Asset' | 'Liability' | 'Equity';
   city?: string;
+  /** Shop name (customer) / contact name (supplier) and phone: searched, not shown. */
+  company?: string;
+  phone?: string;
   /** Debit-positive balance when known. */
   balance?: number;
 }
@@ -87,19 +91,20 @@ export const accountOptions = (accounts: Account[], customers: Customer[], suppl
   const gl = accounts
     .filter((a) => !opts.forVoucher || !BLOCKED_LINE_ACCOUNTS[a.code])
     .map((a) => ({ ref: a.code, code: a.code, name: a.name, group: groupOf(a) }));
-  const cs = customers.map((c) => ({ ref: custRef(c.id), code: c.code || '', name: c.name, group: 'Customer' as const, city: c.city, balance: c.totalDue }));
-  const ss = suppliers.map((s) => ({ ref: suppRef(s.id), code: s.code || '', name: s.company || s.name, group: 'Supplier' as const, city: s.city, balance: -s.totalOwed }));
+  const cs = customers.map((c) => ({ ref: custRef(c.id), code: c.code || '', name: c.name, group: 'Customer' as const, city: c.city, company: c.company, phone: c.phone, balance: c.totalDue }));
+  const ss = suppliers.map((s) => ({ ref: suppRef(s.id), code: s.code || '', name: s.company || s.name, group: 'Supplier' as const, city: s.city, company: s.name, phone: s.phone, balance: -s.totalOwed }));
   return [...gl, ...cs, ...ss];
 };
 
-/** Search the picker by code (exact code first) or by name / city. */
+/** Search the picker by code (exact code first) or by name / shop name / city / phone (utils/search.ts rules). */
 export const searchAccounts = (options: AccountOption[], query: string, limit = 30): AccountOption[] => {
-  const q = query.trim().toLowerCase();
+  const q = foldText(query).replace(/ /g, '');
   if (!q) return options.slice(0, limit);
-  const exact = options.filter((o) => o.code && o.code.toLowerCase() === q);
-  const starts = options.filter((o) => !exact.includes(o) && o.code && o.code.toLowerCase().startsWith(q));
-  const words = q.split(/\s+/);
-  const rest = options.filter((o) => !exact.includes(o) && !starts.includes(o) && words.every((w) => `${o.code} ${o.name} ${o.city || ''} ${o.group}`.toLowerCase().includes(w)));
+  const codeKey = (o: AccountOption) => foldText(o.code).replace(/ /g, '');
+  const exact = options.filter((o) => o.code && codeKey(o) === q);
+  const starts = options.filter((o) => !exact.includes(o) && o.code && codeKey(o).startsWith(q));
+  const m = matcher(query);
+  const rest = options.filter((o) => !exact.includes(o) && !starts.includes(o) && m([o.code, o.name, o.company, o.city, o.group], [o.phone]));
   return [...exact, ...starts, ...rest].slice(0, limit);
 };
 
@@ -567,22 +572,12 @@ export const allCities = (settings: Pick<AppSettings, 'cities'>, customers: { ci
 };
 
 /** Search parties by city (exact, case-insensitive; '' = any) and by ID / name / phone. */
-export const filterParties = <T extends { name: string; code?: string; phone?: string; city?: string; company?: string }>(rows: T[], query: string, city: string): T[] => {
-  const q = query.trim().toLowerCase();
+export const filterParties = <T extends { name: string; code?: string; phone?: string; city?: string; company?: string; contactPerson?: string; address?: string }>(rows: T[], query: string, city: string): T[] => {
   const c = cityKey(city || '');
-  const qDigits = q.replace(/[^0-9]/g, '');
-  return rows.filter(
-    (r) =>
-      (!c || cityKey(r.city || '') === c) &&
-      (!q ||
-        r.name.toLowerCase().includes(q) ||
-        (r.code || '').toLowerCase().includes(q) ||
-        (r.company || '').toLowerCase().includes(q) ||
-        (r.city || '').toLowerCase().includes(q) ||
-        // A phone typed with spaces or dashes still matches: "0300 123" → 0300123. At least 3 digits,
-        // so a code like "Z01" is not also matched by every phone number containing "01".
-        Boolean(qDigits.length >= 3 && (r.phone || '').replace(/[^0-9]/g, '').includes(qDigits)))
-  );
+  // One matcher for every search box (utils/search.ts): name, code, shop name, city, contact person and
+  // address, words in any order, any case, Urdu letter variants; a phone typed with spaces / +92 (3+ digits).
+  const m = matcher(query);
+  return rows.filter((r) => (!c || cityKey(r.city || '') === c) && m([r.name, r.code, r.company, r.city, r.contactPerson, r.address], [r.phone]));
 };
 
 // ---------------------------------------------------------------------------

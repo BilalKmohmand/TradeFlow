@@ -1,3 +1,4 @@
+import { matcher } from '../../utils/search';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Printer, Pencil, Trash2, Eye, X } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
@@ -49,10 +50,10 @@ export const VouchersTab: React.FC<{ accounts: Account[]; flash: Flash; request?
     l.partyType === 'customer' ? customers.find((c) => c.id === l.partyId)?.name || 'Customer' : l.partyType === 'supplier' ? (() => { const s = suppliers.find((x) => x.id === l.partyId); return s ? s.company || s.name : 'Supplier'; })() : accounts.find((a) => a.code === l.accountCode)?.name || l.accountCode;
 
   const rows = useMemo(() => {
-    const s = q.trim().toLowerCase();
+    const m = matcher(q);
     return vouchers
       .filter((v) => (kind === 'all' || v.voucherType === kind) && v.date >= from && v.date <= to)
-      .filter((v) => !s || `${v.ref} ${v.memo} ${v.lines.map((l) => `${l.accountCode} ${nameOf(l)} ${l.narration || ''}`).join(' ')}`.toLowerCase().includes(s))
+      .filter((v) => m([v.ref, v.memo, ...v.lines.flatMap((l) => [l.accountCode, nameOf(l), l.narration])]))
       .sort((a, b) => (a.date === b.date ? b.ref.localeCompare(a.ref, undefined, { numeric: true }) : a.date < b.date ? 1 : -1));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vouchers, kind, q, from, to, customers, suppliers, accounts]);
@@ -218,7 +219,8 @@ export const VoucherModal: React.FC<{ type: VoucherType; editId?: string; accoun
         Debit <strong>{rs(totals.debit + (info.side === 'receive' ? sideAmt : 0))}</strong> • Credit <strong>{rs(totals.credit + (info.side === 'pay' ? sideAmt : 0))}</strong>
         {!info.money && Math.abs(totals.debit - totals.credit) >= 0.005 && <span className="ml-2 font-bold text-rose-700 dark:text-rose-300">Difference {rs(Math.abs(totals.debit - totals.credit))}</span>}
       </div>
-      <div className="flex gap-2 max-sm:w-full">
+      {/* Phones: "Save voucher" gets its own full-width row on top, so no button label is squeezed onto 3 lines. */}
+      <div className="flex flex-wrap gap-2 max-sm:w-full max-sm:[&>*:last-child]:order-first max-sm:[&>*:last-child]:basis-full">
         <button type="button" onClick={onClose} className={`${secondaryBtn} max-sm:flex-1`}>{sent ? 'Close' : 'Cancel'}</button>
         <button type="button" onClick={() => save(true)} disabled={Boolean(sent)} className={`${secondaryBtn} max-sm:flex-1`}><Printer className="w-4 h-4" /> Save &amp; print</button>
         <button type="button" onClick={() => save(false)} disabled={Boolean(sent)} className={`${primaryBtn} max-sm:flex-1`}>Save voucher</button>
@@ -252,12 +254,12 @@ export const VoucherModal: React.FC<{ type: VoucherType; editId?: string; accoun
             <span>Account (type a code or name, F1 to search)</span><span className="text-right">Debit</span><span className="text-right">Credit</span><span>Line narration</span><span />
           </div>
           {lines.map((l, i) => (
-            <div key={l.key} className="grid grid-cols-2 sm:grid-cols-[minmax(0,2.2fr)_7.5rem_7.5rem_minmax(0,1.4fr)_2.5rem] gap-2 items-start rounded-2xl sm:rounded-none border sm:border-0 border-[#E5E5E1] dark:border-[#203248] p-2 sm:p-0" data-testid="voucher-line">
-              <AccountPicker id={`vch-acc-${i + 1}`} aria-label={`Line ${i + 1} account`} className="col-span-2 sm:col-span-1" value={l.account} options={options} onPick={(ref) => set(l.key, { account: ref })} />
+            <div key={l.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,2.2fr)_7.5rem_7.5rem_minmax(0,1.4fr)_2.5rem] gap-2 items-start rounded-2xl sm:rounded-none border sm:border-0 border-[#E5E5E1] dark:border-[#203248] p-2 sm:p-0" data-testid="voucher-line">
+              <AccountPicker id={`vch-acc-${i + 1}`} aria-label={`Line ${i + 1} account`} className="col-span-3 sm:col-span-1" value={l.account} options={options} onPick={(ref) => set(l.key, { account: ref })} />
               <input aria-label={`Line ${i + 1} debit`} type="number" inputMode="decimal" min="0" step="any" value={l.debit} onChange={(e) => set(l.key, { debit: e.target.value, ...(e.target.value ? { credit: '' } : {}) })} className={`${inputCls} tabular-nums text-right ${main === 'debit' ? '' : 'opacity-80'}`} placeholder="Debit" />
-              <input aria-label={`Line ${i + 1} credit`} type="number" inputMode="decimal" min="0" step="any" value={l.credit} onChange={(e) => set(l.key, { credit: e.target.value, ...(e.target.value ? { debit: '' } : {}) })} className={`${inputCls} tabular-nums text-right ${main === 'credit' ? '' : 'opacity-80'}`} placeholder="Credit" />
+              <input aria-label={`Line ${i + 1} credit`} type="number" inputMode="decimal" min="0" step="any" value={l.credit} onChange={(e) => set(l.key, { credit: e.target.value, ...(e.target.value ? { debit: '' } : {}) })} className={`${inputCls} max-sm:col-span-2 tabular-nums text-right ${main === 'credit' ? '' : 'opacity-80'}`} placeholder="Credit" />
               <input aria-label={`Line ${i + 1} narration`} value={l.narration} onChange={(e) => set(l.key, { narration: e.target.value })} className={`${inputCls} col-span-2 sm:col-span-1`} placeholder="optional" />
-              <button type="button" onClick={() => setLines((prev) => (prev.length > 1 ? prev.filter((x) => x.key !== l.key) : prev))} aria-label={`Remove line ${i + 1}`} className="col-span-2 sm:col-span-1 justify-self-end p-2.5 rounded-xl text-[#9CA3AF] hover:text-rose-600"><X className="w-4 h-4" /></button>
+              <button type="button" onClick={() => setLines((prev) => (prev.length > 1 ? prev.filter((x) => x.key !== l.key) : prev))} aria-label={`Remove line ${i + 1}`} className="justify-self-end p-2.5 rounded-xl text-[#9CA3AF] hover:text-rose-600"><X className="w-4 h-4" /></button>
             </div>
           ))}
           <button type="button" onClick={() => setLines((prev) => [...prev, newLine()])} className={secondaryBtn}><Plus className="w-4 h-4" /> Add line</button>

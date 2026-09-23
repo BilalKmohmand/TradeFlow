@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { foldText, matcher } from '../../utils/search';
 
 /** One option of a <select> that can be found by typing (name, code, phone…). */
 export interface PickOption {
@@ -13,22 +14,28 @@ export interface PickOption {
   barcode?: string;
 }
 
-/** Best match for what was typed: code first, then name start, word start, then anywhere in the name. */
+/**
+ * Best match for what was typed: barcode, code, then name start, word start, anywhere in the name, then
+ * the extra text (shop name, phone with or without spaces, city). Any case; Urdu letter variants and
+ * "c0007" for "C-0007" as everywhere else (utils/search.ts).
+ */
 export const findOption = (options: PickOption[], typed: string): PickOption | undefined => {
-  const q = typed.trim().toLowerCase();
+  const q = foldText(typed);
   if (!q) return undefined;
+  const qs = q.replace(/ /g, '');
+  const m = matcher(typed);
   let best: { o: PickOption; score: number } | undefined;
   for (const o of options) {
-    const name = o.name.toLowerCase();
-    const code = (o.code || '').toLowerCase();
+    const name = foldText(o.name);
+    const code = foldText(o.code || '').replace(/ /g, '');
     let score = 99;
-    if (o.barcode && o.barcode.trim().toLowerCase() === q) score = -1;
-    else if (code && code === q) score = 0;
-    else if (code && code.startsWith(q)) score = 1;
+    if (o.barcode && o.barcode.trim().toLowerCase() === typed.trim().toLowerCase()) score = -1;
+    else if (code && code === qs) score = 0;
+    else if (code && code.startsWith(qs)) score = 1;
     else if (name.startsWith(q)) score = 2;
-    else if (name.split(/[\s\-/.,&()]+/).some((w) => w.startsWith(q))) score = 3;
+    else if (name.split(' ').some((w) => w.startsWith(q))) score = 3;
     else if (name.includes(q)) score = 4;
-    else if (o.extra && o.extra.toLowerCase().replace(/\s/g, '').includes(q.replace(/\s/g, ''))) score = 5;
+    else if (m([o.name, o.code, o.extra], [o.extra])) score = 5;
     if (score < 99 && (!best || score < best.score)) best = { o, score };
   }
   return best?.o;

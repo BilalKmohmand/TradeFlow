@@ -95,13 +95,13 @@ export const VisibilitySettingsTab: React.FC = () => {
           <label className="text-xs font-bold text-[#111827] dark:text-white shrink-0">
             Configure Visibility for:
           </label>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 min-w-0">
             {roles.map((r) => (
               <button
                 key={r.id}
                 type="button"
                 onClick={() => setSelectedRoleId(r.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                className={`px-3 py-1.5 whitespace-nowrap rounded-xl text-xs font-bold transition-all border ${
                   selectedRoleId === r.id
                     ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827] border-transparent shadow-xs'
                     : 'bg-white dark:bg-[#101A26] text-[#374151] dark:text-[#CBD5E1] border-[#E5E5E1] dark:border-[#203248] hover:border-teal-500/50'
