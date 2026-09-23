@@ -32,7 +32,8 @@ export const AccountLedgerTab: React.FC<{ accounts: Account[]; journal: JournalE
           <AccountPicker id="al-account" aria-label="Ledger account" value={ref} options={options} onPick={(r) => r && setRef(r)} />
         </div>
         <div className="min-w-0"><label className={labelCls} htmlFor="al-from">Date from</label><input id="al-from" type="date" value={from} onChange={(e) => setFrom(e.target.value || today)} className={inputCls} /></div>
-        <div className="min-w-0"><label className={labelCls} htmlFor="al-to">Date to</label><input id="al-to" type="date" value={to} onChange={(e) => setTo(e.target.value || today)} className={inputCls} /></div>
+        <div className="min-w-0"><label className={labelCls} htmlFor="al-to">Date to</label><input id="al-to" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value || today)} className={inputCls} /></div>
+        {from > to && <p className="col-span-2 sm:col-span-4 text-xs font-semibold text-rose-700 dark:text-rose-300" role="alert">"Date from" is after "Date to": nothing can show. Put the earlier date first.</p>}
         <div className="col-span-2 sm:col-span-4 flex flex-wrap items-center justify-between gap-2">
           <span className="text-sm font-bold text-[#111827] dark:text-white min-w-0 truncate">{rep.code ? <span className="tabular-nums text-[#8E9299] mr-1.5">{rep.code}</span> : null}{rep.title}</span>
           <span className="flex gap-2">
@@ -41,7 +42,24 @@ export const AccountLedgerTab: React.FC<{ accounts: Account[]; journal: JournalE
           </span>
         </div>
       </div>
-      <div className="overflow-x-auto">
+      {/* Phone: one card per entry, so the amounts and the running balance are never off-screen. */}
+      <ul className="sm:hidden divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]" aria-label="Account ledger entries">
+        <li className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm font-semibold bg-[#FAF9F6] dark:bg-[#162436]"><span>OB • {formatDate(from)}</span><span className="tabular-nums whitespace-nowrap">{drCr(rep.opening)}</span></li>
+        {rep.rows.length === 0 && <li className="px-4 py-6 text-center text-sm text-[#8E9299]">Nothing posted to this account in these dates.</li>}
+        {rep.rows.map((r, i) => (
+          <li key={i} className="px-4 py-2.5 text-sm" data-testid="ledger-card">
+            <div className="flex items-start justify-between gap-2">
+              <span className="min-w-0"><span className="block text-[11px] text-[#6B7280] dark:text-[#94A3B8] tabular-nums">{formatDate(r.date)} • {r.ref}</span><span className="block text-[#111827] dark:text-white">{r.narration}</span></span>
+              <span className="text-right shrink-0 tabular-nums whitespace-nowrap">{r.debit ? <span className="block font-bold">Dr {money(r.debit)}</span> : null}{r.credit ? <span className="block font-bold">Cr {money(r.credit)}</span> : null}<span className="block text-[11px] text-[#6B7280] dark:text-[#94A3B8]">bal {drCr(r.balance)}</span></span>
+            </div>
+          </li>
+        ))}
+        <li className="px-4 py-3 text-sm font-bold border-t-2 border-[#111827] dark:border-white">
+          <div className="flex justify-between gap-2"><span>Grand total</span><span className="tabular-nums whitespace-nowrap">{drCr(rep.closing)}</span></div>
+          <div className="flex justify-between gap-2 text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] tabular-nums"><span>Dr {money(rep.totalDebit)}</span><span>Cr {money(rep.totalCredit)}</span></div>
+        </li>
+      </ul>
+      <div className="hidden sm:block overflow-x-auto">
         <table className="w-full min-w-[640px]" aria-label="Account ledger">
           <thead><tr className="border-b border-[#E5E5E1] dark:border-[#203248] text-left"><th className={th}>Date</th><th className={th}>VchNo</th><th className={th}>Narration</th><th className={`${th} text-right`}>Debit</th><th className={`${th} text-right`}>Credit</th><th className={`${th} text-right`}>Balance</th></tr></thead>
           <tbody>

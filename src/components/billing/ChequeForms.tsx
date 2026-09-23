@@ -6,6 +6,7 @@ import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, Notice,
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 import { billsOnly } from '../../utils/billing';
+import { PartyPick, customerParties, supplierParties } from './PartyPick';
 
 /** Cheque no. / bank / date fields, shared by the cheque form and the "Receive payment" forms. */
 export interface ChequeFields {
@@ -68,15 +69,16 @@ export const ChequeFormModal: React.FC<{ isOpen: boolean; onClose: () => void; d
         {error && <Notice kind="error">{error}</Notice>}
         {sent && <Notice kind="ok">{sent}</Notice>}
         <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <label className={labelCls} htmlFor="chq-party">{received ? 'Customer' : 'Supplier'}</label>
-            <select id="chq-party" value={party} onChange={(e) => { setParty(e.target.value); setBillId(''); }} className={inputCls}>
-              <option value="">{received ? 'Select customer…' : 'Select supplier…'}</option>
-              {received
-                ? [...customers].sort((a, b) => b.totalDue - a.totalDue).map((x) => <option key={x.id} value={x.id}>{x.name}{x.totalDue > 0 ? ` (owes Rs. ${x.totalDue.toLocaleString()})` : ''}</option>)
-                : [...suppliers].sort((a, b) => b.totalOwed - a.totalOwed).map((x) => <option key={x.id} value={x.id}>{x.company || x.name}{x.totalOwed > 0 ? ` (you owe Rs. ${x.totalOwed.toLocaleString()})` : ''}</option>)}
-            </select>
-          </div>
+          <PartyPick
+            id="chq-party"
+            className="col-span-2"
+            label={received ? 'Customer' : 'Supplier'}
+            parties={received ? customerParties(customers) : supplierParties(suppliers)}
+            value={party}
+            onPick={(v) => { setParty(v); setBillId(''); setError(''); }}
+            placeholder={received ? 'Select customer…' : 'Select supplier…'}
+            balanceWord={received ? 'owes' : 'you owe'}
+          />
           <div>
             <label className={labelCls} htmlFor="chq-amount">Amount (Rs.)</label>
             <input id="chq-amount" type="number" inputMode="decimal" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />

@@ -40,6 +40,11 @@ export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: stri
     if (Date.now() - openedAt.current < 500) return;
     onClose();
   };
+  // While a closed dialog fades out it is still on the page: swallow clicks / submits on it, so a
+  // double-click (or a second Enter) on Save can't save twice.
+  const openRef = useRef(isOpen);
+  openRef.current = isOpen;
+  const dead = (e: React.SyntheticEvent) => { if (!openRef.current) { e.preventDefault(); e.stopPropagation(); } };
   // Put focus on the first field and keep Tab inside the dialog.
   useEffect(() => {
     if (!isOpen) return;
@@ -68,6 +73,8 @@ export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: stri
           <motion.div
             ref={box}
             onKeyDown={trap}
+            onClickCapture={dead}
+            onSubmitCapture={dead}
             role="dialog"
             aria-modal="true"
             aria-label={title}

@@ -5,10 +5,11 @@ import { Banknote, Landmark, ArrowLeftRight, HandCoins, Receipt, Settings2, Chev
 import { useTrading } from '../../context/TradingContext';
 import { useBillingUI, useRequestedView, useCurrentView } from '../../components/billing/BillingUI';
 import { useStockUI } from '../../components/billing/StockUI';
-import { Tile, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, rs, PageHeader, EmptyState, RowAction, pillCls } from '../../components/billing/ui';
+import { Tile, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, rs, PageHeader, EmptyState, RowAction, pillCls, Notice } from '../../components/billing/ui';
+import { MAIN_BANK_CODE } from '../../utils/banks';
 import { collectCashMovements, accountBalancesOn, positionSummary } from '../../utils/finance';
 import { groupExpenses } from '../../utils/billing';
-import { todayISO } from '../../utils/stockFlow';
+import { todayISO, shiftDate } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 import { booksLockedFor } from '../../utils/accounting';
 import { BankReconciliationTab } from '../../components/billing/BankReconciliationTab';
@@ -47,12 +48,16 @@ export const MoneyScreen: React.FC = () => {
   const [tab, setTab] = useState<Tab>(() => { const v = ui.peekView('money'); return (MONEY_TABS as readonly string[]).includes(v || '') ? (v as Tab) : 'overview'; });
   const [month, setMonth] = useState(today.slice(0, 7));
   const [showOpening, setShowOpening] = useState(false);
-  const [opening, setOpening] = useState({ cash: String(settings.cashOpeningBalance || 0), bank: String(settings.openingBankBalance || 0), date: settings.cashOpeningDate });
+  // Opening balances: cash and every bank account, and the day the books start from.
+  const openingForm = () => ({ cash: String(settings.cashOpeningBalance || 0), banks: Object.fromEntries(bankAccounts.map((b) => [b.code, String(b.openingBalance || 0)])) as Record<string, string>, date: settings.cashOpeningDate || '' });
+  const [opening, setOpening] = useState(openingForm);
+  const [openingError, setOpeningError] = useState('');
   // Menus / search / Home tiles can open a tab (or the opening balances) here.
   useRequestedView('money', (v) => {
     if (v === 'opening') {
       setTab('overview');
-      setOpening({ cash: String(settings.cashOpeningBalance || 0), bank: String(settings.openingBankBalance || 0), date: settings.cashOpeningDate });
+      setOpening(openingForm());
+      setOpeningError('');
       setShowOpening(true);
     } else if ((MONEY_TABS as readonly string[]).includes(v)) setTab(v as Tab);
   });
@@ -78,9 +83,29 @@ export const MoneyScreen: React.FC = () => {
     [movements, month, bookAcct]
   );
 
+  // One account picked (cash or a bank): a real book — balance brought forward, running balance, balance carried.
+  const book = useMemo(() => {
+    if (bookAcct === 'all') return null;
+    const bal = (asOf: string) => { const b = accountBalancesOn(movements, branchSettings, asOf); return bookAcct === 'cash' ? b.cash : b.banks[bookAcct] || 0; };
+    const opening = bal(shiftDate(`${month}-01`, -1));
+    let run = opening;
+    const rows = [...monthMoves]
+      .filter((m) => m.date >= (branchSettings.cashOpeningDate || ''))
+      .sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? -1 : 1))
+      .map((m) => { run = Math.round((run + (m.direction === 'in' ? m.amount : -m.amount)) * 100) / 100; return { m, balance: run }; });
+    return { opening, rows, closing: run };
+  }, [bookAcct, movements, branchSettings, month, monthMoves]);
+
   const saveOpening = (e: React.FormEvent) => {
     e.preventDefault();
-    updateSettings({ cashOpeningBalance: parseFloat(opening.cash) || 0, openingBankBalance: parseFloat(opening.bank) || 0, cashOpeningDate: opening.date || today });
+    const date = opening.date || today;
+    // Opening balances count in every day after the opening date: changing them would change a closed period.
+    const closed = booksLockedFor(settings, settings.cashOpeningDate && settings.cashOpeningDate < date ? settings.cashOpeningDate : date);
+    if (closed) return setOpeningError(`Opening balances can't be changed: ${closed}`);
+    const amt = (v?: string) => Math.round((parseFloat(v || '') || 0) * 100) / 100;
+    const others = Object.fromEntries(bankAccounts.filter((b) => !b.isMain).map((b) => [b.code, amt(opening.banks[b.code])]));
+    updateSettings({ cashOpeningBalance: amt(opening.cash), openingBankBalance: amt(opening.banks[MAIN_BANK_CODE]), bankOpenings: { ...(settings.bankOpenings || {}), ...others }, cashOpeningDate: date });
+    setOpeningError('');
     setShowOpening(false);
   };
 
@@ -118,18 +143,33 @@ export const MoneyScreen: React.FC = () => {
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => ui.transfer()} className={secondaryBtn}><ArrowLeftRight className="w-4 h-4 text-indigo-600 dark:text-indigo-300" /> Cash ↔ Bank</button>
-              <button type="button" onClick={() => { setOpening({ cash: String(settings.cashOpeningBalance || 0), bank: String(settings.openingBankBalance || 0), date: settings.cashOpeningDate }); setShowOpening((v) => !v); }} className={secondaryBtn}><Settings2 className="w-4 h-4" /> Opening balances</button>
+              <button type="button" onClick={() => { setOpening(openingForm()); setOpeningError(''); setShowOpening((v) => !v); }} aria-expanded={showOpening} className={secondaryBtn}><Settings2 className="w-4 h-4" /> Opening balances</button>
             </div>
           </div>
-          <div data-nav-anchor="bank-accounts"><BankAccountsCard balances={balances.banks} onOpenBank={(code) => { setBookAcct(code); setTab('cashbook'); }} /></div>
           {showOpening && (
-            <form onSubmit={saveOpening} data-nav-anchor="opening" className={`${cardCls} p-5 grid grid-cols-1 sm:grid-cols-4 gap-3`}>
-              <div><label className={labelCls} htmlFor="op-cash">Cash on opening day</label><input id="op-cash" type="number" inputMode="decimal" step="any" value={opening.cash} onChange={(e) => setOpening({ ...opening, cash: e.target.value })} className={`${inputCls} tabular-nums`} /></div>
-              <div><label className={labelCls} htmlFor="op-bank">{bankAccounts.length > 1 ? `${bankAccounts[0].name} on opening day` : 'Bank on opening day'}</label><input id="op-bank" type="number" inputMode="decimal" step="any" value={opening.bank} onChange={(e) => setOpening({ ...opening, bank: e.target.value })} className={`${inputCls} tabular-nums`} /></div>
-              <div><label className={labelCls} htmlFor="op-date">Counting from</label><input id="op-date" type="date" value={opening.date} onChange={(e) => setOpening({ ...opening, date: e.target.value })} className={inputCls} /></div>
-              <div className="flex items-end"><button type="submit" className={`${primaryBtn} w-full`}>Save</button></div>
+            <form onSubmit={saveOpening} data-nav-anchor="opening" aria-label="Opening balances" className={`${cardCls} p-5 space-y-3`}>
+              <div>
+                <h2 className="font-bold text-[#111827] dark:text-white">Opening balances</h2>
+                <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]">What was in the cash drawer and in each bank account on the day the books start.</p>
+              </div>
+              {openingError && <Notice kind="error">{openingError}</Notice>}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div><label className={labelCls} htmlFor="op-date">Counting from</label><input id="op-date" type="date" value={opening.date} max={today} onChange={(e) => setOpening({ ...opening, date: e.target.value })} className={inputCls} /></div>
+                <div><label className={labelCls} htmlFor="op-cash">Cash on opening day</label><input id="op-cash" type="number" inputMode="decimal" step="any" value={opening.cash} onChange={(e) => setOpening({ ...opening, cash: e.target.value })} className={`${inputCls} tabular-nums`} /></div>
+                {bankAccounts.map((b) => (
+                  <div key={b.code}>
+                    <label className={labelCls} htmlFor={b.isMain ? 'op-bank' : `op-bank-${b.code}`}>{bankAccounts.length > 1 ? `${b.name} on opening day` : 'Bank on opening day'}</label>
+                    <input id={b.isMain ? 'op-bank' : `op-bank-${b.code}`} type="number" inputMode="decimal" step="any" value={opening.banks[b.code] ?? ''} onChange={(e) => setOpening({ ...opening, banks: { ...opening.banks, [b.code]: e.target.value } })} className={`${inputCls} tabular-nums`} />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setShowOpening(false)} className={secondaryBtn}>Cancel</button>
+                <button type="submit" className={primaryBtn}>Save opening balances</button>
+              </div>
             </form>
           )}
+          <div data-nav-anchor="bank-accounts"><BankAccountsCard balances={balances.banks} onOpenBank={(code) => { setBookAcct(code); setTab('cashbook'); }} /></div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className={`${cardCls} overflow-hidden`}>
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 sm:px-5 py-3 border-b border-[#E5E5E1] dark:border-[#203248]"><h2 className="font-bold text-[#111827] dark:text-white">Customers owe you</h2><span className="flex items-center gap-2 ml-auto"><button type="button" onClick={() => stockUI.aging('customers')} className="text-xs font-bold text-teal-700 dark:text-teal-300 min-h-9 px-2 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40">How long?</button><span className="tabular-nums whitespace-nowrap font-bold text-sm text-teal-700 dark:text-teal-300">{rs(position.receivables)}</span></span></div>
@@ -220,7 +260,7 @@ export const MoneyScreen: React.FC = () => {
         </div>
       )}
 
-      {tab === 'cashbook' && (
+      {tab === 'cashbook' && !book && (
         <div className={`${cardCls} overflow-hidden`}>
           <div className="grid grid-cols-3 text-center divide-x divide-[#E5E5E1] dark:divide-[#203248] border-b border-[#E5E5E1] dark:border-[#203248]">
             <div className="p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">In</div><div className="tabular-nums whitespace-nowrap font-bold text-teal-700 dark:text-teal-300">{rs(monthMoves.filter((m) => m.direction === 'in').reduce((a, m) => a + m.amount, 0))}</div></div>
@@ -234,6 +274,28 @@ export const MoneyScreen: React.FC = () => {
               ))}
             </ul>
           )}
+        </div>
+      )}
+      {tab === 'cashbook' && book && (
+        <div className={`${cardCls} overflow-hidden`} data-testid="account-book">
+          <div className="grid grid-cols-2 sm:grid-cols-4 text-center divide-x divide-[#E5E5E1] dark:divide-[#203248] border-b border-[#E5E5E1] dark:border-[#203248] max-sm:[&>*:nth-child(3)]:border-l-0 max-sm:[&>*:nth-child(-n+2)]:border-b max-sm:[&>*:nth-child(-n+2)]:border-[#E5E5E1] dark:max-sm:[&>*:nth-child(-n+2)]:border-[#203248]">
+            <div className="p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Brought forward</div><div className="tabular-nums whitespace-nowrap font-bold" data-testid="book-opening">{rs(book.opening)}</div></div>
+            <div className="p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">In</div><div className="tabular-nums whitespace-nowrap font-bold text-teal-700 dark:text-teal-300">{rs(book.rows.filter((r) => r.m.direction === 'in').reduce((a, r) => a + r.m.amount, 0))}</div></div>
+            <div className="p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Out</div><div className="tabular-nums whitespace-nowrap font-bold text-rose-700 dark:text-rose-300">{rs(book.rows.filter((r) => r.m.direction === 'out').reduce((a, r) => a + r.m.amount, 0))}</div></div>
+            <div className="p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Balance</div><div className={`tabular-nums whitespace-nowrap font-bold ${book.closing < 0 ? 'text-rose-700 dark:text-rose-300' : ''}`} data-testid="book-closing">{rs(book.closing)}</div></div>
+          </div>
+          <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
+            <li className="flex items-center gap-2 px-4 sm:px-5 py-2.5 text-sm font-semibold bg-[#FAF9F6] dark:bg-[#162436]"><span className="text-xs text-[#6B7280] dark:text-[#8E9299] w-20 shrink-0 tabular-nums">{formatDate(`${month}-01`)}</span><span className="flex-1 min-w-0">Balance brought forward</span><span className="tabular-nums whitespace-nowrap">{rs(book.opening)}</span></li>
+            {book.rows.map(({ m, balance }) => (
+              <li key={m.id} className="flex flex-wrap sm:flex-nowrap items-center gap-x-2 px-4 sm:px-5 py-2.5 text-sm hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors" data-testid="book-row">
+                <span className="text-xs text-[#6B7280] dark:text-[#8E9299] w-20 shrink-0 tabular-nums">{formatDate(m.date)}</span>
+                <span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{m.counterparty ? `${m.counterparty} • ` : ''}{m.description}<span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]"> • {m.method || 'Cash'}</span></span>
+                <span className={`tabular-nums whitespace-nowrap font-bold ${m.direction === 'in' ? 'text-teal-700 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}>{m.direction === 'in' ? '+' : '−'} {rs(m.amount)}</span>
+                <span className="max-sm:w-full max-sm:text-right sm:w-32 shrink-0 text-right tabular-nums whitespace-nowrap text-xs text-[#6B7280] dark:text-[#94A3B8]" data-testid="book-balance">bal {rs(balance)}</span>
+              </li>
+            ))}
+            {book.rows.length === 0 && <li className="px-5 py-5 text-sm text-center text-[#6B7280] dark:text-[#94A3B8]">No money moved in this account this month.</li>}
+          </ul>
         </div>
       )}
       <ConfirmDialog

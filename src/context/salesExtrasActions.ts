@@ -43,6 +43,8 @@ export interface ReceiveManyRow {
   amount: number;
   /** Cash, Bank Transfer, Easypaisa / JazzCash, Card (cheques go through Receive payment → Cheque). */
   method: string;
+  /** Bank account (chart code 1010, 1011…) the money went into, for bank methods; empty = the main bank. */
+  bankCode?: string;
 }
 
 export interface ReceiveManyInput {
@@ -341,6 +343,7 @@ export const useSalesExtrasStore = (d: Deps) => {
         credit: r.amount,
         balanceAfter: round2(c.totalDue - r.amount),
         ...(input.salesmanId ? { salesmanId: input.salesmanId } : {}),
+        ...(r.bankCode && r.bankCode !== '1010' && !isCashMethod(r.method) ? { bankCode: r.bankCode } : {}),
         ...(d.branchStamp ? d.branchStamp() : {}),
       };
     });
