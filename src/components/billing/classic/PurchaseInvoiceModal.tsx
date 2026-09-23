@@ -4,6 +4,7 @@ import { useTrading } from '../../../context/TradingContext';
 import { PURCHASE_PAY_METHODS } from '../../../context/classicActions';
 import { Modal, Notice, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, rs } from '../ui';
 import { QuickSelect, PickOption } from '../QuickPick';
+import { CodeBox } from '../CodeBox';
 import { ConfirmDialog } from '../../ConfirmDialog';
 import { todayISO } from '../../../utils/stockFlow';
 import { formatDate } from '../../../utils/formatters';
@@ -180,10 +181,15 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
           </div>
           <div className="col-span-2">
             <label className={labelCls} htmlFor="pi-supplier">Supplier</label>
-            <QuickSelect id="pi-supplier" value={supplierId} options={supplierOptions} onPick={setSupplierId} className={inputCls} title="Type a name or code to find the supplier">
-              <option value="">Select supplier…</option>
-              {sortedSuppliers.map((s) => <option key={s.id} value={s.id}>{s.code ? `${s.code} • ` : ''}{s.company || s.name}</option>)}
-            </QuickSelect>
+            <div className="flex gap-2">
+              <CodeBox id="pi-supplier-code" label="Supplier code" items={sortedSuppliers} value={supplierId} onPick={setSupplierId} className="w-28 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <QuickSelect id="pi-supplier" value={supplierId} options={supplierOptions} onPick={setSupplierId} className={inputCls} title="Type a name or code to find the supplier">
+                  <option value="">Select supplier…</option>
+                  {sortedSuppliers.map((s) => <option key={s.id} value={s.id}>{s.code ? `${s.code} • ` : ''}{s.company || s.name}</option>)}
+                </QuickSelect>
+              </div>
+            </div>
             {supplier && <p className="mt-1 text-[11px] text-[#6B7280] dark:text-[#94A3B8]" data-testid="pi-supplier-balance">You owe them <strong className="tabular-nums">{rs(supplier.totalOwed)}</strong> now • <strong className="tabular-nums">{rs(supplier.totalOwed + balance)}</strong> after this bill</p>}
           </div>
           <div>
@@ -208,13 +214,13 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
         </div>
 
         <div>
-          <div className="hidden md:grid grid-cols-12 gap-2 px-1 mb-1 text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">
-            <div className="col-span-1">Code</div>
-            <div className="col-span-4">Product name</div>
-            <div className="col-span-2">Unit / packing</div>
-            <div className="col-span-1">Qty</div>
-            <div className="col-span-2">Rate</div>
-            <div className="col-span-2 text-right">Amount</div>
+          <div className="hidden md:grid md:grid-cols-[7rem_minmax(11rem,1fr)_8.5rem_7rem_8rem_8.5rem] gap-2 px-1 mb-1 text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">
+            <div>Code</div>
+            <div>Product name</div>
+            <div>Unit / packing</div>
+            <div>Qty</div>
+            <div>Rate</div>
+            <div className="text-right">Amount</div>
           </div>
           <div className="space-y-2">
             {calc.map((l, i) => {
@@ -222,9 +228,9 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
               const id = (f: string) => (i === 0 ? `pi-${f}` : `pi-${f}-${i + 1}`);
               const unitWord = p ? (l.pack > 1 ? p.packName! : p.unit || 'pcs') : '';
               return (
-                <div key={l.key} data-testid="pi-line" className="grid grid-cols-12 gap-2 items-center rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2 md:p-1 md:border-0">
-                  <div className="hidden md:block col-span-1 text-xs font-mono text-[#6B7280] dark:text-[#94A3B8] truncate">{p?.code || '—'}</div>
-                  <div className="col-span-12 md:col-span-4 flex gap-1">
+                <div key={l.key} data-testid="pi-line" className="grid grid-cols-12 md:grid-cols-[7rem_minmax(11rem,1fr)_8.5rem_7rem_8rem_8.5rem] gap-2 items-center rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2 md:p-1 md:border-0">
+                  <CodeBox id={id('code')} label={`Product code ${i + 1}`} items={sortedProducts} value={l.pid} onPick={(v) => pick(l.key, v)} className="col-span-4 md:col-auto" />
+                  <div className="col-span-8 md:col-auto flex gap-1">
                     <div className="flex-1 min-w-0">
                       <QuickSelect id={id('item')} aria-label={`Product ${i + 1}`} value={l.pid} options={productOptions} onPick={(v) => pick(l.key, v)} className={inputCls} title="Type the product name or code">
                         <option value="">Select product…</option>
@@ -233,7 +239,7 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
                     </div>
                     <button type="button" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : ls))} disabled={lines.length === 1} aria-label={`Remove line ${i + 1}`} className="md:hidden shrink-0 p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 disabled:opacity-30"><Trash2 className="w-4 h-4" /></button>
                   </div>
-                  <div className="col-span-12 md:col-span-2 text-[11px] text-[#6B7280] dark:text-[#94A3B8]">
+                  <div className="col-span-12 md:col-auto text-[11px] text-[#6B7280] dark:text-[#94A3B8]">
                     {p && hasPack(p) ? (
                       <span className="inline-flex rounded-xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden font-bold" role="group" aria-label={`Unit for line ${i + 1}`}>
                         {[false, true].map((packMode) => (
@@ -246,18 +252,18 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
                       <span className="font-semibold">{p ? p.unit || 'pcs' : ''}</span>
                     )}
                   </div>
-                  <div className="col-span-4 md:col-span-1">
-                    <input id={id('qty')} aria-label={`Qty ${i + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} className={`${inputCls} tabular-nums !px-2`} placeholder="Qty" />
+                  <div className="col-span-4 md:col-auto">
+                    <input id={id('qty')} aria-label={`Qty ${i + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="Qty" />
                   </div>
-                  <div className="col-span-4 md:col-span-2">
+                  <div className="col-span-4 md:col-auto">
                     <input id={id('rate')} aria-label={`Rate ${i + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.rate} onChange={(e) => setLine(l.key, { rate: e.target.value })} className={`${inputCls} tabular-nums`} placeholder={p ? `per ${unitWord}` : 'Rate'} />
                   </div>
-                  <div className="col-span-4 md:col-span-2 flex items-center justify-end gap-1">
+                  <div className="col-span-4 md:col-auto flex items-center justify-end gap-1">
                     <span className="tabular-nums font-bold text-sm text-[#111827] dark:text-white" data-testid={`pi-amount-${i + 1}`}>{rs(l.amount)}</span>
                     <button type="button" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : ls))} disabled={lines.length === 1} aria-label={`Remove line ${i + 1}`} className="hidden md:inline-flex p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 disabled:opacity-30"><Trash2 className="w-4 h-4" /></button>
                   </div>
                   {p && (
-                    <div className="col-span-12 flex flex-wrap gap-x-3 text-[11px] text-[#6B7280] dark:text-[#94A3B8] px-1">
+                    <div className="col-span-12 md:col-span-full flex flex-wrap gap-x-3 text-[11px] text-[#6B7280] dark:text-[#94A3B8] px-1">
                       {l.pack > 1 && l.typedQty > 0 && <span>= {formatPackQty(l.qty, p)} at {rs(Math.round(l.rate * 100) / 100)}/{p.unit || 'pcs'}</span>}
                       <span>Stock in hand <strong className="tabular-nums">{formatPackQty(p.stockKg, p, 'short')}</strong></span>
                       {(() => {
@@ -267,7 +273,7 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
                     </div>
                   )}
                   {p?.trackBatches && (
-                    <div className="col-span-12 grid grid-cols-2 gap-2">
+                    <div className="col-span-12 md:col-span-full grid grid-cols-2 gap-2">
                       <input aria-label={`Batch no. ${i + 1}`} value={l.batchNo} onChange={(e) => setLine(l.key, { batchNo: e.target.value })} className={inputCls} placeholder="Batch no. (auto if empty)" />
                       <input aria-label={`Expiry ${i + 1}`} type="date" value={l.expiry} onChange={(e) => setLine(l.key, { expiry: e.target.value })} className={inputCls} />
                     </div>
