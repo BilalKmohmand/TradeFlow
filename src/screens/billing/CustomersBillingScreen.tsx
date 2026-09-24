@@ -58,7 +58,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
   const owed = customers.reduce((a, c) => a + c.totalDue, 0);
   const open = customers.find((c) => c.id === openId) || null;
   const openBills = open ? billsOnly(invoices).filter((i) => i.customerId === open.id).sort((a, b) => (a.issueDate < b.issueDate ? 1 : -1)) : [];
-  const openPayments = open ? ledger.filter((l) => l.entityType === 'customer' && l.entityId === open.id && (l.type === 'payment_received' || l.type === 'cheque_received' || l.type === 'cheque_returned' || l.type === 'cheque_charge' || l.type === 'interest_charge' || l.type === 'voucher' || (l.type === 'refund_paid' && Boolean(l.voucherId)))).sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
+  const openPayments = open ? ledger.filter((l) => l.entityType === 'customer' && l.entityId === open.id && (l.type === 'payment_received' || l.type === 'cheque_received' || l.type === 'cheque_returned' || l.type === 'cheque_charge' || l.type === 'interest_charge' || l.type === 'opening_balance' || l.type === 'voucher' || (l.type === 'refund_paid' && Boolean(l.voucherId)))).sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
 
   return (
     <div className="space-y-5">

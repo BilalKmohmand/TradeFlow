@@ -235,6 +235,12 @@ interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, P
   ) => { success: boolean; message: string };
   /** Simple billing: one call creates the bill, books the sale, takes stock and records any cash paid now. */
   createBill: (input: CreateBillInput) => { success: boolean; message: string; invoice?: Invoice };
+  /** Edit a saved bill in place (same number); refused when returns, a cheque, a closed period or the role forbid it. */
+  editBill: (invoiceId: string, input: CreateBillInput) => { success: boolean; message: string; invoice?: Invoice };
+  /** Why this bill cannot be edited (null = it can). */
+  billEditBlock: (inv: Invoice) => string | null;
+  /** Set a customer's / supplier's opening (old khata) balance; editing it later adjusts the same opening row. */
+  setOpeningBalance: (entityType: 'customer' | 'supplier', id: string, amount: number, date?: string) => { success: boolean; message: string };
   payBill: (invoiceId: string, amount: number, method: string, notes?: string, date?: string, bankCode?: string) => { success: boolean; message: string };
   deleteBill: (invoiceId: string) => { success: boolean; message: string };
   /** Sales return against a bill: goods back to stock, credit note, money back now or off what they owe. */
@@ -545,6 +551,20 @@ export interface CreateBillInput {
 export const BILL_PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'Cheque', 'Easypaisa / JazzCash', 'Card'];
 
 /** Map a free-text method onto the invoice payment record enum. */
+/** One line saying what changed when a bill was edited (for the audit log and the bill's edit history). */
+const billEditSummary = (before: Invoice, after: Invoice): string => {
+  const fmt = (n: number) => `Rs. ${Math.round(n).toLocaleString('en-US')}`;
+  const parts: string[] = [];
+  if (before.customerId !== after.customerId) parts.push(`customer ${before.customerName} → ${after.customerName}`);
+  if (before.issueDate !== after.issueDate) parts.push(`date ${before.issueDate} → ${after.issueDate}`);
+  const lines = (inv: Invoice) => inv.items.map((it) => `${it.productName} × ${it.qty ?? it.kg} @ ${it.unitPrice ?? it.ratePerKg}${it.free ? ' (free)' : ''}`).join(', ');
+  if (lines(before) !== lines(after)) parts.push(`items [${lines(before)}] → [${lines(after)}]`);
+  if ((before.freightCharges || 0) !== (after.freightCharges || 0)) parts.push(`freight ${fmt(before.freightCharges || 0)} → ${fmt(after.freightCharges || 0)}`);
+  if ((before.memoNo || '') !== (after.memoNo || '')) parts.push(`memo ${before.memoNo || '-'} → ${after.memoNo || '-'}`);
+  parts.push(`total ${fmt(before.totalAmount)} → ${fmt(after.totalAmount)}`);
+  return parts.join('; ');
+};
+
 const invoiceMethod = (m: string): InvoicePaymentRecord['method'] => {
   const l = m.toLowerCase();
   if (l.startsWith('cash')) return 'cash';
@@ -728,6 +748,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     invoicesRef.current = invoices;
   }, [invoices]);
+  // Mirror of the ledger that updates synchronously (opening balances set right after a party is added).
+  const ledgerRef = useRef<LedgerEntry[]>(ledger);
+  useEffect(() => {
+    ledgerRef.current = ledger;
+  }, [ledger]);
   const [customerAgreedRates, setCustomerAgreedRates] = useState<CustomerAgreedRate[]>(() =>
     loadLocal(STORAGE_KEYS.AGREED_RATES, initialCustomerAgreedRates)
   );
@@ -1118,6 +1143,58 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateSupplier = (id: string, data: Partial<Supplier>) => {
     setSuppliers((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
+  };
+
+  /**
+   * Opening (old khata) balance of a customer or supplier: one "Opening balance" ledger row (ref OB) that
+   * posts against Opening balance equity (3900). Customer: positive = they owe us. Supplier: positive = we owe
+   * them. Negative = an advance. Setting it again changes that same row; 0 removes it.
+   */
+  const setOpeningBalance = (entityType: 'customer' | 'supplier', id: string, amount: number, date?: string): { success: boolean; message: string } => {
+    const amt = round2(Number(amount) || 0);
+    if (!Number.isFinite(amt)) return { success: false, message: 'Enter the opening balance as a number.' };
+    const party = entityType === 'customer' ? customers.find((c) => c.id === id) : suppliers.find((x) => x.id === id);
+    const name = party ? (entityType === 'customer' ? party.name : (party as Supplier).company || party.name) : '';
+    const existing = ledgerRef.current.find((l) => l.entityType === entityType && l.entityId === id && l.type === 'opening_balance');
+    const oldAmt = existing ? round2((Number(existing.debit) || 0) - (Number(existing.credit) || 0)) : 0;
+    const when = date || existing?.date || (party?.createdAt || '').slice(0, 10) || todayISO();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(when)) return { success: false, message: 'Enter the date of the opening balance.' };
+    if (when > todayISO()) return { success: false, message: 'The opening balance date cannot be in the future.' };
+    if (existing && oldAmt === amt && existing.date === when) return { success: true, message: 'Opening balance unchanged.' };
+    for (const d of [when, existing?.date].filter(Boolean) as string[]) {
+      const locked = booksLockedFor(settings, d);
+      if (locked && (existing || amt !== 0)) return { success: false, message: `The opening balance is in a closed period. ${locked}` };
+    }
+    const delta = round2(amt - oldAmt);
+    const adjust = (v: number) => round2((Number(v) || 0) + delta);
+    if (delta !== 0) {
+      if (entityType === 'customer') setCustomers((prev) => prev.map((c) => (c.id === id ? { ...c, totalDue: adjust(c.totalDue) } : c)));
+      else setSuppliers((prev) => prev.map((x) => (x.id === id ? { ...x, totalOwed: adjust(x.totalOwed) } : x)));
+    }
+    if (amt === 0) {
+      if (existing) {
+        ledgerRef.current = ledgerRef.current.filter((l) => l.id !== existing.id);
+        setLedger((prev) => prev.filter((l) => l.id !== existing.id));
+        removeRemote('ledger', [existing.id]);
+      }
+    } else {
+      const row: LedgerEntry = {
+        id: existing?.id || uid('led'),
+        entityType,
+        entityId: id,
+        type: 'opening_balance',
+        referenceId: 'OB',
+        date: when,
+        description: amt < 0 ? 'Opening balance (advance)' : 'Opening balance',
+        debit: amt > 0 ? amt : 0,
+        credit: amt < 0 ? -amt : 0,
+        balanceAfter: amt,
+      };
+      ledgerRef.current = existing ? ledgerRef.current.map((l) => (l.id === existing.id ? row : l)) : [row, ...ledgerRef.current];
+      setLedger((prev) => (existing ? prev.map((l) => (l.id === existing.id ? row : l)) : [row, ...prev]));
+    }
+    logAuditEvent('Opening Balance', `${entityType === 'customer' ? 'Customer' : 'Supplier'} ${name || id}: opening balance ${formatCurrency(oldAmt)} → ${formatCurrency(amt)} as of ${formatDate(when)}.`, 'info', 'billing');
+    return { success: true, message: `Opening balance ${formatCurrency(amt)} saved.` };
   };
 
   const recordPrice = (productId: string, pricePerKg: number, date: string, source: PriceSource, note?: string, referenceId?: string) => {
@@ -2711,7 +2788,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // ---------------------------------------------------------------------------
   // Simple billing: bills, payments, cash/bank transfers
   // ---------------------------------------------------------------------------
-  const createBill = (input: CreateBillInput): { success: boolean; message: string; invoice?: Invoice } => {
+  const createBill = (input: CreateBillInput, editOf?: Invoice): { success: boolean; message: string; invoice?: Invoice } => {
+    const ed = editOf;
     // Free (scheme) lines are always at price 0 with no discount.
     const items = (input.items || []).filter((it) => it.productId && it.qty > 0).map((it) => (it.free ? { ...it, unitPrice: 0, discountType: undefined, discountValue: undefined, customerRate: undefined, packPrice: undefined } : it));
     if (items.length === 0) return { success: false, message: 'Add at least one item with a quantity.' };
@@ -2721,11 +2799,19 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (items.some((it) => !(it.unitPrice >= 0))) return { success: false, message: 'A price cannot be negative.' };
     // Where the stock comes from (godown, batches first-expiry-first-out). Plain items are unchanged.
     // Expiry is judged against today (not the bill date), so a back-dated bill can't sell an expired batch.
-    const stockPlan = inventory.planBill(items, input.godownId, todayISO());
+    // Editing: the old bill's stock counts as back on the shelf before the new lines are taken.
+    const stockBase = ed
+      ? products.map((p) => {
+          const q = ed.items.filter((it) => it.productId === p.id && it.qty != null).reduce((a, it) => a + (it.qty || 0), 0);
+          return q > 0 ? { ...p, stockKg: round2(p.stockKg + q) } : p;
+        })
+      : products;
+    const stockEdit = ed ? inventory.planEdit(ed.items, stockBase, items, input.godownId, todayISO()) : null;
+    const stockPlan = stockEdit ? stockEdit.plan : inventory.planBill(items, input.godownId, todayISO());
     if (!stockPlan.ok) return { success: false, message: stockPlan.message || 'Not enough stock.' };
     // Stock short: allowed with a warning (as before) unless the shop turned it off in Settings.
     if (settings.allowNegativeStock === false) {
-      const short = shortStockLines(items, products);
+      const short = shortStockLines(items, stockBase);
       if (short.length) return { success: false, message: `${short.map((s) => `${s.name}: only ${formatPackQty(s.have, s.product)} in stock (bill needs ${formatPackQty(s.need, s.product)})`).join('; ')}. Receive the stock first, or turn on "Allow bills when stock is short" in Settings.` };
     }
     let customer = customers.find((c) => c.id === input.customerId);
@@ -2761,8 +2847,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (salesmanId && !salesExtras.api.salesmen.some((s) => s.id === salesmanId)) return { success: false, message: 'The salesman on this bill was not found.' };
     if (areaId && !salesExtras.api.areas.some((a) => a.id === areaId)) return { success: false, message: 'The area on this bill was not found.' };
     // Paid now: one method (older callers) or split across cash / bank / wallet, plus a cheque.
-    const partsIn: BillPaymentPart[] = input.payments ? input.payments : (input.paidNow || 0) > 0 ? [{ method: input.paymentMethod || 'Cash', amount: input.paidNow || 0 }] : [];
-    const chequeIn = input.cheque && Number(input.cheque.amount) > 0 ? input.cheque : null;
+    const partsIn: BillPaymentPart[] = ed ? [] : input.payments ? input.payments : (input.paidNow || 0) > 0 ? [{ method: input.paymentMethod || 'Cash', amount: input.paidNow || 0 }] : [];
+    const chequeIn = !ed && input.cheque && Number(input.cheque.amount) > 0 ? input.cheque : null;
+    // An edited bill keeps the money already taken on it.
+    if (ed && totalAmount + 0.005 < ed.paidAmount) return { success: false, message: `${formatCurrency(ed.paidAmount)} is already paid on ${ed.invoiceNumber}; the new total (${formatCurrency(totalAmount)}) cannot be less than that.` };
     const pay = resolveBillPayments(totalAmount, partsIn, chequeIn?.amount || 0);
     if (pay.error) return { success: false, message: pay.error };
     if (chequeIn) {
@@ -2773,11 +2861,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const dup = cheques.find((c) => c.direction === 'received' && c.status !== 'cancelled' && c.chequeNumber.trim().toLowerCase() === chequeIn.chequeNumber.trim().toLowerCase() && c.bankName.trim().toLowerCase() === chequeIn.bankName.trim().toLowerCase());
       if (dup) return { success: false, message: `Cheque ${dup.chequeNumber} of ${dup.bankName} is already in the register (${dup.partyName}).` };
     }
-    const paidAmount = pay.paid;
+    const paidAmount = ed ? ed.paidAmount : pay.paid;
     const balanceDue = round2(totalAmount - paidAmount);
-    const method = paymentMethodLabel(pay.parts, pay.cheque, input.paymentMethod || 'Cash');
+    const method = ed ? ed.paymentMethod : paymentMethodLabel(pay.parts, pay.cheque, input.paymentMethod || 'Cash');
     // Credit limit: the unpaid part of this bill must fit under the customer's limit (0 = no limit).
-    const credit = creditCheck(customer, balanceDue);
+    // When editing, the old bill's unpaid part comes off what they owe first.
+    const credit = creditCheck(ed && ed.customerId === customer.id ? { ...customer, totalDue: round2((customer.totalDue || 0) - ed.balanceDue) } : customer, balanceDue);
     let creditOverride: Invoice['creditOverride'];
     if (credit.over) {
       const msg = `${customer.name} would owe ${formatCurrency(credit.after)}, which is over their credit limit of ${formatCurrency(credit.limit)} (only ${formatCurrency(credit.available)} left).`;
@@ -2788,7 +2877,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       creditOverride = { by: currentUser?.name || 'Unknown', reason, at: new Date().toISOString(), limit: credit.limit, dueAfter: credit.after };
     }
     if (pendingNewCustomer) customer = addCustomer({ name: pendingNewCustomer.name, company: pendingNewCustomer.name, phone: pendingNewCustomer.phone, email: '', address: '', creditLimit: 0 });
-    const invoiceNumber = controlStore.nextDocNumber('bill', date, invoicesRef.current.map((i) => i.invoiceNumber));
+    const invoiceNumber = ed ? ed.invoiceNumber : controlStore.nextDocNumber('bill', date, invoicesRef.current.map((i) => i.invoiceNumber));
     const invoiceItems: InvoiceItem[] = items.map((it, idx) => {
       const product = products.find((p) => p.id === it.productId);
       // Unit cost at the time of sale: the batches actually used (when they carry a cost), else the
@@ -2818,7 +2907,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ...(it.free ? { free: true, ...(it.schemeId ? { schemeId: it.schemeId } : {}), ...(it.schemeName ? { schemeName: it.schemeName } : {}) } : {}),
       };
     });
-    const fromQuote = input.quotationId ? quotations.find((q) => q.id === input.quotationId) : undefined;
+    const fromQuote = !ed && input.quotationId ? quotations.find((q) => q.id === input.quotationId) : undefined;
     const chequeId = chequeIn ? uid('chq') : '';
     const chequeLedgerId = chequeIn ? uid('led') : '';
     const chequeNo = chequeIn ? chequeIn.chequeNumber.trim() : '';
@@ -2866,18 +2955,67 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       enteredAt: new Date().toISOString(),
       ...(input.deliveryOrder ? { delivery: { status: 'pending' as const } } : {}),
     };
-    invoicesRef.current = [invoice, ...invoicesRef.current];
-    if (fromQuote) setQuotations((prev) => prev.map((q) => (q.id === fromQuote.id ? { ...q, status: 'converted', invoiceId: invoice.id } : q)));
-    setInvoices((prev) => [invoice, ...prev]);
+    if (ed) {
+      // Same bill, same number: keep who made it, when, its payments, delivery and approval; record the old version.
+      const { editHistory: oldHistory, ...before } = ed;
+      const summary = billEditSummary(ed, invoice);
+      Object.assign(invoice, {
+        id: ed.id, createdAt: ed.createdAt, createdBy: ed.createdBy, payments: ed.payments, issuedAt: ed.issuedAt, enteredAt: ed.enteredAt,
+        deviceId: ed.deviceId, branchId: ed.branchId, quotationId: ed.quotationId, approval: ed.approval, delivery: ed.delivery ?? invoice.delivery,
+        creditOverride: creditOverride ?? ed.creditOverride, updatedAt: todayISO(),
+        editHistory: [...(oldHistory || []), { editedAt: new Date().toISOString(), editedBy: currentUser?.name, summary, before: JSON.parse(JSON.stringify(before)) }],
+      });
+      (Object.keys(invoice) as (keyof Invoice)[]).forEach((k) => invoice[k] === undefined && delete invoice[k]);
+      invoicesRef.current = invoicesRef.current.map((i) => (i.id === ed.id ? invoice : i));
+      setInvoices((prev) => prev.map((i) => (i.id === ed.id ? invoice : i)));
+    } else {
+      invoicesRef.current = [invoice, ...invoicesRef.current];
+      if (fromQuote) setQuotations((prev) => prev.map((q) => (q.id === fromQuote.id ? { ...q, status: 'converted', invoiceId: invoice.id } : q)));
+      setInvoices((prev) => [invoice, ...prev]);
+    }
 
-    // Stock comes off in the product's own unit.
+    // Stock comes off in the product's own unit (an edit puts the old bill's stock back first).
     setProducts((prev) =>
       prev.map((p) => {
         const sold = items.filter((it) => it.productId === p.id).reduce((a, it) => a + it.qty, 0);
-        return sold > 0 ? { ...p, stockKg: round2(p.stockKg - sold) } : p;
+        const back = ed ? ed.items.filter((it) => it.productId === p.id && it.qty != null).reduce((a, it) => a + (it.qty || 0), 0) : 0;
+        return sold > 0 || back > 0 ? { ...p, stockKg: round2(p.stockKg - sold + back) } : p;
       })
     );
-    inventory.applyBill(stockPlan);
+    if (stockEdit) inventory.commitRows(stockEdit.rows);
+    else inventory.applyBill(stockPlan);
+
+    if (ed) {
+      // Customer account: the old bill's unpaid part comes off, the new one goes on.
+      setCustomers((prev) => prev.map((c) => {
+        let due = c.totalDue || 0;
+        if (c.id === ed.customerId) due -= ed.balanceDue;
+        if (c.id === customer!.id) due += balanceDue;
+        return due !== (c.totalDue || 0) ? { ...c, totalDue: round2(due) } : c;
+      }));
+      const oldRow = ledger.find((l) => l.entityType === 'customer' && l.type === 'bill_issued' && (l.sourceId ? l.sourceId === ed.id : l.referenceId === ed.invoiceNumber && l.entityId === ed.customerId));
+      const billRow: LedgerEntry = {
+        ...(oldRow || {}),
+        id: oldRow?.id || uid('led'),
+        entityType: 'customer',
+        entityId: customer.id,
+        type: 'bill_issued',
+        referenceId: invoiceNumber,
+        sourceId: invoice.id,
+        date,
+        description: `Bill ${invoiceNumber}: ${invoiceItems.map((it) => `${it.productName} × ${it.qty}${it.free ? ' (free)' : ''}`).join(', ')}${freight > 0 ? `, freight ${formatCurrency(freight)}` : ''}`,
+        debit: totalAmount,
+        credit: 0,
+        balanceAfter: round2((customer.totalDue || 0) - (ed.customerId === customer.id ? ed.balanceDue : 0) + totalAmount),
+      };
+      setLedger((prev) => {
+        const rest = prev.filter((l) => l.id !== oldRow?.id).map((l) => (ed.customerId !== customer!.id && l.entityType === 'customer' && l.sourceId === ed.id ? { ...l, entityId: customer!.id } : l));
+        return [billRow, ...rest];
+      });
+      if (creditOverride) logAuditEvent('Credit Limit Overridden', `${invoiceNumber} (edited) for ${customer.name}: owes ${formatCurrency(credit.after)} vs limit ${formatCurrency(credit.limit)}. Allowed by ${creditOverride.by}. Reason: ${creditOverride.reason}`, 'warning', 'billing');
+      logAuditEvent('Bill Edited', `Bill ${invoiceNumber} edited: ${invoice.editHistory![invoice.editHistory!.length - 1].summary}`, 'warning', 'billing');
+      return { success: true, message: `Bill ${invoiceNumber} updated.`, invoice };
+    }
 
     // Customer account: bill goes on, cash paid now comes off.
     const dueAfterBill = round2((customer.totalDue || 0) + totalAmount);
@@ -2960,6 +3098,29 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (creditOverride) logAuditEvent('Credit Limit Overridden', `${invoiceNumber} for ${customer.name}: owes ${formatCurrency(credit.after)} vs limit ${formatCurrency(credit.limit)}. Allowed by ${creditOverride.by}. Reason: ${creditOverride.reason}`, 'warning', 'billing');
     logAuditEvent('Bill Created', `${invoiceNumber} for ${customer.name}: ${formatCurrency(totalAmount)} (${paidAmount > 0 ? `${formatCurrency(paidAmount)} paid by ${method}` : 'on credit'}).`, 'info', 'billing');
     return { success: true, message: `Bill ${invoiceNumber} saved.`, invoice };
+  };
+
+  /** Why a saved bill cannot be edited right now (null = it can). */
+  const billEditBlock = (inv: Invoice): string | null => {
+    const role = currentUser?.role;
+    if (currentUser && !can('delete_records') && role !== 'admin' && role !== 'manager') return "You don't have permission to edit saved bills. Ask a manager or admin.";
+    const billReturns = returnsForBill(returns, inv.id);
+    if (billReturns.length) return `Goods were returned on ${inv.invoiceNumber} (${billReturns.map((r) => r.returnNumber).join(', ')}), so it cannot be edited. Delete the return first, or make a new bill.`;
+    const chq = cheques.find((c) => c.invoiceId === inv.id);
+    if (chq) return `Cheque ${chq.chequeNumber} (${chq.bankName}) was taken against ${inv.invoiceNumber} and is in the cheque register, so the bill cannot be edited.`;
+    if (inv.items.some((it) => it.qty == null)) return `${inv.invoiceNumber} was made from dispatches and cannot be edited here.`;
+    const locked = booksLockedFor(settings, [inv.issueDate, ...(inv.payments || []).map((p) => p.date)].sort()[0]);
+    if (locked) return `${inv.invoiceNumber} is in a closed period and cannot be edited. ${locked}`;
+    return null;
+  };
+
+  /** Change a saved bill: the old bill's stock, account and books are reversed and the new version posted under the same number. */
+  const editBill = (invoiceId: string, input: CreateBillInput): { success: boolean; message: string; invoice?: Invoice } => {
+    const inv = invoicesRef.current.find((i) => i.id === invoiceId) || invoices.find((i) => i.id === invoiceId);
+    if (!inv) return { success: false, message: 'Bill not found.' };
+    const block = billEditBlock(inv);
+    if (block) return { success: false, message: block };
+    return createBill({ ...input, payments: undefined, paidNow: 0, cheque: undefined, quotationId: undefined }, inv);
   };
 
   const payBill = (invoiceId: string, amount: number, method: string, notes?: string, date?: string, bankCode?: string): { success: boolean; message: string } => {
@@ -3971,7 +4132,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     stockBatches: inventory.api.stockBatches, godowns: inventory.api.godowns,
     setCustomers, setSuppliers, setProducts, setExpenses, setCashEntries, setInvoices, setLedger,
     isLinkedRecord, planBill: inventory.planBill, importSystemBackup, exportSystemBackup,
-    createBill, recordSupplierPayment, issueCheque: chequeApi.issueCheque, adjustStockBy: stockActions.adjustStockBy,
+    createBill: (input: CreateBillInput) => createBill(input), editBill, recordSupplierPayment, issueCheque: chequeApi.issueCheque, adjustStockBy: stockActions.adjustStockBy,
     vouchers: {
       addVoucher: vouchersApi.addVoucher, deleteVoucher: vouchersApi.deleteVoucher, voucherSnapshot: vouchersApi.voucherSnapshot,
       restoreVoucher: vouchersApi.restoreVoucher, voucherRestoreBlock: vouchersApi.voucherRestoreBlock, validate: vouchersApi.validateVoucherInput,
@@ -4130,7 +4291,10 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updateInvoice,
         deleteInvoice,
         recordInvoicePayment,
-        createBill,
+        createBill: (input: CreateBillInput) => createBill(input),
+        editBill,
+        billEditBlock,
+        setOpeningBalance,
         payBill,
         deleteBill,
         returnBillItems,

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { BankSelect } from './BankSelect';
 import { needsBank } from '../../utils/banks';
 import { hasPack, formatPackQty, shortPack } from '../../utils/packUnits';
-import { Printer, Trash2, Wallet, MessageCircle, RotateCcw, Truck } from 'lucide-react';
+import { Printer, Trash2, Wallet, MessageCircle, RotateCcw, Truck, Pencil } from 'lucide-react';
 import { batchLines } from '../../utils/inventory';
 import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, Notice, rs, bidi } from './ui';
@@ -23,7 +23,7 @@ interface Props {
 
 /** One bill: its lines, its payments, and the three things you do with it — take money, print, delete. */
 export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
-  const { invoices, customers, payBill, receiveCheque, deleteBill, setPrintRequest, can, currentUser, returns, deleteReturn, salesmen, areas, billDeleteNeedsApproval, markBillDeliveryPending } = useTrading();
+  const { invoices, customers, payBill, receiveCheque, deleteBill, setPrintRequest, can, currentUser, returns, deleteReturn, salesmen, areas, billDeleteNeedsApproval, markBillDeliveryPending, billEditBlock } = useTrading();
   const ui = useBillingUI();
   const inv = invoices.find((i) => i.id === invoiceId) || null;
   const billReturns = inv ? returnsForBill(returns, inv.id) : [];
@@ -40,6 +40,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
   const [cheque, setCheque] = useState(emptyChequeFields());
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editMsg, setEditMsg] = useState<string | null>(null);
   const canDelete = can('delete_records') || can('system:admin_screen') || can('admin_screen') || currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
 
   const takePayment = (e: React.FormEvent) => {
@@ -75,6 +76,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
               <button type="button" onClick={() => setPrintRequest({ type: 'bill', invoiceId: inv.id })} className={primaryBtn}><Printer className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Print</button>
               <button type="button" onClick={whatsapp} className={secondaryBtn}><MessageCircle className="w-4 h-4 text-emerald-600" /> WhatsApp</button>
               <button type="button" onClick={() => setChallan((c) => ({ ...c, open: !c.open }))} className={secondaryBtn} aria-expanded={challan.open}><Truck className="w-4 h-4 text-indigo-600" /> Delivery challan</button>
+              <button type="button" onClick={() => { const why = billEditBlock(inv); setEditMsg(why); if (!why) ui.editBill(inv.id); }} className={secondaryBtn}><Pencil className="w-4 h-4 text-teal-700" /> Edit bill</button>
               {!allBack && <button type="button" onClick={() => ui.returnItems(inv.id)} className={secondaryBtn}><RotateCcw className="w-4 h-4 text-amber-600" /> Return items</button>}
             </div>
             {(canDelete || billDeleteNeedsApproval) && billReturns.length === 0 && <button type="button" onClick={() => setConfirmDelete(true)} className={dangerBtn}><Trash2 className="w-4 h-4" /> {billDeleteNeedsApproval ? 'Ask to delete' : 'Delete bill'}</button>}
@@ -83,6 +85,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
       >
         {inv && (
           <div className="space-y-5">
+            {editMsg && <div data-testid="bill-edit-refused"><Notice kind="error">{editMsg}</Notice></div>}
             <div className="overflow-x-auto rounded-2xl border border-[#E5E5E1] dark:border-[#203248]">
               <table className="w-full text-sm">
                 <thead className="bg-[#FAF9F6] dark:bg-[#162436] text-[11px] uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">

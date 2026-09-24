@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { PartyExtraFields, cleanPartyExtra, usePartyExtra } from './billing/PartyFields';
+import { PartyExtraFields, cleanPartyExtra, usePartyExtra, OpeningBalanceFields, useOpeningBalance, parseOpening } from './billing/PartyFields';
 import { useTrading } from '../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice } from './billing/ui';
 import { codeTaken, nextPartyCode, SUPPLIER_CODE_PREFIX } from '../utils/partyCode';
@@ -42,6 +42,8 @@ const SupplierForm: React.FC<{
   const [email, setEmail] = useState(editing?.email || '');
   const [address, setAddress] = useState(editing?.address || '');
   const [extra, setExtra] = usePartyExtra(editing);
+  const [opening, setOpening] = useOpeningBalance('supplier', editing?.id);
+  const { setOpeningBalance } = useTrading();
   const [error, setError] = useState('');
   const busy = useRef(false);
 
@@ -55,6 +57,8 @@ const SupplierForm: React.FC<{
     if (dup) return setError(`${dup.company || dup.name} already uses this phone number.`);
     const taken = codeTaken(suppliers, code, editing?.id);
     if (taken) return setError(`Supplier ID ${code.trim()} is already used by ${taken.company || taken.name}.`);
+    const ob = parseOpening(opening);
+    if ('error' in ob) return setError(ob.error);
     busy.current = true;
     const data = {
       code: code.trim() || undefined,
@@ -66,8 +70,16 @@ const SupplierForm: React.FC<{
       address: address.trim(),
       ...cleanPartyExtra(extra),
     };
+    const partyId = editing ? editing.id : '';
     if (editing) updateSupplier(editing.id, data);
-    else addSupplier(data);
+    const saved = editing ? { id: partyId } : addSupplier(data);
+    if (ob.amount !== opening.was || (ob.amount !== 0 && opening.date !== opening.wasDate)) {
+      const r = setOpeningBalance('supplier', saved.id, ob.amount, opening.date);
+      if (!r.success) {
+        busy.current = false;
+        return setError(`${editing ? 'Details saved, but the' : 'Saved, but the'} opening balance was not: ${r.message}`);
+      }
+    }
     onClose();
   };
 
@@ -104,6 +116,7 @@ const SupplierForm: React.FC<{
           <input id="sup-address" value={address} onChange={(e) => setAddress(e.target.value)} className={inputCls} />
         </div>
         <PartyExtraFields idPrefix="sup" value={extra} onChange={setExtra} />
+        <OpeningBalanceFields idPrefix="sup" entityType="supplier" value={opening} onChange={setOpening} />
       </div>
       <div className="flex justify-end gap-2 pt-2">
         <button type="button" onClick={onClose} className={secondaryBtn}>Cancel</button>

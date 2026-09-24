@@ -1,5 +1,5 @@
 import { downloadCsvText, toCsv } from '../../utils/listTools';
-import { importNumber, mapColumns, planImport } from '../../utils/masterImport';
+import { importNumber, importSignedNumber, mapColumns, planImport } from '../../utils/masterImport';
 import { foldText } from '../../utils/search';
 import React, { useRef, useState } from 'react';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
@@ -57,7 +57,7 @@ export const parseCsv = (text: string, delimiter: ',' | ';' | '\t' = detectDelim
 };
 
 export const DataImportTab: React.FC = () => {
-  const { customers, suppliers, products, addCustomer, addSupplier, addProduct, updateCustomer, updateSupplier, logAuditEvent } = useTrading();
+  const { customers, suppliers, products, addCustomer, addSupplier, addProduct, setOpeningBalance, logAuditEvent } = useTrading();
   const [kind, setKind] = useState<Kind>('customers');
   const [preview, setPreview] = useState<{ headers: string[]; rows: string[][]; problems: string[] } | null>(null);
   const [result, setResult] = useState<{ added: number; skipped: number; errors: string[] } | null>(null);
@@ -99,12 +99,13 @@ export const DataImportTab: React.FC = () => {
         const extra = Object.fromEntries(Object.entries({ city: v.city, contactPerson: v.contactPerson, salesTaxNo: v.salesTaxNo, fax: v.fax }).filter(([, x]) => x)) as { city?: string; contactPerson?: string; salesTaxNo?: string; fax?: string };
         if (kind === 'customers') {
           const c = addCustomer({ name: v.name!, company: v.company || v.name!, phone: v.phone || '', email: v.email || '', address: v.address || '', creditLimit: importNumber(v.creditLimit), code: v.code || undefined, ...extra });
-          const opening = importNumber(v.openingDue);
-          if (opening > 0) updateCustomer(c.id, { totalDue: opening });
+          // Old khata balance: a proper "Opening balance" ledger row (negative = advance).
+          const opening = importSignedNumber(v.openingDue);
+          if (opening !== 0) setOpeningBalance('customer', c.id, opening, c.createdAt);
         } else if (kind === 'suppliers') {
           const x = addSupplier({ name: v.name!, company: v.company || v.name!, phone: v.phone || '', email: v.email || '', materialCategory: v.materialCategory || 'General', address: v.address || '', code: v.code || undefined, ...extra });
-          const opening = importNumber(v.openingOwed);
-          if (opening > 0) updateSupplier(x.id, { totalOwed: opening });
+          const opening = importSignedNumber(v.openingOwed);
+          if (opening !== 0) setOpeningBalance('supplier', x.id, opening, x.createdAt);
         } else {
           const supplierCompany = foldText(v.supplierCompany);
           const supplier = supplierCompany ? suppliers.find((s) => foldText(s.company) === supplierCompany || foldText(s.name) === supplierCompany) : undefined;

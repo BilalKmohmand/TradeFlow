@@ -424,6 +424,7 @@ interface ApiDeps {
   exportSystemBackup: () => string;
   // actions that the rules / bin wrap
   createBill: (input: any) => BillResult;
+  editBill?: (invoiceId: string, input: any) => BillResult;
   recordSupplierPayment: (supplierId: string, amount: number, notes?: string, date?: string, opts?: { bankCode?: string }) => LedgerEntry | undefined;
   /** Vouchers (see voucherActions.ts): the rules and the bin wrap these. */
   vouchers: {
@@ -605,6 +606,18 @@ export const createControlApi = (d: ApiDeps) => {
     delete (payload as { allowOverLimit?: boolean }).allowOverLimit;
     const req = queue('bill', hit.keys, hit.reasons, `Bill for ${cust?.name || 'customer'} — ${rs(f.total)}`, f.total, payload, input.overrideReason);
     return { success: true, message: `Sent for approval: ${hit.reasons.join('; ')}. The bill is posted when a manager approves it.`, pendingApproval: req };
+  };
+
+  /**
+   * Editing a saved bill: the same approval rules as a new bill. The credit limit is checked by the edit
+   * itself (it knows the old bill's unpaid part); any other rule hit means only an approver may make the edit.
+   */
+  const editBill = (invoiceId: string, input: BillLikeInput): BillResult => {
+    if (!d.editBill) return fail('Editing bills is not available.');
+    const hit = billRules({ ...input, payments: undefined, paidNow: 0, cheque: undefined });
+    const other = hit ? hit.reasons.filter((_r, i) => hit.keys[i] !== 'credit_limit') : [];
+    if (other.length && !canApprove) return fail(`This edit needs a manager's approval: ${other.join('; ')}. Ask a manager or admin to make the change.`);
+    return d.editBill(invoiceId, input);
   };
 
   const supplierPaymentApproval = (amount: number): string | null => {
@@ -1318,6 +1331,7 @@ export const createControlApi = (d: ApiDeps) => {
   /** Actions the provider exposes in place of the raw ones (rules + bin). */
   const overrides = {
     createBill,
+    editBill,
     recordSupplierPayment,
     issueCheque,
     adjustStockBy,

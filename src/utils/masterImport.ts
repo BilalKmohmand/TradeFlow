@@ -123,4 +123,6 @@ export const planImport = (
 };
 
 /** "1,25,000", "Rs. 500", "(2000)" → numbers (never below zero). */
+/** A number that may be negative (opening balances: negative = advance). */
+export const importSignedNumber = (v?: string): number => Math.round((parseFloat((v || '').replace(/[^0-9.\-]/g, '')) || 0) * 100) / 100;
 export const importNumber = (v?: string): number => Math.max(0, parseFloat((v || '').replace(/[^0-9.\-]/g, '')) || 0);

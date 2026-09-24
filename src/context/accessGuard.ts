@@ -17,7 +17,7 @@ export const READ_SAFE: ReadonlySet<string> = new Set([
   'isBilledReceipt', 'isChequeRecord', 'isFieldVisible', 'isFinanceRecord', 'isLinkedRecord', 'isScreenVisible',
   'previewDocNumber', 'previewInterest', 'previewPurchaseInvoiceNumber', 'previewVoucherNumber', 'restoreBlockReason',
   'supplierPaymentApproval', 'validateVoucherInput', 'voucherEditBlock', 'voucherRestoreBlock', 'voucherSnapshot',
-  'exportSystemBackup', 'refreshAutoBackups',
+  'exportSystemBackup', 'refreshAutoBackups', 'billEditBlock',
   // moving around the app (screens, dialogs, print preview, branch filter)
   'setActiveScreen', 'setBranchView', 'setEditRequest', 'setPrintRequest', 'setSelectedCustomerId', 'setSelectedProductId',
   'setSelectedSupplierId', 'openBooking', 'openBookingsView', 'openOps', 'openReports', 'openSuppliersView',
