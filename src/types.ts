@@ -202,7 +202,9 @@ export type TransactionType =
   /** Accepted supplier claim (leaked / damaged / short goods): takes it off what is owed (debit note). */
   | 'supplier_claim'
   /** A line of a voucher (CPV / CRV / BPV / BRV / JV) on a party that is not a plain payment (see utils/vouchers.ts). */
-  | 'voucher';
+  | 'voucher'
+  /** Old khata balance brought over when the party was set up (customer: owes us; supplier: we owe). Negative = advance. */
+  | 'opening_balance';
 
 export interface LedgerEntry {
   id: string;
@@ -414,6 +416,8 @@ export interface Invoice {
   memoNo?: string;
   /** Exact date-time the bill was typed in ("entered on"), whatever the bill date ("your date") is. */
   enteredAt?: string;
+  /** Earlier versions of this bill, kept each time it was edited (newest last). */
+  editHistory?: { editedAt: string; editedBy?: string; summary: string; before: Omit<Invoice, 'editHistory'> }[];
   /** Delivery order: the goods go out later. Stock is still taken when the bill is made. */
   delivery?: DeliveryInfo;
 }

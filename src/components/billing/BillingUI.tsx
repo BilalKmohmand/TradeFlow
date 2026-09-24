@@ -19,6 +19,8 @@ export type ReportRequest = ReportId | 'books' | 'menu';
 interface BillingUI {
   newBill: (customerId?: string | null) => void;
   openBill: (invoiceId: string) => void;
+  /** Edit a saved bill in the New Bill form (same number); the bill reopens after saving. */
+  editBill: (invoiceId: string) => void;
   /** New bill filled from a quotation ("Convert to bill"). */
   billFromQuote: (quotationId: string) => void;
   /** Return items from a bill (credit note). */
@@ -68,7 +70,7 @@ const Ctx = createContext<BillingUI | null>(null);
 
 /** Hosts every billing dialog once; screens just call e.g. `ui.newBill()`. */
 export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [bill, setBill] = useState<{ open: boolean; customerId: string | null; quotationId?: string | null }>({ open: false, customerId: null });
+  const [bill, setBill] = useState<{ open: boolean; customerId: string | null; quotationId?: string | null; editInvoiceId?: string | null }>({ open: false, customerId: null });
   const [returnFor, setReturnFor] = useState<string | null>(null);
   const [quote, setQuote] = useState<{ open: boolean; editId: string | null; customerId: string | null }>({ open: false, editId: null, customerId: null });
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -100,6 +102,7 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const api: BillingUI = {
     newBill: (customerId) => { bump(); setBill({ open: true, customerId: customerId || null }); },
     openBill: (id) => { bump(); setDetailId(id); },
+    editBill: (id) => { bump(); setDetailId(null); setBill({ open: true, customerId: null, editInvoiceId: id }); },
     billFromQuote: (quotationId) => { bump(); setBill({ open: true, customerId: null, quotationId }); },
     returnItems: (invoiceId) => { bump(); setDetailId(null); setReturnFor(invoiceId); },
     newQuote: (customerId) => { bump(); setQuote({ open: true, editId: null, customerId: customerId || null }); },
@@ -131,7 +134,7 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   return (
     <Ctx.Provider value={api}>
       {children}
-      <NewBillModal key={`bill-${nonce}`} isOpen={bill.open} onClose={() => setBill({ open: false, customerId: null })} customerId={bill.customerId} quotationId={bill.quotationId} />
+      <NewBillModal key={`bill-${nonce}`} isOpen={bill.open} onClose={() => setBill({ open: false, customerId: null })} customerId={bill.customerId} quotationId={bill.quotationId} editInvoiceId={bill.editInvoiceId} onEdited={(id) => { bump(); setBill({ open: false, customerId: null }); setDetailId(id); }} />
       <ReturnItemsModal key={`ret-${nonce}`} invoiceId={returnFor} onClose={() => setReturnFor(null)} onDone={(id) => { bump(); setReturnFor(null); setDetailId(id); }} />
       <QuotationModal key={`quote-${nonce}`} isOpen={quote.open} editId={quote.editId} customerId={quote.customerId} onClose={() => setQuote({ open: false, editId: null, customerId: null })} />
       <BillDetailModal key={`detail-${nonce}`} invoiceId={detailId} onClose={() => setDetailId(null)} />

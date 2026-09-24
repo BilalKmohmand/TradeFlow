@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useTrading } from '../context/TradingContext';
 import { Modal, inputCls, labelCls, primaryBtn, secondaryBtn, Notice } from './billing/ui';
 import { codeTaken, nextPartyCode, CUSTOMER_CODE_PREFIX } from '../utils/partyCode';
-import { PartyExtraFields, cleanPartyExtra, usePartyExtra } from './billing/PartyFields';
+import { PartyExtraFields, cleanPartyExtra, usePartyExtra, OpeningBalanceFields, useOpeningBalance, parseOpening } from './billing/PartyFields';
 
 interface CustomerModalProps {
   isOpen: boolean;
@@ -41,6 +41,8 @@ const CustomerForm: React.FC<{
   const [email, setEmail] = useState(editing?.email || '');
   const [address, setAddress] = useState(editing?.address || '');
   const [extra, setExtra] = usePartyExtra(editing);
+  const [opening, setOpening] = useOpeningBalance('customer', editing?.id);
+  const { setOpeningBalance } = useTrading();
   const [error, setError] = useState('');
   const busy = useRef(false);
 
@@ -56,6 +58,8 @@ const CustomerForm: React.FC<{
     if (taken) return setError(`Customer ID ${code.trim()} is already used by ${taken.name}.`);
     const limit = creditLimit.trim() ? parseFloat(creditLimit.replace(/,/g, '')) : 0;
     if (!Number.isFinite(limit) || limit < 0) return setError('The credit limit must be a number (leave it empty for no limit).');
+    const ob = parseOpening(opening);
+    if ('error' in ob) return setError(ob.error);
     busy.current = true;
     const data = {
       code: code.trim() || undefined,
@@ -67,8 +71,16 @@ const CustomerForm: React.FC<{
       creditLimit: limit,
       ...cleanPartyExtra(extra),
     };
+    const partyId = editing ? editing.id : '';
     if (editing) updateCustomer(editing.id, data);
-    else addCustomer(data);
+    const saved = editing ? { id: partyId } : addCustomer(data);
+    if (ob.amount !== opening.was || (ob.amount !== 0 && opening.date !== opening.wasDate)) {
+      const r = setOpeningBalance('customer', saved.id, ob.amount, opening.date);
+      if (!r.success) {
+        busy.current = false;
+        return setError(`${editing ? 'Details saved, but the' : 'Saved, but the'} opening balance was not: ${r.message}`);
+      }
+    }
     onClose();
   };
 
@@ -106,6 +118,7 @@ const CustomerForm: React.FC<{
           <input id="cust-address" value={address} onChange={(e) => setAddress(e.target.value)} className={inputCls} />
         </div>
         <PartyExtraFields idPrefix="cust" value={extra} onChange={setExtra} />
+        <OpeningBalanceFields idPrefix="cust" entityType="customer" value={opening} onChange={setOpening} />
       </div>
       <div className="flex justify-end gap-2 pt-2">
         <button type="button" onClick={onClose} className={secondaryBtn}>Cancel</button>

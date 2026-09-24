@@ -238,6 +238,13 @@ export const useInventoryStore = (deps: Deps) => {
   const applyBill = (plan: BillStockPlan) => {
     if (Object.keys(plan.deltas).length) setStockBatches((prev) => applyDeltas(prev, plan.deltas));
   };
+  /** Edit a bill: plan the new lines against stock as if the old bill's lines were back on the shelf. */
+  const planEdit = (oldItems: Invoice['items'], productsAfter: Product[], items: { productId: string; qty: number }[], godownId: string | undefined, onDate: string) => {
+    const restored = oldItems.some((it) => it.batches?.length || it.godownId) ? restoreBillRows(stockBatches, oldItems, storedGodowns, today()) : stockBatches;
+    const plan = planBillStock(productsAfter, restored, storedGodowns, items, godownId, onDate);
+    return { plan, rows: plan.ok ? applyDeltas(restored, plan.deltas) : restored };
+  };
+  const commitRows = (rows: StockBatch[]) => setStockBatches(rows);
   const restoreBill = (inv: Pick<Invoice, 'items'>) => {
     if (!inv.items.some((it) => it.batches?.length || it.godownId)) return;
     setStockBatches((prev) => restoreBillRows(prev, inv.items, storedGodowns, today()));
@@ -296,6 +303,6 @@ export const useInventoryStore = (deps: Deps) => {
   const updateRows = (fn: (rows: StockBatch[]) => StockBatch[]) => setStockBatches((prev) => fn(prev));
 
   const api: InventoryApi = { godowns, stockBatches, stockTransfers, addGodown, updateGodown, deleteGodown, receiveStock, transferStock };
-  return { api, planBill, applyBill, restoreBill, restoreReturn, takeBackReturn, hydrate, backupData, reset, purgeSetters, removePurchaseRows, updateRows, storedGodowns };
+  return { api, planBill, applyBill, planEdit, commitRows, restoreBill, restoreReturn, takeBackReturn, hydrate, backupData, reset, purgeSetters, removePurchaseRows, updateRows, storedGodowns };
 };
 

@@ -7,7 +7,7 @@ import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 import { creditCheck } from '../../utils/credit';
 import { BillCreditPanel } from './CreditLimit';
-import { planBillStock, batchLines, stockByGodown } from '../../utils/inventory';
+import { planBillStock, batchLines, stockByGodown, restoreBillRows } from '../../utils/inventory';
 import { lineDiscountAmount, quotationLines } from '../../utils/salesDocs';
 import { customerSnapshot, lastRateFor, resolveBillPayments, PaymentPart } from '../../utils/billing';
 import { hasPack, formatPackQty, plural, baseToPacks } from '../../utils/packUnits';
@@ -72,7 +72,22 @@ interface Props {
   customerId?: string | null;
   /** Fill the bill from this quotation ("Convert to bill"). */
   quotationId?: string | null;
+  /** Edit this saved bill (same number) instead of making a new one. */
+  editInvoiceId?: string | null;
+  /** After an edit is saved (the bill detail reopens). */
+  onEdited?: (invoiceId: string) => void;
 }
+
+/** A saved bill's sold lines as form rows (per pack when it was sold per pack). */
+const rowsFromBill = (items: import('../../types').InvoiceItem[]): Row[] =>
+  items.filter((it) => !it.free && (it.qty ?? 0) > 0).map((it) => {
+    const qty = it.qty ?? it.kg;
+    const price = it.unitPrice ?? it.ratePerKg;
+    const disc = (it.discountAmount || 0) > 0 && it.discountType ? { showDisc: true, discType: it.discountType, disc: String(it.discountValue ?? '') } : {};
+    const from: Row['priceFrom'] = it.customerRate ? 'customer' : 'typed';
+    if (it.packPrice != null && (it.packSize || 0) > 1) return newRow({ productId: it.productId, qty: num4(baseToPacks(qty, it.packSize!)), price: String(it.packPrice), inPack: true, priceFrom: from, ...disc });
+    return newRow({ productId: it.productId, qty: String(qty), price: String(price), priceFrom: from, ...disc });
+  });
 
 /**
  * Make a bill in one screen: pick the customer, add item lines (price is filled from the item
@@ -82,32 +97,44 @@ interface Props {
  * + Enter jumps to "Paid now". Ctrl+Enter or F9 saves; "+" or Alt+N adds a line. Item and
  * customer lists can be searched by typing a name or code.
  */
-export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quotationId }) => {
-  const { customers, products, settings, createBill, setPrintRequest, can, godowns, stockBatches, quotations, getCustomerAgreedRate, invoices, ledger, salesmen, areas, schemes, billApprovalReasons, approvalRules, canApprove, previewDocNumber } = useTrading();
+export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quotationId, editInvoiceId, onEdited }) => {
+  const { customers, products: liveProducts, settings, createBill, editBill, setPrintRequest, can, godowns, stockBatches: liveBatches, quotations, getCustomerAgreedRate, invoices, ledger, salesmen, areas, schemes, billApprovalReasons, approvalRules, canApprove, previewDocNumber } = useTrading();
   const ui = useBillingUI();
+  // Editing a saved bill: the form starts from it, and its own stock counts as back on the shelf.
+  const [editInv] = useState(() => (editInvoiceId ? invoices.find((i) => i.id === editInvoiceId) : undefined));
+  const products = useMemo(() => {
+    if (!editInv) return liveProducts;
+    return liveProducts.map((p) => {
+      const q = editInv.items.filter((it) => it.productId === p.id && it.qty != null).reduce((a, it) => a + (it.qty || 0), 0);
+      return q > 0 ? { ...p, stockKg: Math.round((p.stockKg + q) * 10000) / 10000 } : p;
+    });
+  }, [liveProducts, editInv]);
+  const stockBatches = useMemo(() => (editInv ? restoreBillRows(liveBatches, editInv.items, godowns, todayISO()) : liveBatches), [liveBatches, editInv, godowns]);
   // Apna Accountant fields: memo (book) no., delivery order, and Search for an old bill by number.
-  const [memoNo, setMemoNo] = useState('');
-  const [deliveryOrder, setDeliveryOrder] = useState(false);
+  const [memoNo, setMemoNo] = useState(editInv?.memoNo || '');
+  const [deliveryOrder, setDeliveryOrder] = useState(Boolean(editInv?.delivery));
   const [find, setFind] = useState('');
   /** Line whose item the "Stock in hand" box shows (the one being typed in). */
   const [focusKey, setFocusKey] = useState<string | null>(null);
   // Set once the bill was sent to a manager (approval rules): nothing is posted until approved.
   const [sentForApproval, setSentForApproval] = useState('');
   const quote = quotationId ? quotations.find((q) => q.id === quotationId) : undefined;
-  const [godownId, setGodownId] = useState(godowns[0]?.id || '');
-  const [customer, setCustomer] = useState(quote?.customerId || customerId || '');
+  const [godownId, setGodownId] = useState(editInv?.items.find((it) => it.godownId)?.godownId || godowns[0]?.id || '');
+  const [customer, setCustomer] = useState(editInv?.customerId || quote?.customerId || customerId || '');
   // Salesman and area on the bill start as the customer's defaults (can be changed per bill).
   const startCust = customers.find((c) => c.id === (quote?.customerId || customerId || ''));
-  const [salesmanId, setSalesmanId] = useState(startCust?.salesmanId || '');
-  const [areaId, setAreaId] = useState(startCust?.areaId || '');
-  const [freight, setFreight] = useState('');
+  const [salesmanId, setSalesmanId] = useState(editInv ? editInv.salesmanId || '' : startCust?.salesmanId || '');
+  const [areaId, setAreaId] = useState(editInv ? editInv.areaId || '' : startCust?.areaId || '');
+  const [freight, setFreight] = useState(editInv?.freightCharges ? String(editInv.freightCharges) : '');
   // Scheme lines / scheme discounts the shopkeeper took off this bill.
   const [dropped, setDropped] = useState<Set<string>>(() => new Set());
   const [newCustomer, setNewCustomer] = useState<{ name: string; phone: string } | null>(null);
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(editInv?.issueDate || todayISO());
   // A quotation fills the lines at the quoted prices; otherwise one empty line.
   const [rows, setRows] = useState<Row[]>(() =>
-    quote
+    editInv
+      ? rowsFromBill(editInv.items)
+      : quote
       ? quotationLines(quote, (id) => products.find((p) => p.id === id)?.name).map((l) =>
           // A line quoted per carton comes onto the bill per carton too.
           l.packPrice != null && (l.packSize || 0) > 1 && hasPack(products.find((p) => p.id === l.productId))
@@ -116,7 +143,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
         )
       : [newRow()]
   );
-  const [discount, setDiscount] = useState('');
+  const [discount, setDiscount] = useState(editInv?.discount ? String(editInv.discount) : '');
   const [paidNow, setPaidNow] = useState('');
   const [method, setMethod] = useState('Cash');
   // Split payment: cash + bank/wallet + cheque on one bill.
@@ -130,8 +157,8 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   // "Search party by city": narrows the customer list.
   const [billCity, setBillCity] = useState('');
   const [cheque, setCheque] = useState<ChequeFields>(emptyChequeFields());
-  const [notes, setNotes] = useState(quote ? `From quotation ${quote.quoteNumber}` : '');
-  const [costCentre, setCostCentre] = useState('');
+  const [notes, setNotes] = useState(editInv ? editInv.notes || '' : quote ? `From quotation ${quote.quoteNumber}` : '');
+  const [costCentre, setCostCentre] = useState(editInv?.costCentreId || '');
   const [error, setError] = useState('');
   const [allowOver, setAllowOver] = useState(false);
   const [overReason, setOverReason] = useState('');
@@ -329,18 +356,21 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const amt = (s: string) => Math.max(0, parseFloat(s) || 0);
   const payParts: PaymentPart[] = split ? [{ method: 'Cash', amount: amt(splitCash) }, { method: splitBankMethod, amount: amt(splitBank), ...bankOpt(bank) }] : method === 'Cheque' ? [] : [{ method, amount: amt(paidNow), ...(needsBank(method) ? bankOpt(bank) : {}) }];
   const chequeAmount = split ? amt(splitCheque) : method === 'Cheque' ? amt(paidNow) : 0;
-  const payment = resolveBillPayments(total, payParts, chequeAmount);
+  const payment = editInv ? resolveBillPayments(total, [], 0) : resolveBillPayments(total, payParts, chequeAmount);
   const given = payParts.reduce((a, p) => a + p.amount, 0) + chequeAmount;
-  const paid = payment.error ? Math.min(given, total) : payment.paid;
+  const alreadyPaid = editInv ? editInv.paidAmount : 0;
+  const paid = editInv ? alreadyPaid : payment.error ? Math.min(given, total) : payment.paid;
   const balance = Math.round((total - paid) * 100) / 100;
   const change = payment.error ? 0 : payment.change;
-  const hasCheque = chequeAmount > 0;
+  const hasCheque = !editInv && chequeAmount > 0;
   // A typed "new" customer that matches an existing one (same name or phone) is that customer, as on save.
   const typedMatch = newCustomer
     ? customers.find((c) => c.name.trim().toLowerCase() === newCustomer.name.trim().toLowerCase() || (newCustomer.phone.trim() && c.phone.replace(/\D/g, '') === newCustomer.phone.replace(/\D/g, '')))
     : undefined;
   const selected = newCustomer ? typedMatch : customers.find((c) => c.id === customer);
-  const credit = creditCheck(newCustomer ? typedMatch || null : selected, balance);
+  // Editing: the old bill's unpaid part is already in what they owe.
+  const creditParty = selected && editInv && editInv.customerId === selected.id ? { ...selected, totalDue: selected.totalDue - editInv.balanceDue } : selected;
+  const credit = creditCheck(newCustomer ? typedMatch || null : creditParty || null, balance);
   const canOverride = can('override_credit');
   // Approval rule "bill over credit limit": staff who can't allow it send the bill to a manager instead.
   const creditToApproval = Boolean(approvalRules.creditLimit) && !canOverride && !canApprove;
@@ -351,7 +381,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     items: lines.filter((l) => l.productId && l.qty > 0).map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: l.price, ...(l.lineDisc > 0 ? { discountType: l.discType, discountValue: l.discValue } : {}), ...(l.schemePct ? { schemeId: l.schemePct.schemeId } : {}) })),
     discount: disc,
     freightCharges: freightAmt,
-    payments: payment.parts,
+    payments: editInv ? [] : payment.parts,
     ...(hasCheque ? { cheque: { amount: chequeAmount, ...cheque } } : {}),
     date,
   });
@@ -374,6 +404,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     const minusAt = rows.findIndex((r) => r.productId && (parseFloat(r.qty) || 0) < 0);
     if (minusAt >= 0) return setError(`Line ${minusAt + 1}: the quantity cannot be below zero. For goods coming back, open the bill and use Return items.`);
     if (total <= 0) return setError('The bill total must be more than zero.');
+    if (editInv && total + 0.005 < alreadyPaid) return setError(`${rs(alreadyPaid)} is already paid on this bill; the new total cannot be less than that.`);
     const items = lines.filter((l) => l.productId && l.qty > 0);
     if (items.length === 0) return setError('Add at least one item with a quantity.');
     if (payment.error) return setError(payment.error);
@@ -382,7 +413,8 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     if (credit.over && !creditToApproval && !(canOverride && allowOver)) return setError(canOverride ? 'This bill is over the credit limit. Tick "Allow over limit" and give a reason, or take more payment now.' : 'This bill is over the customer\'s credit limit. Take more payment now, or ask a manager to allow it.');
     if (credit.over && !creditToApproval && !overReason.trim()) return setError('Write a short reason for allowing this bill over the credit limit.');
     busy.current = true; // held until the dialog closes; released at once if the bill is refused
-    const result = createBill({
+    const save = editInv ? (input: Parameters<typeof createBill>[0]) => editBill(editInv.id, input) : createBill;
+    const result = save({
       customerId: newCustomer ? '' : customer,
       newCustomer: newCustomer || undefined,
       items: items.map((l) => ({
@@ -419,6 +451,12 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     // Waiting for approval: say so and keep the dialog (Save stays off, so it can't be sent twice).
     if (isPendingApproval(result)) return setSentForApproval(result.message);
     onClose();
+    // An edit goes back to the bill (with its new figures), not to a new bill.
+    if (editInv) {
+      if (print) setPrintRequest({ type: 'bill', invoiceId: editInv.id });
+      else onEdited?.(editInv.id);
+      return;
+    }
     if (print && result.invoice) setPrintRequest({ type: 'bill', invoiceId: result.invoice.id });
     // Counter work goes bill after bill: a plain Save opens the next new bill straight away.
     else if (openNextBillAfterSave()) ui.newBill();
@@ -431,7 +469,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     onClose();
     ui.openBill(hit.id);
   };
-  const computerNo = previewDocNumber('bill', date);
+  const computerNo = editInv ? editInv.invoiceNumber : previewDocNumber('bill', date);
   const focused = lines.find((l) => l.key === focusKey && l.product) || lines.find((l) => l.product);
   const focusedPer = focused?.product && godowns.length > 1 ? stockByGodown(focused.product, stockBatches, godowns) : null;
 
@@ -490,7 +528,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const smallLabel = 'md:hidden block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1';
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="New Bill" subtitle={quote ? `From quotation ${quote.quoteNumber} — check the items and prices, then save.` : 'Pick the customer, add items, enter what was paid.'} wide="xl" footer={footer}>
+    <Modal isOpen={isOpen} onClose={onClose} title={editInv ? `Edit bill ${editInv.invoiceNumber}` : 'New Bill'} subtitle={editInv ? 'Change the customer, date, items or prices. Saving updates this same bill; money already received stays on it.' : quote ? `From quotation ${quote.quoteNumber} — check the items and prices, then save.` : 'Pick the customer, add items, enter what was paid.'} wide="xl" footer={footer}>
       <div className="space-y-5" ref={box} onKeyDown={onKeys}>
         {error && <Notice kind="error">{error}</Notice>}
         {sentForApproval && <div data-testid="bill-sent-for-approval"><Notice kind="ok">{sentForApproval}</Notice></div>}
@@ -760,7 +798,9 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
             {taxRate > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>{settings.taxLabel || 'Tax'} {taxRate}%</span><span className="tabular-nums">{rs(tax)}</span></div>}
             {freightAmt > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>Freight / loading</span><span className="tabular-nums">{rs(freightAmt)}</span></div>}
             <div className="flex justify-between font-extrabold text-[#111827] dark:text-white border-t border-[#E5E5E1] dark:border-[#203248] pt-2"><span>Total</span><span className="tabular-nums">{rs(total)}</span></div>
-            {split ? (
+            {editInv ? (
+              <div className="flex justify-between text-xs text-[#6B7280] dark:text-[#94A3B8] pt-1" data-testid="bill-edit-paid"><span>Already received on this bill</span><span className="tabular-nums">{rs(alreadyPaid)}</span></div>
+            ) : split ? (
               <div className="space-y-2 pt-1" data-testid="bill-split">
                 <div className="grid grid-cols-2 gap-2">
                   <div>

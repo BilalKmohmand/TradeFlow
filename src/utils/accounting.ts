@@ -559,6 +559,18 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
     if (debit <= 0 && credit <= 0) return;
     const who = l.entityType === 'customer' ? custName.get(l.entityId) || 'Customer' : supName.get(l.entityId) || 'Supplier';
     const b = new EntryBuilder();
+    if (l.type === 'opening_balance') {
+      // Old khata balance brought over: against Opening balance equity (debit = they owe us / we owe them more).
+      if (l.entityType === 'customer') {
+        if (debit > 0) b.dr(ACC.RECEIVABLE, debit, who).cr(ACC.OPENING_EQUITY, debit);
+        if (credit > 0) b.dr(ACC.OPENING_EQUITY, credit).cr(ACC.RECEIVABLE, credit, who);
+      } else {
+        if (debit > 0) b.dr(ACC.OPENING_EQUITY, debit).cr(ACC.PAYABLE, debit, who);
+        if (credit > 0) b.dr(ACC.PAYABLE, credit, who).cr(ACC.OPENING_EQUITY, credit);
+      }
+      push({ id: `auto-led-${l.id}`, date: l.date, ref: 'OB', memo: `Opening balance — ${who}`, sourceType: l.entityType === 'customer' ? 'customer_opening' : 'supplier_opening', sourceId: l.id, builder: b });
+      return;
+    }
     let sourceType: string = l.type;
     let billId: string | undefined;
     let memo = l.description || l.type;
