@@ -44,7 +44,7 @@ export const PartyPick: React.FC<{
             <option value="">{placeholder}</option>
             {parties.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.code ? `${p.code} • ` : ''}{p.name}{p.city ? ` (${p.city})` : ''}{(p.balance || 0) > 0.005 ? ` — ${balanceWord} ${rs(p.balance || 0)}` : ''}
+                {p.name}{p.city ? ` (${p.city})` : ''}{(p.balance || 0) > 0.005 ? ` — ${balanceWord} ${rs(p.balance || 0)}` : ''}
               </option>
             ))}
           </QuickSelect>
