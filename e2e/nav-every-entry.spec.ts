@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { signIn, OWNER } from './helpers/login';
 import { openMenuOption } from './helpers/nav';
+import { VOUCHER_TITLE, voucherLine } from './helpers/voucher';
 import { NAV_GROUPS, NavEntry, navCheck } from '../src/utils/navMap';
 
 /**
@@ -88,12 +89,10 @@ async function addBankChequeVoucher(page: Page) {
   await expect(rc).toHaveCount(0);
 
   await openMenuOption(page, 'Accounts', 'CPV — Cash payment voucher');
-  const v = dialog('New Cash payment voucher');
-  await v.getByLabel('Narration', { exact: true }).fill('Shop rent');
-  await v.getByLabel('Line 1 account', { exact: true }).selectOption('supp:s1');
-  await v.getByLabel('Line 1 debit').fill('3000');
-  await v.getByRole('button', { name: 'Save voucher' }).click();
-  await expect(v).toHaveCount(0);
+  const v = dialog(VOUCHER_TITLE.CPV);
+  await voucherLine(page, v, 'S-0001', { debit: '3000' }, 'Shop rent');
+  await v.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(v.getByTestId('voucher-number')).toHaveValue('CPV-2'); // a new blank voucher
   await closeAll(page);
   await expect(page.getByTestId('voucher-row').filter({ hasText: 'CPV-1' })).toBeVisible();
 }

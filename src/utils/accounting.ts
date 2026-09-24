@@ -447,7 +447,7 @@ export const productCostOn = (purchases: Purchase[], products: Product[], produc
  * valued at cost on the first day of the books. Shared by the journal (Dr Inventory / Cr Opening
  * balance equity) and the stock valuation (utils/stockValuation.ts), so the two always agree.
  */
-export const openingStock = (src: {
+type OpeningStockSource = {
   settings: Pick<AppSettings, 'cashOpeningDate'>;
   ledger: Pick<LedgerEntry, 'date'>[];
   expenses: Pick<Expense, 'date'>[];
@@ -458,7 +458,13 @@ export const openingStock = (src: {
   invoices: Invoice[];
   dispatches: Dispatch[];
   returns: StockReturn[];
-}): { date: string; rows: { product: Product; qty: number; cost: number }[] } => {
+};
+
+/**
+ * Opening quantity of every item (the books' first day) and that day: today's stock with every recorded
+ * movement undone. Coding › Opening Stocks reads and sets it; openingStock below values it.
+ */
+export const openingStockQty = (src: OpeningStockSource): { date: string; qty: Map<string, number> } => {
   const openingDate = src.settings.cashOpeningDate || '1970-01-01';
   const date = [openingDate, ...src.ledger.map((l) => l.date), ...src.expenses.map((e) => e.date), ...src.cashEntries.map((c) => c.date), ...src.adjustments.map((a) => a.date.slice(0, 10))]
     .filter(Boolean)
@@ -475,11 +481,23 @@ export const openingStock = (src: {
     else move(r.productId, r.kind === 'sales' ? r.kg : -r.kg);
   });
   src.adjustments.forEach((a) => move(a.productId, a.deltaKg));
+  const qty = new Map<string, number>();
+  src.products.forEach((p) => qty.set(p.id, round2((Number(p.stockKg) || 0) - (movedIn.get(p.id) || 0))));
+  return { date, qty };
+};
+
+/**
+ * Opening stock the books bring in: today's stock of each item with every recorded movement undone,
+ * valued at cost on the first day of the books. Shared by the journal (Dr Inventory / Cr Opening
+ * balance equity) and the stock valuation (utils/stockValuation.ts), so the two always agree.
+ */
+export const openingStock = (src: OpeningStockSource): { date: string; rows: { product: Product; qty: number; cost: number }[] } => {
+  const { date, qty: opening } = openingStockQty(src);
   const rows: { product: Product; qty: number; cost: number }[] = [];
   src.products.forEach((p) => {
     const cost = productCostOn(src.purchases, src.products, p.id, date);
     if (cost == null) return;
-    const qty = round2((Number(p.stockKg) || 0) - (movedIn.get(p.id) || 0));
+    const qty = opening.get(p.id) || 0;
     if (qty <= 0) return;
     rows.push({ product: p, qty, cost });
   });

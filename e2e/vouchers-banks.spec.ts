@@ -1,6 +1,7 @@
-import { test, expect, Page, Locator } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { signIn } from './helpers/login';
 import { goTo } from './helpers/nav';
+import { VOUCHER_TITLE, voucherLine } from './helpers/voucher';
 
 /**
  * Multiple bank accounts, vouchers (CPV / BPV / JV / CRV), the account ledger for any account,
@@ -37,12 +38,6 @@ async function accTab(page: Page, name: string) {
 async function noSideScroll(page: Page, label: string) {
   const r = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, w: window.innerWidth }));
   expect(r.sw, `${label}: page is wider than the screen`).toBeLessThanOrEqual(r.w);
-}
-async function line(box: Locator, n: number, account: string, amount: { debit?: string; credit?: string }, narration?: string) {
-  await box.getByLabel(`Line ${n} account`, { exact: true }).selectOption(account);
-  if (amount.debit) await box.getByLabel(`Line ${n} debit`).fill(amount.debit);
-  if (amount.credit) await box.getByLabel(`Line ${n} credit`).fill(amount.credit);
-  if (narration) await box.getByLabel(`Line ${n} narration`).fill(narration);
 }
 async function addBank(page: Page, name: string, number: string, opening: string) {
   await page.getByTestId('bank-accounts').getByRole('button', { name: 'Add bank account' }).click();
@@ -90,45 +85,56 @@ test('banks, vouchers, account ledger, chart tree, receivable & payable by city'
   await goTo(page, 'Accounts');
   await accTab(page, 'Vouchers');
   await page.getByRole('button', { name: 'New Cash payment voucher' }).click();
-  let v = dialog(page, 'New Cash payment voucher');
+  let v = dialog(page, VOUCHER_TITLE.CPV);
   await expect(v.getByTestId('voucher-number')).toHaveValue('CPV-1');
-  await v.getByLabel('Narration', { exact: true }).fill('Payments of the day');
-  await line(v, 1, 'supp:s1', { debit: '10000' }, 'On account');
-  await v.getByRole('button', { name: 'Add line' }).click();
-  await line(v, 2, '6000', { debit: '500' }, 'Tea');
+  await voucherLine(page, v, '241001', { debit: '10000' }, 'On account');
+  await voucherLine(page, v, '6000', { debit: '500' }, 'Tea');
   await expect(v.getByTestId('voucher-money-side')).toContainText('Cr Rs. 10,500');
-  await v.getByRole('button', { name: 'Save voucher' }).click();
+  await expect(v.getByTestId('voucher-total-debit')).toHaveText('Rs. 10,500');
+  await v.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(v.getByTestId('voucher-number')).toHaveValue('CPV-2');
+  await page.keyboard.press('Escape');
   await expect(v).toHaveCount(0);
-  await page.keyboard.press('Escape'); // close the view of the saved voucher
   await expect(page.getByTestId('voucher-row').filter({ hasText: 'CPV-1' })).toBeVisible();
 
   // A BPV from HBL, found by typing the supplier code in the F1 search.
   await page.getByRole('button', { name: 'New Bank payment voucher' }).click();
-  v = dialog(page, 'New Bank payment voucher');
+  v = dialog(page, VOUCHER_TITLE.BPV);
   await expect(v.getByTestId('voucher-number')).toHaveValue('BPV-1');
   await v.getByLabel('Bank account').selectOption('1011');
-  await v.getByLabel('Narration', { exact: true }).fill('Oil Co paid by HBL');
-  await v.getByRole('button', { name: 'Search accounts for Line 1 account' }).click();
-  const find = dialog(page, 'Find account');
-  await find.getByLabel('Search accounts').fill('241002');
-  await find.getByLabel('Search accounts').press('Enter');
-  await expect(v.getByLabel("Line 1 account", { exact: true })).toHaveValue('supp:s2');
-  await v.getByLabel('Line 1 debit').fill('3000');
-  await v.getByRole('button', { name: 'Save voucher' }).click();
-  await expect(v).toHaveCount(0);
+  await v.getByRole('button', { name: 'Search Code (By Title)' }).click();
+  const find = dialog(page, 'Search Code (By Title)');
+  await find.getByLabel('Search by title').fill('241002');
+  await find.getByLabel('Search by title').press('Enter');
+  await expect(find).toHaveCount(0);
+  await expect(v.getByLabel('Title', { exact: true })).toHaveValue('Oil Co');
+  await expect(v.getByLabel('Debit', { exact: true })).toBeFocused();
+  await page.keyboard.type('3000');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Oil Co paid by HBL');
+  await page.keyboard.press('Enter');
+  await expect(v.getByTestId('voucher-line')).toHaveCount(1);
+  await v.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(v.getByTestId('voucher-number')).toHaveValue('BPV-2');
   await page.keyboard.press('Escape');
 
   // A JV that must balance.
   await page.getByRole('button', { name: 'New Journal voucher' }).click();
-  v = dialog(page, 'New Journal voucher');
-  await v.getByLabel('Narration', { exact: true }).fill('Freight charged to Zaman');
-  await line(v, 1, 'cust:c1', { debit: '1000' });
-  await line(v, 2, '4100', { credit: '900' });
-  await v.getByRole('button', { name: 'Save voucher' }).click();
-  await expect(v.getByRole('status')).toContainText('Debits (1000) must equal credits (900)');
-  await v.getByLabel('Line 2 credit').fill('1000');
-  await v.getByRole('button', { name: 'Save voucher' }).click();
-  await expect(v).toHaveCount(0);
+  v = dialog(page, VOUCHER_TITLE.JV);
+  await voucherLine(page, v, '141454', { debit: '1000' }, 'Freight charged to Zaman');
+  await voucherLine(page, v, '4100', { credit: '900' }, 'Freight charged to Zaman');
+  await v.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(v.getByRole('status').first()).toContainText('Debits (1000) must equal credits (900)');
+  // Click the line: it comes back into the entry row, on its amount; change it and Enter, Enter.
+  await v.getByTestId('voucher-line').nth(1).click();
+  await expect(v.getByLabel('Credit', { exact: true })).toBeFocused();
+  await v.getByLabel('Credit', { exact: true }).fill('1000');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await expect(v.getByTestId('voucher-line')).toHaveCount(2);
+  await expect(v.getByTestId('voucher-total-credit')).toHaveText('Rs. 1,000');
+  await v.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(v.getByTestId('voucher-number')).toHaveValue('JV-2');
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('voucher-row')).toHaveCount(3);
 
@@ -237,14 +243,13 @@ test.describe('phone', () => {
     await accTab(page, 'Vouchers');
     await noSideScroll(page, 'Vouchers');
     await page.getByRole('button', { name: 'New Cash receipt voucher' }).click();
-    const v = dialog(page, 'New Cash receipt voucher');
-    await v.getByLabel('Narration', { exact: true }).fill('Recovery');
-    await line(v, 1, 'cust:c2', { credit: '2500' }, 'Full');
+    const v = dialog(page, VOUCHER_TITLE.CRV);
+    await voucherLine(page, v, '141455', { credit: '2500' }, 'Full');
     await expect(v.getByTestId('voucher-money-side')).toContainText('Dr Rs. 2,500');
     const box = await v.boundingBox();
     expect(box!.width).toBeLessThanOrEqual(390);
-    await v.getByRole('button', { name: 'Save voucher' }).click();
-    await expect(v).toHaveCount(0);
+    await v.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(v.getByTestId('voucher-number')).toHaveValue('CRV-2');
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('voucher-row').filter({ hasText: 'CRV-1' })).toBeVisible();
     await noSideScroll(page, 'Vouchers list');

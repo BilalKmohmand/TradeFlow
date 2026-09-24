@@ -26,6 +26,7 @@ import {
   ADMIN_TAB_LABEL,
   SUPPLIER_TAB_LABEL,
   BILLS_TAB_LABEL,
+  CODING_TAB_LABEL,
 } from '../utils/navMap';
 import { REPORTS, ReportId } from '../utils/classicReports';
 import { REPORTS_MENU, BOOKS_MENU, isSubmenu } from '../utils/classicMenu';
@@ -36,6 +37,7 @@ import { MONEY_TABS, MONEY_VIEWS } from '../screens/billing/MoneyScreen';
 import { ADMIN_TABS } from '../screens/AdminScreen';
 import { SUPPLIER_TABS, SUPPLIER_VIEWS } from '../screens/billing/SuppliersBillingScreen';
 import { BILLS_TABS } from '../screens/billing/BillsScreen';
+import { CODING_TABS, CODING_TAB_NAMES } from '../screens/billing/CodingScreen';
 
 /** Views each screen understands (tabs, and dialogs it opens on request). */
 const VIEWS: Partial<Record<ActiveScreen, readonly string[]>> = {
@@ -46,6 +48,7 @@ const VIEWS: Partial<Record<ActiveScreen, readonly string[]>> = {
   bills: BILLS_TABS,
   customers: ['add', 'cities', 'city'],
   products: ['godowns', 'move'],
+  coding: CODING_TABS,
 };
 
 /** Cards a menu can scroll to (data-nav-anchor in the screens), by screen and view. */
@@ -215,14 +218,16 @@ describe('nav map: breadcrumb', () => {
   it('names where a screen lives', () => {
     const c = (s: ActiveScreen, v: string | null) => { const b = breadcrumbFor(s, v); return b.group ? `${b.group.label} › ${b.label}` : b.label; };
     expect(c('accounts', 'vouchers')).toBe('Accounts › Vouchers');
-    expect(c('accounts', 'coa')).toBe('Coding › Chart of accounts');
+    expect(c('accounts', 'coa')).toBe('Coding › Accounts Coding New');
     expect(c('money', 'cheques')).toBe('Accounts › Cheques');
     expect(c('admin', 'users')).toBe('System › Users & passwords');
     expect(c('reports-hub', 'trial-balance')).toBe('Reports › Trial Balance');
     expect(c('reports-hub', 'menu')).toBe('Reports › All reports');
     expect(c('reports-hub', 'books')).toBe('Accounts › Books');
     expect(c('bills', 'quotes')).toBe('Invoice › Quotations');
-    expect(c('products', null)).toBe('Coding › Items & prices');
+    expect(c('products', null)).toBe('Coding › Product Coding');
+    expect(c('coding', 'opening-stock')).toBe('Coding › Opening Stocks');
+    expect(c('coding', 'opening-balances')).toBe('Coding › Accounts Opening Balances');
     expect(c('dashboard', null)).toBe('Home');
   });
 });
@@ -258,6 +263,9 @@ const OLD_PROGRAM: [string, string][] = [
   ['Inventory Reports', 'reports'], ['Party Reports', 'reports'], ['Product Reports', 'reports'], ['Stock Reports', 'reports'],
   // Reports › Pending Delivery
   ['Pending Delivery List', 'reports'],
+  // The Coding menu
+  ['Accounts Coding New', 'coding'], ['Accounts Opening Balances', 'coding'], ['Product Unit Coding', 'coding'], ['Store Coding', 'coding'],
+  ['Product Group Coding', 'coding'], ['Manufacturer Coding', 'coding'], ['Opening Stocks', 'coding'], ['User Coding', 'coding'], ['City Coding', 'coding'],
 ];
 
 /** Screens that are deliberately not a menu option, and why. */
@@ -289,6 +297,23 @@ describe('nav map: coverage', () => {
   it.each([...ADMIN_TABS])('Admin tab “%s” has an entry', (tab) => expect(tabCovered('admin', tab)).toBe(true));
   it.each([...SUPPLIER_TABS])('Suppliers tab “%s” has an entry', (tab) => expect(tabCovered('suppliers', tab)).toBe(true));
   it.each([...BILLS_TABS])('Bills tab “%s” has an entry', (tab) => expect(tabCovered('bills', tab)).toBe(true));
+  it.each([...CODING_TABS])('Coding tab “%s” has an entry', (tab) => expect(tabCovered('coding', tab)).toBe(true));
+
+  it('the Coding menu starts with Apna Accountant’s Coding menu, exactly and in order', () => {
+    const coding = NAV_GROUPS.find((g) => g.id === 'coding')!;
+    expect(coding.sections[0].label).toBe('Coding');
+    expect(coding.sections[0].entries.map((e) => e.label)).toEqual([
+      'Accounts Coding New', 'Accounts Opening Balances', 'Product Unit Coding', 'Store Coding', 'Product Group Coding',
+      'Product Coding', 'Manufacturer Coding', 'Opening Stocks', 'User Coding', 'City Coding',
+    ]);
+    // Each opens a working screen: its own Coding tab, or the existing screen / dialog.
+    const where = Object.fromEntries(coding.sections[0].entries.map((e) => [e.label, targetKey(e.target)]));
+    expect(where).toEqual({
+      'Accounts Coding New': 's:accounts:coa::', 'Accounts Opening Balances': 's:coding:opening-balances::', 'Product Unit Coding': 's:coding:units::',
+      'Store Coding': 's:products:godowns::', 'Product Group Coding': 's:coding:groups::', 'Product Coding': 's:products:::', 'Manufacturer Coding': 's:coding:manufacturers::',
+      'Opening Stocks': 's:coding:opening-stock::', 'User Coding': 's:admin:users::', 'City Coding': 's:customers:cities::',
+    });
+  });
 
   it('every report of the Reports hub, and every dialog action, is reachable', () => {
     (Object.keys(REPORTS) as ReportId[]).forEach((id) => expect(NAV_ENTRIES.some((e) => e.target.kind === 'report' && e.target.report === id), id).toBe(true));
@@ -297,7 +322,7 @@ describe('nav map: coverage', () => {
 
   it('the spec’d options are all there, in their menus', () => {
     const want: Record<string, string[]> = {
-      coding: ['Items & prices', 'Customers', 'Suppliers', 'Chart of accounts', 'Bank accounts', 'Cities / towns', 'Salesmen & areas', 'Godowns / stores', 'Schemes (free goods)', 'Opening cash & bank'],
+      coding: ['Product Coding', 'Customers', 'Suppliers', 'Accounts Coding New', 'Bank accounts', 'City Coding', 'Salesmen & areas', 'Store Coding', 'Schemes (free goods)', 'Opening cash & bank'],
       invoice: ['Sale Invoice', 'Cash Sale Invoice', 'Sale Invoices list', 'Purchase Invoice', 'Purchase Invoices list', 'Sale Return', 'Purchase Return', 'Store Transfer', 'Quotations', 'Delivery orders (pending)', 'Purchase orders', 'Receive stock', 'Adjust stock'],
       accounts: ['Vouchers', 'CPV — Cash payment voucher', 'CRV — Cash receipt voucher', 'BPV — Bank payment voucher', 'BRV — Bank receipt voucher', 'JV — Journal voucher', 'Receive payment', 'Receive from many', 'Pay supplier', 'Add expense', 'Cash ↔ Bank', 'Cheques', 'Bank reconciliation', 'Account ledger', 'Books', 'Cash book', 'Bank book', 'Day book', 'Journal book', 'Daily sheet'],
       reports: ['Owner dashboard', 'Who owes for how long (aging)', 'Profit by item & customer', 'Recovery list'],
@@ -351,6 +376,7 @@ describe('nav map: what each option shows', () => {
   });
   it('tab names in the map are the screens’ real tab names', () => {
     expect(ACCOUNTS_TAB_LABEL).toEqual(ACCOUNTS_TAB_NAMES);
+    expect(CODING_TAB_LABEL).toEqual(CODING_TAB_NAMES);
     const src = (f: string) => readFileSync(resolve(__dirname, '..', f), 'utf8');
     const money = src('screens/billing/MoneyScreen.tsx');
     Object.entries(MONEY_TAB_LABEL).forEach(([id, l]) => expect(money, id).toContain(`tabBtn('${id}', '${l}')`));

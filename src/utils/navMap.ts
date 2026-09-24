@@ -123,13 +123,19 @@ const rep = (report: ReportId | 'books' | 'menu'): NavTarget => ({ kind: 'report
 // ---------------------------------------------------------------------------------------------------------
 const CODING: { label: string; entries: Raw[] }[] = [
   {
-    label: 'Items & stock setup',
+    // Apna Accountant SB's Coding menu: exactly these, in this order.
+    label: 'Coding',
     entries: [
-      { id: 'items', label: 'Items & prices', aka: ['Product Coding'], hint: 'Add or change items, codes, units, pack sizes and prices', keywords: ['maal', 'item', 'product', 'rate', 'qeemat', 'qimat', 'price', 'code', 'barcode', 'ghee', 'oil', 'tin'], target: scr('products') },
-      { id: 'new-item', label: 'New item', hint: 'Add one item to the price list', keywords: ['maal', 'naya', 'add item', 'product'], target: act('newItem') },
-      { id: 'godowns', label: 'Godowns / stores', hint: 'Stores and godowns, and the stock in each', keywords: ['godam', 'godaam', 'godown', 'store', 'warehouse'], perm: ['stock:adjust'], target: scr('products', 'godowns') },
-      { id: 'schemes', label: 'Schemes (free goods)', hint: 'Buy 10 get 1 and other free-goods schemes', keywords: ['scheme', 'free', 'bonus', 'muft', 'offer'], target: act('schemes') },
-      { id: 'labels', label: 'Barcode labels', hint: 'Print barcode / price stickers for items', keywords: ['barcode', 'sticker', 'label', 'print'], target: act('labels') },
+      { id: 'chart-of-accounts', label: 'Accounts Coding New', aka: ['Accounts Coding', 'Chart of accounts'], hint: 'The account heads money is sorted into; add a new account', keywords: ['hisab', 'hisaab', 'account head', 'coa', 'coding', 'chart', 'new account'], perm: FIN, target: scr('accounts', 'coa') },
+      { id: 'account-openings', label: 'Accounts Opening Balances', aka: ['Opening balances'], hint: 'Opening balance of cash, banks, customers and suppliers in one grid', keywords: ['opening', 'shuru', 'purana khata', 'old khata', 'balance', 'b/f'], target: scr('coding', 'opening-balances') },
+      { id: 'units', label: 'Product Unit Coding', aka: ['Units'], hint: 'Units items are sold in: tin, can, ctn, pcs…', keywords: ['unit', 'tin', 'can', 'ctn', 'carton', 'qty', 'pcs'], target: scr('coding', 'units') },
+      { id: 'godowns', label: 'Store Coding', aka: ['Godowns / stores', 'Godowns'], hint: 'Stores and godowns, and the stock in each', keywords: ['godam', 'godaam', 'godown', 'store', 'warehouse'], perm: ['stock:adjust'], target: scr('products', 'godowns') },
+      { id: 'product-groups', label: 'Product Group Coding', aka: ['Item groups'], hint: 'Item groups: Ghee, Cooking oil, Banaspati…', keywords: ['group', 'category', 'qism'], target: scr('coding', 'groups') },
+      { id: 'items', label: 'Product Coding', aka: ['Items & prices', 'Items'], hint: 'Add or change items, codes, units, pack sizes and prices', keywords: ['maal', 'item', 'product', 'rate', 'qeemat', 'qimat', 'price', 'code', 'barcode', 'ghee', 'oil', 'tin'], target: scr('products') },
+      { id: 'manufacturers', label: 'Manufacturer Coding', aka: ['Brands'], hint: 'Brands / manufacturers of the items: Dalda, Habib…', keywords: ['brand', 'company', 'manufacturer', 'maker'], target: scr('coding', 'manufacturers') },
+      { id: 'opening-stock', label: 'Opening Stocks', aka: ['Opening stock'], hint: 'Stock of each item on the first day of the books, per store, with its rate', keywords: ['opening', 'stock', 'maal', 'shuru', 'b/f'], target: scr('coding', 'opening-stock') },
+      { id: 'user-coding', label: 'User Coding', aka: ['Users'], hint: 'Who can sign in, their passwords and roles', keywords: ['user', 'password', 'login', 'staff'], anyPerm: ADMIN, perm: ['users:view'], target: scr('admin', 'users'), primary: false },
+      { id: 'cities', label: 'City Coding', aka: ['Cities / towns'], hint: 'The list of cities used on customers and suppliers', keywords: ['shehr', 'shahar', 'city', 'town', 'area'], target: scr('customers', 'cities') },
     ],
   },
   {
@@ -139,14 +145,15 @@ const CODING: { label: string; entries: Raw[] }[] = [
       { id: 'new-customer', label: 'Add customer', hint: 'Open a new customer account', keywords: ['naya gahak', 'new customer', 'party'], target: scr('customers', 'add') },
       { id: 'suppliers', label: 'Suppliers', aka: ['Supplier Coding'], hint: 'Companies you buy from and what you owe them', keywords: ['supplier', 'company', 'dealer', 'party', 'vendor'], target: scr('suppliers', 'suppliers') },
       { id: 'new-supplier', label: 'Add supplier', hint: 'Open a new supplier account', keywords: ['new supplier', 'company', 'party'], target: scr('suppliers', 'add') },
-      { id: 'cities', label: 'Cities / towns', hint: 'The list of cities used on customers and suppliers', keywords: ['shehr', 'shahar', 'city', 'town', 'area'], target: scr('customers', 'cities') },
       { id: 'salesmen', label: 'Salesmen & areas', hint: 'Order bookers, recovery men and their areas', keywords: ['salesman', 'order booker', 'area', 'route', 'ilaqa'], target: act('salesTeam') },
     ],
   },
   {
-    label: 'Accounts setup',
+    label: 'More setup',
     entries: [
-      { id: 'chart-of-accounts', label: 'Chart of accounts', aka: ['Accounts Coding'], hint: 'The account heads money is sorted into; add your own', keywords: ['hisab', 'hisaab', 'account head', 'coa', 'coding'], perm: FIN, target: scr('accounts', 'coa') },
+      { id: 'new-item', label: 'New item', hint: 'Add one item to the price list', keywords: ['maal', 'naya', 'add item', 'product'], target: act('newItem') },
+      { id: 'schemes', label: 'Schemes (free goods)', hint: 'Buy 10 get 1 and other free-goods schemes', keywords: ['scheme', 'free', 'bonus', 'muft', 'offer'], target: act('schemes') },
+      { id: 'labels', label: 'Barcode labels', hint: 'Print barcode / price stickers for items', keywords: ['barcode', 'sticker', 'label', 'print'], target: act('labels') },
       { id: 'bank-accounts', label: 'Bank accounts', hint: 'Meezan, HBL…: add a bank and see each balance', keywords: ['bank', 'account', 'meezan', 'hbl', 'ubl', 'mcb'], perm: FIN, target: scr('money', 'overview', { anchor: 'bank-accounts' }) },
       { id: 'opening-balances', label: 'Opening cash & bank', hint: 'Cash and bank on the day you started', keywords: ['opening', 'shuru', 'balance', 'cash', 'bank'], target: scr('money', 'opening', { anchor: 'opening' }) },
     ],
@@ -405,6 +412,8 @@ const targetPerm = (t: NavTarget): { perm?: Permission[]; anyPerm?: Permission[]
   if (t.kind === 'screen' && t.screen === 'customers' && t.view === 'add') return { perm: ['customers:create'] };
   if (t.kind === 'screen' && t.screen === 'suppliers' && t.view === 'add') return { perm: ['suppliers:create'] };
   if (t.kind === 'screen' && t.screen === 'products' && (t.view === 'godowns' || t.view === 'move')) return { perm: WRITE };
+  if (t.kind === 'screen' && t.screen === 'coding' && t.view === 'opening-balances') return { perm: FIN };
+  if (t.kind === 'screen' && t.screen === 'coding' && t.view === 'opening-stock') return { perm: ['stock:adjust'] };
   return {};
 };
 
@@ -491,7 +500,7 @@ const SYSTEM: { label: string; entries: Raw[] }[] = [
 ];
 
 const GROUP_META: { id: NavGroupId; label: string; key: string; hint: string; cols: number; sections: { label: string; entries: Raw[] }[] }[] = [
-  { id: 'coding', label: 'Coding', key: 'C', hint: 'Items, customers, suppliers, accounts', cols: 3, sections: CODING },
+  { id: 'coding', label: 'Coding', key: 'C', hint: 'Accounts, openings, units, stores, items, users, cities', cols: 3, sections: CODING },
   { id: 'invoice', label: 'Invoice', key: 'I', hint: 'Sale, purchase, returns and stock', cols: 3, sections: INVOICE },
   { id: 'accounts', label: 'Accounts', key: 'A', hint: 'Vouchers, money, banks and books', cols: 4, sections: ACCOUNTS },
   { id: 'reports', label: 'Reports', key: 'R', hint: 'Every report and dashboard', cols: 4, sections: [REPORTS_EXTRA, ...reportSections()] },
@@ -753,7 +762,7 @@ export interface NavCheck {
 /** h1 of each screen. */
 export const SCREEN_TITLE: Partial<Record<ActiveScreen, string>> = {
   dashboard: 'Home', products: 'Items & Prices', customers: 'Customers', suppliers: 'Suppliers', accounts: 'Accounts', money: 'Money',
-  admin: 'Administrator Control Center', bills: 'Bills', daily: 'Daily Sheet', owner: 'Owner dashboard', purchases: 'Purchase invoices', 'reports-hub': 'Reports',
+  admin: 'Administrator Control Center', bills: 'Bills', daily: 'Daily Sheet', owner: 'Owner dashboard', purchases: 'Purchase invoices', 'reports-hub': 'Reports', coding: 'Coding',
 };
 /** Tab / toggle names of the screens with tabs (checked against the screens by the unit tests). */
 export const ACCOUNTS_TAB_LABEL: Record<string, string> = {
@@ -767,6 +776,10 @@ export const ADMIN_TAB_LABEL: Record<string, string> = {
 };
 export const SUPPLIER_TAB_LABEL: Record<string, string> = { suppliers: 'Suppliers', orders: 'Orders', received: 'Stock received', bills: 'Supplier bills', claims: 'Claims', returns: 'Returns' };
 export const BILLS_TAB_LABEL: Record<string, string> = { bills: 'Bills', returns: 'Returns', quotes: 'Quotations' };
+/** Tabs of the Coding screen (screens/billing/CodingScreen.tsx CODING_TAB_NAMES). */
+export const CODING_TAB_LABEL: Record<string, string> = {
+  'opening-balances': 'Accounts Opening Balances', units: 'Product Unit Coding', groups: 'Product Group Coding', manufacturers: 'Manufacturer Coding', 'opening-stock': 'Opening Stocks',
+};
 
 const VIEW_DIALOG: Record<string, string> = {
   'customers:add': 'New customer',
@@ -784,7 +797,8 @@ const ACTION_DIALOG: Record<NavAction, string | null> = {
   agingCustomers: 'Who owes for how long', agingSuppliers: 'Who owes for how long', salesHub: 'Sales & recovery', salesTeam: 'Salesmen & areas', schemes: 'Schemes',
   salesReport: 'Sales reports', recovery: 'Sales reports', commission: 'Sales reports', tradingSuite: null, lock: null,
 };
-const VOUCHER_LABEL: Record<string, string> = { CPV: 'Cash payment voucher', CRV: 'Cash receipt voucher', BPV: 'Bank payment voucher', BRV: 'Bank receipt voucher', JV: 'Journal voucher' };
+/** The voucher screen's title (the old program's window title, utils/voucherEntry.ts VOUCHER_TITLES). */
+const VOUCHER_LABEL: Record<string, string> = { CPV: 'Cash Payment -- [Debit Voucher]', CRV: 'Cash Receipt -- [Credit Voucher]', BPV: 'Bank Payment -- [Debit Voucher]', BRV: 'Bank Receipt -- [Credit Voucher]', JV: 'Journal Voucher' };
 
 /** What must be visible once the entry has opened. */
 export const navCheck = (e: NavEntry): NavCheck => {
@@ -796,7 +810,7 @@ export const navCheck = (e: NavEntry): NavCheck => {
   }
   const c: NavCheck = { heading: SCREEN_TITLE[t.screen] };
   const v = t.view;
-  if (t.sub?.startsWith('new:')) c.dialog = `New ${VOUCHER_LABEL[t.sub.slice(4)]}`;
+  if (t.sub?.startsWith("new:")) c.dialog = VOUCHER_LABEL[t.sub.slice(4)];
   else if (t.sub === 'new' && v === 'journal') c.dialog = 'New journal entry';
   if (t.anchor) c.anchor = t.anchor;
   if (!v) return c;
@@ -808,5 +822,6 @@ export const navCheck = (e: NavEntry): NavCheck => {
   } else if (t.screen === 'admin') c.pressed = ADMIN_TAB_LABEL[v];
   else if (t.screen === 'suppliers') c.tab = SUPPLIER_TAB_LABEL[v];
   else if (t.screen === 'bills') c.tab = BILLS_TAB_LABEL[v];
+  else if (t.screen === 'coding') c.tab = CODING_TAB_LABEL[v];
   return c;
 };

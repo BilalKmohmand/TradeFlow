@@ -113,7 +113,7 @@ const SeriesRow: React.FC<{ k: DocSeriesKey; label: string; onMsg: (m: Msg) => v
       </div>
       <div>
         <label className={labelCls} htmlFor={`${id}-pad`}>Digits</label>
-        <input id={`${id}-pad`} type="number" min="0" max="8" value={f.pad} onChange={(e) => setF({ ...f, pad: e.target.value })} className={inputCls} />
+        <input id={`${id}-pad`} type="number" min="0" max="8" value={f.pad} onChange={(e) => setF({ ...f, pad: e.target.value })} className={`${inputCls} tabular-nums min-w-[4.75rem]`} />
       </div>
       <div>
         <label className={labelCls} htmlFor={`${id}-start`}>Next no.</label>

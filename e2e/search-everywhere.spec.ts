@@ -166,14 +166,14 @@ test('Pickers: Receive payment, Receive from many, report filter and the voucher
   // Voucher line: the account search (F1 / search button) by phone and shop name.
   await openById(page, 'vouchers');
   await page.getByRole('button', { name: 'New Cash payment voucher' }).click();
-  const v = page.getByRole('dialog', { name: 'New Cash payment voucher' });
-  await v.getByRole('button', { name: 'Search accounts for Line 1 account' }).click();
-  const fa = page.getByRole('dialog', { name: 'Find account' });
-  await fa.getByLabel('Search accounts').fill('0321 7008642');
-  await expect(fa.getByRole('listbox', { name: 'Matching accounts' })).toContainText('Seasons Edible Oil');
-  await fa.getByLabel('Search accounts').fill('zaman shop');
-  await expect(fa.getByRole('option').first()).toContainText('Zaman and Co BTK');
-  await fa.getByLabel('Search accounts').press('Enter');
+  const v = page.getByRole('dialog', { name: 'Cash Payment -- [Debit Voucher]' });
+  await v.getByRole('button', { name: 'Search Code (By Title)' }).click();
+  const fa = page.getByRole('dialog', { name: 'Search Code (By Title)' });
+  await fa.getByLabel('Search by title').fill('0321 7008642');
+  await expect(fa.getByRole('grid', { name: 'Accounts found' })).toContainText('Seasons Edible Oil');
+  await fa.getByLabel('Search by title').fill('zaman shop');
+  await expect(fa.getByRole('row').nth(1)).toContainText('Zaman and Co BTK');
+  await fa.getByLabel('Search by title').press('Enter');
   await expect(fa).toHaveCount(0);
-  await expect(v.getByLabel('Line 1 account', { exact: true })).toHaveValue('cust:c1');
+  await expect(v.getByLabel('Title', { exact: true })).toHaveValue('Zaman and Co BTK');
 });
