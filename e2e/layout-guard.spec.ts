@@ -43,7 +43,7 @@ async function openEntry(page: Page, e: NavEntry, groupLabel: string, groupId: s
     await expect(sheet).toBeHidden({ timeout: 10_000 }).catch(() => page.keyboard.press("Escape"));
   } else {
     await page.getByRole('menubar', { name: 'Menu bar' }).getByRole('menuitem', { name: groupLabel, exact: true }).click();
-    const menu = page.getByRole('menu', { name: groupLabel });
+    const menu = page.getByRole('menu', { name: groupLabel, exact: true });
     await menu.getByRole('menuitem', { name: e.label, exact: true }).click();
     await expect(menu).toBeHidden();
   }

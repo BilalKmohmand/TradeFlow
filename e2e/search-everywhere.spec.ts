@@ -26,7 +26,7 @@ async function openById(page: Page, id: string) {
   const g = NAV_GROUPS.find((x) => x.sections.some((s) => s.entries.some((e) => e.id === id)))!;
   const e = g.sections.flatMap((s) => s.entries).find((x) => x.id === id)!;
   await page.getByRole('menubar', { name: 'Menu bar' }).getByRole('menuitem', { name: g.label, exact: true }).click();
-  const menu = page.getByRole('menu', { name: g.label });
+  const menu = page.getByRole('menu', { name: g.label, exact: true });
   await menu.getByRole('menuitem', { name: e.label, exact: true }).click();
   await expect(menu).toBeHidden();
 }

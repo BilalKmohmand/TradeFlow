@@ -69,7 +69,7 @@ async function open(page: Page) {
 /** A bank account, a cheque in hand and a cash payment voucher, made the way a user makes them. */
 async function addBankChequeVoucher(page: Page) {
   const dialog = (name: string) => page.getByRole('dialog', { name });
-  await openMenuOption(page, 'Coding', 'Bank accounts');
+  await openMenuOption(page, 'System', 'Bank accounts');
   await page.getByTestId('bank-accounts').getByRole('button', { name: 'Add bank account' }).click();
   const b = dialog('Add bank account');
   await b.getByLabel('Bank name').fill('HBL');

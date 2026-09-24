@@ -84,9 +84,10 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
   const [warn, setWarn] = useState('');
   const [done, setDone] = useState<{ sheetNo: string; message: string } | null>(null);
 
-  // The dialog stays mounted: every time it opens, start a fresh receipt with one empty line.
+  // The dialog stays mounted: start the next receipt fresh. Done when it CLOSES, so the open dialog never
+  // swaps its rows after the user has started typing (on a slow computer the first entry was lost).
   useEffect(() => {
-    if (!isOpen) return;
+    if (isOpen) return;
     setDate(todayISO());
     setLines([blankLine()]);
     setError('');

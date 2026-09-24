@@ -55,8 +55,19 @@ export async function goTo(page: Page, name: string) {
 /** Desktop top menu bar: open a group (Coding, Invoice, Accounts, Reports, System) and click one option. */
 export async function openMenuOption(page: Page, group: string, option: string) {
   await page.getByRole('menubar', { name: 'Menu bar' }).getByRole('menuitem', { name: group, exact: true }).click();
-  const menu = page.getByRole('menu', { name: group });
+  const menu = page.getByRole('menu', { name: group, exact: true });
   await expect(menu).toBeVisible();
-  await menu.getByRole('menuitem', { name: option, exact: true }).click();
+  // A real option, not a "›" button of the same name.
+  const find = () => menu.getByRole('menuitem', { name: option, exact: true }).and(page.locator(':not([data-nav-sub])'));
+  let item = find();
+  if (!(await item.count())) {
+    // The Invoice menu opens its options to the side ("Purchase Invoice ›"): try each › until it shows.
+    for (const trig of await menu.locator('[data-nav-sub]').all()) {
+      await trig.hover();
+      item = find();
+      if (await item.count()) break;
+    }
+  }
+  await item.click();
   await expect(menu).toBeHidden();
 }

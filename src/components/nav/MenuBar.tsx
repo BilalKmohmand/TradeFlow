@@ -48,9 +48,94 @@ const MenuItem: React.FC<{ entry: NavEntry; onPick: (e: NavEntry) => void }> = (
   );
 };
 
+/**
+ * The old program's Invoice menu: a short list ("Purchase Invoice ›", "Sale Invoice ›", "Store Transfer"),
+ * each "›" opening its options to the side on hover, click or → (← comes back).
+ */
+const FlyoutPanel = React.forwardRef<HTMLDivElement, { group: NavGroup; onPick: (e: NavEntry) => void; onKeyDown: (e: React.KeyboardEvent) => void; left: number }>(({ group, onPick, onKeyDown, left }, ref) => {
+  const [openSub, setOpenSub] = useState<string | null>(null);
+  const subRef = useRef<HTMLDivElement>(null);
+  const trigRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const entries = group.sections.flatMap((s) => s.entries);
+  // Top rows, in order: one per sub-menu (first time it appears) and every entry without one.
+  const rows: ({ kind: 'sub'; label: string } | { kind: 'item'; entry: NavEntry })[] = [];
+  const seen = new Set<string>();
+  entries.forEach((e) => {
+    if (e.sub) {
+      if (!seen.has(e.sub)) { seen.add(e.sub); rows.push({ kind: 'sub', label: e.sub }); }
+    } else rows.push({ kind: 'item', entry: e });
+  });
+  const focusSub = () => setTimeout(() => subRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus(), 0);
+  return (
+    <div
+      ref={ref}
+      role="menu"
+      aria-label={group.label}
+      id={`nav-menu-${group.id}`}
+      onKeyDown={onKeyDown}
+      style={{ left }}
+      data-testid={`nav-menu-${group.id}`}
+      className="absolute top-full mt-1 z-40 rounded-3xl border border-[#E5E5E1] dark:border-[#203248] bg-white dark:bg-[#101A26] shadow-2xl shadow-slate-900/10 p-2 w-64"
+    >
+      <div role="group" aria-label={group.label}>
+        {rows.map((r) => {
+          if (r.kind === 'item') return <div key={r.entry.id} onMouseEnter={() => setOpenSub(null)}><MenuItem entry={r.entry} onPick={onPick} /></div>;
+          const on = openSub === r.label;
+          const subEntries = entries.filter((e) => e.sub === r.label);
+          return (
+            <div key={r.label} className="relative" onMouseEnter={() => setOpenSub(r.label)}>
+              <button
+                ref={(el) => { trigRefs.current[r.label] = el; }}
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                aria-haspopup="menu"
+                aria-expanded={on}
+                aria-label={r.label}
+                data-nav-sub={r.label}
+                onClick={() => { setOpenSub(r.label); focusSub(); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setOpenSub(r.label); focusSub(); }
+                }}
+                className={`w-full flex items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left text-[13px] font-semibold outline-hidden ${on ? 'bg-[#F4F3EF] dark:bg-[#162436]' : ''} hover:bg-[#F4F3EF] dark:hover:bg-[#162436] focus:bg-[#111827] focus:text-white dark:focus:bg-white dark:focus:text-[#111827] text-[#111827] dark:text-white`}
+              >
+                <span>{r.label}</span><span aria-hidden="true">›</span>
+              </button>
+              {on && (
+                <div
+                  ref={subRef}
+                  role="menu"
+                  aria-label={r.label}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowLeft' || e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpenSub(null); trigRefs.current[r.label]?.focus(); return; }
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                      e.preventDefault(); e.stopPropagation();
+                      const list: HTMLElement[] = subRef.current ? Array.from(subRef.current.querySelectorAll<HTMLElement>('[role="menuitem"]')) : [];
+                      const i = list.indexOf(document.activeElement as HTMLElement);
+                      list[(i + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length]?.focus();
+                    }
+                  }}
+                  className="absolute left-full top-0 ml-1 w-72 max-h-[calc(100vh-var(--header-h,7rem)-2rem)] overflow-y-auto rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-white dark:bg-[#101A26] shadow-2xl shadow-slate-900/10 p-2"
+                >
+                  <div role="group" aria-label={r.label}>
+                    {subEntries.map((e) => <MenuItem key={e.id} entry={e} onPick={onPick} />)}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div role="presentation" className="mt-2 pt-2 px-2.5 border-t border-[#F1F0EC] dark:border-[#1E2E40] text-[10.5px] text-[#8E9299]">→ opens a › menu · Alt + {group.key}</div>
+    </div>
+  );
+});
+FlyoutPanel.displayName = 'FlyoutPanel';
+
 /** The dropdown of one group: columns of sections, with sub-headings (Reports › Stock Reports…). */
 const MenuPanel = React.forwardRef<HTMLDivElement, { group: NavGroup; onPick: (e: NavEntry) => void; onKeyDown: (e: React.KeyboardEvent) => void; left: number }>(({ group, onPick, onKeyDown, left }, ref) => {
   const cols = columnsOf(group.sections, Math.min(group.cols, Math.max(1, group.sections.length + (group.sections.some((s) => s.entries.length >= 16) ? 1 : 0))));
+  if (group.flyout) return <FlyoutPanel ref={ref} group={group} onPick={onPick} onKeyDown={onKeyDown} left={left} />;
   return (
     <div
       ref={ref}

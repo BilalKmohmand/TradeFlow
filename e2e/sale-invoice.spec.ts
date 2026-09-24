@@ -345,17 +345,16 @@ test('Purchase Invoice: codes + Enter, discount %, Search loads it back to chang
 test('Invoice menu: Purchase Invoice ›, Sale Invoice ›, Store Transfer first, each opening its screen', async ({ page }) => {
   await open(page);
   await page.getByRole('menubar', { name: 'Menu bar' }).getByRole('menuitem', { name: 'Invoice', exact: true }).click();
-  const menu = page.getByRole('menu', { name: 'Invoice' });
-  const first = menu.getByRole('group', { name: 'Invoice' });
-  await expect(first.getByRole('menuitem')).toHaveText([
-    /^Purchase Invoice/, /^Purchase Return/, /^Purchase Invoices list/,
-    /^Sale Invoice/, /^Cash Sale Invoice/, /^Sale Return/, /^Sale Invoices list/,
-    /^Store Transfer/,
-  ]);
-  await expect(first).toContainText('Purchase Invoice ›');
-  await expect(first).toContainText('Sale Invoice ›');
-  // The other Invoice options are still there.
-  for (const o of ['Quotations', 'Delivery orders (pending)', 'Purchase orders', 'Receive stock', 'Adjust stock']) await expect(menu.getByRole('menuitem', { name: o, exact: true })).toBeVisible();
+  const menu = page.getByRole('menu', { name: 'Invoice', exact: true });
+  // Exactly the old program: Purchase Invoice ›, Sale Invoice ›, Store Transfer.
+  const top = menu.getByRole('group', { name: 'Invoice', exact: true }).locator(':scope > div > [role="menuitem"]');
+  await expect(top).toHaveText([/^Purchase Invoice/, /^Sale Invoice/, /^Store Transfer/]);
+  await menu.getByRole('menuitem', { name: 'Purchase Invoice', exact: true }).first().hover();
+  const pur = page.getByRole('menu', { name: 'Purchase Invoice', exact: true });
+  for (const o of ['Purchase Invoice', 'Purchase Return', 'Purchase Invoices list', 'Purchase orders', 'Receive stock', 'Adjust stock']) await expect(pur.getByRole('menuitem', { name: o, exact: true })).toBeVisible();
+  await menu.getByRole('menuitem', { name: 'Sale Invoice', exact: true }).first().hover();
+  const sale = page.getByRole('menu', { name: 'Sale Invoice', exact: true });
+  for (const o of ['Sale Invoice', 'Cash Sale Invoice', 'Sale Return', 'Sale Invoices list', 'Quotations', 'Delivery orders (pending)']) await expect(sale.getByRole('menuitem', { name: o, exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
 
   const checks: [string, () => Promise<void>][] = [

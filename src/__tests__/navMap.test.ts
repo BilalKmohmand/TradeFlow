@@ -322,11 +322,11 @@ describe('nav map: coverage', () => {
 
   it('the spec’d options are all there, in their menus', () => {
     const want: Record<string, string[]> = {
-      coding: ['Product Coding', 'Customers', 'Suppliers', 'Accounts Coding New', 'Bank accounts', 'City Coding', 'Salesmen & areas', 'Store Coding', 'Schemes (free goods)', 'Opening cash & bank'],
+      coding: ['Accounts Coding New', 'Accounts Opening Balances', 'Product Unit Coding', 'Store Coding', 'Product Group Coding', 'Product Coding', 'Manufacturer Coding', 'Opening Stocks', 'User Coding', 'City Coding'],
       invoice: ['Sale Invoice', 'Cash Sale Invoice', 'Sale Invoices list', 'Purchase Invoice', 'Purchase Invoices list', 'Sale Return', 'Purchase Return', 'Store Transfer', 'Quotations', 'Delivery orders (pending)', 'Purchase orders', 'Receive stock', 'Adjust stock'],
       accounts: ['Vouchers', 'CPV — Cash payment voucher', 'CRV — Cash receipt voucher', 'BPV — Bank payment voucher', 'BRV — Bank receipt voucher', 'JV — Journal voucher', 'Receive payment', 'Receive from many', 'Pay supplier', 'Add expense', 'Cash ↔ Bank', 'Cheques', 'Bank reconciliation', 'Account ledger', 'Books', 'Cash book', 'Bank book', 'Day book', 'Journal book', 'Daily sheet'],
       reports: ['Owner dashboard', 'Who owes for how long (aging)', 'Profit by item & customer', 'Recovery list'],
-      system: ['Shop details', 'Bill settings', 'Users & passwords', 'Roles & permissions', 'Document numbers', 'Approval rules', 'Approvals inbox', 'Branches', 'Backup & restore', 'Automatic backups', 'Data import', 'Deleted records', 'Audit log', 'Year end', 'Full trading suite'],
+      system: ['Customers', 'Suppliers', 'Bank accounts', 'Salesmen & areas', 'Schemes (free goods)', 'Opening cash & bank', 'Shop details', 'Bill settings', 'Users & passwords', 'Roles & permissions', 'Document numbers', 'Approval rules', 'Approvals inbox', 'Branches', 'Backup & restore', 'Automatic backups', 'Data import', 'Deleted records', 'Audit log', 'Year end', 'Full trading suite'],
     };
     Object.entries(want).forEach(([g, labels]) => {
       const have = NAV_ENTRIES.filter((e) => e.group === g).map((e) => e.label);
@@ -335,21 +335,25 @@ describe('nav map: coverage', () => {
   });
 });
 
+describe('nav map: the Coding menu is the old program’s', () => {
+  it('holds exactly its 10 items, in order', () => {
+    const g = NAV_GROUPS.find((x) => x.id === 'coding')!;
+    expect(g.sections).toHaveLength(1);
+    expect(g.sections[0].entries.map((e) => e.label)).toEqual(['Accounts Coding New', 'Accounts Opening Balances', 'Product Unit Coding', 'Store Coding', 'Product Group Coding', 'Product Coding', 'Manufacturer Coding', 'Opening Stocks', 'User Coding', 'City Coding']);
+  });
+});
+
 describe('nav map: the Invoice menu is the old program’s', () => {
   it('starts with Purchase Invoice ›, Sale Invoice › and Store Transfer, in that order; the rest follow', () => {
     const inv = NAV_GROUPS.find((g) => g.id === 'invoice')!;
     const first = inv.sections[0];
     expect(first.label).toBe('Invoice');
-    expect(first.entries.map((e) => `${e.sub ? `${e.sub} › ` : ''}${e.label}`)).toEqual([
-      'Purchase Invoice › Purchase Invoice',
-      'Purchase Invoice › Purchase Return',
-      'Purchase Invoice › Purchase Invoices list',
-      'Sale Invoice › Sale Invoice',
-      'Sale Invoice › Cash Sale Invoice',
-      'Sale Invoice › Sale Return',
-      'Sale Invoice › Sale Invoices list',
-      'Store Transfer',
-    ]);
+    // Exactly the old program's three top-level items; our extras live inside the two submenus.
+    expect(inv.sections).toHaveLength(1);
+    const top = [...new Set(first.entries.map((e) => e.sub || e.label))];
+    expect(top).toEqual(['Purchase Invoice', 'Sale Invoice', 'Store Transfer']);
+    expect(first.entries.filter((e) => e.sub === 'Purchase Invoice').slice(0, 3).map((e) => e.label)).toEqual(['Purchase Invoice', 'Purchase Return', 'Purchase Invoices list']);
+    expect(first.entries.filter((e) => e.sub === 'Sale Invoice').slice(0, 4).map((e) => e.label)).toEqual(['Sale Invoice', 'Cash Sale Invoice', 'Sale Return', 'Sale Invoices list']);
     const t = (id: string) => first.entries.find((e) => e.id === id)!.target;
     expect(t('new-bill')).toEqual({ kind: 'action', action: 'newBill' });
     expect(t('cash-sale')).toEqual({ kind: 'action', action: 'newCashSale' });
@@ -360,7 +364,7 @@ describe('nav map: the Invoice menu is the old program’s', () => {
     expect(t('bills')).toEqual({ kind: 'screen', screen: 'bills', view: 'bills' });
     expect(t('move-stock')).toEqual({ kind: 'screen', screen: 'products', view: 'move' });
     // The other Invoice options are still there, after these.
-    const rest = inv.sections.slice(1).flatMap((x) => x.entries.map((e) => e.id));
+    const rest = first.entries.map((e) => e.id);
     ['quotations', 'new-quote', 'delivery-orders', 'supplier-returns', 'purchase-orders', 'new-purchase-order', 'supplier-bills', 'claims', 'stock-received', 'receive-stock', 'adjust-stock', 'reorder'].forEach((id) => expect(rest, id).toContain(id));
     expect(navCheck(navEntry('cash-sale')!)).toEqual({ dialog: 'Cash Sale Invoice' });
   });

@@ -55,11 +55,13 @@ test.describe('Desktop top menu bar', () => {
 
     const pick = async (group: string, option: string, shot?: string) => {
       await menubar(page).getByRole('menuitem', { name: group, exact: true }).click();
-      const menu = page.getByRole('menu', { name: group });
+      const menu = page.getByRole('menu', { name: group, exact: true });
       await expect(menu).toBeVisible();
       await expect(menubar(page).getByRole('menuitem', { name: group, exact: true })).toHaveAttribute('aria-expanded', 'true');
       if (shot) { await page.waitForTimeout(200); await page.screenshot({ path: `${SHOTS}/${shot}.png` }); }
-      await menu.getByRole('menuitem', { name: option, exact: true }).click();
+      const find = () => menu.getByRole('menuitem', { name: option, exact: true }).and(page.locator(':not([data-nav-sub])'));
+      if (!(await find().count())) for (const t of await menu.locator('[data-nav-sub]').all()) { await t.hover(); if (await find().count()) break; }
+      await find().click();
       await expect(menu).toBeHidden();
     };
 
@@ -138,7 +140,9 @@ test.describe('Desktop top menu bar', () => {
     await expect(h1(page, 'Trial Balance')).toBeVisible();
     // Alt+I, then Enter on the focused first option (Purchase Invoice › Purchase Invoice, as in the old program).
     await page.keyboard.press('Alt+KeyI');
-    await expect(page.getByRole('menu', { name: 'Invoice' }).getByRole('menuitem').first()).toBeFocused();
+    await expect(page.getByRole('menu', { name: 'Invoice', exact: true }).getByRole('menuitem').first()).toBeFocused();
+    await page.keyboard.press('Enter'); // opens "Purchase Invoice ›" to the side
+    await expect(page.getByRole('menu', { name: 'Purchase Invoice', exact: true }).getByRole('menuitem').first()).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('dialog', { name: 'Purchase Invoice' })).toBeVisible();
     await page.keyboard.press('Escape');

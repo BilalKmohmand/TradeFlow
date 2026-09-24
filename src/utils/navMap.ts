@@ -107,6 +107,8 @@ export interface NavGroup {
   /** Columns of the desktop dropdown. */
   cols: number;
   sections: NavSection[];
+  /** Entries with a `sub` open as a side flyout ("Purchase Invoice ›"), like the old program's menu. */
+  flyout?: boolean;
 }
 
 const ADMIN: Permission[] = ['admin_screen', 'system:admin_screen'];
@@ -138,26 +140,6 @@ const CODING: { label: string; entries: Raw[] }[] = [
       { id: 'cities', label: 'City Coding', aka: ['Cities / towns'], hint: 'The list of cities used on customers and suppliers', keywords: ['shehr', 'shahar', 'city', 'town', 'area'], target: scr('customers', 'cities') },
     ],
   },
-  {
-    label: 'Parties',
-    entries: [
-      { id: 'customers', label: 'Customers', aka: ['Customer Coding'], hint: 'Who they are, what they owe, their bills', keywords: ['gahak', 'grahak', 'customer', 'party', 'khata', 'dukandar'], target: scr('customers') },
-      { id: 'new-customer', label: 'Add customer', hint: 'Open a new customer account', keywords: ['naya gahak', 'new customer', 'party'], target: scr('customers', 'add') },
-      { id: 'suppliers', label: 'Suppliers', aka: ['Supplier Coding'], hint: 'Companies you buy from and what you owe them', keywords: ['supplier', 'company', 'dealer', 'party', 'vendor'], target: scr('suppliers', 'suppliers') },
-      { id: 'new-supplier', label: 'Add supplier', hint: 'Open a new supplier account', keywords: ['new supplier', 'company', 'party'], target: scr('suppliers', 'add') },
-      { id: 'salesmen', label: 'Salesmen & areas', hint: 'Order bookers, recovery men and their areas', keywords: ['salesman', 'order booker', 'area', 'route', 'ilaqa'], target: act('salesTeam') },
-    ],
-  },
-  {
-    label: 'More setup',
-    entries: [
-      { id: 'new-item', label: 'New item', hint: 'Add one item to the price list', keywords: ['maal', 'naya', 'add item', 'product'], target: act('newItem') },
-      { id: 'schemes', label: 'Schemes (free goods)', hint: 'Buy 10 get 1 and other free-goods schemes', keywords: ['scheme', 'free', 'bonus', 'muft', 'offer'], target: act('schemes') },
-      { id: 'labels', label: 'Barcode labels', hint: 'Print barcode / price stickers for items', keywords: ['barcode', 'sticker', 'label', 'print'], target: act('labels') },
-      { id: 'bank-accounts', label: 'Bank accounts', hint: 'Meezan, HBL…: add a bank and see each balance', keywords: ['bank', 'account', 'meezan', 'hbl', 'ubl', 'mcb'], perm: FIN, target: scr('money', 'overview', { anchor: 'bank-accounts' }) },
-      { id: 'opening-balances', label: 'Opening cash & bank', hint: 'Cash and bank on the day you started', keywords: ['opening', 'shuru', 'balance', 'cash', 'bank'], target: scr('money', 'opening', { anchor: 'opening' }) },
-    ],
-  },
 ];
 
 // ---------------------------------------------------------------------------------------------------------
@@ -171,38 +153,23 @@ const INVOICE: { label: string; entries: Raw[] }[] = [
       { id: 'new-purchase-invoice', sub: 'Purchase Invoice', label: 'Purchase Invoice', aka: ['New purchase invoice'], hint: "Enter a supplier's bill: stock in, supplier owed", keywords: ['khareed', 'kharid', 'purchase', 'supplier bill', 'maal aya'], anyPerm: STOCK_IN, target: act('newPurchaseInvoice') },
       { id: 'purchase-return', sub: 'Purchase Invoice', label: 'Purchase Return', aka: ['Debit note', 'Return goods'], hint: 'Send stock back to a supplier', keywords: ['wapsi', 'wapas', 'return', 'debit note'], anyPerm: STOCK_IN, target: act('purchaseReturn') },
       { id: 'purchases', sub: 'Purchase Invoice', label: 'Purchase Invoices list', hint: 'Every purchase invoice; search by P-number or bill no.', keywords: ['khareed', 'purchase', 'register'], anyPerm: [...STOCK_IN, 'suppliers:view'], target: scr('purchases') },
+      { sub: 'Purchase Invoice', id: 'supplier-returns', label: 'Purchase returns list', hint: 'Debit notes: goods sent back to suppliers', keywords: ['wapsi', 'debit note', 'return'], target: scr('suppliers', 'returns') },
+      { sub: 'Purchase Invoice', id: 'purchase-orders', label: 'Purchase orders', hint: 'Orders placed with suppliers; receive against them', keywords: ['po', 'order', 'mangwana'], target: scr('suppliers', 'orders') },
+      { sub: 'Purchase Invoice', id: 'new-purchase-order', label: 'New purchase order', hint: 'Order goods from a supplier', keywords: ['po', 'order'], target: act('newOrder') },
+      { sub: 'Purchase Invoice', id: 'supplier-bills', label: 'Supplier bills', hint: 'Bills for goods received earlier or services', keywords: ['supplier bill', 'invoice'], target: scr('suppliers', 'bills') },
+      { sub: 'Purchase Invoice', id: 'claims', label: 'Supplier claims', hint: 'Leaked, short or damaged goods claimed from suppliers', keywords: ['claim', 'leak', 'kharab', 'damage', 'short'], target: scr('suppliers', 'claims') },
+      { sub: 'Purchase Invoice', id: 'stock-received', label: 'Stock received register', hint: 'Every delivery received from suppliers', keywords: ['maal aya', 'grn', 'received'], target: scr('suppliers', 'received') },
+      { sub: 'Purchase Invoice', id: 'receive-stock', label: 'Receive stock', key: 'F6', hint: 'Stock you bought or brought in', keywords: ['maal aya', 'stock in', 'grn', 'maal'], anyPerm: STOCK_IN, target: act('receiveStock') },
+      { sub: 'Purchase Invoice', id: 'adjust-stock', label: 'Adjust stock', hint: 'Leaked, damaged, expired, count correction, received free', keywords: ['leak', 'kharab', 'damage', 'expire', 'ginti', 'count', 'maal'], perm: ['stock:adjust'], target: act('adjustStock') },
+      { sub: 'Purchase Invoice', id: 'reorder', label: 'Re-order list', hint: 'Items to buy again, turned into purchase orders', keywords: ['kam maal', 'order', 'khatam', 'low'], target: act('reorder') },
       { id: 'new-bill', sub: 'Sale Invoice', label: 'Sale Invoice', aka: ['New bill'], key: 'F2', hint: 'Make a bill for a customer', keywords: ['bill', 'parchi', 'invoice', 'bikri', 'farokht', 'sale', 'becha'], target: act('newBill') },
       { id: 'cash-sale', sub: 'Sale Invoice', label: 'Cash Sale Invoice', aka: ['Counter sale', 'Walk-in sale'], hint: 'A walk-in sale paid in cash; customer optional', keywords: ['cash sale', 'naqad', 'counter', 'walk in', 'bikri', 'parchi'], target: act('newCashSale') },
       { id: 'sale-returns', sub: 'Sale Invoice', label: 'Sale Return', aka: ['Sale returns (credit notes)', 'Credit note'], hint: 'Goods customers returned. To make one: open the bill → Return items', keywords: ['wapsi', 'wapas', 'return', 'credit note'], target: scr('bills', 'returns') },
       { id: 'bills', sub: 'Sale Invoice', label: 'Sale Invoices list', aka: ['Bills list'], hint: 'Every bill, paid and unpaid; search by number or memo', keywords: ['parchi', 'bill', 'invoices', 'sale register', 'bikri'], target: scr('bills', 'bills') },
+      { sub: 'Sale Invoice', id: 'quotations', label: 'Quotations', hint: 'Price quotes; convert one to a bill', keywords: ['quote', 'estimate', 'rate dena'], target: scr('bills', 'quotes') },
+      { sub: 'Sale Invoice', id: 'new-quote', label: 'New quotation', hint: 'Write a price quote for a customer', keywords: ['quote', 'estimate'], target: act('newQuote') },
+      { sub: 'Sale Invoice', id: 'delivery-orders', label: 'Delivery orders (pending)', aka: ['Pending deliveries'], hint: 'Bills whose goods have not gone out yet; mark delivered, print challan', keywords: ['delivery', 'challan', 'maal bhejna', 'gari', 'dispatch'], target: rep('pending-delivery'), primary: false },
       { id: 'move-stock', label: 'Store Transfer', aka: ['Move stock', 'Stock transfer'], hint: 'Move stock from one godown to another', keywords: ['godam', 'transfer', 'shift', 'maal', 'store'], anyPerm: STOCK_IN, target: scr('products', 'move') },
-    ],
-  },
-  {
-    label: 'Sale',
-    entries: [
-      { id: 'quotations', label: 'Quotations', hint: 'Price quotes; convert one to a bill', keywords: ['quote', 'estimate', 'rate dena'], target: scr('bills', 'quotes') },
-      { id: 'new-quote', label: 'New quotation', hint: 'Write a price quote for a customer', keywords: ['quote', 'estimate'], target: act('newQuote') },
-      { id: 'delivery-orders', label: 'Delivery orders (pending)', aka: ['Pending deliveries'], hint: 'Bills whose goods have not gone out yet; mark delivered, print challan', keywords: ['delivery', 'challan', 'maal bhejna', 'gari', 'dispatch'], target: rep('pending-delivery'), primary: false },
-    ],
-  },
-  {
-    label: 'Purchase',
-    entries: [
-      { id: 'supplier-returns', label: 'Purchase returns list', hint: 'Debit notes: goods sent back to suppliers', keywords: ['wapsi', 'debit note', 'return'], target: scr('suppliers', 'returns') },
-      { id: 'purchase-orders', label: 'Purchase orders', hint: 'Orders placed with suppliers; receive against them', keywords: ['po', 'order', 'mangwana'], target: scr('suppliers', 'orders') },
-      { id: 'new-purchase-order', label: 'New purchase order', hint: 'Order goods from a supplier', keywords: ['po', 'order'], target: act('newOrder') },
-      { id: 'supplier-bills', label: 'Supplier bills', hint: 'Bills for goods received earlier or services', keywords: ['supplier bill', 'invoice'], target: scr('suppliers', 'bills') },
-      { id: 'claims', label: 'Supplier claims', hint: 'Leaked, short or damaged goods claimed from suppliers', keywords: ['claim', 'leak', 'kharab', 'damage', 'short'], target: scr('suppliers', 'claims') },
-      { id: 'stock-received', label: 'Stock received register', hint: 'Every delivery received from suppliers', keywords: ['maal aya', 'grn', 'received'], target: scr('suppliers', 'received') },
-    ],
-  },
-  {
-    label: 'Stock',
-    entries: [
-      { id: 'receive-stock', label: 'Receive stock', key: 'F6', hint: 'Stock you bought or brought in', keywords: ['maal aya', 'stock in', 'grn', 'maal'], anyPerm: STOCK_IN, target: act('receiveStock') },
-      { id: 'adjust-stock', label: 'Adjust stock', hint: 'Leaked, damaged, expired, count correction, received free', keywords: ['leak', 'kharab', 'damage', 'expire', 'ginti', 'count', 'maal'], perm: ['stock:adjust'], target: act('adjustStock') },
-      { id: 'reorder', label: 'Re-order list', hint: 'Items to buy again, turned into purchase orders', keywords: ['kam maal', 'order', 'khatam', 'low'], target: act('reorder') },
     ],
   },
 ];
@@ -456,6 +423,26 @@ const reportSections = (): { label: string; entries: Raw[] }[] =>
 const admin = (view: string, anchor?: string): NavTarget => scr('admin', view, anchor ? { anchor } : undefined);
 const SYSTEM: { label: string; entries: Raw[] }[] = [
   {
+    label: 'Parties & setup',
+    entries: [
+      { id: 'customers', label: 'Customers', aka: ['Customer Coding'], hint: 'Who they are, what they owe, their bills', keywords: ['gahak', 'grahak', 'customer', 'party', 'khata', 'dukandar'], target: scr('customers') },
+      { id: 'new-customer', label: 'Add customer', hint: 'Open a new customer account', keywords: ['naya gahak', 'new customer', 'party'], target: scr('customers', 'add') },
+      { id: 'suppliers', label: 'Suppliers', aka: ['Supplier Coding'], hint: 'Companies you buy from and what you owe them', keywords: ['supplier', 'company', 'dealer', 'party', 'vendor'], target: scr('suppliers', 'suppliers') },
+      { id: 'new-supplier', label: 'Add supplier', hint: 'Open a new supplier account', keywords: ['new supplier', 'company', 'party'], target: scr('suppliers', 'add') },
+      { id: 'salesmen', label: 'Salesmen & areas', hint: 'Order bookers, recovery men and their areas', keywords: ['salesman', 'order booker', 'area', 'route', 'ilaqa'], target: act('salesTeam') },
+    ],
+  },
+  {
+    label: 'More setup',
+    entries: [
+      { id: 'new-item', label: 'New item', hint: 'Add one item to the price list', keywords: ['maal', 'naya', 'add item', 'product'], target: act('newItem') },
+      { id: 'schemes', label: 'Schemes (free goods)', hint: 'Buy 10 get 1 and other free-goods schemes', keywords: ['scheme', 'free', 'bonus', 'muft', 'offer'], target: act('schemes') },
+      { id: 'labels', label: 'Barcode labels', hint: 'Print barcode / price stickers for items', keywords: ['barcode', 'sticker', 'label', 'print'], target: act('labels') },
+      { id: 'bank-accounts', label: 'Bank accounts', hint: 'Meezan, HBL…: add a bank and see each balance', keywords: ['bank', 'account', 'meezan', 'hbl', 'ubl', 'mcb'], perm: FIN, target: scr('money', 'overview', { anchor: 'bank-accounts' }) },
+      { id: 'opening-balances', label: 'Opening cash & bank', hint: 'Cash and bank on the day you started', keywords: ['opening', 'shuru', 'balance', 'cash', 'bank'], target: scr('money', 'opening', { anchor: 'opening' }) },
+    ],
+  },
+  {
     label: 'Shop & bills',
     entries: [
       { id: 'shop-details', label: 'Shop details', hint: 'Shop name, address, phone, NTN and logo on bills', keywords: ['dukan', 'shop', 'company', 'logo', 'address', 'ntn', 'naam'], anyPerm: ADMIN, perm: ['system:company_settings'], target: admin('system', 'company') },
@@ -499,9 +486,9 @@ const SYSTEM: { label: string; entries: Raw[] }[] = [
   },
 ];
 
-const GROUP_META: { id: NavGroupId; label: string; key: string; hint: string; cols: number; sections: { label: string; entries: Raw[] }[] }[] = [
+const GROUP_META: { id: NavGroupId; label: string; key: string; hint: string; cols: number; flyout?: boolean; sections: { label: string; entries: Raw[] }[] }[] = [
   { id: 'coding', label: 'Coding', key: 'C', hint: 'Accounts, openings, units, stores, items, users, cities', cols: 3, sections: CODING },
-  { id: 'invoice', label: 'Invoice', key: 'I', hint: 'Sale, purchase, returns and stock', cols: 3, sections: INVOICE },
+  { id: 'invoice', label: 'Invoice', key: 'I', hint: 'Sale, purchase, returns and stock', cols: 1, flyout: true, sections: INVOICE },
   { id: 'accounts', label: 'Accounts', key: 'A', hint: 'Vouchers, money, banks and books', cols: 4, sections: ACCOUNTS },
   { id: 'reports', label: 'Reports', key: 'R', hint: 'Every report and dashboard', cols: 4, sections: [REPORTS_EXTRA, ...reportSections()] },
   { id: 'system', label: 'System', key: 'S', hint: 'Settings, users, backups, year end', cols: 3, sections: SYSTEM },
@@ -514,6 +501,7 @@ export const NAV_GROUPS: NavGroup[] = GROUP_META.map((g) => ({
   key: g.key,
   hint: g.hint,
   cols: g.cols,
+  ...(g.flyout ? { flyout: true } : {}),
   sections: g.sections.map((s) => ({
     label: s.label,
     entries: s.entries.map((e) => {
