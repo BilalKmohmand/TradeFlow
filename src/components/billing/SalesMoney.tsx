@@ -10,6 +10,7 @@ import { booksLockedFor } from '../../utils/accounting';
 import { filterParties } from '../../utils/vouchers';
 import { BankSelect } from './BankSelect';
 import { needsBank } from '../../utils/banks';
+import { findByCode } from './CodeBox';
 
 /** Recent interest runs / collection sheets with a one-tap Undo (asks once, then reverses the whole run). */
 const RecentRuns: React.FC<{ title: string; runs: PostedRun[]; noun: string; allowed: boolean; onUndo: (id: string) => { success: boolean; message: string }; testId: string }> = ({ title, runs, noun, allowed, onUndo, testId }) => {
@@ -72,6 +73,8 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
   const [salesmanId, setSalesmanId] = useState('');
   const [areaFilter, setAreaFilter] = useState('all');
   const [query, setQuery] = useState('');
+  const [codeText, setCodeText] = useState('');
+  const [codeMiss, setCodeMiss] = useState(false);
   const [note, setNote] = useState('');
   const [lines, setLines] = useState<Record<string, Line>>({});
   const [error, setError] = useState('');
@@ -166,9 +169,36 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
             <input id="rm-note" value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} placeholder="optional" />
           </div>
         </div>
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a customer" className={`${inputCls} pl-10`} aria-label="Find a customer" />
+        <div className="flex gap-2">
+          {/* Customer ID box, like the old program: type the code, Enter ticks that customer and jumps to the amount. */}
+          <div className="w-32 shrink-0">
+            <input
+              id="rm-code"
+              value={codeText}
+              onChange={(e) => { setCodeText(e.target.value); setCodeMiss(false); }}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                const hit = findByCode<(typeof customers)[number]>(customers.filter((c) => c.totalDue > 0.005), codeText);
+                if (!hit) { if (codeText.trim()) setCodeMiss(true); return; }
+                setQuery('');
+                setLine(hit.id, { on: true, amount: line(hit.id).amount || String(Math.round(hit.totalDue * 100) / 100) });
+                setCodeText('');
+                setTimeout(() => (document.querySelector(`[aria-label="Amount from ${CSS.escape(hit.name)}"]`) as HTMLInputElement | null)?.select(), 60);
+              }}
+              autoCapitalize="characters"
+              autoComplete="off"
+              aria-label="Customer code"
+              aria-invalid={codeMiss || undefined}
+              placeholder="Customer ID"
+              className={`${inputCls} tabular-nums !px-2 ${codeMiss ? '!border-rose-400' : ''}`}
+            />
+            {codeMiss && <p role="alert" className="mt-0.5 text-[10px] font-semibold text-rose-700 dark:text-rose-300">No customer owing with ID "{codeText.trim()}"</p>}
+          </div>
+          <div className="relative flex-1 min-w-0">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a customer" className={`${inputCls} pl-10`} aria-label="Find a customer" />
+          </div>
         </div>
         {owing.length === 0 ? (
           <EmptyState
