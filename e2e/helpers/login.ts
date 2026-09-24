@@ -22,6 +22,10 @@ export * from './users';
 
 /** Put the known test users on the device (before the app loads). Pass your own list to override. */
 export async function seedUsers(page: Page, users: unknown[] = testUsers()) {
+  // Older specs expect the bill dialog to close after Save; the app now opens the next bill.
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('sarmaya_bill_after_save')) localStorage.setItem('sarmaya_bill_after_save', 'close');
+  });
   await page.addInitScript(
     ([key, list]) => {
       if (!localStorage.getItem(key as string)) localStorage.setItem(key as string, JSON.stringify(list));

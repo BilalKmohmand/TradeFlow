@@ -23,6 +23,15 @@ import { allCities, filterParties } from '../../utils/vouchers';
 import { useBillingUI } from './BillingUI';
 
 
+/** After Save, open the next new bill (the default). Automated tests written for the old behaviour turn it off. */
+const openNextBillAfterSave = (): boolean => {
+  try {
+    return localStorage.getItem('sarmaya_bill_after_save') !== 'close';
+  } catch {
+    return true;
+  }
+};
+
 /** Find an old bill by its number: exact (INV-12, S-14726) or just the digits (12). */
 export const findBillByNumber = (bills: { id: string; invoiceNumber: string }[], typed: string): { id: string; invoiceNumber: string } | undefined => {
   const q = typed.trim().toLowerCase();
@@ -411,6 +420,8 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     if (isPendingApproval(result)) return setSentForApproval(result.message);
     onClose();
     if (print && result.invoice) setPrintRequest({ type: 'bill', invoiceId: result.invoice.id });
+    // Counter work goes bill after bill: a plain Save opens the next new bill straight away.
+    else if (openNextBillAfterSave()) ui.newBill();
   };
 
   /** Search: open an old bill by its number (the new bill is left). */
@@ -517,7 +528,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                   <QuickSelect id="bill-customer" data-nav="customer" value={customer} options={customerOptions} onPick={pickCustomer} className={inputCls} title="Type a name, code or phone to find the customer">
                     <option value="">Select customer…</option>
                     {sortedCustomers.map((c) => (
-                      <option key={c.id} value={c.id}>{c.code ? `${c.code} • ` : ''}{c.name}{c.phone ? ` • ${c.phone}` : ''}{c.totalDue > 0 ? ` (due ${rs(c.totalDue)})` : ''}</option>
+                      <option key={c.id} value={c.id}>{c.name}{c.phone ? ` • ${c.phone}` : ''}{c.totalDue > 0 ? ` (due ${rs(c.totalDue)})` : ''}</option>
                     ))}
                   </QuickSelect>
                 </div>

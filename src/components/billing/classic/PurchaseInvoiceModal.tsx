@@ -248,7 +248,7 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
               <div className="flex-1 min-w-0">
                 <QuickSelect id="pi-supplier" data-nav="supplier" value={supplierId} options={supplierOptions} onPick={setSupplierId} className={inputCls} title="Type a name or code to find the supplier">
                   <option value="">Select supplier…</option>
-                  {sortedSuppliers.map((s) => <option key={s.id} value={s.id}>{s.code ? `${s.code} • ` : ''}{s.company || s.name}</option>)}
+                  {sortedSuppliers.map((s) => <option key={s.id} value={s.id}>{s.company || s.name}</option>)}
                 </QuickSelect>
               </div>
             </div>
@@ -302,7 +302,7 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
                     <div className="flex-1 min-w-0">
                       <QuickSelect id={id('item')} data-nav="item" aria-label={`Product ${i + 1}`} value={l.pid} options={productOptions} onPick={(v) => pick(l.key, v)} className={inputCls} title={p ? p.name : 'Type the product name or code'}>
                         <option value="">Product…</option>
-                        {sortedProducts.map((x) => <option key={x.id} value={x.id}>{x.code ? `${x.code} • ` : ''}{x.name}</option>)}
+                        {sortedProducts.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                       </QuickSelect>
                     </div>
                     {remove('lg:hidden')}

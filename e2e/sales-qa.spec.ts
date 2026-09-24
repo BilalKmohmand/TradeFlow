@@ -229,3 +229,21 @@ test.describe('Sales QA', () => {
     await trialBalanced(page);
   });
 });
+
+test('after Save the next new bill opens straight away (not the dashboard)', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('sarmaya_bill_after_save', 'open'));
+  await open(page);
+  await page.keyboard.press('F2');
+  const d = page.getByRole('dialog', { name: 'New Bill' });
+  await expect(d).toBeVisible();
+  const number = await d.getByText(/INV-\d+/).first().textContent();
+  await d.getByLabel('Customer', { exact: true }).selectOption({ index: 1 });
+  await d.getByLabel('Item 1', { exact: true }).selectOption('p9');
+  await d.getByLabel('Quantity 1', { exact: true }).fill('2');
+  await d.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(d.getByRole('alert')).toHaveCount(0);
+  // A fresh bill: the next number, empty lines.
+  await expect(d).toBeVisible();
+  await expect(d.getByLabel('Item 1', { exact: true })).toHaveValue('');
+  await expect(d.getByText(/INV-\d+/).first()).not.toHaveText(number || '');
+});

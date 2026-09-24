@@ -229,7 +229,8 @@ test.describe('Customer dialog', () => {
 
     await page.getByRole('button', { name: 'New Bill' }).first().click();
     const bill = page.getByRole('dialog', { name: 'New Bill' });
-    await bill.getByLabel('Customer', { exact: true }).selectOption({ label: 'C-215 • Gul Traders • 0312 5556677' });
+    await bill.getByLabel('Customer', { exact: true }).selectOption({ label: 'Gul Traders • 0312 5556677' });
+    await expect(bill.getByLabel('Customer code')).toHaveValue('C-215');
   });
 
   test('a customer added without typing a limit has no credit limit and nothing invented', async ({ page }) => {
@@ -254,7 +255,7 @@ test.describe('Customer dialog', () => {
     // The customer got an automatic ID (C-000n), shown before the name in the picker.
     const picker = bill.getByLabel('Customer', { exact: true });
     await picker.selectOption({ label: (await picker.locator('option', { hasText: 'Gul Traders • 0312 5556677' }).textContent())!.trim() });
-    await expect(picker.locator('option:checked')).toHaveText(/^C-\d{4} • Gul Traders/);
+    await expect(picker.locator('option:checked')).toHaveText(/^Gul Traders/);
     await bill.getByLabel('Item 1', { exact: true }).selectOption('p1');
     await bill.getByLabel('Quantity 1', { exact: true }).fill('300');
     await expect(bill.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();

@@ -161,7 +161,7 @@ export const QuotationModal: React.FC<Props> = ({ isOpen, onClose, editId, custo
               <div className="flex-1 min-w-0">
                 <QuickSelect id="quote-customer" value={customer} options={customerOptions} onPick={pickCustomer} className={inputCls} title="Type a name, code or phone to find the customer">
                   <option value="">Select customer…</option>
-                  {sortedCustomers.map((c) => <option key={c.id} value={c.id}>{c.code ? `${c.code} • ` : ''}{c.name}{c.phone ? ` • ${c.phone}` : ''}</option>)}
+                  {sortedCustomers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` • ${c.phone}` : ''}</option>)}
                 </QuickSelect>
               </div>
             </div>
