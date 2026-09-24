@@ -82,6 +82,8 @@ export interface SalesExtrasApi {
   setCustomerSalesInfo: (customerId: string, data: { areaId?: string | null; salesmanId?: string | null; interestPctPerMonth?: number; interestAfterDays?: number }) => Result;
   /** Several customers pay at once: one ledger row each, one collection-sheet number. */
   receiveMany: (input: ReceiveManyInput) => Result<{ sheetNo: string; ledgerIds: string[]; total: number }>;
+  /** The number the next collection sheet will get (e.g. CS-7), shown before saving. */
+  nextCollectionNo: () => string;
   /** Interest each customer would be charged as of a date (nothing is posted). */
   previewInterest: (asOf: string) => InterestRow[];
   /** Post the interest as debit notes (only the customers given, default all in the preview). */
@@ -496,7 +498,10 @@ export const useSalesExtrasStore = (d: Deps) => {
     schemes: () => setSchemes([]),
   };
 
+  const nextCollectionNo = () => nextNumber(d.ledger, 'CS');
+
   const api: SalesExtrasApi = {
+    nextCollectionNo,
     salesmen,
     areas,
     schemes,

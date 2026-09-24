@@ -66,7 +66,7 @@ interface Line {
  * paid, save once. Every customer gets their own payment row; they share one collection-sheet number.
  */
 export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const { customers, salesmen, areas, receiveMany, setPrintRequest, settings, collectionSheets, undoCollection, can } = useTrading();
+  const { customers, salesmen, areas, receiveMany, setPrintRequest, settings, collectionSheets, undoCollection, can, nextCollectionNo } = useTrading();
   const today = todayISO();
   const [date, setDate] = useState(today);
   const [salesmanId, setSalesmanId] = useState('');
@@ -139,6 +139,7 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Receive from many" subtitle="Tick each customer who paid and enter the amount. One save records them all." wide footer={footer}>
       <div className="space-y-4">
+        <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Receipt no. <strong className="tabular-nums text-sm text-[#111827] dark:text-white" title="Given automatically when you save" data-testid="rm-next-number">{nextCollectionNo()}</strong></div>
         {error && <Notice kind="error">{error}</Notice>}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div>

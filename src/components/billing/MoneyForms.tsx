@@ -128,7 +128,7 @@ export const TransferModal: React.FC<{ isOpen: boolean; onClose: () => void }> =
 
 /** Take money from a customer against their whole account (old dues), not a specific bill. */
 export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; customerId?: string | null }> = ({ isOpen, onClose, customerId }) => {
-  const { customers, recordCustomerPayment, receiveCheque, settings } = useTrading();
+  const { customers, recordCustomerPayment, receiveCheque, settings, previewDocNumber } = useTrading();
   const [cust, setCust] = useState(customerId || '');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(todayISO());
@@ -161,6 +161,7 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Receive payment" subtitle="Money received against a customer's account.">
       <form onSubmit={submit} className="space-y-4">
+        <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Receipt no. <strong className="tabular-nums text-sm text-[#111827] dark:text-white" title="Given automatically when you save" data-testid="rc-next-number">{previewDocNumber('receipt', date)}</strong></div>
         {error && <Notice kind="error">{error}</Notice>}
         <PartyPick
           id="rc-cust"
@@ -209,7 +210,7 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
  * cheque register as "given" and is paid from the bank only when it clears). Approval rules apply.
  */
 export const PaySupplierModal: React.FC<{ isOpen: boolean; onClose: () => void; supplierId?: string | null }> = ({ isOpen, onClose, supplierId }) => {
-  const { suppliers, recordSupplierPayment, issueCheque, supplierPaymentApproval, settings } = useTrading();
+  const { suppliers, recordSupplierPayment, issueCheque, supplierPaymentApproval, settings, previewDocNumber } = useTrading();
   const [sup, setSup] = useState(supplierId || '');
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Cash');
@@ -249,6 +250,7 @@ export const PaySupplierModal: React.FC<{ isOpen: boolean; onClose: () => void; 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Pay supplier" subtitle="Money paid against what you owe a supplier.">
       <form onSubmit={submit} className="space-y-4">
+        <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Voucher no. <strong className="tabular-nums text-sm text-[#111827] dark:text-white" title="Given automatically when you save" data-testid="ps-next-number">{previewDocNumber('supplier_payment')}</strong></div>
         {error && <Notice kind="error">{error}</Notice>}
         {sent && <div data-testid="payment-sent-for-approval"><Notice kind="ok">{sent}</Notice></div>}
         {!sent && needsApproval && (

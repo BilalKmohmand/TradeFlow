@@ -162,6 +162,7 @@ test.describe('Sales extras (desktop)', () => {
     await goTo(page, 'Money');
     await page.getByRole('main').getByRole('button', { name: 'Receive from many' }).click();
     const dlg = page.getByRole('dialog', { name: 'Receive from many' });
+    await expect(dlg.getByTestId('rm-next-number')).toHaveText('CS-1'); // shown before saving
     await dlg.getByLabel('Received from Zaman and Co BTK').check();
     await expect(dlg.getByLabel('Amount from Zaman and Co BTK')).toHaveValue('13070');
     await dlg.getByLabel('Amount from Zaman and Co BTK').fill('5000');
