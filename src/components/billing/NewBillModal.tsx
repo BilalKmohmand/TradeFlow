@@ -624,7 +624,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                       <QuickSelect aria-label={`Item ${idx + 1}`} data-nav="item" value={l.productId} options={productOptions} onPick={(v) => { codeFlow.current = false; pickProduct(l.key, v); }} className={inputCls} title="Type the item name or code to find it">
                         <option value="">Select item…</option>
                         {sortedProducts.map((x) => (
-                          <option key={x.id} value={x.id}>{x.name} — {rs(x.unitPricePerKg)}/{x.unit || 'pcs'}{x.code ? ` • ${x.code}` : ''}</option>
+                          <option key={x.id} value={x.id}>{x.name}{x.code ? ` • ${x.code}` : ''}</option>
                         ))}
                       </QuickSelect>
                     </div>
