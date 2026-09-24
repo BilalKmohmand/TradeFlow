@@ -54,6 +54,7 @@ import {
   QuotationLine,
   ReturnLine,
   Cheque,
+  PaymentEdit,
 } from '../types';
 import { lineDiscountAmount, planReturn, maxRefund, returnsForBill, billBalance, quotationTotal, ReturnPick } from '../utils/salesDocs';
 import { creditCheck } from '../utils/credit';
@@ -242,6 +243,10 @@ interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, P
   /** Set a customer's / supplier's opening (old khata) balance; editing it later adjusts the same opening row. */
   setOpeningBalance: (entityType: 'customer' | 'supplier', id: string, amount: number, date?: string) => { success: boolean; message: string };
   payBill: (invoiceId: string, amount: number, method: string, notes?: string, date?: string, bankCode?: string) => { success: boolean; message: string };
+  /** Edit a saved customer / supplier payment in place (same receipt number). */
+  editPayment: (ledgerId: string, input: EditPaymentInput) => { success: boolean; message: string };
+  /** Why a saved payment row cannot be edited (null = it can). */
+  paymentEditBlock: (ledgerId: string) => string | null;
   deleteBill: (invoiceId: string) => { success: boolean; message: string };
   /** Sales return against a bill: goods back to stock, credit note, money back now or off what they owe. */
   returnBillItems: (input: ReturnBillInput) => { success: boolean; message: string; stockReturn?: StockReturn };
@@ -512,6 +517,18 @@ export interface ReturnBillInput {
   reason?: string;
   date?: string;
 }
+/** Edit a saved payment: every field optional (unchanged when left out). */
+export interface EditPaymentInput {
+  amount?: number;
+  date?: string;
+  method?: string;
+  /** Bank account for bank methods ('' / '1010' = the main bank). */
+  bankCode?: string;
+  note?: string;
+  /** Move the payment to another customer (customer payments) or supplier (supplier payments). */
+  entityId?: string;
+}
+
 export interface CreateBillInput {
   customerId: string;
   /** Create this customer on the spot (used when customerId is empty). */
@@ -2236,6 +2253,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       date: today,
       description: notes ? `Payment received: ${notes}` : `Payment received (${payRef})`,
       method: notes ? notes.split(' - ')[0].trim() : undefined,
+      ...(notes && notes.includes(' - ') ? { note: notes.split(' - ').slice(1).join(' - ').trim() } : {}),
       debit: 0,
       credit: amount,
       balanceAfter: newTotalDue,
@@ -2289,6 +2307,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       date: today,
       description: notes ? `Supplier payment made: ${notes}` : `Supplier payment made (${payRef})`,
       ...(notes ? { method: notes.split(' - ')[0].trim() } : {}),
+      ...(notes && notes.includes(' - ') ? { note: notes.split(' - ').slice(1).join(' - ').trim() } : {}),
       debit: 0,
       credit: amount,
       balanceAfter: newTotalOwed,
@@ -2914,7 +2933,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const chequeBank = chequeIn ? chequeIn.bankName.trim() : '';
     const postDated = chequeIn && chequeIn.chequeDate > date ? `, dated ${formatDate(chequeIn.chequeDate)}` : '';
     const partLedgerIds = pay.parts.map(() => uid('led'));
-    const payments: InvoicePaymentRecord[] = pay.parts.map((p) => ({ id: uid('pay'), date, amount: p.amount, method: invoiceMethod(p.method), notes: p.method, recordedBy: currentUser?.name }));
+    const payments: InvoicePaymentRecord[] = pay.parts.map((p, i) => ({ id: uid('pay'), date, amount: p.amount, method: invoiceMethod(p.method), notes: p.method, recordedBy: currentUser?.name, ledgerId: partLedgerIds[i] }));
     if (chequeIn) payments.push({ id: `pay-${chequeId}`, date, amount: pay.cheque, method: 'cheque', referenceNumber: chequeNo, notes: `Cheque ${chequeNo} (${chequeBank})${postDated} - in hand`, recordedBy: currentUser?.name });
     const invoice: Invoice = {
       id: uid('inv'),
@@ -3134,7 +3153,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (closedPay) return { success: false, message: closedPay };
     const newPaid = round2(inv.paidAmount + payAmt);
     const newBalance = billBalance({ ...inv, paidAmount: newPaid });
-    const record: InvoicePaymentRecord = { id: uid('pay'), date: when, amount: payAmt, method: invoiceMethod(method), notes: notes ? `${method} - ${notes}` : method, recordedBy: currentUser?.name };
+    const payLedgerId = uid('led');
+    const record: InvoicePaymentRecord = { id: uid('pay'), date: when, amount: payAmt, method: invoiceMethod(method), notes: notes ? `${method} - ${notes}` : method, recordedBy: currentUser?.name, ledgerId: payLedgerId };
     setInvoices((prev) =>
       prev.map((i) =>
         i.id === invoiceId
@@ -3147,13 +3167,14 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (cust) setCustomers((prev) => prev.map((c) => (c.id === cust.id ? { ...c, totalDue: round2((c.totalDue || 0) - payAmt) } : c)));
     setLedger((prev) => [
       {
-        id: uid('led'),
+        id: payLedgerId,
         entityType: 'customer',
         entityId: inv.customerId,
         type: 'payment_received',
         referenceId: inv.invoiceNumber,
         sourceId: inv.id,
         method,
+        ...(notes ? { note: notes } : {}),
         ...(bankCode && bankCode !== '1010' ? { bankCode } : {}),
         date: when,
         description: `Payment received: ${method} - Bill ${inv.invoiceNumber}${notes ? ` (${notes})` : ''}`,
@@ -3166,6 +3187,104 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     ]);
     logAuditEvent('Bill Payment', `${formatCurrency(payAmt)} by ${method} against ${inv.invoiceNumber}. Left: ${formatCurrency(newBalance)}.`, 'info', 'billing');
     return { success: true, message: `${formatCurrency(payAmt)} received. ${newBalance === 0 ? 'Bill fully paid.' : `${formatCurrency(newBalance)} still due.`}` };
+  };
+
+  /** Why this saved payment row cannot be edited (null = it can). */
+  const paymentEditBlock = (ledgerId: string): string | null => {
+    const l = ledger.find((x) => x.id === ledgerId);
+    if (!l) return 'Payment not found.';
+    const role = currentUser?.role;
+    if (currentUser && !can('delete_records') && role !== 'admin' && role !== 'manager') return "You don't have permission to edit saved payments. Ask a manager or admin.";
+    if (l.type === 'cheque_received' || l.type === 'cheque_issued' || /cheque/i.test(l.method || '') || (l.sourceId && cheques.some((c) => c.id === l.sourceId))) return 'This is a cheque in the cheque register. Use the cheque actions (Money → Cheques) instead.';
+    if (!((l.entityType === 'customer' && l.type === 'payment_received') || (l.entityType === 'supplier' && l.type === 'payment_made'))) return 'Only customer and supplier payments can be edited here.';
+    if (l.voucherId) return 'This payment was posted from a voucher. Change it through the voucher.';
+    if (l.entityType === 'supplier' && l.sourceId) return 'This payment was made on a purchase invoice. Change it on the purchase invoice.';
+    const locked = booksLockedFor(settings, l.date);
+    if (locked) return `${l.referenceId} is in a closed period and cannot be edited. ${locked}`;
+    return null;
+  };
+
+  /** Change a saved payment in place (same receipt number): amount, date, method / bank, note, even the customer or supplier. */
+  const editPayment = (ledgerId: string, input: EditPaymentInput): { success: boolean; message: string } => {
+    const block = paymentEditBlock(ledgerId);
+    if (block) return { success: false, message: block };
+    const l = ledger.find((x) => x.id === ledgerId)!;
+    const isCust = l.entityType === 'customer';
+    const amount = input.amount == null ? round2(l.credit) : round2(Number(input.amount) || 0);
+    if (amount <= 0) return { success: false, message: 'Enter an amount greater than zero.' };
+    const date = input.date || l.date;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { success: false, message: 'Enter a valid date.' };
+    if (date > todayISO()) return { success: false, message: 'The date cannot be in the future.' };
+    const lockedNew = booksLockedFor(settings, date);
+    if (lockedNew) return { success: false, message: lockedNew };
+    const method = (input.method || l.method || 'Cash').trim();
+    if (/cheque/i.test(method)) return { success: false, message: 'A cheque goes through Receive payment → Cheque (the cheque register).' };
+    const entityId = input.entityId || l.entityId;
+    const party = isCust ? customers.find((c) => c.id === entityId) : suppliers.find((x) => x.id === entityId);
+    if (!party) return { success: false, message: isCust ? 'Customer not found.' : 'Supplier not found.' };
+    const oldParty = isCust ? customers.find((c) => c.id === l.entityId) : suppliers.find((x) => x.id === l.entityId);
+    const inv = isCust && l.sourceId ? invoices.find((i) => i.id === l.sourceId) : undefined;
+    if (inv && entityId !== l.entityId) return { success: false, message: `This payment is on bill ${inv.invoiceNumber}, so it stays with ${inv.customerName}. Delete it from the bill's customer or edit the bill instead.` };
+    if (inv && amount > round2(inv.balanceDue + l.credit) + 0.005) return { success: false, message: `Only ${formatCurrency(round2(inv.balanceDue + l.credit))} is left on bill ${inv.invoiceNumber}.` };
+    if (inv && date < inv.issueDate) return { success: false, message: `The payment can't be before the bill date (${formatDate(inv.issueDate)}).` };
+    const note = (input.note ?? l.note ?? '').trim();
+    const bankCode = needsBank(method) && input.bankCode && input.bankCode !== '1010' ? input.bankCode : undefined;
+    const ref = l.referenceId;
+    const description = !isCust
+      ? `Supplier payment made: ${method}${note ? ` - ${note}` : ''}`
+      : inv
+        ? `Payment received: ${method} - Bill ${inv.invoiceNumber}${note ? ` (${note})` : ''}`
+        : /^CS-/.test(ref)
+          ? `Payment received: ${method} - collection ${ref}${note ? ` (${note})` : ''}`
+          : `Payment received: ${method}${note ? ` - ${note}` : ''}`;
+    const nameOf = (p: typeof party) => (p ? (isCust ? p.name : (p as Supplier).company || p.name) : '?');
+    const changes: string[] = [];
+    if (amount !== round2(l.credit)) changes.push(`amount ${formatCurrency(l.credit)} → ${formatCurrency(amount)}`);
+    if (date !== l.date) changes.push(`date ${formatDate(l.date)} → ${formatDate(date)}`);
+    if (method !== (l.method || '')) changes.push(`method ${l.method || '—'} → ${method}`);
+    if ((bankCode || '') !== (l.bankCode || '')) changes.push(`bank ${l.bankCode || 'main'} → ${bankCode || 'main'}`);
+    if (entityId !== l.entityId) changes.push(`${isCust ? 'customer' : 'supplier'} ${nameOf(oldParty)} → ${nameOf(party)}`);
+    if (note !== (l.note || '') && (input.note !== undefined)) changes.push(`note "${l.note || ''}" → "${note}"`);
+    if (changes.length === 0) return { success: true, message: 'Nothing changed.' };
+    const what = changes.join(', ');
+    // Balances: give the old amount back to the old party, take the new amount off the new one.
+    if (isCust) {
+      setCustomers((prev) => prev.map((c) => {
+        let due = c.totalDue || 0;
+        if (c.id === l.entityId) due += l.credit;
+        if (c.id === entityId) due -= amount;
+        return c.id === l.entityId || c.id === entityId ? { ...c, totalDue: round2(due) } : c;
+      }));
+    } else {
+      setSuppliers((prev) => prev.map((x) => {
+        let owed = x.totalOwed || 0;
+        if (x.id === l.entityId) owed += l.credit;
+        if (x.id === entityId) owed -= amount;
+        return x.id === l.entityId || x.id === entityId ? { ...x, totalOwed: round2(owed) } : x;
+      }));
+    }
+    const partyBal = isCust ? (party as Customer).totalDue : (party as Supplier).totalOwed;
+    const balanceAfter = round2((partyBal || 0) + (entityId === l.entityId ? l.credit : 0) - amount);
+    const edit: PaymentEdit = { at: new Date().toISOString(), by: currentUser?.name, changes: what };
+    setLedger((prev) => prev.map((x) => {
+      if (x.id !== l.id) return x;
+      const { bankCode: _old, ...rest } = x;
+      void _old;
+      return { ...rest, entityId, date, method, description, credit: amount, balanceAfter, note, ...(bankCode ? { bankCode } : {}), edits: [...(x.edits || []), edit] };
+    }));
+    if (inv) {
+      setInvoices((prev) => prev.map((i) => {
+        if (i.id !== inv.id) return i;
+        const pays = [...(i.payments || [])];
+        let at = pays.findIndex((p) => p.ledgerId === l.id);
+        if (at < 0) at = pays.findIndex((p) => !p.ledgerId && p.method !== 'cheque' && p.date === l.date && Math.abs(p.amount - l.credit) < 0.005);
+        if (at >= 0) pays[at] = { ...pays[at], amount, date, method: invoiceMethod(method), notes: note ? `${method} - ${note}` : method, ledgerId: l.id };
+        const next = billAfter(i, { paidAmount: round2(i.paidAmount - l.credit + amount), payments: pays });
+        return { ...next, billKind: next.balanceDue === 0 ? 'cash' : 'credit' };
+      }));
+    }
+    logAuditEvent('Payment Edited', `Payment ${ref} edited: ${what}.`, 'warning', 'billing');
+    return { success: true, message: `Payment ${ref} saved.` };
   };
 
   const deleteBill = (invoiceId: string): { success: boolean; message: string } => {
@@ -4296,6 +4415,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         billEditBlock,
         setOpeningBalance,
         payBill,
+        editPayment,
+        paymentEditBlock,
         deleteBill,
         returnBillItems,
         saveBillQuotation,

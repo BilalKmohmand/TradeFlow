@@ -18,6 +18,7 @@ import { unclearedChequeTotals } from '../../utils/cheques';
 import { useBranchScoped } from '../../hooks/useBranchScoped';
 import { BranchFilter } from '../../components/control/BranchFilter';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { EditPaymentButton } from '../../components/billing/EditPaymentModal';
 import { BankAccountsCard } from '../../components/billing/BankAccounts';
 
 export type MoneyTab = 'overview' | 'expenses' | 'cashbook' | 'cheques' | 'bank';
@@ -64,6 +65,7 @@ export const MoneyScreen: React.FC = () => {
   useCurrentView('money', tab === 'overview' && showOpening ? 'opening' : tab);
 
   const movements = useMemo(() => collectCashMovements(ledger, expenses, cashEntries, customers, suppliers), [ledger, expenses, cashEntries, customers, suppliers]);
+  const ledgerById = useMemo(() => new Map(ledger.map((l) => [l.id, l])), [ledger]);
   const balances = useMemo(() => accountBalancesOn(movements, branchSettings, today), [movements, branchSettings, today]);
   const position = useMemo(() => positionSummary(partyCustomers, partySuppliers, expenses, balances), [partyCustomers, partySuppliers, expenses, balances]);
   // Cheques not yet cleared are still the business's money (or still owed): count them in the total.
@@ -270,7 +272,7 @@ export const MoneyScreen: React.FC = () => {
           {monthMoves.length === 0 ? <EmptyState compact icon={<Coins className="w-5 h-5" />} text="No money moved this month." /> : (
             <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40]">
               {monthMoves.map((m) => (
-                <li key={m.id} className="flex items-center gap-2 px-4 sm:px-5 py-2.5 text-sm hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"><span className="text-xs text-[#6B7280] dark:text-[#8E9299] w-20 shrink-0 tabular-nums">{formatDate(m.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{m.counterparty ? `${m.counterparty} • ` : ''}{m.description}<span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]"> • {m.method || 'Cash'}{m.bankCode && bankAccounts.length > 1 ? ` • ${bankName(m.bankCode) || m.bankCode}` : ''}</span></span><span className={`tabular-nums whitespace-nowrap font-bold ${m.direction === 'in' ? 'text-teal-700 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}>{m.direction === 'in' ? '+' : '−'} {rs(m.amount)}</span></li>
+                <li key={m.id} className="flex items-center gap-2 px-4 sm:px-5 py-2.5 text-sm hover:bg-[#FAF9F6] dark:hover:bg-[#162436] transition-colors"><span className="text-xs text-[#6B7280] dark:text-[#8E9299] w-20 shrink-0 tabular-nums">{formatDate(m.date)}</span><span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{m.counterparty ? `${m.counterparty} • ` : ''}{m.description}<span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]"> • {m.method || 'Cash'}{m.bankCode && bankAccounts.length > 1 ? ` • ${bankName(m.bankCode) || m.bankCode}` : ''}</span></span><span className={`tabular-nums whitespace-nowrap font-bold ${m.direction === 'in' ? 'text-teal-700 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}>{m.direction === 'in' ? '+' : '−'} {rs(m.amount)}</span><EditPaymentButton row={ledgerById.get(m.sourceId)} /></li>
               ))}
             </ul>
           )}
@@ -291,6 +293,7 @@ export const MoneyScreen: React.FC = () => {
                 <span className="text-xs text-[#6B7280] dark:text-[#8E9299] w-20 shrink-0 tabular-nums">{formatDate(m.date)}</span>
                 <span className="flex-1 min-w-0 truncate text-[#374151] dark:text-[#CBD5E1]">{m.counterparty ? `${m.counterparty} • ` : ''}{m.description}<span className="text-[11px] text-[#6B7280] dark:text-[#8E9299]"> • {m.method || 'Cash'}</span></span>
                 <span className={`tabular-nums whitespace-nowrap font-bold ${m.direction === 'in' ? 'text-teal-700 dark:text-teal-300' : 'text-rose-700 dark:text-rose-300'}`}>{m.direction === 'in' ? '+' : '−'} {rs(m.amount)}</span>
+                <EditPaymentButton row={ledgerById.get(m.sourceId)} />
                 <span className="max-sm:w-full max-sm:text-right sm:w-32 shrink-0 text-right tabular-nums whitespace-nowrap text-xs text-[#6B7280] dark:text-[#94A3B8]" data-testid="book-balance">bal {rs(balance)}</span>
               </li>
             ))}

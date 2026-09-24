@@ -716,8 +716,8 @@ test.describe('QA — money', () => {
     // Receive from many: Old Khan Store pays 5,000 cash; collection sheet printed.
     await main(page).getByRole('button', { name: 'Receive from many' }).click();
     const many = dialog(page, 'Receive from many');
-    await many.getByLabel('Received from Old Khan Store').check();
-    await many.getByLabel('Amount from Old Khan Store').fill('5000');
+    await many.getByLabel('Line 1 customer').selectOption('c3');
+    await many.getByLabel('Line 1 amount').fill('5000');
     await many.getByRole('button', { name: 'Save & Print' }).click();
     await expect(printRoot(page).getByTestId('print-collection')).toContainText('Old Khan Store');
     await closePreview(page);

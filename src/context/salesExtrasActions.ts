@@ -45,6 +45,8 @@ export interface ReceiveManyRow {
   method: string;
   /** Bank account (chart code 1010, 1011…) the money went into, for bank methods; empty = the main bank. */
   bankCode?: string;
+  /** Narration for this line (else the sheet note). */
+  note?: string;
 }
 
 export interface ReceiveManyInput {
@@ -340,10 +342,11 @@ export const useSalesExtrasStore = (d: Deps) => {
         referenceId: sheetNo,
         date,
         method: r.method,
-        description: `Payment received: ${r.method} - collection ${sheetNo}${note ? ` (${note})` : ''}`,
+        description: `Payment received: ${r.method} - collection ${sheetNo}${(r.note?.trim() || note) ? ` (${r.note?.trim() || note})` : ''}`,
         debit: 0,
         credit: r.amount,
         balanceAfter: round2(c.totalDue - r.amount),
+        ...(r.note?.trim() ? { note: r.note.trim() } : note ? { note } : {}),
         ...(input.salesmanId ? { salesmanId: input.salesmanId } : {}),
         ...(r.bankCode && r.bankCode !== '1010' && !isCashMethod(r.method) ? { bankCode: r.bankCode } : {}),
         ...(d.branchStamp ? d.branchStamp() : {}),

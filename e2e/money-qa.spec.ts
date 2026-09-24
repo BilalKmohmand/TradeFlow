@@ -155,11 +155,11 @@ test('receive by code into a bank on an earlier date, cheque by code, bounce wit
   await expect(bankBal(page, '1012')).toHaveText('Rs. 355,000.50');
   await page.getByRole('button', { name: 'Receive from many' }).click();
   d = dialog(page, 'Receive from many');
-  await d.getByLabel('Find a customer').fill('C001');
-  await d.getByLabel('Received from Zaman Store').check();
-  await d.getByLabel('Amount from Zaman Store').fill('1000');
-  await d.getByLabel('Method for Zaman Store').selectOption('Bank Transfer');
-  await d.getByLabel('Into bank (Zaman Store)').selectOption('1011');
+  await d.getByLabel('Line 1 code').fill('C001');
+  await d.getByLabel('Line 1 code').press('Enter');
+  await d.getByLabel('Line 1 amount').fill('1000');
+  await d.getByLabel('Line 1 method').selectOption('Bank Transfer');
+  await d.getByLabel('Line 1 into bank').selectOption('1011');
   await d.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog(page, 'Money received')).toBeVisible();
   await dialog(page, 'Money received').getByRole('button', { name: 'Done' }).click();

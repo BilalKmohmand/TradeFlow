@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Printer, Save, Search, Percent, Undo2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Printer, Save, Percent, Undo2, Plus, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from '../ConfirmDialog';
 import type { PostedRun } from '../../context/salesExtrasActions';
 import { useTrading, BILL_PAYMENT_METHODS } from '../../context/TradingContext';
@@ -7,10 +7,10 @@ import { Modal, Notice, EmptyState, inputCls, labelCls, primaryBtn, secondaryBtn
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 import { booksLockedFor } from '../../utils/accounting';
-import { filterParties } from '../../utils/vouchers';
 import { BankSelect } from './BankSelect';
 import { needsBank } from '../../utils/banks';
-import { findByCode } from './CodeBox';
+import { CodeBox } from './CodeBox';
+import { QuickSelect, PickOption } from './QuickPick';
 
 /** Recent interest runs / collection sheets with a one-tap Undo (asks once, then reverses the whole run). */
 const RecentRuns: React.FC<{ title: string; runs: PostedRun[]; noun: string; allowed: boolean; onUndo: (id: string) => { success: boolean; message: string }; testId: string }> = ({ title, runs, noun, allowed, onUndo, testId }) => {
@@ -55,56 +55,87 @@ const RecentRuns: React.FC<{ title: string; runs: PostedRun[]; noun: string; all
 const METHODS = BILL_PAYMENT_METHODS.filter((m) => m !== 'Cheque');
 
 interface Line {
-  on: boolean;
+  key: string;
+  customerId: string;
   amount: string;
   method: string;
   /** Bank account for bank methods ('' = the main bank). */
   bank: string;
+  note: string;
 }
 
+let lineSeq = 0;
+const blankLine = (): Line => ({ key: `rl${++lineSeq}`, customerId: '', amount: '', method: 'Cash', bank: '', note: '' });
+const focusSoon = (id: string) => setTimeout(() => { const el = document.getElementById(id) as HTMLInputElement | null; el?.focus(); el?.select?.(); }, 30);
+
 /**
- * Receive from many customers at once (the recovery man's round): tick customers, enter what each
- * paid, save once. Every customer gets their own payment row; they share one collection-sheet number.
+ * Receive from many customers at once, like the old "Cash Receipt (Credit Voucher)": a table of lines —
+ * Code, Title, A/C balance, Amount, Method, Narration. Every customer gets their own payment row; they
+ * share one receipt (collection-sheet) number.
  */
 export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const { customers, salesmen, areas, receiveMany, setPrintRequest, settings, collectionSheets, undoCollection, can, nextCollectionNo } = useTrading();
+  const { customers, salesmen, receiveMany, setPrintRequest, settings, collectionSheets, undoCollection, can, nextCollectionNo } = useTrading();
   const today = todayISO();
   const [date, setDate] = useState(today);
   const [salesmanId, setSalesmanId] = useState('');
-  const [areaFilter, setAreaFilter] = useState('all');
-  const [query, setQuery] = useState('');
-  const [codeText, setCodeText] = useState('');
-  const [codeMiss, setCodeMiss] = useState(false);
   const [note, setNote] = useState('');
-  const [lines, setLines] = useState<Record<string, Line>>({});
+  const [lines, setLines] = useState<Line[]>(() => [blankLine()]);
   const [error, setError] = useState('');
+  const [warn, setWarn] = useState('');
   const [done, setDone] = useState<{ sheetNo: string; message: string } | null>(null);
 
-  const owing = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return customers
-      .filter((c) => c.totalDue > 0.005)
-      .filter((c) => areaFilter === 'all' || (c.areaId || '') === areaFilter)
-      .filter((c) => !q || filterParties([c], q, '').length > 0)
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [customers, query, areaFilter]);
-  // Searching someone who has nothing due must say so, not "nobody owes you".
-  const settled = useMemo(() => {
-    const q = query.trim();
-    if (!q || owing.length > 0) return [] as typeof customers;
-    return filterParties<(typeof customers)[number]>(customers, q, '').filter((c) => c.totalDue <= 0.005).slice(0, 3);
-  }, [customers, query, owing.length]);
-  const line = (id: string): Line => lines[id] || { on: false, amount: '', method: 'Cash', bank: '' };
-  const setLine = (id: string, patch: Partial<Line>) => { setError(''); setLines((prev) => ({ ...prev, [id]: { ...line(id), ...patch } })); };
-  const ticked = (Object.entries(lines) as [string, Line][]).filter(([, l]) => l.on && (parseFloat(l.amount) || 0) > 0);
-  const total = ticked.reduce((a, [, l]) => a + (parseFloat(l.amount) || 0), 0);
-  const cash = ticked.filter(([, l]) => l.method.toLowerCase().startsWith('cash')).reduce((a, [, l]) => a + (parseFloat(l.amount) || 0), 0);
+  // The dialog stays mounted: every time it opens, start a fresh receipt with one empty line.
+  useEffect(() => {
+    if (!isOpen) return;
+    setDate(todayISO());
+    setLines([blankLine()]);
+    setError('');
+    setWarn('');
+    setDone(null);
+  }, [isOpen]);
+
+  const byId = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
+  const sorted = useMemo(() => [...customers].sort((a, b) => a.name.localeCompare(b.name)), [customers]);
+  const options: PickOption[] = useMemo(() => sorted.map((c) => ({ value: c.id, name: c.name, code: c.code, extra: [(c as { company?: string }).company, c.city, c.phone].filter(Boolean).join(' ') })), [sorted]);
+
+  const setLine = (key: string, patch: Partial<Line>) => { setError(''); setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l))); };
+  /** Pick a customer on a line; the same customer twice is not allowed — go to their line instead. */
+  const pickCustomer = (key: string, id: string): boolean => {
+    setWarn('');
+    const other = lines.findIndex((l) => l.key !== key && l.customerId === id);
+    if (id && other >= 0) {
+      setWarn(`${byId.get(id)?.name || 'This customer'} is already on line ${other + 1}. Change the amount there.`);
+      setLine(key, { customerId: '' });
+      focusSoon(`rm-amt-${lines[other].key}`);
+      return false;
+    }
+    setLine(key, { customerId: id });
+    return true;
+  };
+  const addLine = (focus = true) => {
+    const l = blankLine();
+    setLines((prev) => [...prev, l]);
+    if (focus) focusSoon(`rm-code-${l.key}`);
+  };
+  /** Enter on Amount / Narration: go to the next line's Code (adding a line at the end). */
+  const nextLine = (key: string) => {
+    const at = lines.findIndex((l) => l.key === key);
+    if (at >= 0 && at < lines.length - 1) focusSoon(`rm-code-${lines[at + 1].key}`);
+    else addLine();
+  };
+  const removeLine = (key: string) => { setWarn(''); setLines((prev) => (prev.length === 1 ? [blankLine()] : prev.filter((l) => l.key !== key))); };
+
+  const filled = lines.filter((l) => l.customerId && (parseFloat(l.amount) || 0) > 0);
+  const total = filled.reduce((a, l) => a + (parseFloat(l.amount) || 0), 0);
+  const cash = filled.filter((l) => l.method.toLowerCase().startsWith('cash')).reduce((a, l) => a + (parseFloat(l.amount) || 0), 0);
 
   const save = (print: boolean) => {
     setError('');
     const closed = booksLockedFor(settings, date);
     if (closed) return setError(closed);
-    const r = receiveMany({ date, salesmanId: salesmanId || null, note, rows: ticked.map(([customerId, l]) => ({ customerId, amount: parseFloat(l.amount) || 0, method: l.method, ...(needsBank(l.method) && l.bank ? { bankCode: l.bank } : {}) })) });
+    const noName = lines.findIndex((l) => !l.customerId && (parseFloat(l.amount) || 0) > 0);
+    if (noName >= 0) return setError(`Line ${noName + 1} has an amount but no customer.`);
+    const r = receiveMany({ date, salesmanId: salesmanId || null, note, rows: filled.map((l) => ({ customerId: l.customerId, amount: parseFloat(l.amount) || 0, method: l.method, ...(needsBank(l.method) && l.bank ? { bankCode: l.bank } : {}), ...(l.note.trim() ? { note: l.note.trim() } : {}) })) });
     if (!r.success || !r.sheetNo) return setError(r.message);
     setDone({ sheetNo: r.sheetNo, message: r.message });
     if (print) setPrintRequest({ type: 'sales_extras', report: 'collection', sheetNo: r.sheetNo });
@@ -128,23 +159,29 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
   const footer = (
     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
       <div className="flex-1 text-sm">
-        <span className="text-[#6B7280] dark:text-[#94A3B8]">{ticked.length} customer(s) • </span>
+        <span className="text-[#6B7280] dark:text-[#94A3B8]" data-testid="receive-many-count">{filled.length} customer(s) • </span>
         <span className={`${moneyCls} font-extrabold text-lg`} data-testid="receive-many-total">{rs(total)}</span>
         {total > 0 && <span className="ml-2 text-[11px] text-[#6B7280] dark:text-[#94A3B8]">cash {rs(cash)} • bank {rs(total - cash)}</span>}
       </div>
       <div className="flex gap-2">
-        <button type="button" onClick={() => save(false)} disabled={ticked.length === 0} className={secondaryBtn}><Save className="w-4 h-4" /> Save</button>
-        <button type="button" onClick={() => save(true)} disabled={ticked.length === 0} className={primaryBtn}><Printer className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Save &amp; Print</button>
+        <button type="button" onClick={() => save(false)} disabled={filled.length === 0} className={secondaryBtn}><Save className="w-4 h-4" /> Save</button>
+        <button type="button" onClick={() => save(true)} disabled={filled.length === 0} className={primaryBtn}><Printer className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Save &amp; Print</button>
       </div>
     </div>
   );
 
+  const cols = 'sm:grid-cols-[6.5rem_minmax(9rem,1.6fr)_6.5rem_7rem_8.5rem_minmax(6rem,1fr)_2.75rem]';
+  const head = 'text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]';
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Receive from many" subtitle="Tick each customer who paid and enter the amount. One save records them all." wide footer={footer}>
+    <Modal isOpen={isOpen} onClose={onClose} title="Receive from many" subtitle="Cash receipt: one line per customer. Type the code and press Enter, then the amount." wide footer={footer}>
       <div className="space-y-4">
-        <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Receipt no. <strong className="tabular-nums text-sm text-[#111827] dark:text-white" title="Given automatically when you save" data-testid="rm-next-number">{nextCollectionNo()}</strong></div>
         {error && <Notice kind="error">{error}</Notice>}
+        {warn && <Notice kind="error">{warn}</Notice>}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div>
+            <span className={labelCls}>Receipt no.</span>
+            <div className={`${inputCls} tabular-nums`} title="Given automatically when you save" data-testid="rm-next-number">{nextCollectionNo()}</div>
+          </div>
           <div>
             <label className={labelCls} htmlFor="rm-date">Date</label>
             <input id="rm-date" type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} className={inputCls} />
@@ -157,85 +194,52 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
             </select>
           </div>
           <div>
-            <label className={labelCls} htmlFor="rm-area">Area</label>
-            <select id="rm-area" value={areaFilter} onChange={(e) => setAreaFilter(e.target.value)} className={inputCls}>
-              <option value="all">All areas</option>
-              {areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              {areas.length > 0 && <option value="">No area</option>}
-            </select>
-          </div>
-          <div>
             <label className={labelCls} htmlFor="rm-note">Note</label>
             <input id="rm-note" value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} placeholder="optional" />
           </div>
         </div>
-        <div className="flex gap-2">
-          {/* Customer ID box, like the old program: type the code, Enter ticks that customer and jumps to the amount. */}
-          <div className="w-32 shrink-0">
-            <input
-              id="rm-code"
-              value={codeText}
-              onChange={(e) => { setCodeText(e.target.value); setCodeMiss(false); }}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter') return;
-                e.preventDefault();
-                const hit = findByCode<(typeof customers)[number]>(customers.filter((c) => c.totalDue > 0.005), codeText);
-                if (!hit) { if (codeText.trim()) setCodeMiss(true); return; }
-                setQuery('');
-                setLine(hit.id, { on: true, amount: line(hit.id).amount || String(Math.round(hit.totalDue * 100) / 100) });
-                setCodeText('');
-                setTimeout(() => (document.querySelector(`[aria-label="Amount from ${CSS.escape(hit.name)}"]`) as HTMLInputElement | null)?.select(), 60);
-              }}
-              autoCapitalize="characters"
-              autoComplete="off"
-              aria-label="Customer code"
-              aria-invalid={codeMiss || undefined}
-              placeholder="Customer ID"
-              className={`${inputCls} tabular-nums !px-2 ${codeMiss ? '!border-rose-400' : ''}`}
-            />
-            {codeMiss && <p role="alert" className="mt-0.5 text-[10px] font-semibold text-rose-700 dark:text-rose-300">No customer owing with ID "{codeText.trim()}"</p>}
+        <div className="space-y-2" data-testid="receive-many-table">
+          <div className={`hidden sm:grid ${cols} gap-2 px-1`} aria-hidden="true">
+            <span className={head}>Code</span>
+            <span className={head}>Title</span>
+            <span className={`${head} text-right`}>A/C balance</span>
+            <span className={head}>Amount</span>
+            <span className={head}>Method</span>
+            <span className={head}>Narration</span>
+            <span />
           </div>
-          <div className="relative flex-1 min-w-0">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a customer" className={`${inputCls} pl-10`} aria-label="Find a customer" />
-          </div>
+          {lines.map((l, i) => {
+            const c = l.customerId ? byId.get(l.customerId) : undefined;
+            const n = i + 1;
+            return (
+              <div key={l.key} data-testid="receive-many-row" className={`grid grid-cols-2 ${cols} gap-2 items-start sm:items-center rounded-2xl sm:rounded-xl border sm:border-0 border-[#E5E5E1] dark:border-[#203248] p-2.5 sm:p-1 ${c ? 'bg-teal-50/40 dark:bg-teal-950/10' : ''}`}>
+                <CodeBox id={`rm-code-${l.key}`} label={`Line ${n} code`} items={customers} value={l.customerId} onPick={(id) => pickCustomer(l.key, id)}
+                  onEnter={(hit) => { if (hit) focusSoon(`rm-amt-${l.key}`); }} />
+                <div className="min-w-0">
+                  <QuickSelect id={`rm-cust-${l.key}`} aria-label={`Line ${n} customer`} value={l.customerId} options={options} onPick={(id) => { if (pickCustomer(l.key, id) && id) focusSoon(`rm-amt-${l.key}`); }} className={inputCls} title="Type a name, code, city or phone to find it">
+                    <option value="">Customer…</option>
+                    {sorted.map((x) => <option key={x.id} value={x.id}>{x.name}{x.city ? ` (${x.city})` : ''}</option>)}
+                  </QuickSelect>
+                </div>
+                <div className="col-span-2 sm:col-span-1 flex sm:block items-baseline justify-between text-right px-1">
+                  <span className="sm:hidden text-[11px] text-[#6B7280] dark:text-[#94A3B8]">A/C balance</span>
+                  <span className={`${moneyCls} text-sm font-semibold ${c && c.totalDue > 0.005 ? '' : 'text-[#6B7280] dark:text-[#94A3B8]'}`} data-testid={`rm-balance-${n}`}>{c ? rs(c.totalDue) : '—'}</span>
+                </div>
+                <input id={`rm-amt-${l.key}`} aria-label={`Line ${n} amount`} type="number" inputMode="decimal" min="0" step="any" value={l.amount}
+                  onChange={(e) => setLine(l.key, { amount: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); nextLine(l.key); } }}
+                  className={`${inputCls} tabular-nums`} placeholder="Amount" />
+                <select aria-label={`Line ${n} method`} value={l.method} onChange={(e) => setLine(l.key, { method: e.target.value })} className={inputCls}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select>
+                <input aria-label={`Line ${n} narration`} value={l.note} onChange={(e) => setLine(l.key, { note: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); nextLine(l.key); } }}
+                  className={inputCls} placeholder="Narration" />
+                <button type="button" onClick={() => removeLine(l.key)} aria-label={`Remove line ${n}`} className="justify-self-end inline-flex items-center justify-center min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 rounded-xl text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-700 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40"><Trash2 className="w-4 h-4" /></button>
+                {needsBank(l.method) && <BankSelect id={`rm-bank-${l.key}`} className="col-span-2 sm:col-start-4 sm:col-span-3" label={`Line ${n} into bank`} value={l.bank} onChange={(v) => setLine(l.key, { bank: v })} />}
+              </div>
+            );
+          })}
+          <button type="button" onClick={() => addLine()} className={secondaryBtn}><Plus className="w-4 h-4" /> Add row</button>
         </div>
-        {owing.length === 0 ? (
-          <EmptyState
-            compact
-            text={
-              settled.length
-                ? `${settled.map((c) => c.name).join(', ')} ${settled.length === 1 ? 'has' : 'have'} nothing due. Only customers who owe money are listed here.`
-                : query.trim()
-                  ? `No customer here matches "${query.trim()}". Only customers who owe money are listed.`
-                  : 'Nobody owes you money here.'
-            }
-          />
-        ) : (
-          <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248]" data-testid="receive-many-list">
-            {owing.map((c) => {
-              const l = line(c.id);
-              return (
-                <li key={c.id} className={`px-3 py-2 ${l.on ? 'bg-teal-50/60 dark:bg-teal-950/20' : ''}`}>
-                  <div className="flex items-center gap-3">
-                    <input type="checkbox" aria-label={`Received from ${c.name}`} checked={l.on} onChange={(e) => setLine(c.id, { on: e.target.checked, amount: e.target.checked && !l.amount ? String(Math.round(c.totalDue * 100) / 100) : l.amount })} className="w-5 h-5 accent-teal-700 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold truncate text-[#111827] dark:text-white">{c.code ? `${c.code} • ` : ''}{c.name}</div>
-                      <div className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">owes <span className={moneyCls}>{rs(c.totalDue)}</span>{c.city ? ` • ${c.city}` : ''}{c.areaId ? ` • ${areas.find((a) => a.id === c.areaId)?.name || ''}` : ''}</div>
-                    </div>
-                  </div>
-                  {l.on && (
-                    <div className="grid grid-cols-2 gap-2 mt-2 pl-8">
-                      <input aria-label={`Amount from ${c.name}`} type="number" inputMode="decimal" min="0" step="any" value={l.amount} onChange={(e) => setLine(c.id, { amount: e.target.value })} className={`${inputCls} tabular-nums`} placeholder="Amount" />
-                      <select aria-label={`Method for ${c.name}`} value={l.method} onChange={(e) => setLine(c.id, { method: e.target.value })} className={inputCls}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select>
-                      {needsBank(l.method) && <BankSelect id={`rm-bank-${c.id}`} className="col-span-2" label={`Into bank (${c.name})`} value={l.bank} onChange={(v) => setLine(c.id, { bank: v })} />}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
         <p className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">Got a cheque? Use Receive payment → Cheque, so it waits in the cheque register until the bank clears it.</p>
         <RecentRuns title="Recent collection sheets" runs={collectionSheets} noun="collection" allowed={can('finance:record_payment')} onUndo={undoCollection} testId="recent-collections" />
       </div>

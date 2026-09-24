@@ -17,6 +17,7 @@ import { SupplierBillsView } from '../../components/billing/purchasing/SupplierB
 import { SupplierClaimsView } from '../../components/billing/purchasing/SupplierClaims';
 import { ClipboardList, FileText, ShieldAlert, MapPin } from 'lucide-react';
 import { CityFilter, PartyBalancesView } from '../../components/billing/PartyBalances';
+import { EditPaymentButton } from '../../components/billing/EditPaymentModal';
 import { filterParties } from '../../utils/vouchers';
 
 type Tab = 'suppliers' | 'orders' | 'received' | 'bills' | 'claims' | 'returns';
@@ -232,7 +233,7 @@ export const SuppliersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Payments made</h3>
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-sm">
                   {openPayments.slice(0, 12).map((l) => (
-                    <li key={l.id} className="flex justify-between gap-3 px-3 py-2"><span className="min-w-0 truncate">{formatDate(l.date)} • {l.description}</span><span className="tabular-nums font-bold shrink-0">{rs(l.credit)}</span></li>
+                    <li key={l.id} className="flex items-center justify-between gap-3 px-3 py-2"><span className="min-w-0 truncate flex-1">{formatDate(l.date)} • {l.referenceId ? `${l.referenceId} • ` : ''}{l.description}{(l.edits || []).length > 0 && <span className="ml-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">edited</span>}</span><span className="tabular-nums font-bold shrink-0">{rs(l.credit)}</span><EditPaymentButton row={l} /></li>
                   ))}
                 </ul>
               </div>

@@ -12,8 +12,9 @@ import { lineQty, linePrice } from '../../utils/billing';
 import { todayISO } from '../../utils/stockFlow';
 import { useBillingUI } from './BillingUI';
 import { returnsForBill, returnedQtyByLine, billNetTotal, lineDiscountLabel } from '../../utils/salesDocs';
-import { StockReturn } from '../../types';
+import { StockReturn, InvoicePaymentRecord } from '../../types';
 import { ChequeFieldsInput, emptyChequeFields } from './ChequeForms';
+import { EditPaymentButton } from './EditPaymentModal';
 import { isPendingApproval } from '../../context/controlActions';
 
 interface Props {
@@ -23,7 +24,7 @@ interface Props {
 
 /** One bill: its lines, its payments, and the three things you do with it — take money, print, delete. */
 export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
-  const { invoices, customers, payBill, receiveCheque, deleteBill, setPrintRequest, can, currentUser, returns, deleteReturn, salesmen, areas, billDeleteNeedsApproval, markBillDeliveryPending, billEditBlock } = useTrading();
+  const { invoices, customers, payBill, receiveCheque, deleteBill, setPrintRequest, can, currentUser, returns, deleteReturn, salesmen, areas, billDeleteNeedsApproval, markBillDeliveryPending, billEditBlock, ledger } = useTrading();
   const ui = useBillingUI();
   const inv = invoices.find((i) => i.id === invoiceId) || null;
   const billReturns = inv ? returnsForBill(returns, inv.id) : [];
@@ -41,6 +42,12 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editMsg, setEditMsg] = useState<string | null>(null);
+  /** The customer ledger row a bill payment posted (older bills: matched by date and amount). */
+  const payRow = (p: InvoicePaymentRecord) => {
+    if (!inv || p.method === 'cheque') return undefined;
+    const rows = ledger.filter((l) => l.type === 'payment_received' && l.sourceId === inv.id);
+    return (p.ledgerId && rows.find((l) => l.id === p.ledgerId)) || rows.find((l) => l.date === p.date && Math.abs(l.credit - p.amount) < 0.005);
+  };
   const canDelete = can('delete_records') || can('system:admin_screen') || can('admin_screen') || currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
 
   const takePayment = (e: React.FormEvent) => {
@@ -193,7 +200,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Payments</h3>
                 <ul className="text-sm divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248]">
                   {(inv.payments || []).map((p) => (
-                    <li key={p.id} className="flex justify-between px-3 py-2"><span>{formatDate(p.date)} • {p.notes || p.method}</span><span className="tabular-nums font-bold">{rs(p.amount)}</span></li>
+                    <li key={p.id} className="flex items-center justify-between gap-2 px-3 py-2"><span className="flex-1 min-w-0">{formatDate(p.date)} • {p.notes || p.method}</span><span className="tabular-nums font-bold">{rs(p.amount)}</span><EditPaymentButton row={payRow(p)} label={`Edit payment ${formatDate(p.date)} ${rs(p.amount)}`} onSaved={(m) => setMsg({ kind: 'ok', text: m })} /></li>
                   ))}
                 </ul>
               </div>

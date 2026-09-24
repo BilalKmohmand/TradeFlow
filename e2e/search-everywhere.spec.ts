@@ -140,13 +140,17 @@ test('Pickers: Receive payment, Receive from many, report filter and the voucher
   await expect(rc.getByRole('alert')).toContainText('No code');
   await page.keyboard.press('Escape');
 
-  // Receive from many: phone with a space, Urdu.
+  // Receive from many (a voucher table): the line's Code box takes "c0007"; the name list finds by typing.
   await openById(page, 'receive-many');
   const rm = page.getByRole('dialog', { name: 'Receive from many' });
-  const find = rm.getByLabel('Find a customer');
-  await expectFinds(find, rm.getByTestId('receive-many-list'), '0300 1074', 'Gul Khan & Sons', 'Afridi Brothers');
-  await expectFinds(find, rm.getByTestId('receive-many-list'), 'اسلم', 'محمد اسلم', 'Gul Khan & Sons');
-  await expectFinds(find, rm.getByTestId('receive-many-list'), 'C0007', 'Gul Khan & Sons', 'Afridi Brothers');
+  await rm.getByLabel('Line 1 code').fill('c0007');
+  await rm.getByLabel('Line 1 code').press('Enter');
+  await expect(rm.getByLabel('Line 1 customer')).toHaveValue('c7');
+  await rm.getByRole('button', { name: 'Add row' }).click();
+  await rm.getByLabel('Line 2 customer').focus();
+  await page.keyboard.type('gul');
+  await expect(rm.getByLabel('Line 2 customer')).toHaveValue('');
+  await expect(rm.getByText(/Gul Khan & Sons is already on line 1/)).toBeVisible();
   await page.keyboard.press('Escape');
 
   // A report's customer filter: Code box + type-to-find.

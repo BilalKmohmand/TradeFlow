@@ -230,6 +230,17 @@ export interface LedgerEntry {
   bankCode?: string;
   /** Voucher (CPV / CRV / BPV / BRV / JV) this row was posted from: changed or deleted only through the voucher. */
   voucherId?: string;
+  /** Payment rows: the note typed with the payment (kept apart so an edit can show it again). */
+  note?: string;
+  /** Payment rows: every change made after saving (Edit payment). */
+  edits?: PaymentEdit[];
+}
+
+/** One change to a saved payment: when, who, and what changed ("amount Rs. 500 → Rs. 400"). */
+export interface PaymentEdit {
+  at: string;
+  by?: string;
+  changes: string;
 }
 
 export interface WhatsAppMessage {
@@ -355,6 +366,8 @@ export interface InvoicePaymentRecord {
   referenceNumber?: string;
   notes?: string;
   recordedBy?: string;
+  /** The customer ledger row this payment posted (links an edit of the payment back to the bill). */
+  ledgerId?: string;
 }
 
 export interface Invoice {

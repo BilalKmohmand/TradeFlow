@@ -123,8 +123,8 @@ test('reminders, depreciation, cartons on quotations and returns, undo collectio
   // --- Receive from many, then undo the whole sheet in one tap.
   await page.getByRole('button', { name: 'Receive from many' }).click();
   const many = page.getByRole('dialog', { name: 'Receive from many' });
-  await many.getByLabel('Received from Zaman and Co BTK').check();
-  await many.getByLabel('Amount from Zaman and Co BTK').fill('3070');
+  await many.getByLabel('Line 1 customer').selectOption('c1');
+  await many.getByLabel('Line 1 amount').fill('3070');
   await many.getByRole('button', { name: 'Save', exact: true }).click();
   const done = page.getByRole('dialog', { name: 'Money received' });
   await done.getByTestId('undo-collection').getByRole('button', { name: /Undo collection CS-1/ }).click();

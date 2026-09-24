@@ -139,22 +139,28 @@ test.describe('Sales extras (desktop)', () => {
     await expect(com).toContainText('still owed Rs. 0');
   });
 
-  test('receive from many: the search finds a customer by shop name, phone with spaces, ID or city', async ({ page }) => {
+  test('receive from many is a voucher table: no customer list; code + Enter fills the line; same customer twice is refused', async ({ page }) => {
     await open(page);
     await goTo(page, 'Money');
     await page.getByRole('main').getByRole('button', { name: 'Receive from many' }).click();
     const dlg = page.getByRole('dialog', { name: 'Receive from many' });
-    const box = dlg.getByLabel('Find a customer');
-    const rows = dlg.getByTestId('receive-many-list').getByRole('listitem');
-    await expect(rows).toHaveCount(2);
-    await box.fill('Zaman');
-    await expect(rows).toHaveCount(1);
-    await box.fill('z01');
-    await expect(rows).toHaveCount(1); // ID, any case
-    await box.fill('0344 383');
-    await expect(rows).toHaveCount(1); // phone typed with a space
-    await box.fill('nobody-here');
-    await expect(dlg.getByText(/No customer here matches/)).toBeVisible();
+    await expect(dlg.getByTestId('receive-many-row')).toHaveCount(1); // one empty line, nobody listed
+    await expect(dlg.getByRole('checkbox')).toHaveCount(0);
+    await dlg.getByLabel('Line 1 code').fill('z01'); // any case
+    await dlg.getByLabel('Line 1 code').press('Enter');
+    await expect(dlg.getByLabel('Line 1 customer')).toHaveValue('c1');
+    await expect(dlg.getByTestId('rm-balance-1')).toHaveText('Rs. 13,070');
+    await expect(dlg.getByLabel('Line 1 amount')).toBeFocused();
+    await page.keyboard.type('1000');
+    await page.keyboard.press('Enter');
+    await expect(dlg.getByTestId('receive-many-row')).toHaveCount(2);
+    await expect(dlg.getByLabel('Line 2 code')).toBeFocused();
+    await page.keyboard.type('Z01');
+    await page.keyboard.press('Enter');
+    await expect(dlg.getByText(/Zaman and Co BTK is already on line 1/)).toBeVisible();
+    await expect(dlg.getByLabel('Line 2 customer')).toHaveValue('');
+    // The name list shows names without the code.
+    await expect(dlg.getByLabel('Line 2 customer').locator('option', { hasText: 'Zaman and Co BTK' })).not.toContainText('Z01');
   });
 
   test('receive from many: tick customers, one save, collection sheet prints; interest preview and post', async ({ page }) => {
@@ -163,11 +169,15 @@ test.describe('Sales extras (desktop)', () => {
     await page.getByRole('main').getByRole('button', { name: 'Receive from many' }).click();
     const dlg = page.getByRole('dialog', { name: 'Receive from many' });
     await expect(dlg.getByTestId('rm-next-number')).toHaveText('CS-1'); // shown before saving
-    await dlg.getByLabel('Received from Zaman and Co BTK').check();
-    await expect(dlg.getByLabel('Amount from Zaman and Co BTK')).toHaveValue('13070');
-    await dlg.getByLabel('Amount from Zaman and Co BTK').fill('5000');
-    await dlg.getByLabel('Received from Old Khan Store').check();
-    await dlg.getByLabel('Method for Old Khan Store').selectOption('Bank Transfer');
+    await dlg.getByLabel('Line 1 code').fill('Z01');
+    await dlg.getByLabel('Line 1 code').press('Enter');
+    await dlg.getByLabel('Line 1 amount').fill('5000');
+    await dlg.getByRole('button', { name: 'Add row' }).click();
+    await dlg.getByLabel('Line 2 customer').selectOption('c2');
+    await expect(dlg.getByTestId('rm-balance-2')).toHaveText('Rs. 8,000');
+    await dlg.getByLabel('Line 2 amount').fill('8000');
+    await dlg.getByLabel('Line 2 method').selectOption('Bank Transfer');
+    await expect(dlg.getByTestId('receive-many-count')).toContainText('2 customer(s)');
     await expect(dlg.getByTestId('receive-many-total')).toHaveText('Rs. 13,000');
     await dlg.getByRole('button', { name: 'Save & Print' }).click();
     const sheet = page.locator('#print-root').getByTestId('print-collection');
@@ -205,6 +215,49 @@ test.describe('Sales extras (desktop)', () => {
   });
 });
 
+test.describe('Edit a saved payment', () => {
+  test('a Receive-from-many line is edited from the customer; same CS number, balance and cash book follow', async ({ page }) => {
+    await open(page);
+    await goTo(page, 'Money');
+    await page.getByRole('main').getByRole('button', { name: 'Receive from many' }).click();
+    const dlg = page.getByRole('dialog', { name: 'Receive from many' });
+    await dlg.getByLabel('Line 1 code').fill('Z01');
+    await dlg.getByLabel('Line 1 code').press('Enter');
+    await expect(dlg.getByLabel('Line 1 amount')).toBeFocused();
+    await dlg.getByLabel('Line 1 amount').fill('1000');
+    await dlg.getByLabel('Line 1 narration').fill('first round');
+    await expect(dlg.getByTestId('receive-many-total')).toHaveText('Rs. 1,000');
+    await dlg.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Money received' }).getByRole('button', { name: 'Done' }).click();
+
+    await goTo(page, 'Customers');
+    await page.getByRole('button', { name: /Zaman and Co BTK/ }).first().click();
+    const sheet = page.getByRole('dialog', { name: 'Zaman and Co BTK' });
+    await sheet.getByRole('button', { name: 'Edit payment CS-1' }).click();
+    const ed = page.getByRole('dialog', { name: 'Edit payment CS-1' });
+    await expect(ed.getByLabel('Amount')).toHaveValue('1000');
+    await expect(ed.getByLabel('Note')).toHaveValue('first round');
+    await ed.getByLabel('Amount').fill('1500');
+    await ed.getByLabel('Method').selectOption('Bank Transfer');
+    await ed.getByRole('button', { name: 'Save changes' }).click();
+    await expect(ed).toBeHidden();
+    await expect(sheet).toContainText('Rs. 11,570'); // 13,070 − 1,500
+    await expect(sheet).toContainText('edited');
+    await page.keyboard.press('Escape');
+
+    // The cash book shows the new amount and method, under the same number, with its own Edit.
+    await goTo(page, 'Money');
+    await page.getByRole('button', { name: 'Cash book', exact: true }).click();
+    const main = page.getByRole('main');
+    await expect(main.getByRole('button', { name: 'Edit payment CS-1' }).first()).toBeVisible();
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('tradeflow_ledger_v2') || '[]'));
+    const row = stored.find((l: { referenceId: string }) => l.referenceId === 'CS-1');
+    expect(row.credit).toBe(1500);
+    expect(row.method).toBe('Bank Transfer');
+    expect(row.edits).toHaveLength(1);
+  });
+});
+
 test.describe('Sales extras on a 390px phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   test('hub, receive from many and a bill with a free line fit the screen', async ({ page }) => {
@@ -213,7 +266,10 @@ test.describe('Sales extras on a 390px phone', () => {
     await noSideScroll(page, 'hub');
     await hub.getByRole('button', { name: /Receive from many/ }).click();
     const dlg = page.getByRole('dialog', { name: 'Receive from many' });
-    await dlg.getByLabel('Received from Old Khan Store').check();
+    await dlg.getByLabel('Line 1 customer').selectOption('c2');
+    await dlg.getByLabel('Line 1 amount').fill('500');
+    await dlg.getByLabel('Line 1 amount').press('Enter');
+    await expect(dlg.getByTestId('receive-many-row')).toHaveCount(2);
     await page.waitForTimeout(300);
     await noSideScroll(page, 'receive from many');
     await page.keyboard.press('Escape');

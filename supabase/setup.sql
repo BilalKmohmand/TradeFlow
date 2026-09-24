@@ -1760,4 +1760,8 @@ CREATE INDEX IF NOT EXISTS customers_city_idx ON customers (city);
 CREATE INDEX IF NOT EXISTS suppliers_city_idx ON suppliers (city);
 
 
+-- Payments: the note typed with a payment, and the edit history of a saved payment (Edit payment).
+ALTER TABLE ledger ADD COLUMN IF NOT EXISTS note TEXT;
+ALTER TABLE ledger ADD COLUMN IF NOT EXISTS edits JSONB;
+
 COMMIT;

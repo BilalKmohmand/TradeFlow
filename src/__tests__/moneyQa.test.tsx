@@ -139,7 +139,7 @@ describe('pickers take the code', () => {
     { id: 'c2', code: 'C002', name: 'Bismillah Traders', city: 'Mardan', totalDue: 0 },
   ]);
 
-  it('customer picker: type the code and press Enter; the list shows code, name, city and balance', () => {
+  it('customer picker: type the code and press Enter; the list shows name, city and balance', () => {
     const onPick = vi.fn();
     render(<PartyPick id="p" label="Customer" parties={parties} value="" onPick={onPick} placeholder="Select customer…" />);
     const code = screen.getByLabelText('Code');
@@ -152,7 +152,8 @@ describe('pickers take the code', () => {
     fireEvent.change(code, { target: { value: 'X9' } });
     fireEvent.keyDown(code, { key: 'Enter' });
     expect(screen.getByRole('alert').textContent).toBe('No code "X9"');
-    expect(screen.getByRole('option', { name: /C001 • Zaman Store \(Batkhela\) — owes Rs\. 500/ })).toBeTruthy();
+    // The name list leaves the code out (the Code box shows it).
+    expect(screen.getByRole('option', { name: /^Zaman Store \(Batkhela\) — owes Rs\. 500$/ })).toBeTruthy();
     expect((screen.getByLabelText('Customer') as HTMLSelectElement).tagName).toBe('SELECT');
   });
 

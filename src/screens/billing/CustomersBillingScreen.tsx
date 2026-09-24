@@ -18,6 +18,7 @@ import { CustomerSalesPanel } from '../../components/billing/SalesTeam';
 import { billNetTotal } from '../../utils/salesDocs';
 import { MapPin } from 'lucide-react';
 import { CityFilter, CitiesModal, PartyBalancesView } from '../../components/billing/PartyBalances';
+import { EditPaymentButton } from '../../components/billing/EditPaymentModal';
 import { filterParties } from '../../utils/vouchers';
 
 /** Customers the simple way: who they are, what they owe, and their bills. */
@@ -189,7 +190,7 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Money received</h3>
                 <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-sm">
                   {openPayments.slice(0, 12).map((l) => (
-                    <li key={l.id} className="flex justify-between gap-2 px-3 py-2"><span className="min-w-0 truncate">{formatDate(l.date)} • {l.type === 'payment_received' ? l.method || l.description.replace(/^Payment received:?\s*/, '') : l.description}</span>{l.debit > 0 ? <span className="tabular-nums font-bold text-rose-700 dark:text-rose-300 shrink-0">+ {rs(l.debit)}</span> : <span className="tabular-nums font-bold text-teal-700 dark:text-teal-300 shrink-0">{rs(l.credit)}</span>}</li>
+                    <li key={l.id} className="flex items-center justify-between gap-2 px-3 py-2"><span className="min-w-0 truncate flex-1">{formatDate(l.date)} • {l.type === 'payment_received' ? `${l.referenceId ? `${l.referenceId} • ` : ''}${l.method || l.description.replace(/^Payment received:?\s*/, '')}` : l.description}{(l.edits || []).length > 0 && <span className="ml-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">edited</span>}</span>{l.debit > 0 ? <span className="tabular-nums font-bold text-rose-700 dark:text-rose-300 shrink-0">+ {rs(l.debit)}</span> : <span className="tabular-nums font-bold text-teal-700 dark:text-teal-300 shrink-0">{rs(l.credit)}</span>}<EditPaymentButton row={l} /></li>
                   ))}
                 </ul>
               </div>
