@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { saveAndPrint } from './helpers/bill';
 import { signIn } from './helpers/login';
 import { goTo } from './helpers/nav';
 
@@ -68,7 +69,7 @@ test.describe('Simple billing', () => {
     await dialog.getByRole('button', { name: 'Full' }).click();
     await expect(dialog.getByText('Fully paid')).toBeVisible();
     await shot(page, 'billing-new-bill');
-    await dialog.getByRole('button', { name: 'Save & Print' }).click();
+    await saveAndPrint(dialog);
     await expect(page.locator('#print-root')).toContainText('INVOICE');
     await expect(page.locator('#print-root')).toContainText('Invoice #1');
     await expect(page.locator('#print-root')).toContainText('Zaman and Co BTK');
@@ -91,7 +92,7 @@ test.describe('Simple billing', () => {
     await dialog.getByLabel('Item 1', { exact: true }).selectOption('p3');
     await dialog.getByLabel('Quantity 1', { exact: true }).fill('2');
     await dialog.getByLabel('Price 1', { exact: true }).fill('6400');
-    await dialog.getByLabel('Discount (Rs.)', { exact: true }).fill('300');
+    await dialog.getByLabel('Lumsum Disc (Rs.)', { exact: true }).fill('300');
     await expect(dialog.getByText('Rs. 12,500 on credit')).toBeVisible();
     await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(dialog).toBeHidden();

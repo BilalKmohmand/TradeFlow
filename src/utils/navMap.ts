@@ -20,6 +20,7 @@ export type NavGroupId = 'coding' | 'invoice' | 'accounts' | 'reports' | 'system
 /** Dialogs / actions that are not a screen of their own. */
 export type NavAction =
   | 'newBill'
+  | 'newCashSale'
   | 'newQuote'
   | 'newPurchaseInvoice'
   | 'receive'
@@ -47,7 +48,7 @@ export type NavAction =
   | 'lock';
 
 export const NAV_ACTIONS: readonly NavAction[] = [
-  'newBill', 'newQuote', 'newPurchaseInvoice', 'receive', 'receiveMany', 'paySupplier', 'addExpense', 'transfer', 'interest',
+  'newBill', 'newCashSale', 'newQuote', 'newPurchaseInvoice', 'receive', 'receiveMany', 'paySupplier', 'addExpense', 'transfer', 'interest',
   'newItem', 'receiveStock', 'adjustStock', 'purchaseReturn', 'newOrder', 'reorder', 'labels', 'agingCustomers', 'agingSuppliers',
   'salesHub', 'salesTeam', 'schemes', 'salesReport', 'recovery', 'commission', 'tradingSuite', 'lock',
 ];
@@ -157,11 +158,22 @@ const CODING: { label: string; entries: Raw[] }[] = [
 // ---------------------------------------------------------------------------------------------------------
 const INVOICE: { label: string; entries: Raw[] }[] = [
   {
+    // Apna Accountant SB's Invoice menu, in its order: Purchase Invoice ›, Sale Invoice ›, Store Transfer.
+    label: 'Invoice',
+    entries: [
+      { id: 'new-purchase-invoice', sub: 'Purchase Invoice', label: 'Purchase Invoice', aka: ['New purchase invoice'], hint: "Enter a supplier's bill: stock in, supplier owed", keywords: ['khareed', 'kharid', 'purchase', 'supplier bill', 'maal aya'], anyPerm: STOCK_IN, target: act('newPurchaseInvoice') },
+      { id: 'purchase-return', sub: 'Purchase Invoice', label: 'Purchase Return', aka: ['Debit note', 'Return goods'], hint: 'Send stock back to a supplier', keywords: ['wapsi', 'wapas', 'return', 'debit note'], anyPerm: STOCK_IN, target: act('purchaseReturn') },
+      { id: 'purchases', sub: 'Purchase Invoice', label: 'Purchase Invoices list', hint: 'Every purchase invoice; search by P-number or bill no.', keywords: ['khareed', 'purchase', 'register'], anyPerm: [...STOCK_IN, 'suppliers:view'], target: scr('purchases') },
+      { id: 'new-bill', sub: 'Sale Invoice', label: 'Sale Invoice', aka: ['New bill'], key: 'F2', hint: 'Make a bill for a customer', keywords: ['bill', 'parchi', 'invoice', 'bikri', 'farokht', 'sale', 'becha'], target: act('newBill') },
+      { id: 'cash-sale', sub: 'Sale Invoice', label: 'Cash Sale Invoice', aka: ['Counter sale', 'Walk-in sale'], hint: 'A walk-in sale paid in cash; customer optional', keywords: ['cash sale', 'naqad', 'counter', 'walk in', 'bikri', 'parchi'], target: act('newCashSale') },
+      { id: 'sale-returns', sub: 'Sale Invoice', label: 'Sale Return', aka: ['Sale returns (credit notes)', 'Credit note'], hint: 'Goods customers returned. To make one: open the bill → Return items', keywords: ['wapsi', 'wapas', 'return', 'credit note'], target: scr('bills', 'returns') },
+      { id: 'bills', sub: 'Sale Invoice', label: 'Sale Invoices list', aka: ['Bills list'], hint: 'Every bill, paid and unpaid; search by number or memo', keywords: ['parchi', 'bill', 'invoices', 'sale register', 'bikri'], target: scr('bills', 'bills') },
+      { id: 'move-stock', label: 'Store Transfer', aka: ['Move stock', 'Stock transfer'], hint: 'Move stock from one godown to another', keywords: ['godam', 'transfer', 'shift', 'maal', 'store'], anyPerm: STOCK_IN, target: scr('products', 'move') },
+    ],
+  },
+  {
     label: 'Sale',
     entries: [
-      { id: 'new-bill', label: 'Sale invoice (new bill)', aka: ['Sale Invoice', 'New bill'], key: 'F2', hint: 'Make a bill for a customer', keywords: ['bill', 'parchi', 'invoice', 'bikri', 'farokht', 'sale', 'becha'], target: act('newBill') },
-      { id: 'bills', label: 'Bills list', hint: 'Every bill, paid and unpaid; search by number or memo', keywords: ['parchi', 'bill', 'invoices', 'sale register', 'bikri'], target: scr('bills', 'bills') },
-      { id: 'sale-returns', label: 'Sale returns (credit notes)', aka: ['Sale Return', 'Credit note'], hint: 'Goods customers returned. To make one: open the bill → Return items', keywords: ['wapsi', 'wapas', 'return', 'credit note'], target: scr('bills', 'returns') },
       { id: 'quotations', label: 'Quotations', hint: 'Price quotes; convert one to a bill', keywords: ['quote', 'estimate', 'rate dena'], target: scr('bills', 'quotes') },
       { id: 'new-quote', label: 'New quotation', hint: 'Write a price quote for a customer', keywords: ['quote', 'estimate'], target: act('newQuote') },
       { id: 'delivery-orders', label: 'Delivery orders (pending)', aka: ['Pending deliveries'], hint: 'Bills whose goods have not gone out yet; mark delivered, print challan', keywords: ['delivery', 'challan', 'maal bhejna', 'gari', 'dispatch'], target: rep('pending-delivery'), primary: false },
@@ -170,9 +182,6 @@ const INVOICE: { label: string; entries: Raw[] }[] = [
   {
     label: 'Purchase',
     entries: [
-      { id: 'new-purchase-invoice', label: 'Purchase invoice', aka: ['Purchase Invoice'], hint: "Enter a supplier's bill: stock in, supplier owed", keywords: ['khareed', 'kharid', 'purchase', 'supplier bill', 'maal aya'], anyPerm: STOCK_IN, target: act('newPurchaseInvoice') },
-      { id: 'purchases', label: 'Purchase invoices list', hint: 'Every purchase invoice; search by P-number or bill no.', keywords: ['khareed', 'purchase', 'register'], anyPerm: [...STOCK_IN, 'suppliers:view'], target: scr('purchases') },
-      { id: 'purchase-return', label: 'Purchase return (debit note)', aka: ['Purchase Return', 'Debit note', 'Return goods'], hint: 'Send stock back to a supplier', keywords: ['wapsi', 'wapas', 'return', 'debit note'], anyPerm: STOCK_IN, target: act('purchaseReturn') },
       { id: 'supplier-returns', label: 'Purchase returns list', hint: 'Debit notes: goods sent back to suppliers', keywords: ['wapsi', 'debit note', 'return'], target: scr('suppliers', 'returns') },
       { id: 'purchase-orders', label: 'Purchase orders', hint: 'Orders placed with suppliers; receive against them', keywords: ['po', 'order', 'mangwana'], target: scr('suppliers', 'orders') },
       { id: 'new-purchase-order', label: 'New purchase order', hint: 'Order goods from a supplier', keywords: ['po', 'order'], target: act('newOrder') },
@@ -186,7 +195,6 @@ const INVOICE: { label: string; entries: Raw[] }[] = [
     entries: [
       { id: 'receive-stock', label: 'Receive stock', key: 'F6', hint: 'Stock you bought or brought in', keywords: ['maal aya', 'stock in', 'grn', 'maal'], anyPerm: STOCK_IN, target: act('receiveStock') },
       { id: 'adjust-stock', label: 'Adjust stock', hint: 'Leaked, damaged, expired, count correction, received free', keywords: ['leak', 'kharab', 'damage', 'expire', 'ginti', 'count', 'maal'], perm: ['stock:adjust'], target: act('adjustStock') },
-      { id: 'move-stock', label: 'Move stock', aka: ['Stock transfer'], hint: 'Move stock from one godown to another', keywords: ['godam', 'transfer', 'shift', 'maal'], anyPerm: STOCK_IN, target: scr('products', 'move') },
       { id: 'reorder', label: 'Re-order list', hint: 'Items to buy again, turned into purchase orders', keywords: ['kam maal', 'order', 'khatam', 'low'], target: act('reorder') },
     ],
   },
@@ -357,6 +365,7 @@ const EXPENSES: Permission[] = ['manage_expenses', 'finance:manage_expenses'];
  */
 export const ACTION_ACCESS: Record<NavAction, { perm?: Permission[]; anyPerm?: Permission[] }> = {
   newBill: { perm: WRITE },
+  newCashSale: { perm: WRITE },
   newQuote: { perm: WRITE },
   newPurchaseInvoice: { perm: WRITE, anyPerm: STOCK_IN },
   receive: { perm: ['finance:record_payment'] },
@@ -769,7 +778,7 @@ const VIEW_DIALOG: Record<string, string> = {
   'products:move': 'Move stock',
 };
 const ACTION_DIALOG: Record<NavAction, string | null> = {
-  newBill: 'New Bill', newQuote: 'New Quotation', newPurchaseInvoice: 'Purchase Invoice', receive: 'Receive payment', receiveMany: 'Receive from many',
+  newBill: 'New Bill', newCashSale: 'Cash Sale Invoice', newQuote: 'New Quotation', newPurchaseInvoice: 'Purchase Invoice', receive: 'Receive payment', receiveMany: 'Receive from many',
   paySupplier: 'Pay supplier', addExpense: 'Add expense', transfer: 'Cash ↔ Bank', interest: 'Charge interest', newItem: 'New item', receiveStock: 'Receive stock',
   adjustStock: 'Adjust stock', purchaseReturn: 'Return goods to supplier', newOrder: 'New purchase order', reorder: 'Re-order report', labels: 'Print barcode labels',
   agingCustomers: 'Who owes for how long', agingSuppliers: 'Who owes for how long', salesHub: 'Sales & recovery', salesTeam: 'Salesmen & areas', schemes: 'Schemes',

@@ -66,6 +66,10 @@ export interface DeliveredInput {
 export interface ClassicApi {
   purchaseInvoices: PurchaseInvoice[];
   createPurchaseInvoice: (input: PurchaseInvoiceInput) => Result<{ invoice: PurchaseInvoice }>;
+  /** Change a saved purchase invoice (Search → edit): the old one is reversed and the new one posted under the same number. */
+  editPurchaseInvoice: (id: string, input: PurchaseInvoiceInput) => Result<{ invoice: PurchaseInvoice }>;
+  /** Why a saved purchase invoice cannot be changed or deleted now (null = it can). */
+  purchaseInvoiceEditBlock: (id: string) => string | null;
   deletePurchaseInvoice: (id: string) => Result;
   /** The number the next purchase invoice will get (nothing is used up). */
   previewPurchaseInvoiceNumber: (date?: string) => string;
@@ -121,7 +125,31 @@ export const useClassicStore = (d: Deps) => {
 
   const numbers = () => purchaseInvoices.map((p) => p.invoiceNumber);
 
-  const createPurchaseInvoice: ClassicApi['createPurchaseInvoice'] = (input) => {
+  /** Why a saved invoice cannot be reversed right now (null = it can). */
+  const reverseBlock = (inv: PurchaseInvoice): string | null => {
+    const locked = booksLockedFor(d.settings, inv.date);
+    if (locked) return locked;
+    const receiptIds = inv.lines.map((l) => l.purchaseId).filter((x): x is string => Boolean(x));
+    if (receiptIds.some((pid) => d.isBilledReceipt(pid))) return 'A supplier bill is recorded against these goods. Delete that bill first (Suppliers → Supplier bills).';
+    return null;
+  };
+  /** Undo a saved invoice: its receipts (stock + supplier), the payment and rounding rows. */
+  const reverse = (inv: PurchaseInvoice) => {
+    const receiptIds = inv.lines.map((l) => l.purchaseId).filter((x): x is string => Boolean(x));
+    receiptIds.forEach((pid) => { if (d.purchases.some((p) => p.id === pid)) d.deletePurchase(pid); });
+    const extraRows = [inv.paymentLedgerId, inv.roundingLedgerId].filter((x): x is string => Boolean(x));
+    // Put back what the extra rows moved: the payment lowered the balance, the rounding raised (or lowered) it.
+    const back = round2(d.ledger.filter((l) => extraRows.includes(l.id)).reduce((a, l) => a - (Number(l.debit) || 0) + (Number(l.credit) || 0), 0));
+    if (Math.abs(back) >= 0.005) d.setSuppliers((sp) => sp.map((s) => (s.id === inv.supplierId ? { ...s, totalOwed: round2((s.totalOwed || 0) + back) } : s)));
+    d.setLedger((prev) => prev.filter((l) => !extraRows.includes(l.id)));
+    if (extraRows.length) d.removeRemote('ledger', extraRows);
+    setPurchaseInvoices((prev) => prev.filter((p) => p.id !== inv.id));
+    d.removeRemote('purchase_invoices', [inv.id]);
+  };
+
+  const createPurchaseInvoice: ClassicApi['createPurchaseInvoice'] = (input) => post(input);
+
+  const post = (input: PurchaseInvoiceInput, replace?: PurchaseInvoice): Result<{ invoice: PurchaseInvoice }> => {
     if (!(d.can('products:create') || d.can('stock:adjust'))) return fail("You don't have permission to enter purchase invoices. Ask a manager or admin.");
     const supplier = d.suppliers.find((s) => s.id === input.supplierId);
     if (!supplier) return fail('Pick the supplier.');
@@ -142,7 +170,7 @@ export const useClassicStore = (d: Deps) => {
       if (l.expiryDate && l.expiryDate < date) return say(`the expiry date of ${p.name} is before the invoice date.`);
     }
     const memoNo = (input.memoNo || '').trim();
-    if (memoNo && purchaseInvoices.some((p) => p.supplierId === supplier.id && (p.memoNo || '').trim().toLowerCase() === memoNo.toLowerCase())) {
+    if (memoNo && purchaseInvoices.some((p) => p.id !== replace?.id && p.supplierId === supplier.id && (p.memoNo || '').trim().toLowerCase() === memoNo.toLowerCase())) {
       return fail(`Bill no. ${memoNo} of ${supplier.company || supplier.name} is already entered.`);
     }
     const totals = purchaseInvoiceTotals(lines, { discountPct: input.discountPct, discountAmount: input.discountAmount, otherCharges: input.otherCharges });
@@ -151,12 +179,18 @@ export const useClassicStore = (d: Deps) => {
     if (paid > totals.total + 0.005) return fail(`Paid now (${formatCurrency(paid)}) is more than the invoice total (${formatCurrency(totals.total)}).`);
     const method = input.paidMethod && PURCHASE_PAY_METHODS.includes(input.paidMethod) ? input.paidMethod : 'Cash';
 
-    const invoiceNumber = d.docNumber(date, numbers());
+    if (replace) {
+      const block = reverseBlock(replace);
+      if (block) return fail(block);
+      reverse(replace);
+    }
+    const invoiceNumber = replace ? replace.invoiceNumber : d.docNumber(date, numbers());
     const id = d.uid('pinv');
     const { rates, rounding } = landedPosting(lines, totals);
     const supName = supplier.company || supplier.name;
     const note = `Purchase invoice ${invoiceNumber}${memoNo ? ` (bill ${memoNo})` : ''}`;
-    let owed = supplier.totalOwed || 0;
+    // Editing: the old invoice's part of what the supplier is owed is already taken back off.
+    let owed = round2((supplier.totalOwed || 0) - (replace && replace.supplierId === supplier.id ? replace.totalAmount - replace.paidAmount : 0));
     const outLines: PurchaseInvoiceLine[] = [];
     const receipts: string[] = [];
     for (const [i, l] of lines.entries()) {
@@ -226,32 +260,41 @@ export const useClassicStore = (d: Deps) => {
       paymentLedgerId,
       roundingLedgerId,
       ...(input.remarks?.trim() ? { remarks: input.remarks.trim() } : {}),
-      createdAt: new Date().toISOString(),
-      createdBy: d.userName,
+      createdAt: replace ? replace.createdAt : new Date().toISOString(),
+      createdBy: replace ? replace.createdBy : d.userName,
+      ...(replace ? { updatedAt: new Date().toISOString(), updatedBy: d.userName } : {}),
       ...d.branchStamp(),
     };
     setPurchaseInvoices((prev) => [invoice, ...prev]);
+    if (replace) {
+      d.logAuditEvent('Purchase Invoice Edited', `${invoiceNumber} from ${supName}: ${formatCurrency(replace.totalAmount)} → ${formatCurrency(totals.total)}.`, 'warning', 'billing');
+      return { success: true, message: `Purchase invoice ${invoiceNumber} updated.`, invoice };
+    }
     d.logAuditEvent('Purchase Invoice Saved', `${invoiceNumber}${memoNo ? ` (bill ${memoNo})` : ''} from ${supName}: ${formatCurrency(totals.total)}${paid > 0 ? `, ${formatCurrency(paid)} paid by ${method}` : ''}.`, 'info', 'billing');
     return { success: true, message: `Purchase invoice ${invoiceNumber} saved.`, invoice };
+  };
+
+  const purchaseInvoiceEditBlock: ClassicApi['purchaseInvoiceEditBlock'] = (id) => {
+    const inv = purchaseInvoices.find((p) => p.id === id);
+    if (!inv) return 'Purchase invoice not found.';
+    if (!d.can('delete_records')) return "You don't have permission to change saved purchase invoices. Ask a manager or admin.";
+    return reverseBlock(inv);
+  };
+
+  const editPurchaseInvoice: ClassicApi['editPurchaseInvoice'] = (id, input) => {
+    if (!d.can('delete_records')) return fail("You don't have permission to change saved purchase invoices. Ask a manager or admin.");
+    const inv = purchaseInvoices.find((p) => p.id === id);
+    if (!inv) return fail('Purchase invoice not found.');
+    return post(input, inv);
   };
 
   const deletePurchaseInvoice: ClassicApi['deletePurchaseInvoice'] = (id) => {
     if (!d.can('delete_records')) return fail("You don't have permission to delete purchase invoices. Ask a manager or admin.");
     const inv = purchaseInvoices.find((p) => p.id === id);
     if (!inv) return fail('Purchase invoice not found.');
-    const locked = booksLockedFor(d.settings, inv.date);
-    if (locked) return fail(locked);
-    const receiptIds = inv.lines.map((l) => l.purchaseId).filter((x): x is string => Boolean(x));
-    if (receiptIds.some((pid) => d.isBilledReceipt(pid))) return fail('A supplier bill is recorded against these goods. Delete that bill first (Suppliers → Supplier bills).');
-    receiptIds.forEach((pid) => { if (d.purchases.some((p) => p.id === pid)) d.deletePurchase(pid); });
-    const extraRows = [inv.paymentLedgerId, inv.roundingLedgerId].filter((x): x is string => Boolean(x));
-    // Put back what the extra rows moved: the payment lowered the balance, the rounding raised (or lowered) it.
-    const back = round2(d.ledger.filter((l) => extraRows.includes(l.id)).reduce((a, l) => a - (Number(l.debit) || 0) + (Number(l.credit) || 0), 0));
-    if (Math.abs(back) >= 0.005) d.setSuppliers((sp) => sp.map((s) => (s.id === inv.supplierId ? { ...s, totalOwed: round2((s.totalOwed || 0) + back) } : s)));
-    d.setLedger((prev) => prev.filter((l) => !extraRows.includes(l.id)));
-    if (extraRows.length) d.removeRemote('ledger', extraRows);
-    setPurchaseInvoices((prev) => prev.filter((p) => p.id !== id));
-    d.removeRemote('purchase_invoices', [id]);
+    const block = reverseBlock(inv);
+    if (block) return fail(block);
+    reverse(inv);
     d.logAuditEvent('Purchase Invoice Deleted', `${inv.invoiceNumber} from ${inv.supplierName} (${formatCurrency(inv.totalAmount)}): stock, supplier balance and payment reversed.`, 'danger', 'billing');
     return { success: true, message: `Purchase invoice ${inv.invoiceNumber} deleted.` };
   };
@@ -309,6 +352,8 @@ export const useClassicStore = (d: Deps) => {
   const api: ClassicApi = {
     purchaseInvoices,
     createPurchaseInvoice,
+    editPurchaseInvoice,
+    purchaseInvoiceEditBlock,
     deletePurchaseInvoice,
     previewPurchaseInvoiceNumber: (date) => d.previewNumber(date || d.today(), numbers()),
     markBillDelivered,

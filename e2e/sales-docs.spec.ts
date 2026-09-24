@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { saveAndPrint } from './helpers/bill';
 import { signIn } from './helpers/login';
 import { goTo } from './helpers/nav';
 
@@ -75,14 +76,13 @@ test.describe('Sales documents (billing mode)', () => {
     await bill.getByLabel('Item 2', { exact: true }).selectOption('p3');
     await expect(bill.getByLabel('Price 2', { exact: true })).toHaveValue('6535');
     await bill.getByLabel('Quantity 2', { exact: true }).fill('2');
-    await bill.getByRole('button', { name: 'Add discount to item 2' }).click();
     await bill.getByLabel('Discount 2', { exact: true }).fill('10');
     await bill.getByRole('group', { name: 'Discount type 2' }).getByRole('button', { name: '%' }).click();
     // 10 × 2,000 + (2 × 6,535 − 10%) = 20,000 + 11,763 = 31,763
     await expect(bill.getByText('Rs. 31,763').first()).toBeVisible();
     await bill.getByRole('button', { name: 'Full' }).click();
     await shot(page, 'sales-new-bill-discount');
-    await bill.getByRole('button', { name: 'Save & Print' }).click();
+    await saveAndPrint(bill);
     const print = page.locator('#print-root');
     await expect(print).toContainText('INVOICE');
     await expect(print).toContainText('Item discounts');
@@ -150,6 +150,7 @@ test.describe('Sales documents (billing mode)', () => {
     await page.getByRole('button', { name: 'Make bill from QT-1' }).click();
     const fromQuote = page.getByRole('dialog', { name: 'New Bill' });
     await expect(fromQuote.getByLabel('Customer', { exact: true })).toHaveValue('c2');
+    await fromQuote.getByTestId('bill-line').first().click(); // the quoted line, back in the entry row
     await expect(fromQuote.getByLabel('Quantity 1', { exact: true })).toHaveValue('5');
     await expect(fromQuote.getByLabel('Price 1', { exact: true })).toHaveValue('6400');
     await fromQuote.getByRole('button', { name: 'Save', exact: true }).click();
@@ -174,7 +175,6 @@ test.describe('Sales documents on a phone', () => {
     await bill.getByLabel('Customer', { exact: true }).selectOption('c1');
     await bill.getByLabel('Item 1', { exact: true }).selectOption('p1');
     await bill.getByLabel('Quantity 1', { exact: true }).fill('4');
-    await bill.getByRole('button', { name: 'Add discount to item 1' }).click();
     await bill.getByLabel('Discount 1', { exact: true }).fill('100');
     await noOverflow(page, 'new bill with line discount');
     await bill.getByRole('button', { name: 'Save', exact: true }).click();

@@ -105,7 +105,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { cloudAdminSetLogin, cloudSessionEmail } from '../lib/cloudAuth';
 import { useInventoryStore, InventoryApi, INVENTORY_STORAGE_KEYS } from './inventoryStore';
 import { createStockActions, StockActionsApi } from './stockActions';
-import { Account, JournalEntry, mergeAccounts, validateEntry, validateAccount, booksLockedFor } from '../utils/accounting';
+import { ACC, Account, JournalEntry, mergeAccounts, validateEntry, validateAccount, booksLockedFor } from '../utils/accounting';
 import {
   initialCustomers,
   initialSuppliers,
@@ -433,7 +433,7 @@ export type PrintRequestLike =
   | { type: 'booking'; bookingId: string }
   | { type: 'statement'; customerId: string; from: string; to: string }
   | { type: 'supplier_statement'; supplierId: string; from: string; to: string }
-  | { type: 'bill'; invoiceId: string }
+  | { type: 'bill'; invoiceId: string; paper?: 'a4' | 'a5' | 'thermal80' }
   | { type: 'bill_challan'; invoiceId: string; driver?: string; vehicle?: string }
   | { type: 'daily_sheet'; date: string }
   | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number; bankCode?: string }
@@ -487,6 +487,8 @@ export interface CreateBillItemInput {
   free?: boolean;
   schemeId?: string;
   schemeName?: string;
+  /** Description typed on the line (Sale Invoice), printed under the item. */
+  description?: string;
 }
 
 /** One part of "Paid now" on a bill (e.g. Rs. 5,000 cash + Rs. 20,000 bank transfer). */
@@ -495,6 +497,8 @@ export interface BillPaymentPart {
   amount: number;
   /** Bank account (chart code) for a bank / wallet part; empty = the main bank. */
   bankCode?: string;
+  /** Narration typed on the payment line (Sale Invoice → Payment Method grid). */
+  note?: string;
 }
 
 /** A customer's cheque taken with the bill: goes into the cheque register (in hand), not the bank. */
@@ -562,6 +566,11 @@ export interface CreateBillInput {
   memoNo?: string;
   /** Delivery order: the goods go out later (stock is still taken now); the bill waits in the Pending Delivery List. */
   deliveryOrder?: boolean;
+  /** "Sale a/c": income account the goods are credited to (default Sales 4000). */
+  saleAccountCode?: string;
+  /** Cash Sale Invoice: the walk-in buyer's name, and that the bill came from the cash-sale screen. */
+  walkInName?: string;
+  cashSale?: boolean;
 }
 
 /** Payment methods offered on bills. Anything starting with "Cash" counts as cash in hand. */
@@ -2848,6 +2857,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }
     if (!customer) return { success: false, message: 'Pick a customer first.' };
+    // "Sale a/c": any income account of the chart (not the discount / return contra accounts); default Sales 4000.
+    const saleAccountCode = (input.saleAccountCode || '').trim();
+    if (saleAccountCode && saleAccountCode !== ACC.SALES) {
+      const acc = mergeAccounts(customAccounts).find((a) => a.code === saleAccountCode);
+      if (!acc || acc.type !== 'income' || saleAccountCode === ACC.SALES_DISCOUNTS || saleAccountCode === ACC.SALES_RETURNS) return { success: false, message: `Sale a/c ${saleAccountCode} is not an income account. Pick the sales account (or another income account).` };
+    }
     const date = input.date || todayISO();
     if (date > todayISO()) return { success: false, message: 'The bill date cannot be in the future.' };
     const closedBill = booksLockedFor(settings, date);
@@ -2918,6 +2933,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         qty: it.qty,
         unitPrice: round2(it.unitPrice),
         unit: it.unit || product?.unit || 'pcs',
+        ...(it.description?.trim() ? { description: it.description.trim() } : {}),
         ...(lineDisc[idx] > 0 ? { discountType: it.discountType === 'pct' ? 'pct' as const : 'rs' as const, discountValue: round2(Number(it.discountValue) || 0), discountAmount: lineDisc[idx] } : {}),
         ...(it.customerRate ? { customerRate: true } : {}),
         // Pack unit at the time of sale, so the bill can print "2 cartons + 3 tins".
@@ -2973,6 +2989,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ...(input.memoNo?.trim() ? { memoNo: input.memoNo.trim() } : {}),
       enteredAt: new Date().toISOString(),
       ...(input.deliveryOrder ? { delivery: { status: 'pending' as const } } : {}),
+      ...(saleAccountCode && saleAccountCode !== ACC.SALES ? { saleAccountCode } : {}),
+      ...(input.walkInName?.trim() ? { walkInName: input.walkInName.trim() } : {}),
+      ...(input.cashSale ? { cashSale: true } : {}),
     };
     if (ed) {
       // Same bill, same number: keep who made it, when, its payments, delivery and approval; record the old version.
@@ -2980,7 +2999,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const summary = billEditSummary(ed, invoice);
       Object.assign(invoice, {
         id: ed.id, createdAt: ed.createdAt, createdBy: ed.createdBy, payments: ed.payments, issuedAt: ed.issuedAt, enteredAt: ed.enteredAt,
-        deviceId: ed.deviceId, branchId: ed.branchId, quotationId: ed.quotationId, approval: ed.approval, delivery: ed.delivery ?? invoice.delivery,
+        deviceId: ed.deviceId, branchId: ed.branchId, quotationId: ed.quotationId, approval: ed.approval, delivery: input.deliveryOrder === false ? undefined : ed.delivery ?? invoice.delivery, cashSale: ed.cashSale,
         creditOverride: creditOverride ?? ed.creditOverride, updatedAt: todayISO(),
         editHistory: [...(oldHistory || []), { editedAt: new Date().toISOString(), editedBy: currentUser?.name, summary, before: JSON.parse(JSON.stringify(before)) }],
       });
@@ -3069,7 +3088,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         method: p.method,
         ...((p as BillPaymentPart).bankCode && (p as BillPaymentPart).bankCode !== '1010' ? { bankCode: (p as BillPaymentPart).bankCode } : {}),
         date,
-        description: `Payment received: ${p.method} - Bill ${invoiceNumber}`,
+        ...((p as BillPaymentPart).note?.trim() ? { note: (p as BillPaymentPart).note!.trim() } : {}),
+        description: `Payment received: ${p.method} - Bill ${invoiceNumber}${(p as BillPaymentPart).note?.trim() ? ` (${(p as BillPaymentPart).note!.trim()})` : ''}`,
         debit: 0,
         credit: p.amount,
         balanceAfter: running,

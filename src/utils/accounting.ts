@@ -13,7 +13,7 @@
  *  - Vouchers (CPV / CRV / BPV / BRV / JV, see utils/vouchers.ts) are stored as manual journal entries with
  *    their lines; the ledger rows, cash entries and expenses a voucher creates (marked `voucherId`) keep the
  *    party balances, cash book and expense sheets in step and are NOT posted again here.
- *  - Bill (bill_issued ledger row)     Dr Receivable 1100 (total)          Cr Sales 4000 (subtotal)
+ *  - Bill (bill_issued ledger row)     Dr Receivable 1100 (total)          Cr Sales 4000 (subtotal; or the bill's Sale a/c)
  *                                      Dr Sales discounts 4010 (discount)  Cr Sales tax payable 2100 (tax)
  *                                      Cr Freight income 4100 (freight/handling charges, if any)
  *                                      Dr COGS 5000 / Cr Inventory 1200 at the item cost captured on the bill
@@ -589,7 +589,8 @@ export const buildJournal = (src: JournalSources): JournalEntry[] => {
             const charges = (Number(inv.freightCharges) || 0) + (Number(inv.handlingCharges) || 0);
             b.dr(ACC.SALES_DISCOUNTS, discount).cr(ACC.SALES_TAX, tax).cr(ACC.FREIGHT_INCOME, charges);
             // Sales takes whatever is left so the entry always balances with the ledger amount.
-            b.cr(ACC.SALES, debit + discount - tax - charges);
+            // The bill's "Sale a/c" (another income account) takes it instead when one was picked.
+            b.cr(inv.saleAccountCode || ACC.SALES, debit + discount - tax - charges);
             // Cost captured on the bill line (batch cost when batches were used); older bills fall back to the purchase cost then.
             // Free goods under a scheme leave stock at cost too, but as a scheme expense, not cost of sales.
             const costOf = (free: boolean) => inv.items.reduce((a, it) => {

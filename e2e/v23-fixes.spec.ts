@@ -99,6 +99,7 @@ test('reminders, depreciation, cartons on quotations and returns, undo collectio
   // --- Make the bill from it (still in cartons), then return one carton.
   await page.getByRole('button', { name: /Make bill from QT-/ }).click();
   const bill = page.getByRole('dialog', { name: 'New Bill' });
+  await bill.getByTestId('bill-line').first().click(); // the quoted line, back in the entry row
   await expect(bill.getByLabel('Quantity 1', { exact: true })).toHaveValue('2');
   await expect(bill.getByLabel('Price 1', { exact: true })).toHaveValue('6000');
   await bill.getByRole('button', { name: 'Save', exact: true }).click();

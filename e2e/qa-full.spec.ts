@@ -1,4 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
+import { addPayment, saveAndPrint } from './helpers/bill';
 import { readFileSync } from 'fs';
 import { login, signIn, OPERATOR, OWNER } from './helpers/login';
 import { goTo } from './helpers/nav';
@@ -504,7 +505,7 @@ test.describe('QA — selling', () => {
     await expect(bill.getByLabel('Salesman', { exact: true })).not.toHaveValue('');
     await expect(bill.getByLabel('Area', { exact: true })).not.toHaveValue('');
     await bill.getByLabel('Item 1', { exact: true }).selectOption('p1');
-    await bill.getByRole('group', { name: 'Unit for item 1' }).getByRole('button', { name: 'carton (6)' }).click();
+    await bill.getByLabel('Unit 1', { exact: true }).selectOption({ label: 'carton (6)' });
     await expect(bill.getByLabel('Price 1', { exact: true })).toHaveValue('6000');
     await bill.getByLabel('Quantity 1', { exact: true }).fill('2');
     await expect(bill.getByTestId('bill-free-lines')).toContainText('Dalda 16 L Tin'); // 12 tins → 1 free
@@ -513,22 +514,21 @@ test.describe('QA — selling', () => {
     await expect(bill.getByLabel('Price 2', { exact: true })).toHaveValue('1900');
     await expect(bill.getByTestId('customer-rate-2')).toBeVisible();
     await bill.getByLabel('Quantity 2', { exact: true }).fill('5');
-    await bill.getByRole('button', { name: 'Add discount to item 2' }).click();
     await bill.getByLabel('Discount 2', { exact: true }).fill('10');
     await bill.getByRole('group', { name: 'Discount type 2' }).getByRole('button', { name: '%' }).click();
-    await bill.getByLabel('Discount (Rs.)', { exact: true }).fill('100');
-    await bill.getByLabel('Freight / loading (Rs.)').fill('500');
+    await bill.getByLabel('Lumsum Disc (Rs.)', { exact: true }).fill('100');
+    await bill.getByLabel('Others Charges').fill('500');
     await bill.getByLabel('Cost centre (optional)').selectOption({ label: 'Main shop' });
     // 12,000 + (9,500 − 10%) − 100 + 500 = 20,950
     await expect(bill.getByText('Rs. 20,950').first()).toBeVisible();
-    await bill.getByRole('button', { name: /Split: cash \+ bank \+ cheque/ }).click();
-    await bill.getByLabel('Cash', { exact: true }).fill('5000');
-    await bill.getByLabel('Bank / wallet', { exact: true }).fill('3000');
-    await bill.getByLabel('Cheque', { exact: true }).fill('12950');
+    // Payment Method grid: cash, the bank, and a customer's cheque (Cheques in hand).
+    await addPayment(bill, '1000', '5000');
+    await addPayment(bill, '1010', '3000');
+    await addPayment(bill, '1150', '12950', { keep: true });
     await bill.getByLabel('Cheque no.', { exact: true }).fill('445566');
     await bill.getByLabel('Bank', { exact: true }).fill('HBL');
     await expect(bill).toContainText('Fully paid');
-    await bill.getByRole('button', { name: 'Save & Print' }).click();
+    await saveAndPrint(bill);
     await expect(bill).toBeHidden();
     await expect(printRoot(page)).toContainText('INVOICE');
     await expect(printRoot(page)).toHaveAttribute('data-paper', 'a4');
@@ -630,6 +630,7 @@ test.describe('QA — selling', () => {
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Make bill from QT-1' }).click();
     const fromQuote = dialog(page, 'New Bill');
+    await fromQuote.getByTestId('bill-line').first().click(); // the quoted line, back in the entry row
     await expect(fromQuote.getByLabel('Price 1', { exact: true })).toHaveValue('1950');
     await fromQuote.getByRole('button', { name: 'Full' }).click();
     await fromQuote.getByRole('button', { name: 'Save', exact: true }).click();
@@ -649,7 +650,7 @@ test.describe('QA — selling', () => {
     await bill.getByLabel('Customer', { exact: true }).selectOption('c1');
     await bill.getByLabel('Item 1', { exact: true }).selectOption('p2');
     await bill.getByLabel('Quantity 1', { exact: true }).fill('2');
-    await bill.getByLabel('Discount (Rs.)', { exact: true }).fill('400'); // 400 of 3,800 = 10.5%
+    await bill.getByLabel('Lumsum Disc (Rs.)', { exact: true }).fill('400'); // 400 of 3,800 = 10.5%
     await expect(bill.getByTestId('bill-needs-approval')).toContainText('over the 5% limit');
     await bill.getByLabel('Paid now', { exact: true }).fill('3400');
     await bill.getByRole('button', { name: 'Save', exact: true }).click();
@@ -1237,7 +1238,6 @@ test.describe('QA — phone', () => {
     await bill.getByLabel('Customer', { exact: true }).selectOption('c2');
     await bill.getByLabel('Item 1', { exact: true }).selectOption('p2');
     await bill.getByLabel('Quantity 1', { exact: true }).fill('30');
-    await bill.getByRole('button', { name: 'Add discount to item 1' }).click();
     await bill.getByLabel('Discount 1', { exact: true }).fill('1000');
     await bill.getByRole('button', { name: 'Add another item' }).click();
     await bill.getByLabel('Item 2', { exact: true }).selectOption('p1');

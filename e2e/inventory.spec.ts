@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { saveAndPrint } from './helpers/bill';
 import { signIn } from './helpers/login';
 import { goTo } from './helpers/nav';
 
@@ -97,9 +98,9 @@ async function batchesGodownsAndBills(page: Page) {
   await bill.getByLabel('Item 1', { exact: true }).selectOption('p1');
   await bill.getByLabel('Quantity 1', { exact: true }).fill('40');
   await expect(bill.getByTestId('stock-note-1')).toContainText(`Batch EARLY-3 · Exp ${dmy(early)} × 30`);
-  await expect(bill.getByLabel('From godown')).toHaveCount(0); // one godown: no godown picker
+  await expect(bill.getByLabel('Store Name')).toBeDisabled(); // one godown: nothing to pick
   await noOverflow(page, 'new bill with batches');
-  await bill.getByRole('button', { name: 'Save & Print' }).click();
+  await saveAndPrint(bill);
   const printed = page.locator('#print-root');
   await expect(printed).toContainText('INVOICE');
   await expect(printed).toContainText(`Batch EARLY-3 · Exp ${dmy(early)} × 30`);
@@ -139,7 +140,7 @@ async function batchesGodownsAndBills(page: Page) {
   await page.getByRole('button', { name: 'New Bill' }).first().click();
   bill = page.getByRole('dialog', { name: 'New Bill' });
   await bill.getByLabel('Customer', { exact: true }).selectOption('c1');
-  await bill.getByLabel('From godown', { exact: true }).selectOption({ label: 'Batkhela godown' });
+  await bill.getByLabel('Store Name', { exact: true }).selectOption({ label: 'Batkhela godown' });
   await bill.getByLabel('Item 1', { exact: true }).selectOption('p2');
   await bill.getByLabel('Quantity 1', { exact: true }).fill('4');
   await noOverflow(page, 'new bill from second godown');

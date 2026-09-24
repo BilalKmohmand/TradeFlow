@@ -1,4 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
+import { saveAndPrint } from './helpers/bill';
 import { signIn } from './helpers/login';
 import { goTo } from './helpers/nav';
 import { salesSeed } from './helpers/salesSeed';
@@ -130,21 +131,24 @@ test.describe('Sales QA', () => {
       await d.getByLabel('Quantity 1', { exact: true }).fill('12345.25');
       await d.getByLabel('Price 1', { exact: true }).fill('12345678.50');
       for (const label of ['Code 1', 'Quantity 1', 'Price 1', 'Customer code']) await fullyVisible(d.getByLabel(label, { exact: true }), `${name} ${label}`);
-      // Rs. 12,345,678.50 stays on one line and does not run under the remove button.
+      // Rs. 12,345,678.50 stays on one line in the entry row and in the grid, and not under the remove button.
       await d.getByLabel('Quantity 1', { exact: true }).fill('1');
-      const amount = d.getByTestId('line-amount-1');
+      const q = (await d.getByLabel('Quantity 1', { exact: true }).boundingBox())!;
+      expect(q.width, 'qty box too narrow').toBeGreaterThanOrEqual(95);
+      await expect(d.getByTestId('line-amount-1')).toHaveText('Rs. 12,345,678.50');
+      expect((await d.getByTestId('line-amount-1').boundingBox())!.height, 'amount wraps onto two lines').toBeLessThan(26);
+      await d.getByRole('button', { name: 'Add another item' }).click();
+      const amount = d.getByTestId('bill-line').first().getByTestId('line-amount-1');
       await expect(amount).toHaveText('Rs. 12,345,678.50');
       const a = (await amount.boundingBox())!;
       expect(a.height, 'amount wraps onto two lines').toBeLessThan(26);
       const bin = d.getByRole('button', { name: 'Remove item 1' });
       const b = (await bin.boundingBox())!;
       expect(a.x + a.width <= b.x || a.y + a.height <= b.y || b.y + b.height <= a.y, 'amount overlaps the remove button').toBe(true);
-      const q = (await d.getByLabel('Quantity 1', { exact: true }).boundingBox())!;
-      expect(q.width, 'qty box too narrow').toBeGreaterThanOrEqual(95);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow).toBeLessThanOrEqual(0);
-      // The cheque's date is not squeezed in the payment box.
-      await d.getByLabel('Method', { exact: true }).selectOption('Cheque');
+      // The cheque's date is not squeezed in the payment box (a customer's cheque: Cheques in hand).
+      await d.getByLabel('Payment account', { exact: true }).selectOption('1150');
       await d.getByLabel('Paid now', { exact: true }).fill('5000');
       const date = (await d.getByLabel('Date on cheque').boundingBox())!;
       expect(date.width, 'cheque date too narrow').toBeGreaterThanOrEqual(140);
@@ -159,12 +163,12 @@ test.describe('Sales QA', () => {
     await d.getByLabel('Customer code', { exact: true }).press('Enter');
     await expect(d.getByLabel('Customer', { exact: true })).toHaveValue('c3');
     const lastWeek = new Date(Date.now() - 5 * 86_400_000).toISOString().split('T')[0];
-    await d.getByLabel('Date', { exact: true }).fill(lastWeek);
+    await d.getByLabel('Your Date', { exact: true }).fill(lastWeek);
     await d.getByLabel('Item 1', { exact: true }).selectOption('p12');
     await d.getByLabel('Quantity 1', { exact: true }).fill('1234');
     await d.getByLabel('Price 1', { exact: true }).fill('9999.75');
     await d.getByRole('button', { name: 'Full', exact: true }).click();
-    await d.getByRole('button', { name: 'Save & Print' }).click();
+    await saveAndPrint(d);
     const print = page.locator('#print-root');
     await expect(print).toContainText('12,339,691.50'); // not "12,339,691.5"
     await page.getByRole('button', { name: 'Close preview' }).click();
@@ -223,7 +227,8 @@ test.describe('Sales QA', () => {
     await page.getByRole('button', { name: /^Make bill from / }).first().click();
     const d = page.getByRole('dialog', { name: 'New Bill' });
     await expect(d.getByLabel('Customer code', { exact: true })).toHaveValue('C-0010');
-    await expect(d.getByLabel('Code 1', { exact: true })).toHaveValue('104');
+    await expect(d.getByTestId('bill-line')).toHaveCount(1);
+    await expect(d.getByTestId('bill-line').first()).toContainText('104');
     await d.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(d).toBeHidden();
     await trialBalanced(page);

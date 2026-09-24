@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { saveAndPrint } from './helpers/bill';
 import fs from 'fs';
 import { signIn } from './helpers/login';
 import { goTo } from './helpers/nav';
@@ -44,7 +45,7 @@ const sampleBill = async (page: Page, full: boolean) => {
   await dialog.getByRole('button', { name: 'Add another item' }).click();
   await dialog.getByLabel('Item 3', { exact: true }).selectOption('p3'); await dialog.getByLabel('Quantity 3', { exact: true }).fill('40');
   if (full) await dialog.getByRole('button', { name: 'Full' }).click();
-  await dialog.getByRole('button', { name: 'Save & Print' }).click();
+  await saveAndPrint(dialog);
   await expect(page.locator('#print-root')).toContainText('1,192,150');
 };
 

@@ -20,6 +20,7 @@ import {
   targetKey,
   NavEntry,
   navCheck,
+  navEntry,
   ACCOUNTS_TAB_LABEL,
   MONEY_TAB_LABEL,
   ADMIN_TAB_LABEL,
@@ -297,7 +298,7 @@ describe('nav map: coverage', () => {
   it('the spec’d options are all there, in their menus', () => {
     const want: Record<string, string[]> = {
       coding: ['Items & prices', 'Customers', 'Suppliers', 'Chart of accounts', 'Bank accounts', 'Cities / towns', 'Salesmen & areas', 'Godowns / stores', 'Schemes (free goods)', 'Opening cash & bank'],
-      invoice: ['Sale invoice (new bill)', 'Bills list', 'Purchase invoice', 'Purchase invoices list', 'Sale returns (credit notes)', 'Purchase return (debit note)', 'Quotations', 'Delivery orders (pending)', 'Purchase orders', 'Receive stock', 'Adjust stock', 'Move stock'],
+      invoice: ['Sale Invoice', 'Cash Sale Invoice', 'Sale Invoices list', 'Purchase Invoice', 'Purchase Invoices list', 'Sale Return', 'Purchase Return', 'Store Transfer', 'Quotations', 'Delivery orders (pending)', 'Purchase orders', 'Receive stock', 'Adjust stock'],
       accounts: ['Vouchers', 'CPV — Cash payment voucher', 'CRV — Cash receipt voucher', 'BPV — Bank payment voucher', 'BRV — Bank receipt voucher', 'JV — Journal voucher', 'Receive payment', 'Receive from many', 'Pay supplier', 'Add expense', 'Cash ↔ Bank', 'Cheques', 'Bank reconciliation', 'Account ledger', 'Books', 'Cash book', 'Bank book', 'Day book', 'Journal book', 'Daily sheet'],
       reports: ['Owner dashboard', 'Who owes for how long (aging)', 'Profit by item & customer', 'Recovery list'],
       system: ['Shop details', 'Bill settings', 'Users & passwords', 'Roles & permissions', 'Document numbers', 'Approval rules', 'Approvals inbox', 'Branches', 'Backup & restore', 'Automatic backups', 'Data import', 'Deleted records', 'Audit log', 'Year end', 'Full trading suite'],
@@ -306,6 +307,37 @@ describe('nav map: coverage', () => {
       const have = NAV_ENTRIES.filter((e) => e.group === g).map((e) => e.label);
       expect(have, g).toEqual(expect.arrayContaining(labels));
     });
+  });
+});
+
+describe('nav map: the Invoice menu is the old program’s', () => {
+  it('starts with Purchase Invoice ›, Sale Invoice › and Store Transfer, in that order; the rest follow', () => {
+    const inv = NAV_GROUPS.find((g) => g.id === 'invoice')!;
+    const first = inv.sections[0];
+    expect(first.label).toBe('Invoice');
+    expect(first.entries.map((e) => `${e.sub ? `${e.sub} › ` : ''}${e.label}`)).toEqual([
+      'Purchase Invoice › Purchase Invoice',
+      'Purchase Invoice › Purchase Return',
+      'Purchase Invoice › Purchase Invoices list',
+      'Sale Invoice › Sale Invoice',
+      'Sale Invoice › Cash Sale Invoice',
+      'Sale Invoice › Sale Return',
+      'Sale Invoice › Sale Invoices list',
+      'Store Transfer',
+    ]);
+    const t = (id: string) => first.entries.find((e) => e.id === id)!.target;
+    expect(t('new-bill')).toEqual({ kind: 'action', action: 'newBill' });
+    expect(t('cash-sale')).toEqual({ kind: 'action', action: 'newCashSale' });
+    expect(t('new-purchase-invoice')).toEqual({ kind: 'action', action: 'newPurchaseInvoice' });
+    expect(t('purchase-return')).toEqual({ kind: 'action', action: 'purchaseReturn' });
+    expect(t('purchases')).toEqual({ kind: 'screen', screen: 'purchases' });
+    expect(t('sale-returns')).toEqual({ kind: 'screen', screen: 'bills', view: 'returns' });
+    expect(t('bills')).toEqual({ kind: 'screen', screen: 'bills', view: 'bills' });
+    expect(t('move-stock')).toEqual({ kind: 'screen', screen: 'products', view: 'move' });
+    // The other Invoice options are still there, after these.
+    const rest = inv.sections.slice(1).flatMap((x) => x.entries.map((e) => e.id));
+    ['quotations', 'new-quote', 'delivery-orders', 'supplier-returns', 'purchase-orders', 'new-purchase-order', 'supplier-bills', 'claims', 'stock-received', 'receive-stock', 'adjust-stock', 'reorder'].forEach((id) => expect(rest, id).toContain(id));
+    expect(navCheck(navEntry('cash-sale')!)).toEqual({ dialog: 'Cash Sale Invoice' });
   });
 });
 

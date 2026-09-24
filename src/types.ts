@@ -433,6 +433,12 @@ export interface Invoice {
   editHistory?: { editedAt: string; editedBy?: string; summary: string; before: Omit<Invoice, 'editHistory'> }[];
   /** Delivery order: the goods go out later. Stock is still taken when the bill is made. */
   delivery?: DeliveryInfo;
+  /** "Sale a/c" picked on the bill (an income account code); absent = Sales 4000. The goods are credited here. */
+  saleAccountCode?: string;
+  /** Cash sale: the walk-in buyer's name typed on the bill (the bill itself is on the "Cash Sale" account). */
+  walkInName?: string;
+  /** Made on the Cash Sale Invoice screen (paid in full in cash). */
+  cashSale?: boolean;
 }
 
 /** Delivery of a bill marked "Delivery order": pending until someone marks it delivered. */
@@ -504,6 +510,9 @@ export interface PurchaseInvoice {
   remarks?: string;
   createdAt: string;
   createdBy?: string;
+  /** Last changed (Search → edit on the Purchase Invoice screen). */
+  updatedAt?: string;
+  updatedBy?: string;
   branchId?: string | null;
 }
 

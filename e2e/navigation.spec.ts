@@ -68,8 +68,8 @@ test.describe('Desktop top menu bar', () => {
     await expect(page.getByRole('tab', { name: 'Chart of accounts', selected: true })).toBeVisible();
     await expect(crumb(page)).toHaveText(/Coding\s*Chart of accounts/);
 
-    // Invoice › Sale invoice (new bill)
-    await pick('Invoice', 'Sale invoice (new bill)', 'desktop-invoice');
+    // Invoice › Sale Invoice › Sale Invoice
+    await pick('Invoice', 'Sale Invoice', 'desktop-invoice');
     await expect(page.getByRole('dialog', { name: 'New Bill' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: 'New Bill' })).toBeHidden();
@@ -136,11 +136,11 @@ test.describe('Desktop top menu bar', () => {
     await expect(rep.getByRole('menuitem', { name: 'Trial Balance', exact: true })).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(h1(page, 'Trial Balance')).toBeVisible();
-    // Alt+I, then Enter on the focused first option (new bill).
+    // Alt+I, then Enter on the focused first option (Purchase Invoice › Purchase Invoice, as in the old program).
     await page.keyboard.press('Alt+KeyI');
     await expect(page.getByRole('menu', { name: 'Invoice' }).getByRole('menuitem').first()).toBeFocused();
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('dialog', { name: 'New Bill' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Purchase Invoice' })).toBeVisible();
     await page.keyboard.press('Escape');
     // Alt+letter does nothing while a dialog is open.
     await page.keyboard.press('Control+k');

@@ -119,15 +119,19 @@ test.describe('Classic menu and reports on desktop', () => {
     await report.getByRole('button', { name: 'Delivered', exact: true }).click();
     await expect(report.getByTestId('report-table')).toContainText('by Rashid (LES-1234)');
 
-    // Search from the bill form opens the old bill.
+    // Search from the bill form opens the old bill in the same form, to change it (same number).
     await goTo(page, 'Home');
     await page.getByRole('button', { name: 'New Bill' }).first().click();
     dialog = page.getByRole('dialog', { name: 'New Bill' });
     await expect(dialog.getByTestId('bill-next-number')).toHaveText('INV-2');
     await dialog.getByLabel('Search old bill').fill('1');
     await dialog.getByLabel('Search old bill').press('Enter');
-    await expect(page.getByRole('dialog', { name: 'Bill INV-1' })).toBeVisible();
-    await expect(page.getByRole('dialog', { name: 'Bill INV-1' }).getByTestId('bill-delivery')).toContainText('delivered');
+    const found = page.getByRole('dialog', { name: 'Edit bill INV-1' });
+    await expect(found).toBeVisible();
+    await expect(found.getByTestId('bill-next-number')).toHaveText('INV-1');
+    await expect(found.getByTestId('bill-line')).toHaveCount(1);
+    await expect(found.getByLabel('Memo No', { exact: true })).toHaveValue('BK-77');
+    await expect(found.getByLabel('Delivery Order')).toBeChecked();
     await page.keyboard.press('Escape');
 
     // F9 opens the Cash Book (the 3 tins were on credit, so only the opening cash).
@@ -155,7 +159,7 @@ test.describe('Classic menu and reports on desktop', () => {
     await form.getByLabel('Rate 1', { exact: true }).fill('6000');
     await form.getByRole('button', { name: 'Add another item' }).click();
     await form.getByLabel('Product 2', { exact: true }).selectOption('p2');
-    await form.getByRole('group', { name: 'Unit for line 2' }).getByRole('button', { name: /carton/ }).click();
+    await form.getByLabel('Unit 2', { exact: true }).selectOption('pack');
     await form.getByLabel('Qty 2', { exact: true }).fill('2');
     await form.getByLabel('Rate 2', { exact: true }).fill('8000');
     await expect(form.getByTestId('pi-amount-2')).toHaveText('Rs. 16,000');

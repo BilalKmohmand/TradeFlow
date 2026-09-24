@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, Printer, Save, UserPlus, Percent, SplitSquareHorizontal, Keyboard, Gift, Search, Truck } from 'lucide-react';
-import { useTrading, BILL_PAYMENT_METHODS, CreateBillItemInput } from '../../context/TradingContext';
-import { Modal, inputCls, numInputCls, labelCls, primaryBtn, secondaryBtn, Notice, rs, moneyCls, bidi } from './ui';
+import { Trash2, Printer, Save, UserPlus, Keyboard, Gift, Search, Truck, Eye, X, FilePlus2, MoreHorizontal } from 'lucide-react';
+import { useTrading, CreateBillItemInput } from '../../context/TradingContext';
+import { Modal, inputCls, numInputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, Notice, rs, moneyCls } from './ui';
 import { CodeBox } from './CodeBox';
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
@@ -10,18 +10,19 @@ import { BillCreditPanel } from './CreditLimit';
 import { planBillStock, batchLines, stockByGodown, restoreBillRows } from '../../utils/inventory';
 import { lineDiscountAmount, quotationLines } from '../../utils/salesDocs';
 import { customerSnapshot, lastRateFor, resolveBillPayments, PaymentPart } from '../../utils/billing';
-import { hasPack, formatPackQty, plural, baseToPacks } from '../../utils/packUnits';
+import { hasPack, formatPackQty, baseToPacks } from '../../utils/packUnits';
 import { QuickSelect, PickOption, findOption } from './QuickPick';
 import { ScanButton } from './purchasing/Barcodes';
 import { ChequeFieldsInput, ChequeFields, emptyChequeFields } from './ChequeForms';
 import { evaluateSchemes } from '../../utils/salesExtras';
 import { CostCentreSelect } from '../finance/common';
 import { isPendingApproval } from '../../context/controlActions';
-import { BankSelect, bankOpt } from './BankSelect';
-import { needsBank } from '../../utils/banks';
-import { allCities, filterParties } from '../../utils/vouchers';
+import { allCities } from '../../utils/vouchers';
 import { useBillingUI } from './BillingUI';
-
+import { ConfirmDialog } from '../ConfirmDialog';
+import { SearchPartyDialog } from './classic/SearchPartyDialog';
+import { ACC } from '../../utils/accounting';
+import { PRINT_CHOICES, PrintChoice, loadPrintChoice, paperOf, paymentAccounts, paymentsFromGrid, saleAccounts, savePrintChoice } from '../../utils/saleInvoice';
 
 /** After Save, open the next new bill (the default). Automated tests written for the old behaviour turn it off. */
 const openNextBillAfterSave = (): boolean => {
@@ -44,26 +45,35 @@ interface Row {
   productId: string;
   qty: string;
   price: string;
-  /** Qty and price are typed per pack (e.g. per carton) instead of per base unit. */
+  /** Qty and price are typed per pack (e.g. per carton) instead of per base unit ("Unit" = the pack). */
   inPack: boolean;
   /** Where the price came from: the item's list price, the customer's agreed rate, or typed in. */
   priceFrom: 'list' | 'customer' | 'typed';
-  /** Line discount, shown once the shopkeeper taps "Discount" on the line. */
-  showDisc: boolean;
   discType: 'rs' | 'pct';
   disc: string;
+  desc: string;
+  /** In the grid (Enter on the entry row put it there). The one line that is not is the entry row. */
+  committed: boolean;
 }
 
-const newRow = (patch: Partial<Row> = {}): Row => ({ key: Math.random().toString(36).slice(2), productId: '', qty: '1', price: '', inPack: false, priceFrom: 'list', showDisc: false, discType: 'rs', disc: '', ...patch });
+const newRow = (patch: Partial<Row> = {}): Row => ({ key: Math.random().toString(36).slice(2), productId: '', qty: '1', price: '', inPack: false, priceFrom: 'list', discType: 'rs', disc: '', desc: '', committed: false, ...patch });
 
-/** Methods for the non-cash part of a split payment (the cheque has its own box). */
-const BANK_METHODS = BILL_PAYMENT_METHODS.filter((m) => m !== 'Cash' && m !== 'Cheque');
+interface PayRow {
+  key: string;
+  code: string;
+  amount: string;
+  note: string;
+  committed: boolean;
+}
+const newPay = (patch: Partial<PayRow> = {}): PayRow => ({ key: Math.random().toString(36).slice(2), code: ACC.CASH, amount: '', note: '', committed: false, ...patch });
+
 const num4 = (n: number) => String(Math.round(n * 10000) / 10000);
-/**
- * Bill line columns from a tablet up: Code | Item | Qty | Price | Amount | remove. Qty and Price are wide
- * enough for "12345.25" / "12345678.50", and Amount grows to fit "Rs. 12,345,678.50" (the item name gives way).
- */
-const LINE_COLS = 'md:grid-cols-[5.5rem_minmax(0,1fr)_6.5rem_8rem_minmax(8rem,max-content)_2.5rem]';
+const round2 = (n: number) => Math.round(n * 100) / 100;
+/** Entry row / grid columns on a wide screen (lg); below that each line is a card: Code | Product Name | Unit | Description | Qty | Rate | Amount | Disc | Net Amount. */
+const LINE_COLS = 'lg:grid-cols-[5.5rem_minmax(8rem,1.6fr)_6.5rem_minmax(4.5rem,1fr)_6.5rem_8rem_minmax(5.5rem,max-content)_8rem_minmax(6.5rem,max-content)]';
+/** The grid is read-only, so its figures need less room than the entry row's boxes. */
+const GRID_COLS = 'lg:grid-cols-[4.5rem_minmax(7rem,1.5fr)_5rem_minmax(3rem,1fr)_5rem_6.5rem_max-content_5.5rem_max-content_2rem]';
+const PAY_COLS = 'sm:grid-cols-[5.5rem_minmax(8rem,1fr)_8rem_minmax(6rem,1fr)]';
 
 interface Props {
   isOpen: boolean;
@@ -76,32 +86,40 @@ interface Props {
   editInvoiceId?: string | null;
   /** After an edit is saved (the bill detail reopens). */
   onEdited?: (invoiceId: string) => void;
+  /** 'cash' = the Cash Sale Invoice: walk-in customer allowed, paid in full in cash, no Payment Method grid. */
+  mode?: 'sale' | 'cash';
 }
 
-/** A saved bill's sold lines as form rows (per pack when it was sold per pack). */
+/** A saved bill's sold lines as grid rows (per pack when it was sold per pack). */
 const rowsFromBill = (items: import('../../types').InvoiceItem[]): Row[] =>
   items.filter((it) => !it.free && (it.qty ?? 0) > 0).map((it) => {
     const qty = it.qty ?? it.kg;
     const price = it.unitPrice ?? it.ratePerKg;
-    const disc = (it.discountAmount || 0) > 0 && it.discountType ? { showDisc: true, discType: it.discountType, disc: String(it.discountValue ?? '') } : {};
+    const disc = (it.discountAmount || 0) > 0 && it.discountType ? { discType: it.discountType, disc: String(it.discountValue ?? '') } : {};
     const from: Row['priceFrom'] = it.customerRate ? 'customer' : 'typed';
-    if (it.packPrice != null && (it.packSize || 0) > 1) return newRow({ productId: it.productId, qty: num4(baseToPacks(qty, it.packSize!)), price: String(it.packPrice), inPack: true, priceFrom: from, ...disc });
-    return newRow({ productId: it.productId, qty: String(qty), price: String(price), priceFrom: from, ...disc });
+    const desc = it.description || '';
+    if (it.packPrice != null && (it.packSize || 0) > 1) return newRow({ productId: it.productId, qty: num4(baseToPacks(qty, it.packSize!)), price: String(it.packPrice), inPack: true, priceFrom: from, desc, committed: true, ...disc });
+    return newRow({ productId: it.productId, qty: String(qty), price: String(price), priceFrom: from, desc, committed: true, ...disc });
   });
 
 /**
- * Make a bill in one screen: pick the customer, add item lines (price is filled from the item
- * but can be changed per line), enter what was paid now, save or save-and-print.
+ * Sale Invoice, step for step as Apna Accountant SB (our look): Computer # / date, Delivery Order, Customer
+ * [code][name], Sale a/c, Store, Stock in Hand; Party Balance, Memo No, Your Date, Disc % on the right. Items go
+ * in through ONE entry row (Code | Product | Unit | Description | Qty | Rate | Amount | Disc | Net); Enter moves
+ * across it and Enter on Rate (or Disc) puts the line into the grid and clears the row for the next one. A grid
+ * line clicked (or Enter on it) comes back into the entry row; Delete removes it. Payment Method grid below
+ * (Code | Title | Debit | Narration against cash / bank accounts), totals, Print Invoice None / Half / Full /
+ * Mini, and Save / Delete / Search / Preview / Close. Ctrl+Enter or F9 saves.
  *
- * Keyboard (desktop): Enter moves customer → item → qty → price → next line; an empty item line
- * + Enter jumps to "Paid now". Ctrl+Enter or F9 saves; "+" or Alt+N adds a line. Item and
- * customer lists can be searched by typing a name or code.
+ * The Cash Sale Invoice (mode 'cash') is the same screen for a walk-in: customer optional, a free-text name,
+ * paid in full in cash, no Payment Method grid.
  */
-export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quotationId, editInvoiceId, onEdited }) => {
-  const { customers, products: liveProducts, settings, createBill, editBill, setPrintRequest, can, godowns, stockBatches: liveBatches, quotations, getCustomerAgreedRate, invoices, ledger, salesmen, areas, schemes, billApprovalReasons, approvalRules, canApprove, previewDocNumber } = useTrading();
+export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quotationId, editInvoiceId, onEdited, mode = 'sale' }) => {
+  const { customers, products: liveProducts, settings, createBill, editBill, setPrintRequest, can, godowns, stockBatches: liveBatches, quotations, getCustomerAgreedRate, invoices, ledger, salesmen, areas, schemes, billApprovalReasons, approvalRules, canApprove, previewDocNumber, customAccounts, deleteBill, billDeleteNeedsApproval, billEditBlock, currentUser } = useTrading();
   const ui = useBillingUI();
   // Editing a saved bill: the form starts from it, and its own stock counts as back on the shelf.
   const [editInv] = useState(() => (editInvoiceId ? invoices.find((i) => i.id === editInvoiceId) : undefined));
+  const cash = editInv ? Boolean(editInv.cashSale) : mode === 'cash';
   const products = useMemo(() => {
     if (!editInv) return liveProducts;
     return liveProducts.map((p) => {
@@ -110,17 +128,16 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     });
   }, [liveProducts, editInv]);
   const stockBatches = useMemo(() => (editInv ? restoreBillRows(liveBatches, editInv.items, godowns, todayISO()) : liveBatches), [liveBatches, editInv, godowns]);
-  // Apna Accountant fields: memo (book) no., delivery order, and Search for an old bill by number.
   const [memoNo, setMemoNo] = useState(editInv?.memoNo || '');
   const [deliveryOrder, setDeliveryOrder] = useState(Boolean(editInv?.delivery));
   const [find, setFind] = useState('');
-  /** Line whose item the "Stock in hand" box shows (the one being typed in). */
-  const [focusKey, setFocusKey] = useState<string | null>(null);
   // Set once the bill was sent to a manager (approval rules): nothing is posted until approved.
   const [sentForApproval, setSentForApproval] = useState('');
   const quote = quotationId ? quotations.find((q) => q.id === quotationId) : undefined;
   const [godownId, setGodownId] = useState(editInv?.items.find((it) => it.godownId)?.godownId || godowns[0]?.id || '');
-  const [customer, setCustomer] = useState(editInv?.customerId || quote?.customerId || customerId || '');
+  const walkInCustomer = editInv && editInv.cashSale && editInv.customerName === 'Cash Sale';
+  const [customer, setCustomer] = useState(walkInCustomer ? '' : editInv?.customerId || quote?.customerId || customerId || '');
+  const [walkIn, setWalkIn] = useState(editInv?.walkInName || '');
   // Salesman and area on the bill start as the customer's defaults (can be changed per bill).
   const startCust = customers.find((c) => c.id === (quote?.customerId || customerId || ''));
   const [salesmanId, setSalesmanId] = useState(editInv ? editInv.salesmanId || '' : startCust?.salesmanId || '');
@@ -130,52 +147,67 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const [dropped, setDropped] = useState<Set<string>>(() => new Set());
   const [newCustomer, setNewCustomer] = useState<{ name: string; phone: string } | null>(null);
   const [date, setDate] = useState(editInv?.issueDate || todayISO());
-  // A quotation fills the lines at the quoted prices; otherwise one empty line.
-  const [rows, setRows] = useState<Row[]>(() =>
-    editInv
+  const [saleAc, setSaleAc] = useState(editInv?.saleAccountCode || ACC.SALES);
+  const [billPct, setBillPct] = useState('');
+  // Grid lines plus the entry row (the one line not yet committed, always last).
+  const [rows, setRows] = useState<Row[]>(() => [
+    ...(editInv
       ? rowsFromBill(editInv.items)
       : quote
       ? quotationLines(quote, (id) => products.find((p) => p.id === id)?.name).map((l) =>
           // A line quoted per carton comes onto the bill per carton too.
           l.packPrice != null && (l.packSize || 0) > 1 && hasPack(products.find((p) => p.id === l.productId))
-            ? newRow({ productId: l.productId, qty: num4(baseToPacks(l.qty, l.packSize!)), price: String(l.packPrice), inPack: true, priceFrom: 'typed' })
-            : newRow({ productId: l.productId, qty: String(l.qty), price: String(l.unitPrice), priceFrom: 'typed' })
+            ? newRow({ productId: l.productId, qty: num4(baseToPacks(l.qty, l.packSize!)), price: String(l.packPrice), inPack: true, priceFrom: 'typed', committed: true })
+            : newRow({ productId: l.productId, qty: String(l.qty), price: String(l.unitPrice), priceFrom: 'typed', committed: true })
         )
-      : [newRow()]
-  );
+      : []),
+    newRow(),
+  ]);
+  /** The line shown in the entry row: the new line, or a grid line being changed. */
+  const [activeKey, setActiveKey] = useState(() => rows[rows.length - 1].key);
+  const [lumsumPct, setLumsumPct] = useState('');
   const [discount, setDiscount] = useState(editInv?.discount ? String(editInv.discount) : '');
-  const [paidNow, setPaidNow] = useState('');
-  const [method, setMethod] = useState('Cash');
-  // Split payment: cash + bank/wallet + cheque on one bill.
-  const [split, setSplit] = useState(false);
-  const [splitCash, setSplitCash] = useState('');
-  const [splitBank, setSplitBank] = useState('');
-  const [splitBankMethod, setSplitBankMethod] = useState(BANK_METHODS[0] || 'Bank Transfer');
-  const [splitCheque, setSplitCheque] = useState('');
-  // Bank account the bank part goes into (only asked when the shop has more than one bank).
-  const [bank, setBank] = useState('');
-  // "Search party by city": narrows the customer list.
-  const [billCity, setBillCity] = useState('');
+  const [payRows, setPayRows] = useState<PayRow[]>(() => [newPay()]);
+  const [activePay, setActivePay] = useState(() => payRows[0].key);
   const [cheque, setCheque] = useState<ChequeFields>(emptyChequeFields());
   const [notes, setNotes] = useState(editInv ? editInv.notes || '' : quote ? `From quotation ${quote.quoteNumber}` : '');
   const [costCentre, setCostCentre] = useState(editInv?.costCentreId || '');
+  const [printChoice, setPrintChoiceState] = useState<PrintChoice>(() => loadPrintChoice(cash ? 'cash-sale' : 'sale'));
+  const setPrintChoice = (c: PrintChoice) => { setPrintChoiceState(c); savePrintChoice(cash ? 'cash-sale' : 'sale', c); };
+  const [partySearch, setPartySearch] = useState<{ text: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [preview, setPreview] = useState(false);
   const [error, setError] = useState('');
   const [allowOver, setAllowOver] = useState(false);
   const [overReason, setOverReason] = useState('');
   const busy = useRef(false);
   const box = useRef<HTMLDivElement>(null);
-  /** After adding a line from the keyboard, put the cursor in its item field. */
-  const focusRow = useRef<string | null>(null);
   const allowNegative = settings.allowNegativeStock !== false;
 
   const cityList = useMemo(() => allCities(settings, customers, []), [settings, customers]);
-  const sortedCustomers = useMemo(() => {
-    const all = [...customers].sort((a, b) => a.name.localeCompare(b.name));
-    return billCity ? all.filter((c) => c.id === customer || filterParties([c], '', billCity).length > 0) : all;
-  }, [customers, billCity, customer]);
+  const sortedCustomers = useMemo(() => [...customers].sort((a, b) => a.name.localeCompare(b.name)), [customers]);
   const sortedProducts = useMemo(() => [...products].sort((a, b) => a.name.localeCompare(b.name)), [products]);
   const customerOptions: PickOption[] = useMemo(() => sortedCustomers.map((c) => ({ value: c.id, name: c.name, code: c.code, extra: [c.phone, c.city].filter(Boolean).join(' ') })), [sortedCustomers]);
   const productOptions: PickOption[] = useMemo(() => sortedProducts.map((p) => ({ value: p.id, name: p.name, code: p.code, barcode: p.barcode })), [sortedProducts]);
+  const saleAccs = useMemo(() => saleAccounts(customAccounts), [customAccounts]);
+  const payAccs = useMemo(() => paymentAccounts(settings, customAccounts), [settings, customAccounts]);
+
+  // ---- Focus after a change (a new line needs one render first) ----
+  const pendingFocus = useRef<string | null>(null);
+  const focusIn = (selector: string): boolean => {
+    const el = box.current?.querySelector<HTMLElement>(selector);
+    if (!el) return false;
+    el.focus();
+    if (el instanceof HTMLInputElement) el.select();
+    return true;
+  };
+  useEffect(() => {
+    if (pendingFocus.current && focusIn(pendingFocus.current)) pendingFocus.current = null;
+  });
+  const focusSoon = (selector: string) => {
+    pendingFocus.current = selector;
+    setTimeout(() => { if (pendingFocus.current === selector && focusIn(selector)) pendingFocus.current = null; }, 0);
+  };
 
   const setRow = (key: string, patch: Partial<Row>) => setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   /** Price per base unit for an item: the customer's agreed rate when there is one, else the item's list price. */
@@ -213,16 +245,15 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
       return { ...r, price: shownPrice(r.productId, base, r.inPack), priceFrom };
     }));
   };
-  /** Switch a line between packs and base units; qty and price are converted so the amount stays the same. */
-  const togglePack = (key: string) =>
+  /** Unit dropdown: the item's own unit or its pack (carton); qty and price are converted so the amount stays the same. */
+  const setUnit = (key: string, toPack: boolean) =>
     setRows((prev) =>
       prev.map((r) => {
-        if (r.key !== key) return r;
+        if (r.key !== key || r.inPack === toPack) return r;
         const p = products.find((x) => x.id === r.productId);
         if (!hasPack(p)) return r;
         const q = parseFloat(r.qty);
         const pr = parseFloat(r.price);
-        const toPack = !r.inPack;
         return {
           ...r,
           inPack: toPack,
@@ -231,62 +262,106 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
         };
       })
     );
-  /** A scanned item (camera or USB scanner): one more on its line, else the first empty line, else a new line. */
+
+  const entry = rows.find((r) => r.key === activeKey) || rows[rows.length - 1];
+  const entryIdx = rows.indexOf(entry);
+  /** Number the entry row's fields carry (Item 3, Quantity 3…): the line it is, or will become. */
+  const n = entryIdx + 1;
+  const editingLine = entry.committed;
+  const newRowOf = (list: Row[]) => list.find((r) => !r.committed) || list[list.length - 1];
+
+  /** Enter on the last field: the entry row goes into the grid and clears for the next line (focus back to Code). */
+  const commitEntry = (focus: 'code' | 'item' = 'code') => {
+    const r = entry;
+    if (!r.productId) {
+      if (editingLine) setActiveKey(newRowOf(rows).key);
+      return false;
+    }
+    if (!((parseFloat(r.qty) || 0) > 0)) {
+      setError(`Enter the quantity of ${products.find((p) => p.id === r.productId)?.name || 'the item'}.`);
+      focusSoon('[data-entry] [data-nav="qty"]');
+      return false;
+    }
+    let next: Row;
+    if (editingLine) {
+      next = newRowOf(rows);
+      setActiveKey(next.key);
+    } else {
+      next = newRow();
+      setRows((prev) => [...prev.map((x) => (x.key === r.key ? { ...x, committed: true } : x)), next]);
+      setActiveKey(next.key);
+    }
+    focusSoon(focus === 'code' ? '[data-entry] [data-code]' : '[data-entry] [data-nav="item"]');
+    return true;
+  };
+  /** A grid line back into the entry row (the line being typed goes into the grid first). */
+  const loadLine = (key: string) => {
+    if (key === activeKey) return;
+    if (!editingLine && entry.productId && (parseFloat(entry.qty) || 0) > 0) {
+      const next = newRow();
+      setRows((prev) => [...prev.map((x) => (x.key === entry.key ? { ...x, committed: true } : x)), next]);
+    }
+    setActiveKey(key);
+    focusSoon('[data-entry] [data-nav="qty"]');
+  };
+  const removeLine = (key: string) => {
+    setRows((prev) => {
+      const left = prev.filter((r) => r.key !== key);
+      return left.some((r) => !r.committed) ? left : [...left, newRow()];
+    });
+    if (key === activeKey) setActiveKey(newRowOf(rows.filter((r) => r.key !== key))?.key || '');
+  };
+  // An entry row that was removed: point back at the new line.
+  useEffect(() => {
+    if (!rows.some((r) => r.key === activeKey)) setActiveKey(newRowOf(rows).key);
+  }, [rows, activeKey]);
+
+  /** A scanned item (camera or USB scanner): one more on its line, else into the entry row. */
   const addScanned = (productId: string) => {
     const same = rows.find((r) => r.productId === productId);
     if (same) return setRow(same.key, { qty: num4((parseFloat(same.qty) || 0) + 1) });
-    const empty = rows.find((r) => !r.productId);
-    if (empty) return pickProduct(empty.key, productId);
+    if (!entry.productId) return pickProduct(entry.key, productId);
     const { base, priceFrom } = priceFor(productId, newCustomer ? '' : customer);
-    setRows((prev) => [...prev, newRow({ productId, price: shownPrice(productId, base, false), priceFrom })]);
+    const next = newRow();
+    setRows((prev) => [...prev.map((x) => (x.key === entry.key ? { ...x, committed: true } : x)), newRow({ productId, price: shownPrice(productId, base, false), priceFrom, committed: true }), next]);
+    setActiveKey(next.key);
   };
-  const removeRow = (key: string) => setRows((prev) => (prev.length > 1 ? prev.filter((r) => r.key !== key) : prev));
-  const addRow = () => {
-    const row = newRow();
-    focusRow.current = row.key;
-    setRows((prev) => [...prev, row]);
-  };
-  useEffect(() => {
-    if (!focusRow.current) return;
-    // Someone working from the Code boxes (as in the old program) gets the next line's Code box.
-    const el = box.current?.querySelector<HTMLElement>(`[data-row="${focusRow.current}"] ${codeFlow.current ? '[data-code]' : '[data-nav="item"]'}`);
-    focusRow.current = null;
-    el?.focus();
-  }, [rows.length]);
-  /** True while the shopkeeper picks items by typing codes in the Code boxes (Enter then goes Code → Qty → Price → next Code). */
-  const codeFlow = useRef(false);
-  const focusIn = (selector: string) => {
-    const el = box.current?.querySelector<HTMLElement>(selector);
-    if (!el) return;
-    el.focus();
-    if (el instanceof HTMLInputElement) el.select();
-  };
-  /** Enter in a line's Code box: picked → its Qty; empty → "Paid now" when the bill has items (else the item list). */
-  const onLineCodeEnter = (key: string, picked: string | undefined, typed: string) => {
-    if (picked) {
-      codeFlow.current = true;
-      return focusIn(`[data-row="${key}"] [data-nav="qty"]`);
-    }
+
+  /** Enter in the entry row's Code box: picked → Qty; empty → the payment (the bill has lines) or the item list. */
+  const onLineCodeEnter = (picked: string | undefined, typed: string) => {
+    if (picked) return focusSoon('[data-entry] [data-nav="qty"]');
     if (typed) return; // no such code: stay, the box says so
-    if (rows.some((r) => r.productId)) return focusIn('[data-nav="paid"]');
-    focusIn(`[data-row="${key}"] [data-nav="item"]`);
-  };
-  /** Enter in the customer Code box: picked → the first line's Code box; empty → the customer list. */
-  const onCustomerCodeEnter = (picked: string | undefined, typed: string) => {
-    if (picked) {
-      codeFlow.current = true;
-      const empty = rows.find((r) => !r.productId) || rows[0];
-      return focusIn(`[data-row="${empty.key}"] [data-code]`);
+    if (rows.some((r) => r.committed && r.productId) || entry.productId) {
+      if (entry.productId && commitEntry()) return;
+      if (!cash && focusIn('[data-nav="paid"]')) return;
+      focusIn('#bill-freight');
+      return;
     }
+    focusIn('[data-entry] [data-nav="item"]');
+  };
+  /** Enter in the customer Code box: picked → the entry row's Code box; empty → the customer list. */
+  const onCustomerCodeEnter = (picked: string | undefined, typed: string) => {
+    if (picked) return focusSoon('[data-entry] [data-code]');
     if (!typed) focusIn('#bill-customer');
   };
   const productByName = (typed: string) => findOption(productOptions, typed)?.value;
   const customerByName = (typed: string) => findOption(customerOptions, typed)?.value;
+  const openPartySearch = (text = '') => setPartySearch({ text });
+  const partyKeys = (e: React.KeyboardEvent): boolean => {
+    if (e.key === 'F2') {
+      e.preventDefault();
+      e.stopPropagation();
+      openPartySearch('');
+      return true;
+    }
+    return false;
+  };
 
+  // ---- Figures ----
+  const billPctNum = Math.min(100, Math.max(0, parseFloat(billPct) || 0));
   const baseLines = rows.map((r) => {
     const p = products.find((x) => x.id === r.productId);
     const pack = r.inPack && hasPack(p) ? p.packSize : 1;
-    // What was typed (per pack or per unit) …
     // A minus qty is refused on Save (returns go through Return items); until then it counts as 0, so the total
     // shown is never less than what would be saved.
     const typedQty = Math.max(0, parseFloat(r.qty) || 0);
@@ -294,10 +369,10 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     // … and what is stored: always the base unit.
     const qty = typedQty * pack;
     const price = pack > 1 ? typedPrice / pack : typedPrice;
-    const discValue = parseFloat(r.disc) || 0;
-    const lineDisc = lineDiscountAmount(typedQty, typedPrice, r.discType, discValue);
-    // rawQty / rawPrice are what the fields show; qty / price are per base unit.
-    return { ...r, rawQty: r.qty, rawPrice: r.price, typedQty, typedPrice, pack, qty, price, discValue, lineDisc, amount: Math.round((typedQty * typedPrice - lineDisc) * 100) / 100, product: p, schemePct: null as null | { schemeId: string; schemeName: string; pct: number } };
+    const ownDisc = parseFloat(r.disc) || 0;
+    const gross = round2(typedQty * typedPrice);
+    const lineDisc = lineDiscountAmount(typedQty, typedPrice, r.discType, ownDisc);
+    return { ...r, rawQty: r.qty, rawPrice: r.price, typedQty, typedPrice, pack, qty, price, discValue: ownDisc, lineDisc, gross, amount: round2(gross - lineDisc), product: p, schemePct: null as null | { schemeId: string; schemeName: string; pct: number }, fromBillPct: false };
   });
   // Schemes: free goods and "% off above a quantity", worked out from what is on the bill.
   const schemeCustomer = newCustomer ? '' : customer;
@@ -307,12 +382,19 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [schemes, schemeCustomer, date, qtyKey]
   );
-  // A % scheme fills the line discount unless the shopkeeper typed their own discount on that line.
+  // A line's own discount wins; else a % scheme; else the bill's Disc %.
   const lines = baseLines.map((l) => {
+    if (l.discValue > 0) return l;
     const sp = l.productId ? schemeResult.pct[l.productId] : undefined;
-    if (!sp || l.discValue > 0 || dropped.has(`pct|${sp.schemeId}|${l.key}`)) return l;
-    const lineDisc = lineDiscountAmount(l.typedQty, l.typedPrice, 'pct', sp.pct);
-    return { ...l, discType: 'pct' as const, discValue: sp.pct, lineDisc, amount: Math.round((l.typedQty * l.typedPrice - lineDisc) * 100) / 100, schemePct: sp };
+    if (sp && !dropped.has(`pct|${sp.schemeId}|${l.key}`)) {
+      const lineDisc = lineDiscountAmount(l.typedQty, l.typedPrice, 'pct', sp.pct);
+      return { ...l, discType: 'pct' as const, discValue: sp.pct, lineDisc, amount: round2(l.gross - lineDisc), schemePct: sp };
+    }
+    if (billPctNum > 0 && l.productId) {
+      const lineDisc = lineDiscountAmount(l.typedQty, l.typedPrice, 'pct', billPctNum);
+      return { ...l, discType: 'pct' as const, discValue: billPctNum, lineDisc, amount: round2(l.gross - lineDisc), fromBillPct: true };
+    }
+    return l;
   });
   const freeLines = schemeResult.free
     .filter((f) => !dropped.has(f.key))
@@ -325,7 +407,6 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   // as saving the bill will. Expiry is judged against today, so a back-dated bill can't sell expired stock.
   const stockNote = (l: (typeof lines)[number], idx: number): { warn: boolean; block?: boolean; text: string } | null => {
     if (!l.product || l.qty <= 0) return null;
-    // Stock short (all godowns): refused unless the shop allows bills to take stock below zero.
     const upToSame = lines.slice(0, idx + 1).filter((x) => x.product?.id === l.product!.id).reduce((a, x) => a + x.qty, 0);
     if (upToSame > l.product.stockKg + 0.0001) {
       const have = formatPackQty(l.product.stockKg, l.product);
@@ -344,25 +425,66 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     }
     return null;
   };
-  const subtotal = lines.reduce((a, l) => a + l.amount, 0);
-  const lineDiscTotal = lines.reduce((a, l) => a + l.lineDisc, 0);
-  const disc = Math.min(Math.max(0, parseFloat(discount) || 0), subtotal);
+  const used = lines.filter((l) => l.productId);
+  const qtyTotal = Math.round(used.reduce((a, l) => a + l.typedQty, 0) * 10000) / 10000;
+  const subtotal = round2(lines.reduce((a, l) => a + l.amount, 0));
+  const lumsumPctNum = Math.min(100, Math.max(0, parseFloat(lumsumPct) || 0));
+  const disc = round2(Math.min(lumsumPctNum > 0 ? (subtotal * lumsumPctNum) / 100 : Math.max(0, parseFloat(discount) || 0), subtotal));
   const taxRate = settings.taxRatePct ?? 0;
-  const tax = ((subtotal - disc) * taxRate) / 100;
+  const tax = round2(((subtotal - disc) * taxRate) / 100);
   const freightAmt = Math.max(0, parseFloat(freight) || 0);
-  const total = Math.round((subtotal - disc + tax + freightAmt) * 100) / 100;
+  const total = round2(subtotal - disc + tax + freightAmt);
 
-  // What was paid now: one method, or split across cash / bank / cheque.
-  const amt = (s: string) => Math.max(0, parseFloat(s) || 0);
-  const payParts: PaymentPart[] = split ? [{ method: 'Cash', amount: amt(splitCash) }, { method: splitBankMethod, amount: amt(splitBank), ...bankOpt(bank) }] : method === 'Cheque' ? [] : [{ method, amount: amt(paidNow), ...(needsBank(method) ? bankOpt(bank) : {}) }];
-  const chequeAmount = split ? amt(splitCheque) : method === 'Cheque' ? amt(paidNow) : 0;
+  // ---- Payment Method grid (the line being typed counts too) ----
+  const payEntry = payRows.find((p) => p.key === activePay) || payRows[payRows.length - 1];
+  const grid = paymentsFromGrid(payRows.map((p) => ({ code: p.code, amount: parseFloat(p.amount) || 0, note: p.note })), payAccs);
+  const payParts: PaymentPart[] = cash ? [{ method: 'Cash', amount: total }] : grid.parts;
+  const chequeAmount = cash ? 0 : grid.cheque;
   const payment = editInv ? resolveBillPayments(total, [], 0) : resolveBillPayments(total, payParts, chequeAmount);
-  const given = payParts.reduce((a, p) => a + p.amount, 0) + chequeAmount;
+  const given = round2(payParts.reduce((a, p) => a + p.amount, 0) + chequeAmount);
   const alreadyPaid = editInv ? editInv.paidAmount : 0;
   const paid = editInv ? alreadyPaid : payment.error ? Math.min(given, total) : payment.paid;
-  const balance = Math.round((total - paid) * 100) / 100;
+  const balance = round2(total - paid);
   const change = payment.error ? 0 : payment.change;
   const hasCheque = !editInv && chequeAmount > 0;
+  const payError = grid.error || payment.error;
+  const setPay = (key: string, patch: Partial<PayRow>) => setPayRows((prev) => prev.map((p) => (p.key === key ? { ...p, ...patch } : p)));
+  const commitPay = () => {
+    const p = payEntry;
+    if (!((parseFloat(p.amount) || 0) > 0)) {
+      if (p.committed) setActivePay(payRows.find((x) => !x.committed)!.key);
+      focusIn('#bill-freight');
+      return;
+    }
+    if (p.committed) setActivePay(payRows.find((x) => !x.committed)!.key);
+    else {
+      const next = newPay();
+      setPayRows((prev) => [...prev.map((x) => (x.key === p.key ? { ...x, committed: true } : x)), next]);
+      setActivePay(next.key);
+    }
+    focusSoon('[data-pay-entry] [data-code]');
+  };
+  const removePay = (key: string) => {
+    setPayRows((prev) => {
+      const left = prev.filter((p) => p.key !== key);
+      return left.some((p) => !p.committed) ? left : [...left, newPay()];
+    });
+  };
+  useEffect(() => {
+    if (!payRows.some((p) => p.key === activePay)) setActivePay(payRows.find((p) => !p.committed)?.key || payRows[0].key);
+  }, [payRows, activePay]);
+  const accName = (code: string) => payAccs.find((a) => a.code === code)?.name || `Account ${code}`;
+  /** Editing: the money already received on the bill, as Payment Method lines (read-only). */
+  const savedPays = useMemo(
+    () =>
+      (editInv?.payments || []).map((p) => {
+        const row = p.ledgerId ? ledger.find((l) => l.id === p.ledgerId) : undefined;
+        const code = p.method === 'cheque' ? '1150' : p.method === 'cash' ? ACC.CASH : row?.bankCode || '1010';
+        return { id: p.id, code, amount: p.amount, note: row?.note || (p.method === 'cheque' ? p.notes || '' : '') };
+      }),
+    [editInv, ledger]
+  );
+
   // A typed "new" customer that matches an existing one (same name or phone) is that customer, as on save.
   const typedMatch = newCustomer
     ? customers.find((c) => c.name.trim().toLowerCase() === newCustomer.name.trim().toLowerCase() || (newCustomer.phone.trim() && c.phone.replace(/\D/g, '') === newCustomer.phone.replace(/\D/g, '')))
@@ -375,17 +497,17 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   // Approval rule "bill over credit limit": staff who can't allow it send the bill to a manager instead.
   const creditToApproval = Boolean(approvalRules.creditLimit) && !canOverride && !canApprove;
   const creditBlocked = credit.over && !creditToApproval && !(canOverride && allowOver && overReason.trim());
+  const cashParty = cash && !customer && !newCustomer ? { name: 'Cash Sale', phone: '' } : undefined;
   const approvalWhy = billApprovalReasons({
-    customerId: newCustomer ? '' : customer,
-    newCustomer: newCustomer || undefined,
-    items: lines.filter((l) => l.productId && l.qty > 0).map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: l.price, ...(l.lineDisc > 0 ? { discountType: l.discType, discountValue: l.discValue } : {}), ...(l.schemePct ? { schemeId: l.schemePct.schemeId } : {}) })),
+    customerId: newCustomer || cashParty ? '' : customer,
+    newCustomer: newCustomer || cashParty,
+    items: used.filter((l) => l.qty > 0).map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: l.price, ...(l.lineDisc > 0 ? { discountType: l.discType, discountValue: l.discValue } : {}), ...(l.schemePct ? { schemeId: l.schemePct.schemeId } : {}) })),
     discount: disc,
     freightCharges: freightAmt,
     payments: editInv ? [] : payment.parts,
     ...(hasCheque ? { cheque: { amount: chequeAmount, ...cheque } } : {}),
     date,
   });
-  // Stock the bill can't be made from (short stock, batches, expired stock, another godown): Save waits until it is fixed.
   // Free goods take stock too: when short stock is not allowed, the bill waits until the free qty fits.
   const freeShort = !allowNegative ? freeLines.find((f) => lines.filter((l) => l.product?.id === f.productId).reduce((a, l) => a + l.qty, 0) + freeLines.filter((x) => x.productId === f.productId).reduce((a, x) => a + x.qty, 0) > (f.product!.stockKg || 0) + 0.0001) : undefined;
   const stockBlocked = lines.some((l, idx) => stockNote(l, idx)?.block) || Boolean(freeShort);
@@ -393,13 +515,13 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const blockedWhy = stockBlocked ? 'Not enough stock for this bill' : creditBlocked ? 'Over the credit limit' : undefined;
   const snapshot = useMemo(() => (selected ? customerSnapshot(selected.id, invoices, ledger) : null), [selected, invoices, ledger]);
   // Any change to the bill clears an old error message.
-  React.useEffect(() => { setError(''); }, [customer, newCustomer, rows, discount, paidNow, method, godownId, allowOver, overReason, split, splitCash, splitBank, splitCheque, cheque, freight, salesmanId, areaId, dropped]);
+  React.useEffect(() => { setError(''); }, [customer, newCustomer, rows, discount, lumsumPct, billPct, payRows, godownId, allowOver, overReason, cheque, freight, salesmanId, areaId, dropped, saleAc]);
 
-  const submit = (print: boolean) => {
+  const submit = (after: 'next' | 'stay' = 'next') => {
     if (busy.current) return; // a double tap must not make two bills
     setError('');
     if (newCustomer && !newCustomer.name.trim()) return setError('Enter the new customer name.');
-    if (!newCustomer && !customer) return setError('Pick a customer (or add a new one).');
+    if (!cash && !newCustomer && !customer) return setError('Pick a customer (or add a new one).');
     if (lines.some((l) => l.productId && l.price < 0)) return setError('A price cannot be negative.');
     const minusAt = rows.findIndex((r) => r.productId && (parseFloat(r.qty) || 0) < 0);
     if (minusAt >= 0) return setError(`Line ${minusAt + 1}: the quantity cannot be below zero. For goods coming back, open the bill and use Return items.`);
@@ -407,22 +529,25 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     if (editInv && total + 0.005 < alreadyPaid) return setError(`${rs(alreadyPaid)} is already paid on this bill; the new total cannot be less than that.`);
     const items = lines.filter((l) => l.productId && l.qty > 0);
     if (items.length === 0) return setError('Add at least one item with a quantity.');
+    if (!editInv && grid.error) return setError(grid.error);
     if (payment.error) return setError(payment.error);
     if (hasCheque && (!cheque.chequeNumber.trim() || !cheque.bankName.trim())) return setError('Enter the cheque number and bank.');
-    if (stockBlocked) return setError(lines.map((l, i) => stockNote(l, i)).find((n) => n?.block)?.text || (freeShort ? `Not enough ${freeShort.product!.name} in stock for the free goods. Receive the stock first, or remove the free line.` : 'Not enough stock.'));
+    if (stockBlocked) return setError(lines.map((l, i) => stockNote(l, i)).find((x) => x?.block)?.text || (freeShort ? `Not enough ${freeShort.product!.name} in stock for the free goods. Receive the stock first, or remove the free line.` : 'Not enough stock.'));
     if (credit.over && !creditToApproval && !(canOverride && allowOver)) return setError(canOverride ? 'This bill is over the credit limit. Tick "Allow over limit" and give a reason, or take more payment now.' : 'This bill is over the customer\'s credit limit. Take more payment now, or ask a manager to allow it.');
     if (credit.over && !creditToApproval && !overReason.trim()) return setError('Write a short reason for allowing this bill over the credit limit.');
     busy.current = true; // held until the dialog closes; released at once if the bill is refused
     const save = editInv ? (input: Parameters<typeof createBill>[0]) => editBill(editInv.id, input) : createBill;
+    const paper = paperOf(printChoice);
     const result = save({
-      customerId: newCustomer ? '' : customer,
-      newCustomer: newCustomer || undefined,
+      customerId: newCustomer || cashParty ? '' : customer,
+      newCustomer: newCustomer || cashParty,
       items: items.map((l) => ({
         productId: l.productId,
         name: l.product?.name || 'Item',
         qty: l.qty,
         unitPrice: l.price,
         unit: l.product?.unit,
+        ...(l.desc.trim() ? { description: l.desc.trim() } : {}),
         ...(l.lineDisc > 0 ? { discountType: l.discType, discountValue: l.discValue } : {}),
         ...(l.priceFrom === 'customer' ? { customerRate: true } : {}),
         ...(l.pack > 1 ? { packPrice: l.typedPrice } : {}),
@@ -434,7 +559,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
       quotationId: quote?.id,
       discount: disc,
       payments: payment.parts,
-      paymentMethod: split ? undefined : method,
+      paymentMethod: payment.parts.length === 1 && !hasCheque ? payment.parts[0].method : undefined,
       ...(hasCheque ? { cheque: { amount: chequeAmount, ...cheque } } : {}),
       notes,
       date,
@@ -442,7 +567,9 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
       godownId: godowns.length > 1 ? godownId : undefined,
       ...(costCentre ? { costCentreId: costCentre } : {}),
       ...(memoNo.trim() ? { memoNo: memoNo.trim() } : {}),
-      ...(deliveryOrder ? { deliveryOrder: true } : {}),
+      ...(deliveryOrder ? { deliveryOrder: true } : editInv?.delivery ? { deliveryOrder: false } : {}),
+      ...(saleAc && saleAc !== ACC.SALES ? { saleAccountCode: saleAc } : {}),
+      ...(cash ? { cashSale: true, ...(walkIn.trim() ? { walkInName: walkIn.trim() } : {}) } : {}),
     });
     if (!result.success) {
       busy.current = false;
@@ -451,151 +578,251 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     // Waiting for approval: say so and keep the dialog (Save stays off, so it can't be sent twice).
     if (isPendingApproval(result)) return setSentForApproval(result.message);
     onClose();
-    // An edit goes back to the bill (with its new figures), not to a new bill.
+    const savedId = editInv ? editInv.id : result.invoice?.id;
+    if (paper && savedId) setPrintRequest({ type: 'bill', invoiceId: savedId, paper });
+    // An edit goes back to the bill (with its new figures).
     if (editInv) {
-      if (print) setPrintRequest({ type: 'bill', invoiceId: editInv.id });
-      else onEdited?.(editInv.id);
+      if (!paper) onEdited?.(editInv.id);
       return;
     }
-    if (print && result.invoice) setPrintRequest({ type: 'bill', invoiceId: result.invoice.id });
-    // Counter work goes bill after bill: a plain Save opens the next new bill straight away.
-    else if (openNextBillAfterSave()) ui.newBill();
+    // Counter work goes bill after bill: Save opens the next new bill straight away.
+    if (after === 'next' && openNextBillAfterSave()) {
+      if (cash) ui.newCashSale();
+      else ui.newBill();
+    }
   };
 
-  /** Search: open an old bill by its number (the new bill is left). */
+  /** Search: open a saved bill by its number in this same form, to change it (same number). */
   const searchBill = () => {
     const hit = findBillByNumber(invoices, find);
     if (!hit) return setError(`No bill “${find.trim()}”. Type the bill number, e.g. ${invoices[0]?.invoiceNumber || 'INV-12'} or just its digits.`);
+    const inv = invoices.find((i) => i.id === hit.id)!;
+    // Can't be changed (goods returned, a cheque on it, closed period, no permission): say why, stay here.
+    const why = billEditBlock(inv);
+    if (why) return setError(`${inv.invoiceNumber} cannot be opened for changes: ${why}`);
+    ui.editBill(hit.id);
+  };
+  const doDelete = () => {
+    if (!editInv) return;
+    const r = deleteBill(editInv.id);
+    setConfirmDelete(false);
+    if (!r.success) return setError(r.message);
     onClose();
-    ui.openBill(hit.id);
+    if (cash) ui.newCashSale();
+    else ui.newBill();
+  };
+  const canDelete = can('delete_records') || can('system:admin_screen') || can('admin_screen') || currentUser?.role === 'super_admin' || currentUser?.role === 'admin' || billDeleteNeedsApproval;
+  const doPreview = () => {
+    if (editInv) setPrintRequest({ type: 'bill', invoiceId: editInv.id, ...(paperOf(printChoice) ? { paper: paperOf(printChoice)! } : {}) });
+    else setPreview(true);
   };
   const computerNo = editInv ? editInv.invoiceNumber : previewDocNumber('bill', date);
-  const focused = lines.find((l) => l.key === focusKey && l.product) || lines.find((l) => l.product);
-  const focusedPer = focused?.product && godowns.length > 1 ? stockByGodown(focused.product, stockBatches, godowns) : null;
+  const ep = entry.productId ? products.find((p) => p.id === entry.productId) : undefined;
+  const epPer = ep && godowns.length > 1 ? stockByGodown(ep, stockBatches, godowns) : null;
 
-  /** Enter → next field; Ctrl+Enter / F9 → save; "+" / Alt+N → new line. */
+  /** Enter → next field (entry row: Enter on Rate or Disc puts the line in the grid); Ctrl+Enter / F9 → save; "+" / Alt+N → line in. */
   const onKeys = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const t = e.target as HTMLElement;
     const tag = t.tagName;
     if ((e.key === 'Enter' && (e.ctrlKey || e.metaKey)) || e.key === 'F9') {
       e.preventDefault();
-      submit(false);
+      submit();
       return;
     }
+    const inEntry = Boolean(t.closest('[data-entry]'));
     const isNumber = tag === 'INPUT' && (t as HTMLInputElement).type === 'number';
-    if ((e.altKey && (e.key === 'n' || e.key === 'N' || e.code === 'KeyN')) || (e.key === '+' && (tag === 'SELECT' || isNumber))) {
+    if ((e.altKey && (e.key === 'n' || e.key === 'N' || e.code === 'KeyN')) || (e.key === '+' && inEntry && (tag === 'SELECT' || isNumber))) {
       e.preventDefault();
-      addRow();
+      commitEntry();
       return;
     }
     if (e.key !== 'Enter' || e.shiftKey || e.altKey || tag === 'TEXTAREA' || tag === 'BUTTON' || !box.current) return;
-    const navs = (Array.from(box.current.querySelectorAll('[data-nav]')) as HTMLElement[]).filter((n) => n.offsetParent !== null || n === t);
-    const at = navs.indexOf(t);
-    if (at < 0) return;
-    e.preventDefault();
     const nav = t.getAttribute('data-nav');
-    const rowKey = t.closest('[data-row]')?.getAttribute('data-row');
-    const rowIdx = rows.findIndex((r) => r.key === rowKey);
-    const focus = (el?: HTMLElement | null) => {
-      if (!el) return;
-      el.focus();
-      if (el instanceof HTMLInputElement) el.select();
-    };
-    const paidField = () => box.current?.querySelector<HTMLElement>('[data-nav="paid"]');
-    // An empty item line ends the item list: go to "Paid now".
-    if (nav === 'item' && !(t as HTMLSelectElement).value && rows.some((r) => r.productId)) return focus(paidField());
-    // Price on the last line: start a new line.
-    if (nav === 'price' && rowIdx === rows.length - 1 && rows[rowIdx]?.productId) return addRow();
-    focus(navs[at + 1]);
+    if (!nav) return;
+    e.preventDefault();
+    if (inEntry) {
+      // An empty Product box ends the item list: go to the payment.
+      if (nav === 'item' && !(t as HTMLSelectElement).value) {
+        if (rows.some((r) => r.committed && r.productId)) {
+          if (!cash && focusIn('[data-nav="paid"]')) return;
+          focusIn('#bill-freight');
+        }
+        return;
+      }
+      if (nav === 'price' || nav === 'disc') {
+        commitEntry();
+        return;
+      }
+    }
+    if (t.closest('[data-pay-entry]')) {
+      if (nav === 'pay-note') return commitPay();
+    }
+    const navs = (Array.from(box.current.querySelectorAll('[data-nav]')) as HTMLElement[]).filter((x) => x === t || (x.offsetParent !== null && !(x as HTMLInputElement).disabled));
+    const at = navs.indexOf(t);
+    const next = navs[at + 1];
+    if (next) {
+      next.focus();
+      if (next instanceof HTMLInputElement) next.select();
+    }
   };
 
   const footer = (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-      <div className="flex-1 text-sm">
-        <span className="text-[#6B7280] dark:text-[#94A3B8]">Total </span>
-        <span className="tabular-nums font-extrabold text-lg text-[#111827] dark:text-white">{rs(total)}</span>
-        {balance > 0 && <span className="ml-2 text-xs font-bold text-amber-700 dark:text-amber-300">{rs(balance)} on credit</span>}
-        {total > 0 && balance === 0 && <span className="ml-2 text-xs font-bold text-teal-700 dark:text-teal-300">Fully paid</span>}
-        <span className="hidden lg:inline-flex items-center gap-1 ml-3 text-[10px] text-[#8E9299]" title="Enter: next field • Ctrl+Enter or F9: save • + or Alt+N: new line • type to search items"><Keyboard className="w-3 h-3" /> Enter next • F9 save • + line</span>
+    <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 flex-1 min-w-0">
+        <div role="radiogroup" aria-label="Print Invoice" className="inline-flex items-center gap-1 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-1 text-xs font-bold">
+          <span className="px-1.5 text-[10px] uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Print</span>
+          {PRINT_CHOICES.map((c) => (
+            <label key={c.id} className={`px-2.5 py-1.5 rounded-xl cursor-pointer ${printChoice === c.id ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : 'text-[#6B7280] dark:text-[#94A3B8]'}`} title={c.id === 'half' ? 'A5' : c.id === 'full' ? 'A4' : c.id === 'mini' ? '80 mm thermal' : 'Do not print'}>
+              <input type="radio" name={`print-${cash ? 'cash' : 'sale'}`} value={c.id} checked={printChoice === c.id} onChange={() => setPrintChoice(c.id)} className="sr-only" aria-label={c.label} />
+              {c.label}
+            </label>
+          ))}
+        </div>
+        <span className="text-sm">
+          <span className="text-[#6B7280] dark:text-[#94A3B8]">Total </span>
+          <span className="tabular-nums font-extrabold text-lg text-[#111827] dark:text-white">{rs(total)}</span>
+          {!cash && balance > 0 && <span className="ml-2 text-xs font-bold text-amber-700 dark:text-amber-300">{rs(balance)} on credit</span>}
+          {total > 0 && balance === 0 && <span className="ml-2 text-xs font-bold text-teal-700 dark:text-teal-300">Fully paid</span>}
+        </span>
+        <span className="hidden xl:inline-flex items-center gap-1 text-[10px] text-[#8E9299]" title="Enter: next field • Enter on Rate: line in • Ctrl+Enter or F9: save • F2 in Customer: search party"><Keyboard className="w-3 h-3" /> Enter next • F9 save • F2 party</span>
       </div>
-      <div className="flex gap-2">
-        <button type="button" onClick={() => submit(false)} disabled={saveBlocked} title={blockedWhy || 'Save (Ctrl+Enter or F9)'} className={secondaryBtn}><Save className="w-4 h-4" /> Save</button>
-        <button type="button" onClick={() => submit(true)} disabled={saveBlocked} title={blockedWhy} className={primaryBtn}><Printer className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Save &amp; Print</button>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => submit()} disabled={saveBlocked} title={blockedWhy || 'Save (Ctrl+Enter or F9)'} className={primaryBtn}><Save className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Save</button>
+        {cash && (
+          <button type="button" onClick={() => { onClose(); ui.newCashSale(); }} className={secondaryBtn} title="A new, empty cash sale (this one is not saved)"><FilePlus2 className="w-4 h-4" /> New</button>
+        )}
+        <button type="button" onClick={() => setConfirmDelete(true)} disabled={!editInv || !canDelete} className={dangerBtn} title={editInv ? `Delete ${editInv.invoiceNumber}` : 'Open a saved invoice (Search) to delete it'}><Trash2 className="w-4 h-4" /> Delete</button>
+        <button type="button" onClick={() => focusIn('#bill-search')} className={secondaryBtn} title="Open a saved invoice by its number to change it"><Search className="w-4 h-4" /> Search</button>
+        <button type="button" onClick={doPreview} className={secondaryBtn}><Eye className="w-4 h-4" /> Preview</button>
+        <button type="button" onClick={onClose} className={secondaryBtn} aria-label="Close invoice"><X className="w-4 h-4" /> Close</button>
       </div>
     </div>
   );
 
-  const smallLabel = 'md:hidden block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1';
+  const small = 'block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1';
+  const hdr = 'text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]';
+  const readBox = 'rounded-2xl border border-dashed border-[#E5E5E1] dark:border-[#203248] px-3 py-2 text-sm min-h-11 flex items-center';
+  const title = editInv ? `Edit bill ${editInv.invoiceNumber}` : cash ? 'Cash Sale Invoice' : 'New Bill';
+  const committed = lines.map((l, idx) => ({ l, idx })).filter(({ l }) => l.committed);
+  const entryLine = lines[entryIdx];
+  const entryNote = entryLine ? stockNote(entryLine, entryIdx) : null;
+  const last = ep && selected ? lastRateFor(selected.id, ep.id, invoices) : null;
+  const unitWord = ep ? (entryLine.pack > 1 ? ep.packName! : ep.unit || 'pcs') : '';
+  const payCommitted = payRows.filter((p) => p.committed);
+  const payTotal = round2(payRows.reduce((a, p) => a + (parseFloat(p.amount) || 0), 0));
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={editInv ? `Edit bill ${editInv.invoiceNumber}` : 'New Bill'} subtitle={editInv ? 'Change the customer, date, items or prices. Saving updates this same bill; money already received stays on it.' : quote ? `From quotation ${quote.quoteNumber} — check the items and prices, then save.` : 'Pick the customer, add items, enter what was paid.'} wide="xl" footer={footer}>
-      <div className="space-y-5" ref={box} onKeyDown={onKeys}>
-        {error && <Notice kind="error">{error}</Notice>}
-        {sentForApproval && <div data-testid="bill-sent-for-approval"><Notice kind="ok">{sentForApproval}</Notice></div>}
-        {!sentForApproval && approvalWhy && (
-          <div data-testid="bill-needs-approval" className="rounded-2xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3.5 py-2.5 text-xs space-y-2">
-            <p className="font-bold text-amber-900 dark:text-amber-200">Needs a manager’s approval: {approvalWhy.join('; ')}.</p>
-            <p className="text-amber-900/80 dark:text-amber-200/80">Saving sends the bill to Approvals. Nothing goes to the books or the stock until a manager approves it.</p>
-            {(!credit.over || !canOverride) && <input aria-label="Note for the manager" value={overReason} onChange={(e) => setOverReason(e.target.value)} className={inputCls} placeholder="Note for the manager (optional)" />}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-end gap-x-4 gap-y-2 rounded-2xl border border-dashed border-[#E5E5E1] dark:border-[#203248] px-3.5 py-2" data-testid="bill-computer-no">
-          <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Computer # <strong className="tabular-nums text-sm text-[#111827] dark:text-white" title="Given automatically when you save" data-testid="bill-next-number">{computerNo}</strong></div>
-          <div className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Computer date <strong className="text-[#111827] dark:text-white">{formatDate(todayISO())}</strong></div>
-          <div className="flex-1 min-w-[12rem] flex gap-1.5 sm:justify-end">
-            <label className="sr-only" htmlFor="bill-search">Search old bill</label>
-            <input id="bill-search" data-skip-autofocus value={find} onChange={(e) => setFind(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); searchBill(); } }} className={`${inputCls} !py-1.5 sm:max-w-[11rem]`} placeholder="Search bill #" />
-            <button type="button" onClick={searchBill} className={`${secondaryBtn} !py-1.5 !px-3 shrink-0`} aria-label="Open old bill"><Search className="w-4 h-4" /></button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_10.5rem] gap-3">
-          <div className="min-w-0">
-            <label className={labelCls} htmlFor="bill-customer">Customer</label>
-            {newCustomer ? (
-              <div className="grid grid-cols-2 gap-2">
-                <input autoFocus data-nav="customer" placeholder="Customer name" value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} className={inputCls} aria-label="New customer name" />
-                <input data-nav="customer-phone" placeholder="Phone" value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} className={inputCls} aria-label="New customer phone" />
-                <button type="button" onClick={() => setNewCustomer(null)} className="col-span-2 text-xs font-semibold text-[#6B7280] hover:text-[#111827] dark:hover:text-white text-left">← Choose an existing customer instead</button>
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                <CodeBox id="bill-customer-code" label="Customer code" items={customers} value={customer} onPick={pickCustomer} fallback={customerByName} onEnter={onCustomerCodeEnter} skipAutofocus className="w-24 sm:w-28 shrink-0" />
-                <div className="flex-1 min-w-[11rem]">
-                  <QuickSelect id="bill-customer" data-nav="customer" value={customer} options={customerOptions} onPick={pickCustomer} className={inputCls} title="Type a name, code or phone to find the customer">
-                    <option value="">Select customer…</option>
-                    {sortedCustomers.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}{c.phone ? ` • ${c.phone}` : ''}{c.totalDue > 0 ? ` (due ${rs(c.totalDue)})` : ''}</option>
-                    ))}
-                  </QuickSelect>
-                </div>
-                {cityList.length > 0 && (
-                  <select aria-label="Customer city" data-testid="bill-customer-city" value={billCity} onChange={(e) => setBillCity(e.target.value)} className={`${inputCls} !w-auto min-w-[7rem] max-w-[10rem] shrink-0 max-sm:flex-1 max-sm:max-w-none`} title="Search party by city">
-                    <option value="">All cities</option>
-                    {cityList.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                )}
-                <button type="button" onClick={() => setNewCustomer({ name: '', phone: '' })} className={`${secondaryBtn} shrink-0 px-3`} title="Add a new customer"><UserPlus className="w-4 h-4" /><span>New</span></button>
-              </div>
-            )}
-          </div>
-          <div>
-            <label className={labelCls} htmlFor="bill-date">Date</label>
-            <input id="bill-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
-          </div>
-          <div className="sm:col-span-full grid grid-cols-2 gap-3 items-end">
-            <div>
-              <label className={labelCls} htmlFor="bill-memo">Memo No</label>
-              <input id="bill-memo" value={memoNo} onChange={(e) => setMemoNo(e.target.value)} className={inputCls} placeholder="book / ref. no." />
+    <>
+      <Modal isOpen={isOpen} onClose={onClose} title={title} subtitle={editInv ? 'Sale Invoice — change it and Save; it keeps its number. Money already received stays on it.' : cash ? 'Walk-in sale, paid in cash. Customer is optional.' : quote ? `Sale Invoice from quotation ${quote.quoteNumber} — check the items and prices, then save.` : 'Sale Invoice'} xwide footer={footer}>
+        <div className="space-y-4" ref={box} onKeyDown={onKeys} data-testid={cash ? 'cash-sale-form' : 'sale-invoice-form'}>
+          {error && <Notice kind="error">{error}</Notice>}
+          {sentForApproval && <div data-testid="bill-sent-for-approval"><Notice kind="ok">{sentForApproval}</Notice></div>}
+          {!sentForApproval && approvalWhy && (
+            <div data-testid="bill-needs-approval" className="rounded-2xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3.5 py-2.5 text-xs space-y-2">
+              <p className="font-bold text-amber-900 dark:text-amber-200">Needs a manager’s approval: {approvalWhy.join('; ')}.</p>
+              <p className="text-amber-900/80 dark:text-amber-200/80">Saving sends the bill to Approvals. Nothing goes to the books or the stock until a manager approves it.</p>
+              {(!credit.over || !canOverride) && <input aria-label="Note for the manager" value={overReason} onChange={(e) => setOverReason(e.target.value)} className={inputCls} placeholder="Note for the manager (optional)" />}
             </div>
-            <label htmlFor="bill-delivery-order" className="flex items-center gap-2.5 min-h-11 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] px-3 cursor-pointer" title="Goods go out later. Stock is taken now; the bill waits in the Pending Delivery List.">
-              <input id="bill-delivery-order" type="checkbox" checked={deliveryOrder} onChange={(e) => setDeliveryOrder(e.target.checked)} className="w-5 h-5 accent-teal-700" />
-              <span className="text-sm font-semibold text-[#111827] dark:text-white inline-flex items-center gap-1.5"><Truck className="w-4 h-4 text-indigo-600" /> Delivery Order</span>
-            </label>
+          )}
+
+          {/* ---- Header: left block (the old program's left column) and right block ---- */}
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_17rem] gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-[repeat(4,minmax(0,1fr))] gap-3 items-end">
+              <div className="col-span-2 sm:col-span-1" data-testid="bill-computer-no">
+                <span className={labelCls}>Computer #</span>
+                <div className="flex gap-1">
+                  <div className={`${readBox} flex-1 font-bold tabular-nums text-[#111827] dark:text-white`} title="Given automatically when you save" data-testid="bill-next-number">{computerNo}</div>
+                  <button type="button" onClick={() => focusIn('#bill-search')} className={`${secondaryBtn} !px-2.5 shrink-0`} aria-label="Find a saved invoice" title="Search a saved invoice by its number"><MoreHorizontal className="w-4 h-4" /></button>
+                </div>
+              </div>
+              <div>
+                <span className={labelCls}>Computer Date</span>
+                <div className={`${readBox} text-[#111827] dark:text-white`} data-testid="bill-computer-date">{formatDate(editInv ? (editInv.enteredAt || editInv.createdAt || todayISO()).slice(0, 10) : todayISO())}</div>
+              </div>
+              <label htmlFor="bill-delivery-order" className="flex items-center gap-2.5 min-h-11 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] px-3 cursor-pointer" title="Goods go out later. Stock is taken now; the bill waits in the Pending Delivery List.">
+                <input id="bill-delivery-order" data-skip-autofocus type="checkbox" checked={deliveryOrder} onChange={(e) => setDeliveryOrder(e.target.checked)} className="w-5 h-5 accent-teal-700" />
+                <span className="text-sm font-semibold text-[#111827] dark:text-white inline-flex items-center gap-1.5"><Truck className="w-4 h-4 text-indigo-600" /> Delivery Order</span>
+              </label>
+              <div>
+                <label className="sr-only" htmlFor="bill-search">Search old bill</label>
+                <span className={labelCls} aria-hidden="true">Search invoice</span>
+                <div className="flex gap-1">
+                  <input id="bill-search" data-skip-autofocus value={find} onChange={(e) => setFind(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); searchBill(); } }} className={inputCls} placeholder="Bill #" />
+                  <button type="button" onClick={searchBill} className={`${secondaryBtn} !px-2.5 shrink-0`} aria-label="Open old bill"><Search className="w-4 h-4" /></button>
+                </div>
+              </div>
+
+              <div className="col-span-2 sm:col-span-4 min-w-0">
+                <label className={labelCls} htmlFor="bill-customer">{cash ? 'Customer (optional)' : 'Customer'}</label>
+                {newCustomer ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <input autoFocus data-nav="customer" placeholder="Customer name" value={newCustomer.name} onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })} className={inputCls} aria-label="New customer name" />
+                    <input data-nav="customer-phone" placeholder="Phone" value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} className={inputCls} aria-label="New customer phone" />
+                    <button type="button" onClick={() => setNewCustomer(null)} className="col-span-2 text-xs font-semibold text-[#6B7280] hover:text-[#111827] dark:hover:text-white text-left">← Choose an existing customer instead</button>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <CodeBox id="bill-customer-code" label="Customer code" items={customers} value={customer} onPick={pickCustomer} fallback={customerByName} onEnter={onCustomerCodeEnter} onTypeName={(t) => openPartySearch(t)} onKeyDownExtra={partyKeys} skipAutofocus className="w-24 sm:w-28 shrink-0" />
+                    <div className="flex-1 min-w-[11rem]" onKeyDown={partyKeys}>
+                      <QuickSelect id="bill-customer" data-nav="customer" value={customer} options={customerOptions} onPick={pickCustomer} className={inputCls} title="Type a name, code or phone to find the customer (F2: search party by city)">
+                        <option value="">{cash ? 'Walk-in (cash sale)' : 'Select customer…'}</option>
+                        {sortedCustomers.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}{c.phone ? ` • ${c.phone}` : ''}{c.totalDue > 0 ? ` (due ${rs(c.totalDue)})` : ''}</option>
+                        ))}
+                      </QuickSelect>
+                    </div>
+                    <button type="button" onClick={() => openPartySearch('')} className={`${secondaryBtn} shrink-0 !px-3`} aria-label="Search party by city" title="Search Party By City (F2)"><Search className="w-4 h-4" /></button>
+                    {!cash && <button type="button" onClick={() => setNewCustomer({ name: '', phone: '' })} className={`${secondaryBtn} shrink-0 px-3`} title="Add a new customer"><UserPlus className="w-4 h-4" /><span>New</span></button>}
+                  </div>
+                )}
+              </div>
+
+              <div className="col-span-2 min-w-0">
+                <label className={labelCls} htmlFor="bill-sale-ac">Sale a/c</label>
+                <div className="flex gap-2">
+                  <CodeBox id="bill-sale-ac-code" label="Sale a/c code" items={saleAccs.map((a) => ({ id: a.code, code: a.code }))} value={saleAc} onPick={setSaleAc} className="w-24 shrink-0" skipAutofocus nextId="bill-godown" />
+                  <select id="bill-sale-ac" value={saleAc} onChange={(e) => setSaleAc(e.target.value)} className={`${inputCls} flex-1 min-w-0`} title="The income account the goods are credited to">
+                    {saleAccs.map((a) => <option key={a.code} value={a.code}>{a.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="min-w-0">
+                <label className={labelCls} htmlFor="bill-godown">Store Name</label>
+                <select id="bill-godown" value={godownId} onChange={(e) => setGodownId(e.target.value)} className={inputCls} disabled={godowns.length < 2}>
+                  {godowns.length === 0 && <option value="">Main store</option>}
+                  {godowns.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+              </div>
+              <div className="min-w-0">
+                <span className={labelCls}>{cash ? 'Product Balance/Unit' : 'Stock in Hand'}</span>
+                <div className={`${readBox} tabular-nums font-bold ${ep && ep.stockKg < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#111827] dark:text-white'}`} data-testid="bill-stock-box" title={ep ? `${ep.name}: stock in hand` : 'Stock of the item in the entry row'}>
+                  {ep ? formatPackQty(ep.stockKg, ep, 'short') : '—'}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-1 gap-3 content-start">
+              <div className="col-span-2 lg:col-span-1">
+                <span className={labelCls}>Party Balance</span>
+                <div className={`${readBox} tabular-nums font-extrabold ${selected && selected.totalDue > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-[#111827] dark:text-white'}`} data-testid="bill-party-balance">{selected ? rs(selected.totalDue) : '—'}</div>
+              </div>
+              <div>
+                <label className={labelCls} htmlFor="bill-memo">Memo No</label>
+                <input id="bill-memo" value={memoNo} onChange={(e) => setMemoNo(e.target.value)} className={inputCls} placeholder="book / ref. no." />
+              </div>
+              <div>
+                <label className={labelCls} htmlFor="bill-date">Your Date</label>
+                <input id="bill-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+              </div>
+              <div className="col-span-2 lg:col-span-1">
+                <label className={labelCls} htmlFor="bill-disc-pct">Disc %</label>
+                <input id="bill-disc-pct" type="number" inputMode="decimal" min="0" max="100" step="any" value={billPct} onChange={(e) => setBillPct(e.target.value)} className={numInputCls} placeholder="0 (on every line)" title="A discount % on every line that has no discount of its own" />
+              </div>
+            </div>
           </div>
+
           {selected && snapshot && (
-            <div data-testid="bill-customer-info" className="sm:col-span-full rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] px-3.5 py-2.5 text-xs text-[#374151] dark:text-[#CBD5E1] space-y-1">
+            <div data-testid="bill-customer-info" className="rounded-2xl border border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#162436] px-3.5 py-2.5 text-xs text-[#374151] dark:text-[#CBD5E1] space-y-1">
               <div className="flex flex-wrap gap-x-4 gap-y-1">
                 <span>Balance <strong className={`tabular-nums ${selected.totalDue > 0 ? 'text-amber-700 dark:text-amber-300' : selected.totalDue < 0 ? 'text-teal-700 dark:text-teal-300' : ''}`}>{rs(selected.totalDue)}</strong>{selected.totalDue < 0 ? ' (advance)' : ''}</span>
                 <span>Credit left <strong className="tabular-nums">{credit.hasLimit ? rs(credit.available) : 'no limit'}</strong></span>
@@ -611,22 +838,9 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               )}
             </div>
           )}
-          {credit.hasLimit && (
-            <div className="sm:col-span-full sm:order-last">
-              <BillCreditPanel check={credit} canOverride={canOverride} allow={allowOver} onAllow={setAllowOver} reason={overReason} onReason={setOverReason} />
-            </div>
-          )}
-          {(godowns.length > 1 || salesmen.length > 0 || areas.length > 0) && (
-            // Godown, salesman and area share one row on a tablet / desktop, so the item lines stay in view.
-            <div className="sm:col-span-full grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {godowns.length > 1 && (
-                <div className="col-span-2 sm:col-span-1">
-                  <label className={labelCls} htmlFor="bill-godown">From godown</label>
-                  <select id="bill-godown" value={godownId} onChange={(e) => setGodownId(e.target.value)} className={inputCls}>
-                    {godowns.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                  </select>
-                </div>
-              )}
+          {credit.hasLimit && !cash && <BillCreditPanel check={credit} canOverride={canOverride} allow={allowOver} onAllow={setAllowOver} reason={overReason} onReason={setOverReason} />}
+          {(salesmen.length > 0 || areas.length > 0) && (
+            <div className="grid grid-cols-2 gap-3">
               {salesmen.length > 0 && (
                 <div>
                   <label className={labelCls} htmlFor="bill-salesman">Salesman</label>
@@ -647,115 +861,164 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               )}
             </div>
           )}
-        </div>
 
-        <div>
-          <div className={`hidden md:grid ${LINE_COLS} gap-2 px-1 mb-1 text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]`}>
-            <div>Code</div>
-            <div>Item</div>
-            <div>Qty</div>
-            <div>Price</div>
-            <div className="text-right">Amount</div>
-            <div />
+          {/* ---- Entry row ---- */}
+          <div>
+            <div className={`hidden lg:grid ${LINE_COLS} gap-2 px-1 mb-1 ${hdr}`}>
+              <div>Code</div>
+              <div>Product Name</div>
+              <div>Unit</div>
+              <div>Description</div>
+              <div>Qty</div>
+              <div>Rate</div>
+              <div className="text-right">Amount</div>
+              <div>Disc</div>
+              <div className="text-right">Net Amount</div>
+            </div>
+            <div data-entry data-row={entry.key} data-testid="bill-entry" className={`grid grid-cols-12 ${LINE_COLS} gap-2 items-start rounded-2xl border-2 ${editingLine ? 'border-indigo-300 dark:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/20' : 'border-teal-200 dark:border-teal-900 bg-teal-50/30 dark:bg-teal-950/10'} p-2`}>
+              <div className="col-span-4 lg:col-auto min-w-0">
+                <span className={`lg:hidden ${small}`}>Code</span>
+                <CodeBox key={entry.key} id="bill-entry-code" label={`Code ${n}`} items={sortedProducts} value={entry.productId} onPick={(v) => pickProduct(entry.key, v)} fallback={productByName} onEnter={onLineCodeEnter} />
+              </div>
+              <div className="col-span-8 lg:col-auto min-w-0">
+                <span className={`lg:hidden ${small}`}>Product Name</span>
+                <QuickSelect aria-label={`Item ${n}`} data-nav="item" value={entry.productId} options={productOptions} onPick={(v) => pickProduct(entry.key, v)} className={inputCls} title="Type the item name or code to find it">
+                  <option value="">Select item…</option>
+                  {sortedProducts.map((x) => (
+                    <option key={x.id} value={x.id}>{x.name}{x.code ? ` • ${x.code}` : ''}</option>
+                  ))}
+                </QuickSelect>
+              </div>
+              <div className="col-span-4 lg:col-auto min-w-0">
+                <span className={`lg:hidden ${small}`}>Unit</span>
+                <select aria-label={`Unit ${n}`} data-nav="unit" value={entry.inPack ? 'pack' : 'unit'} onChange={(e) => setUnit(entry.key, e.target.value === 'pack')} disabled={!hasPack(ep)} className={`${inputCls} !px-2`}>
+                  <option value="unit">{ep ? ep.unit || 'pcs' : 'Unit'}</option>
+                  {ep && hasPack(ep) && <option value="pack">{`${ep.packName} (${ep.packSize})`}</option>}
+                </select>
+              </div>
+              <div className="col-span-8 lg:col-auto min-w-0">
+                <span className={`lg:hidden ${small}`}>Description</span>
+                <input aria-label={`Description ${n}`} data-nav="desc" value={entry.desc} onChange={(e) => setRow(entry.key, { desc: e.target.value })} className={inputCls} placeholder="optional" />
+              </div>
+              <div className="col-span-6 lg:col-auto min-w-0">
+                <span className={`lg:hidden ${small}`}>Qty{ep ? ` (${unitWord})` : ''}</span>
+                <input aria-label={`Quantity ${n}`} data-nav="qty" type="number" inputMode="decimal" min="0" step="any" value={entry.qty} onChange={(e) => setRow(entry.key, { qty: e.target.value })} className={numInputCls} placeholder="Qty" />
+              </div>
+              <div className="col-span-6 lg:col-auto min-w-0">
+                <span className={`lg:hidden ${small}`}>Rate{ep ? ` per ${unitWord}` : ''}</span>
+                <input aria-label={`Price ${n}`} data-nav="price" type="number" inputMode="decimal" min="0" step="any" value={entry.price} onChange={(e) => setRow(entry.key, { price: e.target.value, priceFrom: 'typed' })} className={numInputCls} placeholder={ep ? `per ${unitWord}` : 'Rate'} />
+                {entry.priceFrom === 'customer' && entry.productId && <span data-testid={`customer-rate-${n}`} className="block mt-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Customer rate</span>}
+              </div>
+              <div className="col-span-6 lg:col-auto min-w-0 text-right self-center">
+                <span className={`lg:hidden ${small}`}>Amount</span>
+                <span className={`${moneyCls} text-sm text-[#374151] dark:text-[#CBD5E1]`} data-testid="entry-amount">{rs(entryLine?.gross || 0)}</span>
+              </div>
+              <div className="col-span-6 lg:col-auto min-w-0">
+                <span className={`lg:hidden ${small}`}>Disc</span>
+                <div className="flex gap-1">
+                  <input id={`disc-${entry.key}`} aria-label={`Discount ${n}`} data-nav="disc" type="number" inputMode="decimal" min="0" step="any" value={entry.disc} onChange={(e) => setRow(entry.key, { disc: e.target.value })} className={`${numInputCls} min-w-0`} placeholder={entryLine?.fromBillPct || entryLine?.schemePct ? `${entryLine.discValue}%` : '0'} />
+                  <span role="group" aria-label={`Discount type ${n}`} title="Rs. or % off this line" className="shrink-0 inline-flex flex-col rounded-xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden text-[9px] font-bold leading-none">
+                    {(['rs', 'pct'] as const).map((t) => (
+                      <button key={t} type="button" tabIndex={-1} aria-pressed={entry.discType === t} onClick={() => setRow(entry.key, { discType: t })} className={`flex-1 px-1.5 ${entry.discType === t ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : 'text-[#6B7280] dark:text-[#94A3B8]'}`}>{t === 'rs' ? 'Rs.' : '%'}</button>
+                    ))}
+                  </span>
+                </div>
+              </div>
+              <div className="col-span-12 lg:col-auto min-w-0 flex lg:block items-baseline justify-between text-right self-center">
+                <span className={`lg:hidden ${small}`}>Net Amount</span>
+                <span data-testid={`line-amount-${n}`} className={`${moneyCls} font-bold text-sm text-[#111827] dark:text-white`}>{rs(entryLine?.amount || 0)}</span>
+              </div>
+              {ep && (
+                <div data-testid={`line-info-${n}`} className="col-span-full flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6B7280] dark:text-[#94A3B8] px-1">
+                  {entryLine.pack > 1 && entryLine.qty > 0 && <span className="font-semibold text-[#374151] dark:text-[#CBD5E1]">= {formatPackQty(entryLine.qty, ep)} • {rs(Math.round(entryLine.price * 100) / 100)}/{ep.unit || 'pcs'}</span>}
+                  <span>Stock <strong className={`tabular-nums ${ep.stockKg < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#374151] dark:text-[#CBD5E1]'}`}>{formatPackQty(ep.stockKg, ep, 'short')}</strong></span>
+                  {epPer && godowns.map((g) => <span key={g.id}>{g.name}: <strong className="tabular-nums">{formatPackQty(epPer[g.id] || 0, ep, 'short')}</strong></span>)}
+                  {last && (
+                    <button type="button" tabIndex={-1} onClick={() => setRow(entry.key, { price: shownPrice(ep.id, last.rate, entry.inPack), priceFrom: 'typed' })} className="hover:text-teal-700 dark:hover:text-teal-300" title="Use this rate">
+                      Last rate <strong className="tabular-nums text-[#374151] dark:text-[#CBD5E1]">{rs(last.rate)}/{ep.unit || 'pcs'}</strong> ({formatDate(last.date)})
+                    </button>
+                  )}
+                  {entryLine.lineDisc > 0 && <span>Disc − {rs(entryLine.lineDisc)}{entryLine.fromBillPct ? ` (bill ${entryLine.discValue}%)` : ''}</span>}
+                </div>
+              )}
+              {entryLine?.schemePct && (
+                <div data-testid={`scheme-pct-${n}`} className="col-span-full flex flex-wrap items-center gap-2 text-[11px] font-semibold text-teal-700 dark:text-teal-300">
+                  <Gift className="w-3.5 h-3.5" /> Scheme “{entryLine.schemePct.schemeName}”: {entryLine.schemePct.pct}% off (− {rs(entryLine.lineDisc)})
+                  <button type="button" tabIndex={-1} onClick={() => drop(`pct|${entryLine.schemePct!.schemeId}|${entryLine.key}`)} className="underline text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600" aria-label={`Remove scheme discount on item ${n}`}>remove</button>
+                </div>
+              )}
+              {entryNote && <div data-testid={`stock-note-${n}`} className={`col-span-full text-[11px] font-semibold ${entryNote.block ? 'text-rose-700 dark:text-rose-300' : entryNote.warn ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{entryNote.text}</div>}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <button type="button" onClick={() => commitEntry()} title="Put the line in the grid (Enter on Rate, + or Alt+N)" className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-300 hover:underline">{editingLine ? 'Update line' : 'Add another item'}</button>
+              {editingLine && <button type="button" onClick={() => setActiveKey(newRowOf(rows).key)} className="text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] hover:underline">Done with line {n}</button>}
+              <ScanButton onPick={(p) => addScanned(p.id)} keepOpen />
+              {ep && (
+                <span data-testid="bill-stock-in-hand" className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">
+                  <span className="font-bold uppercase tracking-wider text-[10px]">Stock in hand</span> {ep.name}: <strong className="tabular-nums text-[#111827] dark:text-white">{formatPackQty(ep.stockKg, ep)}</strong>
+                  {selected && <> • Party balance <strong className="tabular-nums">{rs(selected.totalDue)}</strong></>}
+                </span>
+              )}
+            </div>
           </div>
-          <div className="space-y-2">
-            {lines.map((l, idx) => {
+
+          {/* ---- Grid ---- */}
+          <div className="rounded-2xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden" role="grid" aria-label="Invoice lines">
+            <div role="row" className={`hidden lg:grid ${GRID_COLS} gap-2 px-3 py-2 bg-[#FAF9F6] dark:bg-[#162436] ${hdr}`}>
+              <div role="columnheader">Code</div>
+              <div role="columnheader">Product Name</div>
+              <div role="columnheader">Unit</div>
+              <div role="columnheader">Description</div>
+              <div role="columnheader" className="text-right">Qty</div>
+              <div role="columnheader" className="text-right">Rate</div>
+              <div role="columnheader" className="text-right">Amount</div>
+              <div role="columnheader" className="text-right">Disc</div>
+              <div role="columnheader" className="text-right">Net Amount</div>
+              <div />
+            </div>
+            {committed.length === 0 && <p className="px-3 py-3 text-xs text-[#6B7280] dark:text-[#94A3B8]">No lines yet. Type the code (or pick the product), Qty and Rate, then Enter.</p>}
+            {committed.map(({ l, idx }) => {
               const p = l.product;
-              const packable = hasPack(p);
-              const unitWord = p ? (l.pack > 1 ? p.packName! : p.unit || 'pcs') : '';
-              const last = p && selected ? lastRateFor(selected.id, p.id, invoices) : null;
-              const note = stockNote(l, idx);
+              const active = l.key === activeKey;
+              const note = active ? null : stockNote(l, idx);
+              const uw = p ? (l.pack > 1 ? p.packName! : p.unit || 'pcs') : '';
               return (
-                <div key={l.key} data-row={l.key} data-testid="bill-line" onFocus={() => setFocusKey(l.key)} className={`grid grid-cols-12 ${LINE_COLS} gap-2 items-center rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2 md:p-1 md:border-0`}>
-                  <CodeBox id={`bill-code-${idx + 1}`} label={`Code ${idx + 1}`} items={sortedProducts} value={l.productId} onPick={(v) => pickProduct(l.key, v)} fallback={productByName} onEnter={(hit, typed) => onLineCodeEnter(l.key, hit, typed)} className="col-span-4 md:col-auto" />
-                  <div className="col-span-8 md:col-auto flex gap-1 min-w-0">
-                    <div className="flex-1 min-w-0">
-                      <QuickSelect aria-label={`Item ${idx + 1}`} data-nav="item" value={l.productId} options={productOptions} onPick={(v) => { codeFlow.current = false; pickProduct(l.key, v); }} className={inputCls} title="Type the item name or code to find it">
-                        <option value="">Select item…</option>
-                        {sortedProducts.map((x) => (
-                          <option key={x.id} value={x.id}>{x.name}{x.code ? ` • ${x.code}` : ''}</option>
-                        ))}
-                      </QuickSelect>
-                    </div>
-                    <button type="button" onClick={() => removeRow(l.key)} aria-label={`Remove item ${idx + 1}`} className="md:hidden shrink-0 p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-30" disabled={rows.length === 1}><Trash2 className="w-4 h-4" /></button>
+                <div
+                  key={l.key}
+                  role="row"
+                  tabIndex={0}
+                  data-testid="bill-line"
+                  aria-selected={active}
+                  aria-label={`Line ${idx + 1}: ${p?.name || ''}`}
+                  onClick={() => loadLine(l.key)}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === 'Delete') { e.preventDefault(); removeLine(l.key); }
+                    else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); loadLine(l.key); }
+                  }}
+                  className={`grid grid-cols-12 ${GRID_COLS} gap-x-2 gap-y-0.5 items-center px-3 py-2 text-sm border-t border-[#F1F0EC] dark:border-[#1E2E40] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${active ? 'bg-indigo-50 dark:bg-indigo-950/40' : 'hover:bg-[#FAF9F6] dark:hover:bg-[#162436]'}`}
+                >
+                  <div role="gridcell" className="col-span-3 lg:col-auto font-mono text-xs text-[#6B7280] dark:text-[#94A3B8]">{p?.code || '—'}</div>
+                  <div role="gridcell" className="col-span-9 lg:col-auto font-semibold text-[#111827] dark:text-white truncate">{p?.name}</div>
+                  <div role="gridcell" className="col-span-3 lg:col-auto text-xs">{uw}</div>
+                  <div role="gridcell" className="col-span-9 lg:col-auto text-xs text-[#6B7280] dark:text-[#94A3B8] truncate">{l.desc}</div>
+                  <div role="gridcell" className="col-span-3 lg:col-auto text-right tabular-nums">{l.rawQty}</div>
+                  <div role="gridcell" className="col-span-3 lg:col-auto text-right tabular-nums">{l.rawPrice}</div>
+                  <div role="gridcell" className="col-span-3 lg:col-auto text-right tabular-nums whitespace-nowrap">{rs(l.gross)}</div>
+                  <div role="gridcell" className="col-span-3 lg:col-auto text-right tabular-nums whitespace-nowrap text-xs">{l.lineDisc > 0 ? `${rs(l.lineDisc)}${l.discType === 'pct' ? ` (${l.discValue}%)` : ''}` : '—'}</div>
+                  <div role="gridcell" className="col-span-9 lg:col-auto text-right font-bold tabular-nums whitespace-nowrap text-[#111827] dark:text-white" {...(active ? {} : { 'data-testid': `line-amount-${idx + 1}` })}>{rs(l.amount)}</div>
+                  <div className="col-span-3 lg:col-auto flex justify-end">
+                    <button type="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); removeLine(l.key); }} aria-label={`Remove item ${idx + 1}`} className="p-1.5 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"><Trash2 className="w-4 h-4" /></button>
                   </div>
-                  <div className="col-span-6 md:col-auto min-w-0">
-                    <span className={smallLabel}>Qty{p ? ` (${plural(unitWord, 2)})` : ''}</span>
-                    <input aria-label={`Quantity ${idx + 1}`} data-nav="qty" type="number" inputMode="decimal" min="0" step="any" value={l.rawQty} onChange={(e) => setRow(l.key, { qty: e.target.value })} className={numInputCls} placeholder="Qty" />
-                  </div>
-                  <div className="col-span-6 md:col-auto min-w-0">
-                    <span className={smallLabel}>Price{p ? ` per ${unitWord}` : ''}</span>
-                    <input aria-label={`Price ${idx + 1}`} data-nav="price" type="number" inputMode="decimal" min="0" step="any" value={l.rawPrice} onChange={(e) => setRow(l.key, { price: e.target.value, priceFrom: 'typed' })} className={numInputCls} placeholder={p ? `per ${unitWord}` : 'Price'} />
-                    {l.priceFrom === 'customer' && <span data-testid={`customer-rate-${idx + 1}`} className="block mt-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Customer rate</span>}
-                  </div>
-                  <div className="col-span-full md:col-auto flex md:block items-baseline justify-between gap-2 text-right px-1 md:px-0">
-                    <span className="md:hidden text-[10px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Amount</span>
-                    <span data-testid={`line-amount-${idx + 1}`} className={`${moneyCls} font-bold text-sm text-[#111827] dark:text-white`}>{rs(l.amount)}</span>
-                  </div>
-                  <div className="hidden md:flex justify-end">
-                    <button type="button" onClick={() => removeRow(l.key)} aria-label={`Remove item ${idx + 1}`} className="p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-30" disabled={rows.length === 1}><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                  {p && (
-                    <div data-testid={`line-info-${idx + 1}`} className="col-span-full flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6B7280] dark:text-[#94A3B8] px-1">
-                      {packable && (
-                        <span className="inline-flex rounded-xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden font-bold" role="group" aria-label={`Unit for item ${idx + 1}`}>
-                          {[false, true].map((packMode) => (
-                            <button key={String(packMode)} type="button" tabIndex={-1} aria-pressed={l.inPack === packMode} onClick={() => l.inPack !== packMode && togglePack(l.key)} className={`px-2 py-0.5 ${l.inPack === packMode ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : ''}`}>
-                              {packMode ? `${p.packName} (${p.packSize})` : p.unit || 'pcs'}
-                            </button>
-                          ))}
-                        </span>
-                      )}
-                      {l.pack > 1 && l.qty > 0 && <span className="font-semibold text-[#374151] dark:text-[#CBD5E1]">= {formatPackQty(l.qty, p)} • {rs(Math.round(l.price * 100) / 100)}/{p.unit || 'pcs'}</span>}
-                      <span>Stock <strong className={`tabular-nums ${p.stockKg < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#374151] dark:text-[#CBD5E1]'}`}>{formatPackQty(p.stockKg, p, 'short')}</strong></span>
-                      {last && (
-                        <button type="button" tabIndex={-1} onClick={() => setRow(l.key, { price: shownPrice(p.id, last.rate, l.inPack), priceFrom: 'typed' })} className="hover:text-teal-700 dark:hover:text-teal-300" title="Use this rate">
-                          Last rate <strong className="tabular-nums text-[#374151] dark:text-[#CBD5E1]">{rs(last.rate)}/{p.unit || 'pcs'}</strong> ({formatDate(last.date)})
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {l.schemePct && (
-                    <div data-testid={`scheme-pct-${idx + 1}`} className="col-span-full flex flex-wrap items-center gap-2 text-[11px] font-semibold text-teal-700 dark:text-teal-300">
-                      <Gift className="w-3.5 h-3.5" /> Scheme “{l.schemePct.schemeName}”: {l.schemePct.pct}% off (− {rs(l.lineDisc)})
-                      <button type="button" tabIndex={-1} onClick={() => drop(`pct|${l.schemePct!.schemeId}|${l.key}`)} className="underline text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600" aria-label={`Remove scheme discount on item ${idx + 1}`}>remove</button>
-                    </div>
-                  )}
+                  {l.schemePct && !active && <div className="col-span-full text-[11px] font-semibold text-teal-700 dark:text-teal-300">Scheme “{l.schemePct.schemeName}” {l.schemePct.pct}%</div>}
                   {note && <div data-testid={`stock-note-${idx + 1}`} className={`col-span-full text-[11px] font-semibold ${note.block ? 'text-rose-700 dark:text-rose-300' : note.warn ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{note.text}</div>}
-                  {l.showDisc ? (
-                    <div className="col-span-full flex flex-wrap items-center gap-2">
-                      <label htmlFor={`disc-${l.key}`} className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8]">Discount on this item</label>
-                      <div className="w-28"><input id={`disc-${l.key}`} aria-label={`Discount ${idx + 1}`} type="number" inputMode="decimal" min="0" step="any" value={l.disc} onChange={(e) => setRow(l.key, { disc: e.target.value })} className={numInputCls} placeholder="0" /></div>
-                      <div className="inline-flex rounded-2xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden text-xs font-bold" role="group" aria-label={`Discount type ${idx + 1}`}>
-                        {(['rs', 'pct'] as const).map((t) => (
-                          <button key={t} type="button" aria-pressed={l.discType === t} onClick={() => setRow(l.key, { discType: t })} className={`px-3 py-2 ${l.discType === t ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : 'text-[#6B7280] dark:text-[#94A3B8]'}`}>{t === 'rs' ? 'Rs.' : '%'}</button>
-                        ))}
-                      </div>
-                      {l.lineDisc > 0 && <span className="text-[11px] font-semibold text-[#6B7280] dark:text-[#94A3B8]">− {rs(l.lineDisc)}</span>}
-                    </div>
-                  ) : (
-                    <div className="col-span-full -mt-1">
-                      <button type="button" tabIndex={-1} onClick={() => setRow(l.key, { showDisc: true })} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#6B7280] dark:text-[#94A3B8] hover:text-teal-700" aria-label={`Add discount to item ${idx + 1}`}><Percent className="w-3 h-3" /> Discount</button>
-                    </div>
-                  )}
                 </div>
               );
             })}
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={addRow} title="Add a line (+ or Alt+N)" className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-300 hover:underline"><Plus className="w-4 h-4" /> Add another item</button>
-            <ScanButton onPick={(p) => addScanned(p.id)} keepOpen />
-          </div>
-          {focused?.product && (
-            <div data-testid="bill-stock-in-hand" className="mt-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] px-3.5 py-2 text-xs text-[#374151] dark:text-[#CBD5E1] flex flex-wrap gap-x-4 gap-y-1">
-              <span><span className="font-bold uppercase tracking-wider text-[10px] text-[#6B7280] dark:text-[#94A3B8]">Stock in hand</span> {focused.product.name}: <strong className={`tabular-nums ${focused.product.stockKg < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#111827] dark:text-white'}`}>{formatPackQty(focused.product.stockKg, focused.product)}</strong></span>
-              {focusedPer && godowns.map((g) => <span key={g.id}>{g.name}: <strong className="tabular-nums">{formatPackQty(focusedPer[g.id] || 0, focused.product!, 'short')}</strong></span>)}
-              {selected && <span>Party balance <strong className="tabular-nums">{rs(selected.totalDue)}</strong></span>}
-            </div>
-          )}
-          {products.length === 0 && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">No items yet. Add your products with their prices on the Items screen first.</p>}
+          {products.length === 0 && <p className="text-xs text-amber-700 dark:text-amber-300">No items yet. Add your products with their prices on the Items screen first.</p>}
           {freeLines.length > 0 && (
-            <div className="mt-3 rounded-2xl border border-teal-200 dark:border-teal-900 bg-teal-50/50 dark:bg-teal-950/20 p-2.5 space-y-1.5" data-testid="bill-free-lines">
+            <div className="rounded-2xl border border-teal-200 dark:border-teal-900 bg-teal-50/50 dark:bg-teal-950/20 p-2.5 space-y-1.5" data-testid="bill-free-lines">
               <div className="text-[11px] font-bold uppercase tracking-wider text-teal-800 dark:text-teal-300 flex items-center gap-1.5"><Gift className="w-3.5 h-3.5" /> Free goods (scheme)</div>
               {freeLines.map((f) => (
                 <div key={f.key} className="flex items-center gap-2 text-sm">
@@ -767,93 +1030,156 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               {freeShort && <p className="text-[11px] font-semibold text-rose-700 dark:text-rose-300">Not enough {freeShort.product!.name} in stock for the free goods.</p>}
             </div>
           )}
-          {droppedCount > 0 && <button type="button" onClick={() => setDropped(new Set())} className="mt-2 text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:underline">Put back the removed scheme{droppedCount === 1 ? '' : 's'} ({droppedCount})</button>}
-        </div>
+          {droppedCount > 0 && <button type="button" onClick={() => setDropped(new Set())} className="text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:underline">Put back the removed scheme{droppedCount === 1 ? '' : 's'} ({droppedCount})</button>}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-3">
-            <div>
-              <label className={labelCls} htmlFor="bill-discount">Discount (Rs.)</label>
-              <input id="bill-discount" type="number" inputMode="decimal" min="0" step="any" value={discount} onChange={(e) => setDiscount(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0 (on the whole bill)" />
-            </div>
-            <div>
-              <label className={labelCls} htmlFor="bill-freight">Freight / loading (Rs.)</label>
-              <input id="bill-freight" type="number" inputMode="decimal" min="0" step="any" value={freight} onChange={(e) => setFreight(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0 (cartage / loading charged)" />
-            </div>
-            <div>
-              <label className={labelCls} htmlFor="bill-notes">Note (optional)</label>
-              <input id="bill-notes" value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} placeholder="e.g. delivered by Rashid" />
-            </div>
-            <CostCentreSelect id="bill-centre" value={costCentre} onChange={setCostCentre} />
-          </div>
-          <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] p-4 space-y-2 text-sm">
-            {lineDiscTotal > 0 && (
-              <>
-                <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>Items before discount</span><span className="tabular-nums">{rs(subtotal + lineDiscTotal)}</span></div>
-                <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>Item discounts</span><span className="tabular-nums">− {rs(lineDiscTotal)}</span></div>
-              </>
-            )}
-            <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>Subtotal</span><span className="tabular-nums">{rs(subtotal)}</span></div>
-            {disc > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>Discount</span><span className="tabular-nums">− {rs(disc)}</span></div>}
-            {taxRate > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>{settings.taxLabel || 'Tax'} {taxRate}%</span><span className="tabular-nums">{rs(tax)}</span></div>}
-            {freightAmt > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>Freight / loading</span><span className="tabular-nums">{rs(freightAmt)}</span></div>}
-            <div className="flex justify-between font-extrabold text-[#111827] dark:text-white border-t border-[#E5E5E1] dark:border-[#203248] pt-2"><span>Total</span><span className="tabular-nums">{rs(total)}</span></div>
-            {editInv ? (
-              <div className="flex justify-between text-xs text-[#6B7280] dark:text-[#94A3B8] pt-1" data-testid="bill-edit-paid"><span>Already received on this bill</span><span className="tabular-nums">{rs(alreadyPaid)}</span></div>
-            ) : split ? (
-              <div className="space-y-2 pt-1" data-testid="bill-split">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className={labelCls} htmlFor="bill-split-cash">Cash</label>
-                    <input id="bill-split-cash" data-nav="paid" type="number" inputMode="decimal" min="0" step="any" value={splitCash} onChange={(e) => setSplitCash(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
-                  </div>
-                  <div>
-                    <label className={labelCls} htmlFor="bill-split-cheque">Cheque</label>
-                    <input id="bill-split-cheque" data-nav="split-cheque" type="number" inputMode="decimal" min="0" step="any" value={splitCheque} onChange={(e) => setSplitCheque(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
-                  </div>
-                  <div>
-                    <label className={labelCls} htmlFor="bill-split-bank">Bank / wallet</label>
-                    <input id="bill-split-bank" data-nav="split-bank" type="number" inputMode="decimal" min="0" step="any" value={splitBank} onChange={(e) => setSplitBank(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
-                  </div>
-                  <div>
-                    <label className={labelCls} htmlFor="bill-split-bank-method">Bank by</label>
-                    <select id="bill-split-bank-method" value={splitBankMethod} onChange={(e) => setSplitBankMethod(e.target.value)} className={inputCls}>
-                      {BANK_METHODS.map((m) => <option key={m}>{m}</option>)}
-                    </select>
-                  </div>
-                  <BankSelect id="bill-split-bank-account" className="col-span-2" label="Into bank" value={bank} onChange={setBank} />
-                </div>
-                <button type="button" onClick={() => { setSplit(false); setSplitCash(''); setSplitBank(''); setSplitCheque(''); }} className="text-[11px] font-bold text-[#6B7280] dark:text-[#94A3B8] hover:text-teal-700">← One payment method</button>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2 pt-1">
-                  <div>
-                    <label className={labelCls} htmlFor="bill-paid">Paid now</label>
-                    <div className="flex gap-1">
-                      <input id="bill-paid" data-nav="paid" type="number" inputMode="decimal" min="0" step="any" value={paidNow} onChange={(e) => setPaidNow(e.target.value)} className={`${inputCls} tabular-nums`} placeholder="0" />
-                      <button type="button" tabIndex={-1} onClick={() => setPaidNow(String(total))} className="shrink-0 px-2.5 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:bg-white dark:hover:bg-[#1E2E40]" title="Paid in full">Full</button>
+          {/* ---- Payment Method (left) and totals (right) ---- */}
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_22rem] gap-4">
+            <div className="space-y-3 min-w-0">
+              {editInv ? (
+                <div data-testid="bill-payments-saved">
+                  <div className={`${hdr} mb-1`}>Payment Method</div>
+                  <div className="rounded-2xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden" role="grid" aria-label="Payments on this bill">
+                    <div role="row" className={`grid grid-cols-[4.5rem_minmax(0,1fr)_7rem] sm:grid-cols-[5.5rem_minmax(0,1fr)_8rem_minmax(0,1fr)] gap-2 px-3 py-1.5 bg-[#FAF9F6] dark:bg-[#162436] ${hdr} !text-[10px]`}>
+                      <span role="columnheader">Code</span><span role="columnheader">Title</span><span role="columnheader" className="text-right">Debit</span><span role="columnheader" className="hidden sm:block">Narration</span>
                     </div>
+                    {savedPays.length === 0 && <p className="px-3 py-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">Nothing received on this bill yet.</p>}
+                    {savedPays.map((p) => (
+                      <div key={p.id} role="row" data-testid="bill-saved-pay" className="grid grid-cols-[4.5rem_minmax(0,1fr)_7rem] sm:grid-cols-[5.5rem_minmax(0,1fr)_8rem_minmax(0,1fr)] gap-2 px-3 py-1.5 text-sm border-t border-[#F1F0EC] dark:border-[#1E2E40]">
+                        <span role="gridcell" className="font-mono text-xs self-center">{p.code}</span>
+                        <span role="gridcell" className="truncate">{accName(p.code)}</span>
+                        <span role="gridcell" className="text-right tabular-nums font-bold whitespace-nowrap">{rs(p.amount)}</span>
+                        <span role="gridcell" className="hidden sm:block truncate text-xs text-[#6B7280] dark:text-[#94A3B8]">{p.note}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <label className={labelCls} htmlFor="bill-method">Method</label>
-                    <select id="bill-method" data-nav="method" value={method} onChange={(e) => setMethod(e.target.value)} className={inputCls}>
-                      {BILL_PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
-                    </select>
+                  <div className="mt-1 flex flex-wrap justify-between gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8] px-1" data-testid="bill-edit-paid">
+                    <span>Money already received stays on this bill (change a payment from the bill: Edit payment).</span>
+                    <span>Received <strong className="tabular-nums text-[#111827] dark:text-white">{rs(alreadyPaid)}</strong></span>
                   </div>
-                  {needsBank(method) && <BankSelect id="bill-bank" className="col-span-full" label="Into bank" value={bank} onChange={setBank} />}
                 </div>
-                <button type="button" onClick={() => { setSplit(true); if (method === 'Cheque') setSplitCheque(paidNow); else if (method === 'Cash') setSplitCash(paidNow); else { setSplitBankMethod(BANK_METHODS.includes(method) ? method : BANK_METHODS[0]); setSplitBank(paidNow); } setPaidNow(''); }} className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:underline"><SplitSquareHorizontal className="w-3 h-3" /> Split: cash + bank + cheque</button>
-              </>
-            )}
-            {hasCheque && <div className="grid grid-cols-2 gap-2"><ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="bill-chq" narrow /></div>}
-            {payment.error && <p role="alert" className="text-[11px] font-bold text-rose-700 dark:text-rose-300">{payment.error}</p>}
-            {split && payment.paid > 0 && !payment.error && <div className="flex justify-between text-xs text-[#6B7280] dark:text-[#94A3B8]"><span>Paid now</span><span className="tabular-nums">{rs(payment.paid)}</span></div>}
-            <div className="flex justify-between text-xs font-bold pt-1 text-[#111827] dark:text-white"><span className={balance > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}>{balance > 0 ? 'Balance (credit)' : 'Balance'}</span><span className="tabular-nums">{rs(balance)}</span></div>
-            {change > 0 && <div className="flex justify-between text-xs font-bold text-indigo-700 dark:text-indigo-300"><span>Change to return</span><span className="tabular-nums">{rs(change)}</span></div>}
+              ) : cash ? (
+                <div className="rounded-2xl border border-teal-200 dark:border-teal-900 bg-teal-50/40 dark:bg-teal-950/20 px-3.5 py-2.5 text-xs text-teal-900 dark:text-teal-200" data-testid="cash-sale-paid">Paid in cash: <strong className="tabular-nums">{rs(total)}</strong> goes into Cash in hand.</div>
+              ) : (
+                <div data-testid="bill-payments">
+                  <div className={`${hdr} mb-1`}>Payment Method</div>
+                  <div className={`hidden sm:grid ${PAY_COLS} gap-2 px-1 mb-1 ${hdr} !text-[10px]`}>
+                    <div>Code</div>
+                    <div>Title</div>
+                    <div>Debit</div>
+                    <div>Narration</div>
+                  </div>
+                  <div data-pay-entry className={`grid grid-cols-2 ${PAY_COLS} gap-2 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2`}>
+                    <CodeBox key={payEntry.key} id="bill-pay-code" label="Payment code" items={payAccs.map((a) => ({ id: a.code, code: a.code }))} value={payEntry.code} onPick={(v) => setPay(payEntry.key, { code: v })} skipAutofocus nextId="bill-paid" />
+                    <select id="bill-pay-account" aria-label="Payment account" data-nav="pay-title" value={payEntry.code} onChange={(e) => setPay(payEntry.key, { code: e.target.value })} className={inputCls}>
+                      {payAccs.map((a) => <option key={a.code} value={a.code}>{a.name}</option>)}
+                    </select>
+                    <div className="flex gap-1 min-w-0">
+                      <input id="bill-paid" aria-label="Paid now" title="Debit: money received now into this account" data-nav="paid" type="number" inputMode="decimal" min="0" step="any" value={payEntry.amount} onChange={(e) => setPay(payEntry.key, { amount: e.target.value })} className={`${numInputCls} min-w-0`} placeholder="0" />
+                      <button type="button" tabIndex={-1} onClick={() => setPay(payEntry.key, { amount: String(Math.max(0, round2(total - (payTotal - (parseFloat(payEntry.amount) || 0))))) })} className="shrink-0 px-2 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-[11px] font-bold text-teal-700 dark:text-teal-300" title="The rest of the bill">Full</button>
+                    </div>
+                    <input id="bill-pay-note" aria-label="Narration" data-nav="pay-note" value={payEntry.note} onChange={(e) => setPay(payEntry.key, { note: e.target.value })} className={inputCls} placeholder="optional" />
+                  </div>
+                  {payCommitted.length > 0 && (
+                    <div className="mt-2 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden" role="grid" aria-label="Payments">
+                      {payCommitted.map((p) => (
+                        <div key={p.key} role="row" tabIndex={0} data-testid="bill-pay-line" aria-selected={p.key === activePay} onClick={() => { setActivePay(p.key); focusSoon('#bill-paid'); }} onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === 'Delete') { e.preventDefault(); removePay(p.key); } else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); setActivePay(p.key); focusSoon('#bill-paid'); } }} className={`grid grid-cols-[4.5rem_minmax(0,1fr)_7rem_2rem] sm:grid-cols-[5.5rem_minmax(0,1fr)_8rem_minmax(0,1fr)_2rem] gap-2 px-3 py-1.5 text-sm border-t first:border-t-0 border-[#F1F0EC] dark:border-[#1E2E40] cursor-pointer ${p.key === activePay ? 'bg-indigo-50 dark:bg-indigo-950/40' : ''}`}>
+                          <span role="gridcell" className="font-mono text-xs self-center">{p.code}</span>
+                          <span role="gridcell" className="truncate">{accName(p.code)}</span>
+                          <span role="gridcell" className="text-right tabular-nums font-bold">{rs(parseFloat(p.amount) || 0)}</span>
+                          <span role="gridcell" className="hidden sm:block truncate text-xs text-[#6B7280] dark:text-[#94A3B8]">{p.note}</span>
+                          <button type="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); removePay(p.key); }} aria-label={`Remove payment ${accName(p.code)}`} className="text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-1 flex flex-wrap justify-between gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8] px-1">
+                    <button type="button" onClick={commitPay} className="font-bold text-teal-700 dark:text-teal-300 hover:underline">Add payment line</button>
+                    <span>Total received <strong className="tabular-nums text-[#111827] dark:text-white" data-testid="bill-pay-total">{rs(payTotal)}</strong></span>
+                  </div>
+                  {hasCheque && <div className="mt-2 grid grid-cols-2 gap-2"><ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="bill-chq" narrow /></div>}
+                  {payError && <p role="alert" className="mt-1 text-[11px] font-bold text-rose-700 dark:text-rose-300">{payError}</p>}
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className={cash ? '' : 'sm:col-span-2'}>
+                  <label className={labelCls} htmlFor="bill-notes">Remarks</label>
+                  <input id="bill-notes" value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} placeholder="optional" />
+                </div>
+                {cash && (
+                  <div>
+                    <label className={labelCls} htmlFor="bill-walkin">Customer:</label>
+                    <input id="bill-walkin" value={walkIn} onChange={(e) => setWalkIn(e.target.value)} className={inputCls} placeholder="Walk-in customer name (optional)" />
+                  </div>
+                )}
+                <CostCentreSelect id="bill-centre" value={costCentre} onChange={setCostCentre} />
+              </div>
+            </div>
+            <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] border border-[#E5E5E1] dark:border-[#203248] p-4 space-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-2">
+                <div><span className={small}>Qty total</span><div className="tabular-nums font-bold text-[#111827] dark:text-white" data-testid="bill-qty-total">{qtyTotal}</div></div>
+                <div className="text-right"><span className={small}>Amount total</span><div className="tabular-nums font-bold text-[#111827] dark:text-white" data-testid="bill-amount-total">{rs(subtotal)}</div></div>
+              </div>
+              <div>
+                <label className={small} htmlFor="bill-freight">Others Charges</label>
+                <input id="bill-freight" type="number" inputMode="decimal" min="0" step="any" value={freight} onChange={(e) => setFreight(e.target.value)} className={numInputCls} placeholder="0 (freight / loading)" />
+              </div>
+              <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2 items-end">
+                <div>
+                  <label className={small} htmlFor="bill-lumsum-pct">Lumsum Disc%</label>
+                  <input id="bill-lumsum-pct" type="number" inputMode="decimal" min="0" max="100" step="any" value={lumsumPct} onChange={(e) => { setLumsumPct(e.target.value); if (e.target.value) setDiscount(''); }} className={numInputCls} placeholder="%" />
+                </div>
+                <div>
+                  <label className={small} htmlFor="bill-discount">Lumsum Disc (Rs.)</label>
+                  <input id="bill-discount" type="number" inputMode="decimal" min="0" step="any" value={lumsumPctNum > 0 ? String(disc) : discount} readOnly={lumsumPctNum > 0} onChange={(e) => setDiscount(e.target.value)} className={numInputCls} placeholder="0" />
+                </div>
+              </div>
+              {taxRate > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>{settings.taxLabel || 'Tax'} {taxRate}%</span><span className="tabular-nums">{rs(tax)}</span></div>}
+              <div className="flex justify-between font-extrabold text-[#111827] dark:text-white border-t border-[#E5E5E1] dark:border-[#203248] pt-2"><span>Bill Total</span><span className="tabular-nums" data-testid="bill-total">{rs(total)}</span></div>
+              {!cash && <div className="flex justify-between text-xs text-[#6B7280] dark:text-[#94A3B8]"><span>{editInv ? 'Received' : 'Paid now'}</span><span className="tabular-nums">{rs(paid)}</span></div>}
+              <div className={`flex justify-between font-extrabold rounded-xl px-2.5 py-2 ${balance > 0 ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200' : 'bg-teal-100 dark:bg-teal-950/60 text-teal-900 dark:text-teal-200'}`}><span>{balance > 0 ? 'Balance (credit)' : 'Balance'}</span><span className="tabular-nums" data-testid="bill-balance">{rs(balance)}</span></div>
+              {change > 0 && <div className="flex justify-between text-xs font-bold text-indigo-700 dark:text-indigo-300"><span>Change to return</span><span className="tabular-nums">{rs(change)}</span></div>}
+            </div>
           </div>
         </div>
-      </div>
-    </Modal>
+      </Modal>
+      <SearchPartyDialog
+        isOpen={Boolean(partySearch)}
+        parties={customers}
+        cities={cityList}
+        initialText={partySearch?.text || ''}
+        onClose={() => { setPartySearch(null); focusSoon('#bill-customer-code'); }}
+        onPick={(id) => { pickCustomer(id); setPartySearch(null); focusSoon('[data-entry] [data-code]'); }}
+      />
+      <ConfirmDialog
+        isOpen={confirmDelete}
+        title={`Delete bill ${editInv?.invoiceNumber || ''}?`}
+        message="The stock goes back, the customer's account and the books are reversed. This cannot be undone here (see Deleted records)."
+        details={editInv ? [`Bill total ${rs(editInv.totalAmount)}`, `Customer: ${editInv.customerName}`] : []}
+        confirmLabel={billDeleteNeedsApproval ? 'Delete bill (ask manager)' : 'Delete bill'}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={doDelete}
+      />
+      <Modal isOpen={preview} onClose={() => setPreview(false)} title="Invoice preview" subtitle={`${computerNo} • ${formatDate(date)} • not saved yet`} wide>
+        <div className="space-y-3 text-sm" data-testid="bill-preview">
+          <div className="flex justify-between"><span className="font-bold">{selected?.name || newCustomer?.name || (cash ? `Cash Sale${walkIn ? ` — ${walkIn}` : ''}` : '—')}</span><span>{memoNo ? `Memo ${memoNo}` : ''}</span></div>
+          <table className="w-full text-xs">
+            <thead><tr className="text-left text-[#6B7280]"><th className="py-1">Product</th><th className="text-right">Qty</th><th className="text-right">Rate</th><th className="text-right">Disc</th><th className="text-right">Net</th></tr></thead>
+            <tbody>
+              {used.map((l) => <tr key={l.key} className="border-t border-[#F1F0EC] dark:border-[#1E2E40]"><td className="py-1">{l.product?.name}{l.desc ? ` — ${l.desc}` : ''}</td><td className="text-right tabular-nums">{l.rawQty} {l.pack > 1 ? l.product?.packName : l.product?.unit}</td><td className="text-right tabular-nums">{l.rawPrice}</td><td className="text-right tabular-nums">{l.lineDisc > 0 ? rs(l.lineDisc) : ''}</td><td className="text-right tabular-nums font-bold">{rs(l.amount)}</td></tr>)}
+              {freeLines.map((f) => <tr key={f.key}><td className="py-1">{f.product!.name} (free)</td><td className="text-right tabular-nums">{f.qty}</td><td /><td /><td className="text-right">0</td></tr>)}
+            </tbody>
+          </table>
+          <div className="ml-auto max-w-xs space-y-1">
+            <div className="flex justify-between"><span>Amount</span><span className="tabular-nums">{rs(subtotal)}</span></div>
+            {disc > 0 && <div className="flex justify-between"><span>Lumsum disc</span><span className="tabular-nums">− {rs(disc)}</span></div>}
+            {freightAmt > 0 && <div className="flex justify-between"><span>Others charges</span><span className="tabular-nums">{rs(freightAmt)}</span></div>}
+            <div className="flex justify-between font-bold"><span>Bill total</span><span className="tabular-nums">{rs(total)}</span></div>
+            <div className="flex justify-between"><span>Paid</span><span className="tabular-nums">{rs(paid)}</span></div>
+            <div className="flex justify-between font-bold"><span>Balance</span><span className="tabular-nums">{rs(balance)}</span></div>
+          </div>
+          <div className="flex justify-end"><button type="button" onClick={() => setPreview(false)} className={secondaryBtn}><Printer className="w-4 h-4" /> Back to the invoice</button></div>
+        </div>
+      </Modal>
+    </>
   );
 };

@@ -196,11 +196,15 @@ test('banks, vouchers, account ledger, chart tree, receivable & payable by city'
   await expect(page.getByRole('button', { name: /Khan Kiryana/ }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Bismillah Traders/ }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Zaman Store/ })).toHaveCount(0);
-  // New bill: the customer picker can be narrowed by city too.
+  // New bill: "Search Party By City" narrows the customers by city too.
   await page.getByRole('button', { name: 'New bill for Khan Kiryana' }).click();
   const bill = dialog(page, 'New Bill');
-  await bill.getByTestId('bill-customer-city').selectOption('Mardan');
-  await expect(bill.locator('#bill-customer option')).toHaveText(['Select customer…', /Bismillah Traders/, /Khan Kiryana/]);
+  await bill.getByRole('button', { name: 'Search party by city' }).click();
+  const sp = dialog(page, 'Search Party By City');
+  await sp.getByLabel('City', { exact: true }).selectOption('Mardan');
+  await expect(sp.locator('[data-idx]')).toHaveText([/Bismillah Traders/, /Khan Kiryana/]);
+  await page.keyboard.press('Escape');
+  await expect(sp).toHaveCount(0);
   await bill.getByRole('button', { name: 'Close' }).first().click();
   await expect(bill).toHaveCount(0);
 

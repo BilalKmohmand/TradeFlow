@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { saveAndPrint } from './helpers/bill';
 import { signIn } from './helpers/login';
 import { goTo } from './helpers/nav';
 
@@ -97,9 +98,9 @@ test.describe('Sales extras (desktop)', () => {
     await expect(dialog.getByTestId('bill-free-lines')).toHaveCount(0);
     await dialog.getByRole('button', { name: /Put back the removed scheme/ }).click();
     await expect(dialog.getByTestId('bill-free-lines')).toBeVisible();
-    await dialog.getByLabel('Freight / loading (Rs.)').fill('500');
+    await dialog.getByLabel('Others Charges').fill('500');
     await expect(dialog).toContainText('Rs. 20,500');
-    await dialog.getByRole('button', { name: 'Save & Print' }).click();
+    await saveAndPrint(dialog);
     await expect(dialog).toBeHidden();
     const root = page.locator('#print-root');
     await expect(root).toContainText('INVOICE');

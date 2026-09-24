@@ -18,6 +18,8 @@ export type ReportRequest = ReportId | 'books' | 'menu';
 
 interface BillingUI {
   newBill: (customerId?: string | null) => void;
+  /** Cash Sale Invoice: a walk-in sale paid in cash (customer optional). */
+  newCashSale: () => void;
   openBill: (invoiceId: string) => void;
   /** Edit a saved bill in the New Bill form (same number); the bill reopens after saving. */
   editBill: (invoiceId: string) => void;
@@ -62,6 +64,8 @@ interface BillingUI {
   /** New purchase invoice, or look at a saved one. */
   newPurchaseInvoice: (supplierId?: string | null) => void;
   openPurchaseInvoice: (id: string) => void;
+  /** A saved purchase invoice in the Purchase Invoice form, to change or delete it (Search). */
+  editPurchaseInvoice: (id: string) => void;
   /** Delivery order: mark delivered (date, who, vehicle) and print the challan. */
   markDelivered: (invoiceId: string) => void;
 }
@@ -70,7 +74,7 @@ const Ctx = createContext<BillingUI | null>(null);
 
 /** Hosts every billing dialog once; screens just call e.g. `ui.newBill()`. */
 export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [bill, setBill] = useState<{ open: boolean; customerId: string | null; quotationId?: string | null; editInvoiceId?: string | null }>({ open: false, customerId: null });
+  const [bill, setBill] = useState<{ open: boolean; customerId: string | null; quotationId?: string | null; editInvoiceId?: string | null; mode?: 'sale' | 'cash' }>({ open: false, customerId: null });
   const [returnFor, setReturnFor] = useState<string | null>(null);
   const [quote, setQuote] = useState<{ open: boolean; editId: string | null; customerId: string | null }>({ open: false, editId: null, customerId: null });
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -95,12 +99,13 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const peekView = (screen: string) => (pendingView.current?.screen === screen ? pendingView.current.view : null);
   const [reportRequest, setReportRequest] = useState<BillingUI['reportRequest']>(null);
   const [accountsTabRequest, setAccountsTabRequest] = useState<BillingUI['accountsTabRequest']>(null);
-  const [purchase, setPurchase] = useState<{ open: boolean; supplierId: string | null }>({ open: false, supplierId: null });
+  const [purchase, setPurchase] = useState<{ open: boolean; supplierId: string | null; editId?: string | null }>({ open: false, supplierId: null });
   const [purchaseId, setPurchaseId] = useState<string | null>(null);
   const [deliverId, setDeliverId] = useState<string | null>(null);
 
   const api: BillingUI = {
     newBill: (customerId) => { bump(); setBill({ open: true, customerId: customerId || null }); },
+    newCashSale: () => { bump(); setBill({ open: true, customerId: null, mode: 'cash' }); },
     openBill: (id) => { bump(); setDetailId(id); },
     editBill: (id) => { bump(); setDetailId(null); setBill({ open: true, customerId: null, editInvoiceId: id }); },
     billFromQuote: (quotationId) => { bump(); setBill({ open: true, customerId: null, quotationId }); },
@@ -128,13 +133,14 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     accountsTabRequest,
     newPurchaseInvoice: (supplierId) => { bump(); setPurchase({ open: true, supplierId: supplierId || null }); },
     openPurchaseInvoice: (id) => { bump(); setPurchaseId(id); },
+    editPurchaseInvoice: (id) => { bump(); setPurchaseId(null); setPurchase({ open: true, supplierId: null, editId: id }); },
     markDelivered: (invoiceId) => { bump(); setDeliverId(invoiceId); },
   };
 
   return (
     <Ctx.Provider value={api}>
       {children}
-      <NewBillModal key={`bill-${nonce}`} isOpen={bill.open} onClose={() => setBill({ open: false, customerId: null })} customerId={bill.customerId} quotationId={bill.quotationId} editInvoiceId={bill.editInvoiceId} onEdited={(id) => { bump(); setBill({ open: false, customerId: null }); setDetailId(id); }} />
+      <NewBillModal key={`bill-${nonce}`} isOpen={bill.open} onClose={() => setBill({ open: false, customerId: null })} customerId={bill.customerId} quotationId={bill.quotationId} editInvoiceId={bill.editInvoiceId} mode={bill.mode} onEdited={(id) => { bump(); setBill({ open: false, customerId: null }); setDetailId(id); }} />
       <ReturnItemsModal key={`ret-${nonce}`} invoiceId={returnFor} onClose={() => setReturnFor(null)} onDone={(id) => { bump(); setReturnFor(null); setDetailId(id); }} />
       <QuotationModal key={`quote-${nonce}`} isOpen={quote.open} editId={quote.editId} customerId={quote.customerId} onClose={() => setQuote({ open: false, editId: null, customerId: null })} />
       <BillDetailModal key={`detail-${nonce}`} invoiceId={detailId} onClose={() => setDetailId(null)} />
@@ -144,7 +150,7 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       <TransferModal key={`tr-${nonce}`} isOpen={transferOpen} onClose={() => setTransferOpen(false)} />
       <SalesExtrasModals key={`sx-${nonce}`} view={salesView} onView={setSalesView} />
       <ItemModal key={`item-${nonce}`} isOpen={item.open} onClose={() => setItem({ open: false, editId: null })} editId={item.editId} />
-      <PurchaseInvoiceModal key={`pinv-${nonce}`} isOpen={purchase.open} supplierId={purchase.supplierId} onClose={() => setPurchase({ open: false, supplierId: null })} onSaved={(id) => { bump(); setPurchase({ open: false, supplierId: null }); setPurchaseId(id); }} onOpen={(id) => { bump(); setPurchase({ open: false, supplierId: null }); setPurchaseId(id); }} />
+      <PurchaseInvoiceModal key={`pinv-${nonce}`} isOpen={purchase.open} supplierId={purchase.supplierId} editId={purchase.editId} onEdit={(id) => { bump(); setPurchase({ open: true, supplierId: null, editId: id }); }} onNew={() => { bump(); setPurchase({ open: true, supplierId: null }); }} onClose={() => setPurchase({ open: false, supplierId: null })} onSaved={(id) => { bump(); setPurchase({ open: false, supplierId: null }); setPurchaseId(id); }} onOpen={(id) => { bump(); setPurchase({ open: false, supplierId: null }); setPurchaseId(id); }} />
       <PurchaseInvoiceDetail key={`pind-${nonce}`} id={purchaseId} onClose={() => setPurchaseId(null)} />
       <MarkDeliveredModal key={`dlv-${nonce}`} invoiceId={deliverId} onClose={() => setDeliverId(null)} />
     </Ctx.Provider>

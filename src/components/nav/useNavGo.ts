@@ -88,6 +88,7 @@ export const useNavGo = () => {
       case 'action':
         switch (target.action) {
           case 'newBill': return ui.newBill();
+          case 'newCashSale': return ui.newCashSale();
           case 'newQuote': return ui.newQuote();
           case 'newPurchaseInvoice': return ui.newPurchaseInvoice();
           case 'receive': return ui.receive();

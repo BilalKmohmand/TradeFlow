@@ -34,7 +34,7 @@ export type PrintRequest =
   | { type: 'booking'; bookingId: string }
   | { type: 'statement'; customerId: string; from: string; to: string }
   | { type: 'supplier_statement'; supplierId: string; from: string; to: string }
-  | { type: 'bill'; invoiceId: string }
+  | { type: 'bill'; invoiceId: string; paper?: BillPrintSize }
   | { type: 'bill_challan'; invoiceId: string; driver?: string; vehicle?: string }
   | { type: 'daily_sheet'; date: string }
   | { type: 'bank_reconciliation'; statementDate: string; closingBalance: number; bankCode?: string }
@@ -110,7 +110,8 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
   };
   useEscape(Boolean(request), onClose, 1); // the preview sits above every dialog
   // Paper for bills and receipts (Settings): A4, A5 or an 80 mm thermal roll.
-  const paper: BillPrintSize = settings.billPrintSize || 'a4';
+  // A bill can ask for its own paper (Sale Invoice → Print Invoice: Half = A5, Full = A4, Mini = thermal).
+  const paper: BillPrintSize = (request?.type === 'bill' && request.paper) || settings.billPrintSize || 'a4';
   const sizedDoc = Boolean(request && (request.type === 'bill' || request.type === 'voucher'));
   const books = useAccounting(isAccountingPrint(request));
   const billingReport = useBillingReportPrint(request);
@@ -159,7 +160,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
           body: (
             <ThermalReceipt company={COMPANY} title={`INVOICE #${inv.invoiceNumber.replace(/^INV-/, '')}`} date={`${formatDate(inv.issueDate)}${time ? ` ${time}` : ''}`} footer={settings.billFooter}>
               <div data-testid="thermal-customer">
-                <div>Customer: <b>{inv.customerName}</b></div>
+                <div>Customer: <b>{inv.customerName}</b>{inv.walkInName ? ` (${inv.walkInName})` : ''}</div>
                 {(inv.customerPhone || customer?.phone) && <div>Ph: {inv.customerPhone || customer?.phone}</div>}
                 {(salesmanName || areaName) && <div>{[salesmanName && `Salesman: ${salesmanName}`, areaName && `Area: ${areaName}`].filter(Boolean).join(' · ')}</div>}
                 {inv.memoNo && <div>Memo No: {inv.memoNo}</div>}
@@ -169,6 +170,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               {inv.items.map((it) => (
                 <div key={it.id} className="py-0.5">
                   <div className="font-bold">{it.productName}</div>
+                  {it.description && <div>{it.description}</div>}
                   {it.free ? (
                     <ThermalRow left={`${qtyText(it)} FREE${it.schemeName ? ` (${it.schemeName})` : ' (scheme)'}`} right="0" />
                   ) : (
@@ -217,7 +219,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               </div>
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Bill to</div>
-                <div className="font-bold text-sm">{inv.customerName}</div>
+                <div className="font-bold text-sm">{inv.customerName}{inv.walkInName ? ` — ${inv.walkInName}` : ''}</div>
                 {inv.customerCompany && inv.customerCompany !== inv.customerName && <div>{inv.customerCompany}</div>}
                 {(inv.customerAddress || customer?.address) && <div>{inv.customerAddress || customer?.address}</div>}
                 <div className="font-mono">{inv.customerPhone || customer?.phone}</div>
@@ -246,6 +248,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                   <tr key={it.id} className="border-b border-gray-200">
                     <td className={`${paper === 'a5' ? 'py-2' : 'py-3'} px-3 font-bold`}>
                       {it.productName}
+                      {it.description && <div className="text-[10px] font-normal text-gray-600">{it.description}</div>}
                       {it.free && <div className="text-[10px] font-bold text-teal-700" data-testid="print-free-line">FREE — {it.schemeName || 'scheme'}</div>}
                       {batchLines(it).map((b) => <div key={b} className="text-[10px] font-normal text-gray-600">{b}</div>)}
                     </td>
@@ -316,7 +319,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
             <div className="grid grid-cols-2 gap-6 text-xs">
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Deliver to</div>
-                <div className="font-bold text-sm">{inv.customerName}</div>
+                <div className="font-bold text-sm">{inv.customerName}{inv.walkInName ? ` — ${inv.walkInName}` : ''}</div>
                 {inv.customerCompany && inv.customerCompany !== inv.customerName && <div>{inv.customerCompany}</div>}
                 {(inv.customerAddress || customer?.address) && <div>{inv.customerAddress || customer?.address}</div>}
                 <div className="font-mono">{inv.customerPhone || customer?.phone}</div>

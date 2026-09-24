@@ -48,13 +48,16 @@ test.describe('Edit bill and opening balances', () => {
 
     const edit = page.getByRole('dialog', { name: 'Edit bill INV-1' });
     await expect(edit).toBeVisible();
-    await expect(edit.getByLabel('Quantity 1', { exact: true })).toHaveValue('10');
+    // The saved lines are in the grid; a click brings one back into the entry row to change it.
+    await expect(edit.getByTestId('bill-line')).toHaveCount(1);
     await expect(edit.getByTestId('bill-edit-paid')).toContainText('5,000');
+    await edit.getByTestId('bill-line').first().click();
+    await expect(edit.getByLabel('Quantity 1', { exact: true })).toHaveValue('10');
     await edit.getByLabel('Quantity 1', { exact: true }).fill('6');
-    await edit.getByRole('button', { name: 'Add another item' }).click();
+    await edit.getByRole('button', { name: 'Update line' }).click();
     await edit.getByLabel('Item 2', { exact: true }).selectOption('p2');
     await edit.getByLabel('Quantity 2', { exact: true }).fill('4');
-    await edit.getByLabel('Freight / loading (Rs.)').fill('300');
+    await edit.getByLabel('Others Charges').fill('300');
     await edit.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(edit).toBeHidden();
 

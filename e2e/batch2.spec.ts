@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { readFileSync } from 'fs';
+import { addPayment, saveAndPrint } from './helpers/bill';
 import { signIn } from './helpers/login';
 
 /**
@@ -56,25 +57,26 @@ test.describe('Batch 2 (desktop)', () => {
     await page.keyboard.type('dt16');
     await expect(item1).toHaveValue('p1');
     await expect(dialog.getByTestId('line-info-1')).toContainText('Stock 7 ctn + 2 tins');
-    await dialog.getByRole('group', { name: 'Unit for item 1' }).getByRole('button', { name: 'carton (6)' }).click();
+    await dialog.getByLabel('Unit 1', { exact: true }).selectOption({ label: 'carton (6)' });
     await expect(dialog.getByLabel('Price 1', { exact: true })).toHaveValue('6000');
     await dialog.getByLabel('Quantity 1', { exact: true }).fill('2.5');
     await expect(dialog.getByTestId('line-info-1')).toContainText('= 2 cartons + 3 tins');
     await dialog.getByLabel('Quantity 1', { exact: true }).press('Enter');
     await expect(dialog.getByLabel('Price 1', { exact: true })).toBeFocused();
-    await page.keyboard.press('Enter'); // last line's price → a new line, cursor in its item
+    await page.keyboard.press('Enter'); // Enter on the rate: the line goes into the grid, cursor back at Code
+    await expect(dialog.getByTestId('bill-line')).toHaveCount(1);
+    await expect(dialog.getByLabel('Code 2', { exact: true })).toBeFocused();
     const item2 = dialog.getByLabel('Item 2', { exact: true });
-    await expect(item2).toBeFocused();
 
-    // Item by name ("can"), Enter → qty, "+" adds another line.
+    // Item by name ("can") in the Code box, Enter → qty, "+" puts the line in the grid.
     await page.keyboard.type('can');
-    await expect(item2).toHaveValue('p2');
     await page.keyboard.press('Enter');
+    await expect(item2).toHaveValue('p2');
     await expect(dialog.getByLabel('Quantity 2', { exact: true })).toBeFocused();
     await page.keyboard.type('2');
     await page.keyboard.press('+');
-    await expect(dialog.getByLabel('Item 3', { exact: true })).toBeFocused();
-    await page.keyboard.press('Enter'); // empty item line → "Paid now"
+    await expect(dialog.getByLabel('Code 3', { exact: true })).toBeFocused();
+    await page.keyboard.press('Enter'); // empty Code box → "Paid now"
     await expect(dialog.getByLabel('Paid now', { exact: true })).toBeFocused();
     await page.keyboard.type('5000');
     await expect(dialog).toContainText('Rs. 19,000'); // 15,000 + 4,000
@@ -166,14 +168,14 @@ test.describe('Batch 2 (desktop)', () => {
     await dialog.getByLabel('Item 1', { exact: true }).selectOption('p2');
     await dialog.getByLabel('Quantity 1', { exact: true }).fill('7');
     await expect(dialog.getByTestId('stock-note-1')).toContainText('stock will go to -2 cans');
-    await dialog.getByRole('button', { name: /Split: cash \+ bank \+ cheque/ }).click();
-    await dialog.getByLabel('Cash', { exact: true }).fill('4000');
-    await dialog.getByLabel('Bank / wallet', { exact: true }).fill('3000');
-    await dialog.getByLabel('Cheque', { exact: true }).fill('7000');
+    // Payment Method grid: cash, the bank, and a customer's cheque (Cheques in hand).
+    await addPayment(dialog, '1000', '4000');
+    await addPayment(dialog, '1010', '3000');
+    await addPayment(dialog, '1150', '7000', { keep: true });
     await dialog.getByLabel('Cheque no.', { exact: true }).fill('445566');
     await dialog.getByLabel('Bank', { exact: true }).fill('HBL');
     await expect(dialog).toContainText('Fully paid');
-    await dialog.getByRole('button', { name: 'Save & Print' }).click();
+    await saveAndPrint(dialog, 'Mini');
     await expect(dialog).toBeHidden();
 
     // Thermal receipt: shop name, item, totals, previous balance, footer, thank-you.

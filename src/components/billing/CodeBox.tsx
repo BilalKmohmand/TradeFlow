@@ -70,18 +70,29 @@ export const CodeBox: React.FC<{
   nextId?: string;
   /** Id of the name list this box sits beside (skipped when moving on with Enter). */
   pairId?: string;
-}> = ({ id, label, items, value, onPick, placeholder = 'Code', className = '', fallback, onEnter, onEnterResult, nav, skipAutofocus, nextId, pairId }) => {
+  /**
+   * A name (not a code) is being typed: two letters in a row that no code starts with. The box is cleared and
+   * this gets the text (the Sale / Purchase Invoice then opens "Search Party By City" with it).
+   */
+  onTypeName?: (typed: string) => void;
+  /** Keys the form wants from this box (e.g. F2 = search party); return true when it handled the key. */
+  onKeyDownExtra?: (e: React.KeyboardEvent<HTMLInputElement>) => boolean;
+}> = ({ id, label, items, value, onPick, placeholder = 'Code', className = '', fallback, onEnter, onEnterResult, nav, skipAutofocus, nextId, pairId, onTypeName, onKeyDownExtra }) => {
   const current = items.find((x) => x.id === value);
   const [text, setText] = useState(current?.code || '');
   const [miss, setMiss] = useState(false);
   // What this box picked last: Enter and then leaving the box must not pick it a second time.
   const picked = useRef('');
+  // Typed in since the box last showed the picked item's code. Leaving the box only picks when it was, so a
+  // pick made in the name list a moment ago is never undone by the box's older text.
+  const dirty = useRef(false);
 
   // Picked by name (or cleared) somewhere else: show that item's code.
   useEffect(() => {
     setText(current?.code || '');
     setMiss(false);
     picked.current = '';
+    dirty.current = false;
   }, [value, current?.code]);
 
   const commit = (): string | undefined => {
@@ -108,8 +119,20 @@ export const CodeBox: React.FC<{
         data-code
         data-skip-autofocus={skipAutofocus || undefined}
         value={text}
-        onChange={(e) => { setText(e.target.value); setMiss(false); picked.current = ''; }}
+        onChange={(e) => {
+          const t = e.target.value;
+          if (onTypeName && /[a-z]{2}/i.test(t) && !items.some((x) => x.code && norm(x.code).startsWith(norm(t)))) {
+            setText(current?.code || '');
+            onTypeName(t);
+            return;
+          }
+          setText(t);
+          setMiss(false);
+          picked.current = '';
+          dirty.current = true;
+        }}
         onKeyDown={(e) => {
+          if (onKeyDownExtra?.(e)) return;
           if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
             e.stopPropagation();
@@ -129,7 +152,7 @@ export const CodeBox: React.FC<{
             }
           }
         }}
-        onBlur={() => { commit(); }}
+        onBlur={() => { if (dirty.current) commit(); }}
         data-nav={nav}
         autoCapitalize="characters"
         autoComplete="off"

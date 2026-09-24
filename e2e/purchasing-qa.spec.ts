@@ -30,7 +30,7 @@ async function booksAgree(page: Page) {
 }
 
 async function openPurchaseInvoice(page: Page) {
-  await openMenuOption(page, 'Invoice', 'Purchase invoice');
+  await openMenuOption(page, 'Invoice', 'Purchase Invoice');
   const form = page.getByRole('dialog', { name: 'Purchase Invoice' });
   await expect(form).toBeVisible();
   return form;
@@ -44,11 +44,13 @@ test.describe('Purchase Invoice: code boxes and keyboard only', () => {
     // The cursor starts in the supplier Code box (the date is already today).
     await expect(sc).toBeFocused();
 
-    // Just the number → S-0003; Enter jumps to Memo No.
+    // Just the number → S-0003; Enter jumps to Store Name (two godowns), then Memo No.
     await page.keyboard.type('3');
     await page.keyboard.press('Enter');
     await expect(form.locator('#pi-supplier')).toHaveValue('s3');
     await expect(sc).toHaveValue('S-0003');
+    await expect(form.locator('#pi-godown')).toBeFocused();
+    await page.keyboard.press('Enter');
     await expect(form.locator('#pi-memo')).toBeFocused();
 
     // A wrong code says so and keeps the supplier; picking by name puts its code in the box.
@@ -66,12 +68,10 @@ test.describe('Purchase Invoice: code boxes and keyboard only', () => {
 
     await form.locator('#pi-memo').fill('HB-7781');
     await form.locator('#pi-memo').press('Enter');
-    await expect(form.locator('#pi-godown')).toBeFocused();
-    await page.keyboard.press('Enter');
-    // (Search old invoice is skipped: it is not a data-entry field.)
+    // (Search old invoice and Your Date are skipped: not data-entry fields.)
     await expect(form.getByLabel('Product code 1')).toBeFocused();
 
-    // Line 1: item code → Enter → Qty → Enter → Rate (cost price filled) → Enter → new line's Code box.
+    // Line 1 in the entry row: item code → Enter → Qty → Enter → Rate (cost price filled) → Enter puts it in the grid; Code again.
     await page.keyboard.type('102');
     await page.keyboard.press('Enter');
     await expect(form.getByLabel('Product 1', { exact: true })).toHaveValue('p2');
@@ -97,11 +97,19 @@ test.describe('Purchase Invoice: code boxes and keyboard only', () => {
     await page.keyboard.press('Enter');
     await expect(form.getByLabel('Discount %')).toBeFocused();
     await page.keyboard.type('10');
-    // Alt+N adds a line from anywhere; remove it again.
+    // Alt+N from anywhere goes back to the entry row's Code box (an empty entry row adds nothing).
     await page.keyboard.press('Alt+n');
-    await expect(form.getByLabel('Product code 4')).toBeFocused();
-    await form.locator('button[aria-label="Remove line 4"]:visible').click();
-    await form.locator('button[aria-label="Remove line 3"]:visible').click();
+    await expect(form.getByLabel('Product code 3')).toBeFocused();
+    await expect(form.getByTestId('pi-line')).toHaveCount(2);
+    // A wrong line: in and out again with Delete.
+    await page.keyboard.type('101');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('1');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    await expect(form.getByTestId('pi-line')).toHaveCount(3);
+    await form.getByTestId('pi-line').nth(2).focus();
+    await page.keyboard.press('Delete');
     await expect(form.getByTestId('pi-line')).toHaveCount(2);
 
     // 12 cans × 2,000 + 3 tins × 6,000 = 42,000 − 10% = 37,800.
@@ -176,19 +184,19 @@ test.describe('Purchase Invoice: nothing cut off', () => {
       await form.getByLabel('Product code 1').press('Enter');
       await form.getByLabel('Qty 1', { exact: true }).fill('123456.75');
       await form.getByLabel('Rate 1', { exact: true }).fill('1234567.89');
+      // No text cut off inside the entry row's Code / Qty / Rate boxes.
+      const cutOff = () => form.locator('input[aria-label^="Qty"], input[aria-label^="Rate"], input[aria-label^="Product code"]').evaluateAll((els) =>
+        els.filter((e) => (e as HTMLInputElement).scrollWidth > (e as HTMLInputElement).clientWidth + 1).map((e) => `${e.getAttribute('aria-label')}=${(e as HTMLInputElement).value}`)
+      );
+      expect(await cutOff(), 'values cut off').toEqual([]);
       await form.getByRole('button', { name: 'Add another item' }).click();
       await form.getByLabel('Product code 2').fill('105'); // batches: batch + expiry row
       await form.getByLabel('Product code 2').press('Enter');
       await form.getByLabel('Qty 2', { exact: true }).fill('10');
-
-      // No text cut off inside the Code / Qty / Rate boxes.
-      const cut = await form.locator('input[aria-label^="Qty"], input[aria-label^="Rate"], input[aria-label^="Product code"]').evaluateAll((els) =>
-        els.filter((e) => (e as HTMLInputElement).scrollWidth > (e as HTMLInputElement).clientWidth + 1).map((e) => `${e.getAttribute('aria-label')}=${(e as HTMLInputElement).value}`)
-      );
-      expect(cut, 'values cut off').toEqual([]);
-      // Every part of each line stays inside the dialog (amount, delete, batch/expiry).
+      expect(await cutOff(), 'values cut off').toEqual([]);
+      // Every part of the entry row and each grid line stays inside the dialog (amount, delete, batch/expiry).
       const dialogBox = (await form.boundingBox())!;
-      const outside = await form.locator('[data-testid="pi-line"] input, [data-testid="pi-line"] select, [data-testid="pi-line"] [data-testid^="pi-amount"], [data-testid="pi-line"] button').evaluateAll(
+      const outside = await form.locator('[data-testid="pi-line"] [data-testid^="pi-amount"], [data-testid="pi-line"] button, [data-testid="pi-entry"] input, [data-testid="pi-entry"] select, [data-testid="pi-entry"] [data-testid^="pi-amount"]').evaluateAll(
         (els, right) => els.filter((e) => (e as HTMLElement).offsetParent !== null && e.getBoundingClientRect().right > right + 1).map((e) => e.getAttribute('aria-label') || e.getAttribute('data-testid') || e.tagName),
         dialogBox.x + dialogBox.width
       );
