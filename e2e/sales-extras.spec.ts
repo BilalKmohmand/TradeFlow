@@ -145,16 +145,21 @@ test.describe('Sales extras (desktop)', () => {
     await goTo(page, 'Money');
     await page.getByRole('main').getByRole('button', { name: 'Receive from many' }).click();
     const dlg = page.getByRole('dialog', { name: 'Receive from many' });
-    await expect(dlg.getByTestId('receive-many-row')).toHaveCount(1); // one empty line, nobody listed
+    await expect(dlg.getByTestId('receive-many-row')).toHaveCount(0); // an empty grid under the entry row, nobody listed
     await expect(dlg.getByRole('checkbox')).toHaveCount(0);
     await dlg.getByLabel('Line 1 code').fill('z01'); // any case
     await dlg.getByLabel('Line 1 code').press('Enter');
     await expect(dlg.getByLabel('Line 1 customer')).toHaveValue('c1');
-    await expect(dlg.getByTestId('rm-balance-1')).toHaveText('Rs. 13,070');
+    await expect(dlg.getByTestId('rm-balance-1')).toHaveText('13,070.00');
     await expect(dlg.getByLabel('Line 1 amount')).toBeFocused();
     await page.keyboard.type('1000');
-    await page.keyboard.press('Enter');
-    await expect(dlg.getByTestId('receive-many-row')).toHaveCount(2);
+    await page.keyboard.press('Enter'); // -> Method
+    await expect(dlg.getByLabel('Line 1 method')).toBeFocused();
+    await page.keyboard.press('Enter'); // -> Narration
+    await expect(dlg.getByLabel('Line 1 narration')).toBeFocused();
+    await page.keyboard.press('Enter'); // the line drops into the grid
+    await expect(dlg.getByTestId('receive-many-row')).toHaveCount(1);
+    await expect(dlg.getByTestId('rm-amount-1')).toHaveText('1,000.00');
     await expect(dlg.getByLabel('Line 2 code')).toBeFocused();
     await page.keyboard.type('Z01');
     await page.keyboard.press('Enter');
@@ -175,7 +180,7 @@ test.describe('Sales extras (desktop)', () => {
     await dlg.getByLabel('Line 1 amount').fill('5000');
     await dlg.getByRole('button', { name: 'Add row' }).click();
     await dlg.getByLabel('Line 2 customer').selectOption('c2');
-    await expect(dlg.getByTestId('rm-balance-2')).toHaveText('Rs. 8,000');
+    await expect(dlg.getByTestId('rm-balance-2')).toHaveText('8,000.00');
     await dlg.getByLabel('Line 2 amount').fill('8000');
     await dlg.getByLabel('Line 2 method').selectOption('Bank Transfer');
     await expect(dlg.getByTestId('receive-many-count')).toContainText('2 customer(s)');
@@ -270,7 +275,9 @@ test.describe('Sales extras on a 390px phone', () => {
     await dlg.getByLabel('Line 1 customer').selectOption('c2');
     await dlg.getByLabel('Line 1 amount').fill('500');
     await dlg.getByLabel('Line 1 amount').press('Enter');
-    await expect(dlg.getByTestId('receive-many-row')).toHaveCount(2);
+    await dlg.getByLabel('Line 1 method').press('Enter');
+    await dlg.getByLabel('Line 1 narration').press('Enter');
+    await expect(dlg.getByTestId('receive-many-row')).toHaveCount(1);
     await page.waitForTimeout(300);
     await noSideScroll(page, 'receive from many');
     await page.keyboard.press('Escape');

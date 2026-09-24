@@ -814,14 +814,18 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       if (!l || !(l.type === 'payment_received' || l.type === 'payment_made')) return null;
       const isReceipt = l.type === 'payment_received';
       const party = isReceipt ? customers.find((c) => c.id === l.entityId) : suppliers.find((s) => s.id === l.entityId);
+      // The receipt / voucher number: a bill payment's own receipt number, else the document it was posted with.
+      const payNo = l.receiptNo || l.referenceId;
+      const onBill = l.receiptNo && l.referenceId !== l.receiptNo ? l.referenceId : '';
       if (paper === 'thermal80') {
         return {
           thermal: true,
           title: isReceipt ? 'RECEIPT' : 'PAYMENT',
-          number: l.referenceId,
+          number: payNo,
           date: l.date,
           body: (
-            <ThermalReceipt company={COMPANY} title={`${isReceipt ? 'RECEIPT' : 'PAYMENT'} ${l.referenceId}`} date={formatDate(l.date)} footer={settings.billFooter}>
+            <ThermalReceipt company={COMPANY} title={`${isReceipt ? 'RECEIPT' : 'PAYMENT'} ${payNo}`} date={formatDate(l.date)} footer={settings.billFooter}>
+              <div>{isReceipt ? 'Receipt no.' : 'Voucher no.'}: <b data-testid="print-payment-no">{payNo}</b>{onBill ? ` (bill ${onBill})` : ''}</div>
               <div>{isReceipt ? 'Received from' : 'Paid to'}: <b>{party?.company || party?.name}</b></div>
               {party?.phone && <div>Ph: {party.phone}</div>}
               <ThermalRule />
@@ -835,12 +839,14 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
       }
       return {
         title: isReceipt ? 'RECEIPT VOUCHER' : 'PAYMENT VOUCHER',
-        number: l.referenceId,
+        number: payNo,
         date: l.date,
         body: (
           <>
             <div className="grid grid-cols-2 gap-6 text-xs">
               <div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">{isReceipt ? 'Receipt no.' : 'Voucher no.'}</div>
+                <div className="font-mono font-bold text-sm mb-3" data-testid="print-payment-no">{payNo}{onBill ? <span className="font-sans font-normal text-[11px] text-gray-500"> — against bill {onBill}</span> : null}</div>
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">{isReceipt ? 'Received from' : 'Paid to'}</div>
                 <div className="font-bold text-sm">{party?.company}</div>
                 <div>{party?.name}</div>

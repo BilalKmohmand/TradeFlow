@@ -13,9 +13,19 @@ import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
 import { MAIN_BANK_CODE } from '../../utils/banks';
 import { isPendingApproval } from '../../context/controlActions';
+import { LedgerGrid, LedgerColumn, TotalsLabel, fmt2, fmt2OrBlank, ledgerInputCls, ledgerNumCls } from '../billing/classic/LedgerGrid';
 
 const roCls = `${inputCls} tabular-nums !bg-[#F4F3EF] dark:!bg-[#0D1520]`;
-const cellCls = 'px-2 py-2 align-top';
+const cellBtn = 'w-8 h-8 inline-flex items-center justify-center rounded-md border border-[#D9D8D2] dark:border-[#2A3E57] bg-white dark:bg-[#0B131D] text-[#374151] dark:text-[#CBD5E1] hover:text-teal-700 dark:hover:text-teal-300';
+/** Code | Title | Debit | Credit | Narration, as the old voucher screen. */
+const VCH_COLS: LedgerColumn[] = [
+  { key: 'code', label: 'Code', width: '6.25rem' },
+  { key: 'title', label: 'Title', width: 'minmax(9rem,2fr)' },
+  { key: 'debit', label: 'Debit', width: '7.75rem', numeric: true },
+  { key: 'credit', label: 'Credit', width: '7.75rem', numeric: true },
+  { key: 'narration', label: 'Narration', width: 'minmax(8rem,1.6fr)' },
+  { key: 'act', label: <span className="sr-only">Line</span>, width: '4.75rem', align: 'center' },
+];
 
 /**
  * The voucher screen, step for step as Apna Accountant SB: "Cash Payment -- [Debit Voucher]" (CPV),
@@ -295,10 +305,6 @@ export const VoucherModal: React.FC<{
         <label className="inline-flex items-center gap-2 text-sm font-semibold text-[#374151] dark:text-[#CBD5E1] min-h-11 sm:min-h-0">
           <input type="checkbox" checked={printOn} onChange={(e) => setPrintOn(e.target.checked)} className="w-4 h-4 accent-teal-700" /> Print Voucher
         </label>
-        <div className="text-xs text-[#374151] dark:text-[#CBD5E1] tabular-nums" data-testid="voucher-totals">
-          Totals: Debit <strong data-testid="voucher-total-debit">{rs(totals.debit)}</strong> • Credit <strong data-testid="voucher-total-credit">{rs(totals.credit)}</strong>
-          {!info.money && Math.abs(totals.debit - totals.credit) >= 0.005 && <span className="ml-2 font-bold text-rose-700 dark:text-rose-300">Difference {rs(Math.abs(totals.debit - totals.credit))}</span>}
-        </div>
       </div>
       <div className="grid grid-cols-2 sm:flex gap-2 max-sm:w-full">
         <button type="button" onClick={save} disabled={readOnly} className={`${primaryBtn} max-sm:col-span-2`}><Save className="w-4 h-4" /> Save</button>
@@ -309,7 +315,7 @@ export const VoucherModal: React.FC<{
     </div>
   );
 
-  const amountCls = (which: 'debit' | 'credit') => `${inputCls} tabular-nums text-right ${which === main ? '' : 'opacity-80'}`;
+  const amountCls = (which: 'debit' | 'credit') => `${ledgerNumCls} ${which === main ? '' : 'opacity-80'}`;
   return (
     <Modal isOpen onClose={onClose} title={VOUCHER_TITLES[type]} subtitle={loaded ? `Voucher ${loaded.ref}${readOnly ? ' (view only)' : ' — change it and Save'}` : info.money ? `The ${info.money === 'cash' ? 'cash' : 'bank'} side is added by itself. Code, Enter, amount, Enter, narration, Enter.` : 'Debits must equal credits. Code, Enter, amount, Enter, narration, Enter.'} wide="xl" footer={footer}>
       <div className="space-y-4" data-testid="voucher-form" data-voucher-type={type}>
@@ -338,82 +344,64 @@ export const VoucherModal: React.FC<{
           </div>
         </div>
 
-        {/* Entry row */}
-        {!readOnly && (
-          <div role="group" aria-label="Entry row" className={`rounded-2xl border p-2.5 ${editIndex != null ? 'border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/20' : 'border-[#E5E5E1] dark:border-[#203248] bg-[#FAF9F6] dark:bg-[#0D1520]'}`}>
-            <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] sm:grid-cols-[7rem_minmax(0,2fr)_8rem_8rem_minmax(0,1.6fr)_auto] gap-2 items-end">
-              <div className="min-w-0">
-                <label className={labelCls} htmlFor="vch-code">Code</label>
-                <input id="vch-code" ref={codeRef} value={codeText} autoComplete="off" inputMode="text" onChange={(e) => setCodeText(e.target.value)} onKeyDown={onCodeKey} onBlur={onCodeBlur} className={`${inputCls} tabular-nums`} placeholder="F1" title="Type the account code and press Enter. F1 / F2: search by title." />
-              </div>
-              <div className="min-w-0">
-                <label className={labelCls} htmlFor="vch-title">Title</label>
+        {/* Entry row + grid: one ruled sheet, Code | Title | Debit | Credit | Narration */}
+        <LedgerGrid
+          ariaLabel="Voucher lines"
+          testId="voucher-grid"
+          columns={VCH_COLS}
+          minWidth={680}
+          minRows={15}
+          empty="No lines yet. Type a code in the entry row and press Enter."
+          entry={readOnly ? undefined : {
+            editing: editIndex != null,
+            cells: {
+              code: <input id="vch-code" ref={codeRef} aria-label="Code" value={codeText} autoComplete="off" inputMode="text" onChange={(e) => setCodeText(e.target.value)} onKeyDown={onCodeKey} onBlur={onCodeBlur} className={`${ledgerInputCls} tabular-nums`} placeholder="F1" title="Type the account code and press Enter. F1 / F2: search by title." />,
+              title: (
                 <div className="flex gap-1">
-                  <input id="vch-title" ref={titleRef} value={titleText} autoComplete="off" onChange={(e) => onTitleChange(e.target.value)} onKeyDown={onTitleKey} className={`${inputCls} flex-1 min-w-0`} placeholder="Type a name to search" />
-                  <button type="button" onClick={() => openPicker('')} className="shrink-0 px-2.5 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-[#6B7280] hover:text-teal-700" aria-label="Search Code (By Title)" title="Search Code (By Title) — F1"><Search className="w-4 h-4" /></button>
+                  <input id="vch-title" ref={titleRef} aria-label="Title" value={titleText} autoComplete="off" onChange={(e) => onTitleChange(e.target.value)} onKeyDown={onTitleKey} className={`${ledgerInputCls} flex-1`} placeholder="Type a name to search" />
+                  <button type="button" onClick={() => openPicker('')} className="shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-md border border-[#D9D8D2] dark:border-[#2A3E57] text-[#6B7280] hover:text-teal-700" aria-label="Search Code (By Title)" title="Search Code (By Title) — F1"><Search className="w-4 h-4" /></button>
                 </div>
-              </div>
-              <div className="min-w-0">
-                <label className={labelCls} htmlFor="vch-debit">Debit</label>
-                <input id="vch-debit" ref={debitRef} type="number" inputMode="decimal" min="0" step="any" value={entry.debit} onChange={(e) => setEntry((x) => ({ ...x, debit: e.target.value, ...(e.target.value ? { credit: '' } : {}) }))} onKeyDown={onAmountKey('debit')} className={amountCls('debit')} />
-              </div>
-              <div className="min-w-0">
-                <label className={labelCls} htmlFor="vch-credit">Credit</label>
-                <input id="vch-credit" ref={creditRef} type="number" inputMode="decimal" min="0" step="any" value={entry.credit} onChange={(e) => setEntry((x) => ({ ...x, credit: e.target.value, ...(e.target.value ? { debit: '' } : {}) }))} onKeyDown={onAmountKey('credit')} className={amountCls('credit')} />
-              </div>
-              <div className="min-w-0 col-span-2 sm:col-span-1">
-                <label className={labelCls} htmlFor="vch-narration">Narration</label>
-                <input id="vch-narration" ref={narrRef} value={entry.narration} autoComplete="off" onChange={(e) => setEntry((x) => ({ ...x, narration: e.target.value }))} onKeyDown={onNarrKey} className={inputCls} placeholder={type === 'CRV' || type === 'BRV' ? 'e.g. Bill 1203' : 'e.g. BAHL- Rahmat Ali Peshawar'} />
-              </div>
-              <div className="col-span-2 sm:col-span-1 flex gap-2">
-                <button type="button" onClick={() => { if (commit()) focusCode(); }} className={`${secondaryBtn} flex-1`} aria-label={editIndex != null ? 'Update line' : 'Add line'}>
-                  {editIndex != null ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}<span className="sm:hidden">{editIndex != null ? 'Update line' : 'Add line'}</span>
-                </button>
-                {editIndex != null && <button type="button" onClick={() => { clearEntry(); focusCode(); }} className={secondaryBtn} aria-label="Stop changing line"><X className="w-4 h-4" /></button>}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Grid */}
-        <div className="overflow-x-auto rounded-2xl border border-[#E5E5E1] dark:border-[#203248]">
-          <table className="w-full min-w-[620px] text-sm" aria-label="Voucher lines">
-            <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wider text-[#6B7280] bg-[#FAF9F6] dark:bg-[#162436]">
-                <th className={`${cellCls} w-24`}>Code</th><th className={cellCls}>Title</th><th className={`${cellCls} text-right w-32`}>Debit</th><th className={`${cellCls} text-right w-32`}>Credit</th><th className={cellCls}>Narration</th><th className="w-10"><span className="sr-only">Remove</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.length === 0 && (
-                <tr><td colSpan={6} className="px-3 py-4 text-center text-xs text-[#8E9299]">No lines yet. Type a code in the entry row and press Enter.</td></tr>
-              )}
-              {lines.map((l, i) => (
-                <tr
-                  key={i}
-                  tabIndex={readOnly ? -1 : 0}
-                  aria-selected={editIndex === i}
-                  aria-label={`Line ${i + 1}: ${nameOfRef(l.account)}`}
-                  data-testid="voucher-line"
-                  onClick={() => editLine(i)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); dropLine(i); focusCode(); }
-                    else if (e.key === 'Enter') { e.preventDefault(); editLine(i); }
-                  }}
-                  className={`border-t border-[#F1F0EC] dark:border-[#1E2E40] ${readOnly ? '' : 'cursor-pointer hover:bg-[#FAF9F6] dark:hover:bg-[#162436]'} focus:outline-2 focus:outline-teal-600 ${editIndex === i ? 'bg-amber-50 dark:bg-amber-950/30' : ''}`}
-                >
-                  <td className={`${cellCls} tabular-nums text-xs text-[#6B7280]`}>{codeOfRef(l.account)}</td>
-                  <td className={`${cellCls} font-semibold text-[#111827] dark:text-white`}>{nameOfRef(l.account)}</td>
-                  <td className={`${cellCls} text-right tabular-nums`}>{l.debit ? rs(l.debit) : ''}</td>
-                  <td className={`${cellCls} text-right tabular-nums`}>{l.credit ? rs(l.credit) : ''}</td>
-                  <td className={`${cellCls} text-xs text-[#374151] dark:text-[#CBD5E1]`}>{l.narration}</td>
-                  <td className="px-1 py-1 text-right">
-                    {!readOnly && <button type="button" onClick={(e) => { e.stopPropagation(); dropLine(i); }} aria-label={`Remove line ${i + 1}`} className="min-h-9 min-w-9 inline-flex items-center justify-center rounded-xl text-[#9CA3AF] hover:text-rose-600"><X className="w-4 h-4" /></button>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              ),
+              debit: <input id="vch-debit" ref={debitRef} aria-label="Debit" type="number" inputMode="decimal" min="0" step="any" value={entry.debit} onChange={(e) => setEntry((x) => ({ ...x, debit: e.target.value, ...(e.target.value ? { credit: '' } : {}) }))} onKeyDown={onAmountKey('debit')} className={amountCls('debit')} />,
+              credit: <input id="vch-credit" ref={creditRef} aria-label="Credit" type="number" inputMode="decimal" min="0" step="any" value={entry.credit} onChange={(e) => setEntry((x) => ({ ...x, credit: e.target.value, ...(e.target.value ? { debit: '' } : {}) }))} onKeyDown={onAmountKey('credit')} className={amountCls('credit')} />,
+              narration: <input id="vch-narration" ref={narrRef} aria-label="Narration" value={entry.narration} autoComplete="off" onChange={(e) => setEntry((x) => ({ ...x, narration: e.target.value }))} onKeyDown={onNarrKey} className={ledgerInputCls} placeholder={type === 'CRV' || type === 'BRV' ? 'e.g. Bill 1203' : 'e.g. BAHL- Rahmat Ali Peshawar'} />,
+              act: (
+                <div className="flex gap-1 justify-center">
+                  <button type="button" onClick={() => { if (commit()) focusCode(); }} className={cellBtn} aria-label={editIndex != null ? 'Update line' : 'Add line'} title={editIndex != null ? 'Update line (Enter on Narration)' : 'Add line (Enter on Narration)'}>
+                    {editIndex != null ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  </button>
+                  {editIndex != null && <button type="button" onClick={() => { clearEntry(); focusCode(); }} className={cellBtn} aria-label="Stop changing line"><X className="w-4 h-4" /></button>}
+                </div>
+              ),
+            },
+          }}
+          rows={lines.map((l, i) => ({
+            key: i,
+            testId: 'voucher-line',
+            label: `Line ${i + 1}: ${nameOfRef(l.account)}`,
+            selected: editIndex === i,
+            inert: readOnly,
+            onActivate: readOnly ? undefined : () => editLine(i),
+            onDelete: readOnly ? undefined : () => { dropLine(i); focusCode(); },
+            cells: {
+              code: <span className="text-[#6B7280] dark:text-[#94A3B8]">{codeOfRef(l.account)}</span>,
+              title: <span className="font-semibold">{nameOfRef(l.account)}</span>,
+              debit: fmt2OrBlank(l.debit),
+              credit: fmt2OrBlank(l.credit),
+              narration: <span className="text-[#374151] dark:text-[#CBD5E1]">{l.narration}</span>,
+              act: readOnly ? null : <button type="button" onClick={(e) => { e.stopPropagation(); dropLine(i); }} aria-label={`Remove line ${i + 1}`} className="inline-flex w-6 h-6 items-center justify-center rounded text-[#9CA3AF] hover:text-rose-600 align-middle"><X className="w-3.5 h-3.5" /></button>,
+            },
+          }))}
+          totals={{
+            testId: 'voucher-totals',
+            cells: {
+              title: <TotalsLabel />,
+              debit: <span data-testid="voucher-total-debit">{fmt2(totals.debit)}</span>,
+              credit: <span data-testid="voucher-total-credit">{fmt2(totals.credit)}</span>,
+              narration: !info.money && Math.abs(totals.debit - totals.credit) >= 0.005 ? <span className="text-xs font-bold text-rose-700 dark:text-rose-300">Difference {rs(Math.abs(totals.debit - totals.credit))}</span> : null,
+            },
+          }}
+        />
         {side && (
           <div className="flex items-center justify-between gap-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] px-3.5 py-2.5 text-sm" data-testid="voucher-money-side">
             <span className="min-w-0 truncate"><span className="tabular-nums text-xs text-[#8E9299] mr-2">{side}</span>{sideName} <span className="text-[11px] text-[#6B7280]">(added by itself)</span></span>

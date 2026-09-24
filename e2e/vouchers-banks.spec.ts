@@ -90,7 +90,7 @@ test('banks, vouchers, account ledger, chart tree, receivable & payable by city'
   await voucherLine(page, v, '241001', { debit: '10000' }, 'On account');
   await voucherLine(page, v, '6000', { debit: '500' }, 'Tea');
   await expect(v.getByTestId('voucher-money-side')).toContainText('Cr Rs. 10,500');
-  await expect(v.getByTestId('voucher-total-debit')).toHaveText('Rs. 10,500');
+  await expect(v.getByTestId('voucher-total-debit')).toHaveText('10,500.00');
   await v.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(v.getByTestId('voucher-number')).toHaveValue('CPV-2');
   await page.keyboard.press('Escape');
@@ -132,7 +132,7 @@ test('banks, vouchers, account ledger, chart tree, receivable & payable by city'
   await page.keyboard.press('Enter');
   await page.keyboard.press('Enter');
   await expect(v.getByTestId('voucher-line')).toHaveCount(2);
-  await expect(v.getByTestId('voucher-total-credit')).toHaveText('Rs. 1,000');
+  await expect(v.getByTestId('voucher-total-credit')).toHaveText('1,000.00');
   await v.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(v.getByTestId('voucher-number')).toHaveValue('JV-2');
   await page.keyboard.press('Escape');

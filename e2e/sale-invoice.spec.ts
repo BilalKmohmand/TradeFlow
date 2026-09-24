@@ -51,7 +51,7 @@ test('Sale Invoice by keyboard only: codes, Enter across the entry row, lines in
   await expect(d.getByTestId('bill-line')).toHaveCount(1);
   await expect(d.getByLabel('Code 2', { exact: true })).toBeFocused();
   await expect(d.getByLabel('Item 2', { exact: true })).toHaveValue('');
-  await expect(d.getByTestId('line-amount-1')).toHaveText('Rs. 35,250');
+  await expect(d.getByTestId('line-amount-1')).toHaveText('35,250.00'); // grid figures: 2 decimals, as in the old program
 
   // Line 2 the same way.
   await page.keyboard.type('104');
@@ -67,7 +67,7 @@ test('Sale Invoice by keyboard only: codes, Enter across the entry row, lines in
   await expect(d.getByLabel('Quantity 2', { exact: true })).toHaveValue('10');
   await d.getByLabel('Quantity 2', { exact: true }).fill('12');
   await d.getByLabel('Price 2', { exact: true }).press('Enter');
-  await expect(d.getByTestId('line-amount-2')).toHaveText('Rs. 19,800');
+  await expect(d.getByTestId('line-amount-2')).toHaveText('19,800.00');
   // Delete on a grid line removes it (a third, wrong line).
   await page.keyboard.type('112');
   await page.keyboard.press('Enter');
@@ -144,12 +144,12 @@ test('Bill edit the old way: Search by number opens it filled in; change qty and
   await expect(e.getByTestId('bill-next-number')).toHaveText('INV-1');
   await expect(e.getByLabel('Customer', { exact: true })).toHaveValue('c3');
   await expect(e.getByTestId('bill-line')).toHaveCount(1);
-  await expect(e.getByTestId('line-amount-1')).toHaveText('Rs. 28,200');
+  await expect(e.getByTestId('line-amount-1')).toHaveText('28,200.00');
   await expect(e.getByLabel('Lumsum Disc (Rs.)', { exact: true })).toHaveValue('50');
   await expect(e.getByLabel('Others Charges', { exact: true })).toHaveValue('200');
   await expect(e.getByLabel('Remarks', { exact: true })).toHaveValue('first');
   await expect(e.getByTestId('bill-saved-pay')).toHaveCount(1);
-  await expect(e.getByTestId('bill-saved-pay')).toContainText('Rs. 10,000');
+  await expect(e.getByTestId('bill-saved-pay')).toContainText('10,000.00');
   // Change qty and rate on the line, then Save: same number, new totals, balance follows.
   await e.getByTestId('bill-line').first().click();
   await e.getByLabel('Quantity 1', { exact: true }).fill('6');

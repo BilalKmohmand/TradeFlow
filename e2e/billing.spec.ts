@@ -106,10 +106,19 @@ test.describe('Simple billing', () => {
     await page.getByRole('button', { name: /Walk-in Gul Khan/ }).first().click();
     const detail = page.getByRole('dialog', { name: 'Bill INV-2' });
     await expect(detail).toBeVisible();
+    // The receipt number shows before saving, then on the saved payment row and on the printed receipt.
+    const receiptNo = (await detail.getByTestId('bill-pay-next-number').textContent())!.trim();
+    expect(receiptNo).toMatch(/\d/);
     await detail.getByLabel('Amount', { exact: true }).fill('2500');
     await detail.getByLabel('Method', { exact: true }).selectOption('Easypaisa / JazzCash');
     await detail.getByRole('button', { name: 'Receive', exact: true }).click();
     await expect(detail.getByText(/10,000 still due/)).toBeVisible();
+    await expect(detail.getByTestId('bill-payment-no').last()).toHaveText(receiptNo);
+    await expect(detail.getByTestId('bill-pay-next-number')).not.toHaveText(receiptNo); // the next one moves on
+    await detail.getByRole('button', { name: `Print receipt ${receiptNo}` }).click();
+    await expect(page.locator('#print-root').getByTestId('print-payment-no')).toContainText(receiptNo);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#print-root')).toHaveCount(0);
     await shot(page, 'billing-bill-detail');
     // Escape under a print preview closes only the preview, the bill stays open.
     await detail.getByRole('button', { name: 'Print', exact: true }).click();

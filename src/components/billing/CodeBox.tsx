@@ -77,7 +77,9 @@ export const CodeBox: React.FC<{
   onTypeName?: (typed: string) => void;
   /** Keys the form wants from this box (e.g. F2 = search party); return true when it handled the key. */
   onKeyDownExtra?: (e: React.KeyboardEvent<HTMLInputElement>) => boolean;
-}> = ({ id, label, items, value, onPick, placeholder = 'Code', className = '', fallback, onEnter, onEnterResult, nav, skipAutofocus, nextId, pairId, onTypeName, onKeyDownExtra }) => {
+  /** The input's own look (a spreadsheet cell uses a compact one); default: the form input. */
+  inputClassName?: string;
+}> = ({ id, label, items, value, onPick, placeholder = 'Code', className = '', fallback, onEnter, onEnterResult, nav, skipAutofocus, nextId, pairId, onTypeName, onKeyDownExtra, inputClassName = inputCls }) => {
   const current = items.find((x) => x.id === value);
   const [text, setText] = useState(current?.code || '');
   const [miss, setMiss] = useState(false);
@@ -157,7 +159,7 @@ export const CodeBox: React.FC<{
         autoCapitalize="characters"
         autoComplete="off"
         spellCheck={false}
-        className={`${inputCls} tabular-nums !px-2 ${miss ? '!border-rose-400 dark:!border-rose-500' : ''}`}
+        className={`${inputClassName} tabular-nums !px-2 ${miss ? '!border-rose-400 dark:!border-rose-500' : ''}`}
         placeholder={placeholder}
         title={fallback ? 'Type the code, barcode or name and press Enter' : 'Type the code and press Enter'}
         aria-invalid={miss || undefined}

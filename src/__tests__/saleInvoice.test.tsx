@@ -266,7 +266,7 @@ describe('Sale Invoice form (entry row + grid)', () => {
     // In the grid; the entry row is empty and numbered 2.
     expect(q.getAllByTestId('bill-line')).toHaveLength(1);
     expect((q.getByLabelText('Item 2') as HTMLSelectElement).value).toBe('');
-    expect(q.getByTestId('line-amount-1').textContent).toBe('Rs. 70,000');
+    expect(q.getByTestId('line-amount-1').textContent).toBe('70,000.00'); // the grid: 2 decimals, like the old program
 
     // Line 2 with its own discount (Rs.) and a description.
     typeIn(q.getByLabelText('Code 2'), '103');
@@ -279,8 +279,8 @@ describe('Sale Invoice form (entry row + grid)', () => {
 
     // Header Disc % 5 → line 1 (no own discount) gets 5%; line 2 keeps its Rs. 100.
     typeIn(q.getByLabelText('Disc %'), '5');
-    expect(q.getByTestId('line-amount-1').textContent).toBe('Rs. 66,500');
-    expect(q.getByTestId('line-amount-2').textContent).toBe('Rs. 900');
+    expect(q.getByTestId('line-amount-1').textContent).toBe('66,500.00');
+    expect(q.getByTestId('line-amount-2').textContent).toBe('900.00');
     expect(q.getByTestId('bill-qty-total').textContent).toBe('30');
     expect(q.getByTestId('bill-amount-total').textContent).toBe('Rs. 67,400');
     typeIn(q.getByLabelText('Lumsum Disc%'), '2');
@@ -304,7 +304,7 @@ describe('Sale Invoice form (entry row + grid)', () => {
     typeIn(q.getByLabelText('Paid now'), '30000');
     typeIn(q.getByLabelText('Narration'), 'HBL deposit');
     enter(q.getByLabelText('Narration'));
-    expect(q.getByTestId('bill-pay-total').textContent).toBe('Rs. 50,000');
+    expect(q.getByTestId('bill-pay-total').textContent).toBe('50,000.00');
     expect(q.getByTestId('bill-balance').textContent).toBe('Rs. 16,552');
 
     fireEvent.click(q.getByRole('button', { name: /^Save/ }));
@@ -392,7 +392,7 @@ describe('Sale Invoice form (entry row + grid)', () => {
     expect(q.getByTestId('pi-packing').textContent).toContain('4 can/carton');
     enter(q.getByLabelText('Rate 1'));
     expect(q.getAllByTestId('pi-line')).toHaveLength(1);
-    expect(q.getByTestId('pi-amount-1').textContent).toBe('Rs. 16,000');
+    expect(q.getByTestId('pi-amount-1').textContent).toBe('16,000.00');
     expect((q.getByLabelText('Product 2') as HTMLSelectElement).value).toBe('');
   });
 });

@@ -22,6 +22,8 @@ import { useBillingUI } from './BillingUI';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { SearchPartyDialog } from './classic/SearchPartyDialog';
 import { ACC } from '../../utils/accounting';
+import { LedgerGrid, LedgerColumn, TotalsLabel, fmt2, ledgerInputCls, ledgerNumCls, ledgerSelectCls } from './classic/LedgerGrid';
+import { paymentNo } from '../../utils/paymentNumbers';
 import { PRINT_CHOICES, PrintChoice, loadPrintChoice, paperOf, paymentAccounts, paymentsFromGrid, saleAccounts, savePrintChoice } from '../../utils/saleInvoice';
 
 /** After Save, open the next new bill (the default). Automated tests written for the old behaviour turn it off. */
@@ -69,11 +71,35 @@ const newPay = (patch: Partial<PayRow> = {}): PayRow => ({ key: Math.random().to
 
 const num4 = (n: number) => String(Math.round(n * 10000) / 10000);
 const round2 = (n: number) => Math.round(n * 100) / 100;
-/** Entry row / grid columns on a wide screen (lg); below that each line is a card: Code | Product Name | Unit | Description | Qty | Rate | Amount | Disc | Net Amount. */
-const LINE_COLS = 'lg:grid-cols-[5.5rem_minmax(8rem,1.6fr)_6.5rem_minmax(4.5rem,1fr)_6.5rem_8rem_minmax(5.5rem,max-content)_8rem_minmax(6.5rem,max-content)]';
-/** The grid is read-only, so its figures need less room than the entry row's boxes. */
-const GRID_COLS = 'lg:grid-cols-[4.5rem_minmax(7rem,1.5fr)_5rem_minmax(3rem,1fr)_5rem_6.5rem_max-content_5.5rem_max-content_2rem]';
-const PAY_COLS = 'sm:grid-cols-[5.5rem_minmax(8rem,1fr)_8rem_minmax(6rem,1fr)]';
+/** Code | Product Name | Unit | Description | Qty | Rate | Amount | Disc | Net Amount — entry row and grid alike. */
+const LINE_COLUMNS: LedgerColumn[] = [
+  { key: 'code', label: 'Code', width: '6rem' },
+  { key: 'name', label: 'Product Name', width: 'minmax(10rem,1.6fr)' },
+  { key: 'unit', label: 'Unit', width: '6.5rem' },
+  { key: 'desc', label: 'Description', width: 'minmax(3rem,1fr)' },
+  { key: 'qty', label: 'Qty', width: '6.75rem', numeric: true },
+  { key: 'rate', label: 'Rate', width: '8rem', numeric: true },
+  { key: 'amount', label: 'Amount', width: '7.25rem', numeric: true },
+  { key: 'disc', label: 'Disc', width: '8.5rem', numeric: true },
+  { key: 'net', label: 'Net Amount', width: '8rem', numeric: true },
+  { key: 'act', label: <span className="sr-only">Remove</span>, width: '2.25rem', align: 'center' },
+];
+/** Payment Method: Code | Title | Debit | Narration against cash / bank accounts. */
+const PAY_COLUMNS: LedgerColumn[] = [
+  { key: 'code', label: 'Code', width: '6rem' },
+  { key: 'title', label: 'Title', width: 'minmax(10rem,1fr)' },
+  { key: 'debit', label: 'Debit', width: '9rem', numeric: true },
+  { key: 'narration', label: 'Narration', width: 'minmax(7rem,1fr)' },
+  { key: 'act', label: <span className="sr-only">Remove</span>, width: '2.25rem', align: 'center' },
+];
+/** Money already received on a bill being edited, with its receipt number. */
+const SAVED_PAY_COLUMNS: LedgerColumn[] = [
+  { key: 'receipt', label: 'Receipt #', width: '6.5rem' },
+  { key: 'code', label: 'Code', width: '4.5rem' },
+  { key: 'title', label: 'Title', width: 'minmax(8rem,1fr)' },
+  { key: 'debit', label: 'Debit', width: '8rem', numeric: true },
+  { key: 'narration', label: 'Narration', width: 'minmax(6rem,1fr)' },
+];
 
 interface Props {
   isOpen: boolean;
@@ -480,7 +506,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
       (editInv?.payments || []).map((p) => {
         const row = p.ledgerId ? ledger.find((l) => l.id === p.ledgerId) : undefined;
         const code = p.method === 'cheque' ? '1150' : p.method === 'cash' ? ACC.CASH : row?.bankCode || '1010';
-        return { id: p.id, code, amount: p.amount, note: row?.note || (p.method === 'cheque' ? p.notes || '' : '') };
+        return { id: p.id, code, amount: p.amount, note: row?.note || (p.method === 'cheque' ? p.notes || '' : ''), receiptNo: p.referenceNumber || (row ? paymentNo(row) : editInv!.invoiceNumber) };
       }),
     [editInv, ledger]
   );
@@ -704,6 +730,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const readBox = 'rounded-2xl border border-dashed border-[#E5E5E1] dark:border-[#203248] px-3 py-2 text-sm min-h-11 flex items-center';
   const title = editInv ? `Edit bill ${editInv.invoiceNumber}` : cash ? 'Cash Sale Invoice' : 'New Bill';
   const committed = lines.map((l, idx) => ({ l, idx })).filter(({ l }) => l.committed);
+  const committedLines = committed.map(({ l }) => l);
   const entryLine = lines[entryIdx];
   const entryNote = entryLine ? stockNote(entryLine, entryIdx) : null;
   const last = ep && selected ? lastRateFor(selected.id, ep.id, invoices) : null;
@@ -862,93 +889,121 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
             </div>
           )}
 
-          {/* ---- Entry row ---- */}
+          {/* ---- Entry row + grid: one ruled sheet ---- */}
           <div>
-            <div className={`hidden lg:grid ${LINE_COLS} gap-2 px-1 mb-1 ${hdr}`}>
-              <div>Code</div>
-              <div>Product Name</div>
-              <div>Unit</div>
-              <div>Description</div>
-              <div>Qty</div>
-              <div>Rate</div>
-              <div className="text-right">Amount</div>
-              <div>Disc</div>
-              <div className="text-right">Net Amount</div>
-            </div>
-            <div data-entry data-row={entry.key} data-testid="bill-entry" className={`grid grid-cols-12 ${LINE_COLS} gap-2 items-start rounded-2xl border-2 ${editingLine ? 'border-indigo-300 dark:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/20' : 'border-teal-200 dark:border-teal-900 bg-teal-50/30 dark:bg-teal-950/10'} p-2`}>
-              <div className="col-span-4 lg:col-auto min-w-0">
-                <span className={`lg:hidden ${small}`}>Code</span>
-                <CodeBox key={entry.key} id="bill-entry-code" label={`Code ${n}`} items={sortedProducts} value={entry.productId} onPick={(v) => pickProduct(entry.key, v)} fallback={productByName} onEnter={onLineCodeEnter} />
-              </div>
-              <div className="col-span-8 lg:col-auto min-w-0">
-                <span className={`lg:hidden ${small}`}>Product Name</span>
-                <QuickSelect aria-label={`Item ${n}`} data-nav="item" value={entry.productId} options={productOptions} onPick={(v) => pickProduct(entry.key, v)} className={inputCls} title="Type the item name or code to find it">
-                  <option value="">Select item…</option>
-                  {sortedProducts.map((x) => (
-                    <option key={x.id} value={x.id}>{x.name}{x.code ? ` • ${x.code}` : ''}</option>
-                  ))}
-                </QuickSelect>
-              </div>
-              <div className="col-span-4 lg:col-auto min-w-0">
-                <span className={`lg:hidden ${small}`}>Unit</span>
-                <select aria-label={`Unit ${n}`} data-nav="unit" value={entry.inPack ? 'pack' : 'unit'} onChange={(e) => setUnit(entry.key, e.target.value === 'pack')} disabled={!hasPack(ep)} className={`${inputCls} !px-2`}>
-                  <option value="unit">{ep ? ep.unit || 'pcs' : 'Unit'}</option>
-                  {ep && hasPack(ep) && <option value="pack">{`${ep.packName} (${ep.packSize})`}</option>}
-                </select>
-              </div>
-              <div className="col-span-8 lg:col-auto min-w-0">
-                <span className={`lg:hidden ${small}`}>Description</span>
-                <input aria-label={`Description ${n}`} data-nav="desc" value={entry.desc} onChange={(e) => setRow(entry.key, { desc: e.target.value })} className={inputCls} placeholder="optional" />
-              </div>
-              <div className="col-span-6 lg:col-auto min-w-0">
-                <span className={`lg:hidden ${small}`}>Qty{ep ? ` (${unitWord})` : ''}</span>
-                <input aria-label={`Quantity ${n}`} data-nav="qty" type="number" inputMode="decimal" min="0" step="any" value={entry.qty} onChange={(e) => setRow(entry.key, { qty: e.target.value })} className={numInputCls} placeholder="Qty" />
-              </div>
-              <div className="col-span-6 lg:col-auto min-w-0">
-                <span className={`lg:hidden ${small}`}>Rate{ep ? ` per ${unitWord}` : ''}</span>
-                <input aria-label={`Price ${n}`} data-nav="price" type="number" inputMode="decimal" min="0" step="any" value={entry.price} onChange={(e) => setRow(entry.key, { price: e.target.value, priceFrom: 'typed' })} className={numInputCls} placeholder={ep ? `per ${unitWord}` : 'Rate'} />
-                {entry.priceFrom === 'customer' && entry.productId && <span data-testid={`customer-rate-${n}`} className="block mt-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Customer rate</span>}
-              </div>
-              <div className="col-span-6 lg:col-auto min-w-0 text-right self-center">
-                <span className={`lg:hidden ${small}`}>Amount</span>
-                <span className={`${moneyCls} text-sm text-[#374151] dark:text-[#CBD5E1]`} data-testid="entry-amount">{rs(entryLine?.gross || 0)}</span>
-              </div>
-              <div className="col-span-6 lg:col-auto min-w-0">
-                <span className={`lg:hidden ${small}`}>Disc</span>
-                <div className="flex gap-1">
-                  <input id={`disc-${entry.key}`} aria-label={`Discount ${n}`} data-nav="disc" type="number" inputMode="decimal" min="0" step="any" value={entry.disc} onChange={(e) => setRow(entry.key, { disc: e.target.value })} className={`${numInputCls} min-w-0`} placeholder={entryLine?.fromBillPct || entryLine?.schemePct ? `${entryLine.discValue}%` : '0'} />
-                  <span role="group" aria-label={`Discount type ${n}`} title="Rs. or % off this line" className="shrink-0 inline-flex flex-col rounded-xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden text-[9px] font-bold leading-none">
-                    {(['rs', 'pct'] as const).map((t) => (
-                      <button key={t} type="button" tabIndex={-1} aria-pressed={entry.discType === t} onClick={() => setRow(entry.key, { discType: t })} className={`flex-1 px-1.5 ${entry.discType === t ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : 'text-[#6B7280] dark:text-[#94A3B8]'}`}>{t === 'rs' ? 'Rs.' : '%'}</button>
-                    ))}
-                  </span>
-                </div>
-              </div>
-              <div className="col-span-12 lg:col-auto min-w-0 flex lg:block items-baseline justify-between text-right self-center">
-                <span className={`lg:hidden ${small}`}>Net Amount</span>
-                <span data-testid={`line-amount-${n}`} className={`${moneyCls} font-bold text-sm text-[#111827] dark:text-white`}>{rs(entryLine?.amount || 0)}</span>
-              </div>
-              {ep && (
-                <div data-testid={`line-info-${n}`} className="col-span-full flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6B7280] dark:text-[#94A3B8] px-1">
-                  {entryLine.pack > 1 && entryLine.qty > 0 && <span className="font-semibold text-[#374151] dark:text-[#CBD5E1]">= {formatPackQty(entryLine.qty, ep)} • {rs(Math.round(entryLine.price * 100) / 100)}/{ep.unit || 'pcs'}</span>}
-                  <span>Stock <strong className={`tabular-nums ${ep.stockKg < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#374151] dark:text-[#CBD5E1]'}`}>{formatPackQty(ep.stockKg, ep, 'short')}</strong></span>
-                  {epPer && godowns.map((g) => <span key={g.id}>{g.name}: <strong className="tabular-nums">{formatPackQty(epPer[g.id] || 0, ep, 'short')}</strong></span>)}
-                  {last && (
-                    <button type="button" tabIndex={-1} onClick={() => setRow(entry.key, { price: shownPrice(ep.id, last.rate, entry.inPack), priceFrom: 'typed' })} className="hover:text-teal-700 dark:hover:text-teal-300" title="Use this rate">
-                      Last rate <strong className="tabular-nums text-[#374151] dark:text-[#CBD5E1]">{rs(last.rate)}/{ep.unit || 'pcs'}</strong> ({formatDate(last.date)})
-                    </button>
-                  )}
-                  {entryLine.lineDisc > 0 && <span>Disc − {rs(entryLine.lineDisc)}{entryLine.fromBillPct ? ` (bill ${entryLine.discValue}%)` : ''}</span>}
-                </div>
-              )}
-              {entryLine?.schemePct && (
-                <div data-testid={`scheme-pct-${n}`} className="col-span-full flex flex-wrap items-center gap-2 text-[11px] font-semibold text-teal-700 dark:text-teal-300">
-                  <Gift className="w-3.5 h-3.5" /> Scheme “{entryLine.schemePct.schemeName}”: {entryLine.schemePct.pct}% off (− {rs(entryLine.lineDisc)})
-                  <button type="button" tabIndex={-1} onClick={() => drop(`pct|${entryLine.schemePct!.schemeId}|${entryLine.key}`)} className="underline text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600" aria-label={`Remove scheme discount on item ${n}`}>remove</button>
-                </div>
-              )}
-              {entryNote && <div data-testid={`stock-note-${n}`} className={`col-span-full text-[11px] font-semibold ${entryNote.block ? 'text-rose-700 dark:text-rose-300' : entryNote.warn ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{entryNote.text}</div>}
-            </div>
+            <LedgerGrid
+              ariaLabel="Invoice lines"
+              testId="bill-grid"
+              columns={LINE_COLUMNS}
+              minWidth={1090}
+              minRows={12}
+              empty="No lines yet. Type the code (or pick the product), Qty and Rate, then Enter."
+              entry={{
+                editing: editingLine,
+                props: { 'data-entry': true, 'data-row': entry.key, 'data-testid': 'bill-entry' },
+                cells: {
+                  code: <CodeBox key={entry.key} id="bill-entry-code" label={`Code ${n}`} items={sortedProducts} value={entry.productId} onPick={(v) => pickProduct(entry.key, v)} fallback={productByName} onEnter={onLineCodeEnter} inputClassName={ledgerInputCls} />,
+                  name: (
+                    <QuickSelect aria-label={`Item ${n}`} data-nav="item" value={entry.productId} options={productOptions} onPick={(v) => pickProduct(entry.key, v)} className={ledgerSelectCls} title="Type the item name or code to find it">
+                      <option value="">Select item…</option>
+                      {sortedProducts.map((x) => (
+                        <option key={x.id} value={x.id}>{x.name}{x.code ? ` • ${x.code}` : ''}</option>
+                      ))}
+                    </QuickSelect>
+                  ),
+                  unit: (
+                    <select aria-label={`Unit ${n}`} data-nav="unit" value={entry.inPack ? 'pack' : 'unit'} onChange={(e) => setUnit(entry.key, e.target.value === 'pack')} disabled={!hasPack(ep)} className={ledgerSelectCls}>
+                      <option value="unit">{ep ? ep.unit || 'pcs' : 'Unit'}</option>
+                      {ep && hasPack(ep) && <option value="pack">{`${ep.packName} (${ep.packSize})`}</option>}
+                    </select>
+                  ),
+                  desc: <input aria-label={`Description ${n}`} data-nav="desc" value={entry.desc} onChange={(e) => setRow(entry.key, { desc: e.target.value })} className={ledgerInputCls} placeholder="optional" />,
+                  qty: <input aria-label={`Quantity ${n}`} data-nav="qty" type="number" inputMode="decimal" min="0" step="any" value={entry.qty} onChange={(e) => setRow(entry.key, { qty: e.target.value })} className={ledgerNumCls} placeholder="Qty" title={ep ? `Qty (${unitWord})` : 'Qty'} />,
+                  rate: <input aria-label={`Price ${n}`} data-nav="price" type="number" inputMode="decimal" min="0" step="any" value={entry.price} onChange={(e) => setRow(entry.key, { price: e.target.value, priceFrom: 'typed' })} className={ledgerNumCls} placeholder={ep ? `per ${unitWord}` : 'Rate'} title={ep ? `Rate per ${unitWord}` : 'Rate'} />,
+                  amount: <span className={`block leading-8 px-1 ${moneyCls} text-[#374151] dark:text-[#CBD5E1]`}><span data-testid="entry-amount">{fmt2(entryLine?.gross || 0)}</span></span>,
+                  disc: (
+                    <div className="flex gap-1">
+                      <input id={`disc-${entry.key}`} aria-label={`Discount ${n}`} data-nav="disc" type="number" inputMode="decimal" min="0" step="any" value={entry.disc} onChange={(e) => setRow(entry.key, { disc: e.target.value })} className={`${ledgerNumCls} flex-1`} placeholder={entryLine?.fromBillPct || entryLine?.schemePct ? `${entryLine.discValue}%` : '0'} />
+                      <span role="group" aria-label={`Discount type ${n}`} title="Rs. or % off this line" className="shrink-0 inline-flex flex-col rounded-md border border-[#D9D8D2] dark:border-[#2A3E57] overflow-hidden text-[9px] font-bold leading-none h-8">
+                        {(['rs', 'pct'] as const).map((t) => (
+                          <button key={t} type="button" tabIndex={-1} aria-pressed={entry.discType === t} onClick={() => setRow(entry.key, { discType: t })} className={`flex-1 px-1.5 ${entry.discType === t ? 'bg-[#111827] dark:bg-white text-white dark:text-[#111827]' : 'text-[#6B7280] dark:text-[#94A3B8]'}`}>{t === 'rs' ? 'Rs.' : '%'}</button>
+                        ))}
+                      </span>
+                    </div>
+                  ),
+                  net: <span className={`block leading-8 px-1 ${moneyCls} font-bold text-[#111827] dark:text-white`}><span data-testid={`line-amount-${n}`}>{fmt2(entryLine?.amount || 0)}</span></span>,
+                  act: null,
+                },
+                below: (entry.priceFrom === 'customer' && entry.productId) || ep || entryLine?.schemePct || entryNote ? (
+                  <>
+                    {ep && (
+                      <div data-testid={`line-info-${n}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6B7280] dark:text-[#94A3B8]">
+                        {entry.priceFrom === 'customer' && entry.productId && <span data-testid={`customer-rate-${n}`} className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Customer rate</span>}
+                        {entryLine.pack > 1 && entryLine.qty > 0 && <span className="font-semibold text-[#374151] dark:text-[#CBD5E1]">= {formatPackQty(entryLine.qty, ep)} • {rs(Math.round(entryLine.price * 100) / 100)}/{ep.unit || 'pcs'}</span>}
+                        <span>Stock <strong className={`tabular-nums ${ep.stockKg < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-[#374151] dark:text-[#CBD5E1]'}`}>{formatPackQty(ep.stockKg, ep, 'short')}</strong></span>
+                        {epPer && godowns.map((g) => <span key={g.id}>{g.name}: <strong className="tabular-nums">{formatPackQty(epPer[g.id] || 0, ep, 'short')}</strong></span>)}
+                        {last && (
+                          <button type="button" tabIndex={-1} onClick={() => setRow(entry.key, { price: shownPrice(ep.id, last.rate, entry.inPack), priceFrom: 'typed' })} className="hover:text-teal-700 dark:hover:text-teal-300" title="Use this rate">
+                            Last rate <strong className="tabular-nums text-[#374151] dark:text-[#CBD5E1]">{rs(last.rate)}/{ep.unit || 'pcs'}</strong> ({formatDate(last.date)})
+                          </button>
+                        )}
+                        {entryLine.lineDisc > 0 && <span>Disc − {rs(entryLine.lineDisc)}{entryLine.fromBillPct ? ` (bill ${entryLine.discValue}%)` : ''}</span>}
+                      </div>
+                    )}
+                    {!ep && entry.priceFrom === 'customer' && entry.productId && <span data-testid={`customer-rate-${n}`} className="block text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Customer rate</span>}
+                    {entryLine?.schemePct && (
+                      <div data-testid={`scheme-pct-${n}`} className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-teal-700 dark:text-teal-300">
+                        <Gift className="w-3.5 h-3.5" /> Scheme “{entryLine.schemePct.schemeName}”: {entryLine.schemePct.pct}% off (− {rs(entryLine.lineDisc)})
+                        <button type="button" tabIndex={-1} onClick={() => drop(`pct|${entryLine.schemePct!.schemeId}|${entryLine.key}`)} className="underline text-[#6B7280] dark:text-[#94A3B8] hover:text-rose-600" aria-label={`Remove scheme discount on item ${n}`}>remove</button>
+                      </div>
+                    )}
+                    {entryNote && <div data-testid={`stock-note-${n}`} className={`text-[11px] font-semibold ${entryNote.block ? 'text-rose-700 dark:text-rose-300' : entryNote.warn ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{entryNote.text}</div>}
+                  </>
+                ) : undefined,
+              }}
+              rows={committed.map(({ l, idx }) => {
+                const p = l.product;
+                const active = l.key === activeKey;
+                const note = active ? null : stockNote(l, idx);
+                const uw = p ? (l.pack > 1 ? p.packName! : p.unit || 'pcs') : '';
+                return {
+                  key: l.key,
+                  testId: 'bill-line',
+                  label: `Line ${idx + 1}: ${p?.name || ''}`,
+                  selected: active,
+                  onActivate: () => loadLine(l.key),
+                  onDelete: () => removeLine(l.key),
+                  cells: {
+                    code: <span className="text-[#6B7280] dark:text-[#94A3B8]">{p?.code || '—'}</span>,
+                    name: <span className="font-semibold">{p?.name}</span>,
+                    unit: <span className="text-xs">{uw}</span>,
+                    desc: <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">{l.desc}</span>,
+                    qty: l.rawQty,
+                    rate: fmt2(l.typedPrice),
+                    amount: fmt2(l.gross),
+                    disc: l.lineDisc > 0 ? <span className="text-xs">{fmt2(l.lineDisc)}{l.discType === 'pct' ? ` (${l.discValue}%)` : ''}</span> : '',
+                    net: <span className="font-bold" {...(active ? {} : { 'data-testid': `line-amount-${idx + 1}` })}>{fmt2(l.amount)}</span>,
+                    act: <button type="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); removeLine(l.key); }} aria-label={`Remove item ${idx + 1}`} className="inline-flex w-6 h-6 items-center justify-center rounded text-[#9CA3AF] hover:text-rose-600 align-middle"><Trash2 className="w-3.5 h-3.5" /></button>,
+                  },
+                  sub: (l.schemePct && !active) || note ? (
+                    <>
+                      {l.schemePct && !active && <div className="text-[11px] font-semibold text-teal-700 dark:text-teal-300 leading-5">Scheme “{l.schemePct.schemeName}” {l.schemePct.pct}%</div>}
+                      {note && <div data-testid={`stock-note-${idx + 1}`} className={`text-[11px] font-semibold leading-5 whitespace-normal ${note.block ? 'text-rose-700 dark:text-rose-300' : note.warn ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{note.text}</div>}
+                    </>
+                  ) : undefined,
+                };
+              })}
+              totals={{
+                testId: 'bill-grid-totals',
+                cells: {
+                  desc: <TotalsLabel />,
+                  qty: Math.round(committedLines.reduce((a, l) => a + l.typedQty, 0) * 10000) / 10000,
+                  amount: fmt2(round2(committedLines.reduce((a, l) => a + l.gross, 0))),
+                  disc: fmt2(round2(committedLines.reduce((a, l) => a + l.lineDisc, 0))),
+                  net: fmt2(round2(committedLines.reduce((a, l) => a + l.amount, 0))),
+                },
+              }}
+            />
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <button type="button" onClick={() => commitEntry()} title="Put the line in the grid (Enter on Rate, + or Alt+N)" className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-300 hover:underline">{editingLine ? 'Update line' : 'Add another item'}</button>
               {editingLine && <button type="button" onClick={() => setActiveKey(newRowOf(rows).key)} className="text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] hover:underline">Done with line {n}</button>}
@@ -960,61 +1015,6 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                 </span>
               )}
             </div>
-          </div>
-
-          {/* ---- Grid ---- */}
-          <div className="rounded-2xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden" role="grid" aria-label="Invoice lines">
-            <div role="row" className={`hidden lg:grid ${GRID_COLS} gap-2 px-3 py-2 bg-[#FAF9F6] dark:bg-[#162436] ${hdr}`}>
-              <div role="columnheader">Code</div>
-              <div role="columnheader">Product Name</div>
-              <div role="columnheader">Unit</div>
-              <div role="columnheader">Description</div>
-              <div role="columnheader" className="text-right">Qty</div>
-              <div role="columnheader" className="text-right">Rate</div>
-              <div role="columnheader" className="text-right">Amount</div>
-              <div role="columnheader" className="text-right">Disc</div>
-              <div role="columnheader" className="text-right">Net Amount</div>
-              <div />
-            </div>
-            {committed.length === 0 && <p className="px-3 py-3 text-xs text-[#6B7280] dark:text-[#94A3B8]">No lines yet. Type the code (or pick the product), Qty and Rate, then Enter.</p>}
-            {committed.map(({ l, idx }) => {
-              const p = l.product;
-              const active = l.key === activeKey;
-              const note = active ? null : stockNote(l, idx);
-              const uw = p ? (l.pack > 1 ? p.packName! : p.unit || 'pcs') : '';
-              return (
-                <div
-                  key={l.key}
-                  role="row"
-                  tabIndex={0}
-                  data-testid="bill-line"
-                  aria-selected={active}
-                  aria-label={`Line ${idx + 1}: ${p?.name || ''}`}
-                  onClick={() => loadLine(l.key)}
-                  onKeyDown={(e) => {
-                    if (e.target !== e.currentTarget) return;
-                    if (e.key === 'Delete') { e.preventDefault(); removeLine(l.key); }
-                    else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); loadLine(l.key); }
-                  }}
-                  className={`grid grid-cols-12 ${GRID_COLS} gap-x-2 gap-y-0.5 items-center px-3 py-2 text-sm border-t border-[#F1F0EC] dark:border-[#1E2E40] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${active ? 'bg-indigo-50 dark:bg-indigo-950/40' : 'hover:bg-[#FAF9F6] dark:hover:bg-[#162436]'}`}
-                >
-                  <div role="gridcell" className="col-span-3 lg:col-auto font-mono text-xs text-[#6B7280] dark:text-[#94A3B8]">{p?.code || '—'}</div>
-                  <div role="gridcell" className="col-span-9 lg:col-auto font-semibold text-[#111827] dark:text-white truncate">{p?.name}</div>
-                  <div role="gridcell" className="col-span-3 lg:col-auto text-xs">{uw}</div>
-                  <div role="gridcell" className="col-span-9 lg:col-auto text-xs text-[#6B7280] dark:text-[#94A3B8] truncate">{l.desc}</div>
-                  <div role="gridcell" className="col-span-3 lg:col-auto text-right tabular-nums">{l.rawQty}</div>
-                  <div role="gridcell" className="col-span-3 lg:col-auto text-right tabular-nums">{l.rawPrice}</div>
-                  <div role="gridcell" className="col-span-3 lg:col-auto text-right tabular-nums whitespace-nowrap">{rs(l.gross)}</div>
-                  <div role="gridcell" className="col-span-3 lg:col-auto text-right tabular-nums whitespace-nowrap text-xs">{l.lineDisc > 0 ? `${rs(l.lineDisc)}${l.discType === 'pct' ? ` (${l.discValue}%)` : ''}` : '—'}</div>
-                  <div role="gridcell" className="col-span-9 lg:col-auto text-right font-bold tabular-nums whitespace-nowrap text-[#111827] dark:text-white" {...(active ? {} : { 'data-testid': `line-amount-${idx + 1}` })}>{rs(l.amount)}</div>
-                  <div className="col-span-3 lg:col-auto flex justify-end">
-                    <button type="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); removeLine(l.key); }} aria-label={`Remove item ${idx + 1}`} className="p-1.5 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                  {l.schemePct && !active && <div className="col-span-full text-[11px] font-semibold text-teal-700 dark:text-teal-300">Scheme “{l.schemePct.schemeName}” {l.schemePct.pct}%</div>}
-                  {note && <div data-testid={`stock-note-${idx + 1}`} className={`col-span-full text-[11px] font-semibold ${note.block ? 'text-rose-700 dark:text-rose-300' : note.warn ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{note.text}</div>}
-                </div>
-              );
-            })}
           </div>
           {products.length === 0 && <p className="text-xs text-amber-700 dark:text-amber-300">No items yet. Add your products with their prices on the Items screen first.</p>}
           {freeLines.length > 0 && (
@@ -1038,20 +1038,26 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               {editInv ? (
                 <div data-testid="bill-payments-saved">
                   <div className={`${hdr} mb-1`}>Payment Method</div>
-                  <div className="rounded-2xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden" role="grid" aria-label="Payments on this bill">
-                    <div role="row" className={`grid grid-cols-[4.5rem_minmax(0,1fr)_7rem] sm:grid-cols-[5.5rem_minmax(0,1fr)_8rem_minmax(0,1fr)] gap-2 px-3 py-1.5 bg-[#FAF9F6] dark:bg-[#162436] ${hdr} !text-[10px]`}>
-                      <span role="columnheader">Code</span><span role="columnheader">Title</span><span role="columnheader" className="text-right">Debit</span><span role="columnheader" className="hidden sm:block">Narration</span>
-                    </div>
-                    {savedPays.length === 0 && <p className="px-3 py-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">Nothing received on this bill yet.</p>}
-                    {savedPays.map((p) => (
-                      <div key={p.id} role="row" data-testid="bill-saved-pay" className="grid grid-cols-[4.5rem_minmax(0,1fr)_7rem] sm:grid-cols-[5.5rem_minmax(0,1fr)_8rem_minmax(0,1fr)] gap-2 px-3 py-1.5 text-sm border-t border-[#F1F0EC] dark:border-[#1E2E40]">
-                        <span role="gridcell" className="font-mono text-xs self-center">{p.code}</span>
-                        <span role="gridcell" className="truncate">{accName(p.code)}</span>
-                        <span role="gridcell" className="text-right tabular-nums font-bold whitespace-nowrap">{rs(p.amount)}</span>
-                        <span role="gridcell" className="hidden sm:block truncate text-xs text-[#6B7280] dark:text-[#94A3B8]">{p.note}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <LedgerGrid
+                    ariaLabel="Payments on this bill"
+                    columns={SAVED_PAY_COLUMNS}
+                    minWidth={560}
+                    minRows={4}
+                    empty="Nothing received on this bill yet."
+                    rows={savedPays.map((p) => ({
+                      key: p.id,
+                      testId: 'bill-saved-pay',
+                      inert: true,
+                      cells: {
+                        receipt: <span className="text-[#6B7280] dark:text-[#94A3B8]" data-testid="bill-saved-pay-no">{p.receiptNo}</span>,
+                        code: <span className="text-[#6B7280] dark:text-[#94A3B8]">{p.code}</span>,
+                        title: accName(p.code),
+                        debit: <span className="font-bold">{fmt2(p.amount)}</span>,
+                        narration: <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">{p.note}</span>,
+                      },
+                    }))}
+                    totals={{ cells: { title: <TotalsLabel />, debit: fmt2(alreadyPaid) } }}
+                  />
                   <div className="mt-1 flex flex-wrap justify-between gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8] px-1" data-testid="bill-edit-paid">
                     <span>Money already received stays on this bill (change a payment from the bill: Edit payment).</span>
                     <span>Received <strong className="tabular-nums text-[#111827] dark:text-white">{rs(alreadyPaid)}</strong></span>
@@ -1062,39 +1068,51 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               ) : (
                 <div data-testid="bill-payments">
                   <div className={`${hdr} mb-1`}>Payment Method</div>
-                  <div className={`hidden sm:grid ${PAY_COLS} gap-2 px-1 mb-1 ${hdr} !text-[10px]`}>
-                    <div>Code</div>
-                    <div>Title</div>
-                    <div>Debit</div>
-                    <div>Narration</div>
-                  </div>
-                  <div data-pay-entry className={`grid grid-cols-2 ${PAY_COLS} gap-2 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] p-2`}>
-                    <CodeBox key={payEntry.key} id="bill-pay-code" label="Payment code" items={payAccs.map((a) => ({ id: a.code, code: a.code }))} value={payEntry.code} onPick={(v) => setPay(payEntry.key, { code: v })} skipAutofocus nextId="bill-paid" />
-                    <select id="bill-pay-account" aria-label="Payment account" data-nav="pay-title" value={payEntry.code} onChange={(e) => setPay(payEntry.key, { code: e.target.value })} className={inputCls}>
-                      {payAccs.map((a) => <option key={a.code} value={a.code}>{a.name}</option>)}
-                    </select>
-                    <div className="flex gap-1 min-w-0">
-                      <input id="bill-paid" aria-label="Paid now" title="Debit: money received now into this account" data-nav="paid" type="number" inputMode="decimal" min="0" step="any" value={payEntry.amount} onChange={(e) => setPay(payEntry.key, { amount: e.target.value })} className={`${numInputCls} min-w-0`} placeholder="0" />
-                      <button type="button" tabIndex={-1} onClick={() => setPay(payEntry.key, { amount: String(Math.max(0, round2(total - (payTotal - (parseFloat(payEntry.amount) || 0))))) })} className="shrink-0 px-2 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] text-[11px] font-bold text-teal-700 dark:text-teal-300" title="The rest of the bill">Full</button>
-                    </div>
-                    <input id="bill-pay-note" aria-label="Narration" data-nav="pay-note" value={payEntry.note} onChange={(e) => setPay(payEntry.key, { note: e.target.value })} className={inputCls} placeholder="optional" />
-                  </div>
-                  {payCommitted.length > 0 && (
-                    <div className="mt-2 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden" role="grid" aria-label="Payments">
-                      {payCommitted.map((p) => (
-                        <div key={p.key} role="row" tabIndex={0} data-testid="bill-pay-line" aria-selected={p.key === activePay} onClick={() => { setActivePay(p.key); focusSoon('#bill-paid'); }} onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === 'Delete') { e.preventDefault(); removePay(p.key); } else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); setActivePay(p.key); focusSoon('#bill-paid'); } }} className={`grid grid-cols-[4.5rem_minmax(0,1fr)_7rem_2rem] sm:grid-cols-[5.5rem_minmax(0,1fr)_8rem_minmax(0,1fr)_2rem] gap-2 px-3 py-1.5 text-sm border-t first:border-t-0 border-[#F1F0EC] dark:border-[#1E2E40] cursor-pointer ${p.key === activePay ? 'bg-indigo-50 dark:bg-indigo-950/40' : ''}`}>
-                          <span role="gridcell" className="font-mono text-xs self-center">{p.code}</span>
-                          <span role="gridcell" className="truncate">{accName(p.code)}</span>
-                          <span role="gridcell" className="text-right tabular-nums font-bold">{rs(parseFloat(p.amount) || 0)}</span>
-                          <span role="gridcell" className="hidden sm:block truncate text-xs text-[#6B7280] dark:text-[#94A3B8]">{p.note}</span>
-                          <button type="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); removePay(p.key); }} aria-label={`Remove payment ${accName(p.code)}`} className="text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <LedgerGrid
+                    ariaLabel="Payments"
+                    columns={PAY_COLUMNS}
+                    minWidth={560}
+                    minRows={4}
+                    entry={{
+                      editing: payEntry.committed,
+                      props: { 'data-pay-entry': true },
+                      cells: {
+                        code: <CodeBox key={payEntry.key} id="bill-pay-code" label="Payment code" items={payAccs.map((a) => ({ id: a.code, code: a.code }))} value={payEntry.code} onPick={(v) => setPay(payEntry.key, { code: v })} skipAutofocus nextId="bill-paid" inputClassName={ledgerInputCls} />,
+                        title: (
+                          <select id="bill-pay-account" aria-label="Payment account" data-nav="pay-title" value={payEntry.code} onChange={(e) => setPay(payEntry.key, { code: e.target.value })} className={ledgerSelectCls}>
+                            {payAccs.map((a) => <option key={a.code} value={a.code}>{a.name}</option>)}
+                          </select>
+                        ),
+                        debit: (
+                          <div className="flex gap-1 min-w-0">
+                            <input id="bill-paid" aria-label="Paid now" title="Debit: money received now into this account" data-nav="paid" type="number" inputMode="decimal" min="0" step="any" value={payEntry.amount} onChange={(e) => setPay(payEntry.key, { amount: e.target.value })} className={`${ledgerNumCls} flex-1`} placeholder="0" />
+                            <button type="button" tabIndex={-1} onClick={() => setPay(payEntry.key, { amount: String(Math.max(0, round2(total - (payTotal - (parseFloat(payEntry.amount) || 0))))) })} className="shrink-0 h-8 px-1.5 rounded-md border border-[#D9D8D2] dark:border-[#2A3E57] text-[11px] font-bold text-teal-700 dark:text-teal-300" title="The rest of the bill">Full</button>
+                          </div>
+                        ),
+                        narration: <input id="bill-pay-note" aria-label="Narration" data-nav="pay-note" value={payEntry.note} onChange={(e) => setPay(payEntry.key, { note: e.target.value })} className={ledgerInputCls} placeholder="optional" />,
+                        act: null,
+                      },
+                    }}
+                    rows={payCommitted.map((p) => ({
+                      key: p.key,
+                      testId: 'bill-pay-line',
+                      selected: p.key === activePay,
+                      label: `Payment ${accName(p.code)}`,
+                      onActivate: () => { setActivePay(p.key); focusSoon('#bill-paid'); },
+                      onDelete: () => removePay(p.key),
+                      cells: {
+                        code: <span className="text-[#6B7280] dark:text-[#94A3B8]">{p.code}</span>,
+                        title: accName(p.code),
+                        debit: <span className="font-bold">{fmt2(parseFloat(p.amount) || 0)}</span>,
+                        narration: <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">{p.note}</span>,
+                        act: <button type="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); removePay(p.key); }} aria-label={`Remove payment ${accName(p.code)}`} className="inline-flex w-6 h-6 items-center justify-center rounded text-[#9CA3AF] hover:text-rose-600 align-middle"><Trash2 className="w-3.5 h-3.5" /></button>,
+                      },
+                    }))}
+                    totals={{ cells: { title: <TotalsLabel>Total received</TotalsLabel>, debit: <span data-testid="bill-pay-total" title={rs(payTotal)}>{fmt2(payTotal)}</span> } }}
+                  />
                   <div className="mt-1 flex flex-wrap justify-between gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8] px-1">
                     <button type="button" onClick={commitPay} className="font-bold text-teal-700 dark:text-teal-300 hover:underline">Add payment line</button>
-                    <span>Total received <strong className="tabular-nums text-[#111827] dark:text-white" data-testid="bill-pay-total">{rs(payTotal)}</strong></span>
+                    <span>Enter on Narration puts the line in the grid.</span>
                   </div>
                   {hasCheque && <div className="mt-2 grid grid-cols-2 gap-2"><ChequeFieldsInput value={cheque} onChange={setCheque} idPrefix="bill-chq" narrow /></div>}
                   {payError && <p role="alert" className="mt-1 text-[11px] font-bold text-rose-700 dark:text-rose-300">{payError}</p>}

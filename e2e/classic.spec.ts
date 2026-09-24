@@ -162,7 +162,7 @@ test.describe('Classic menu and reports on desktop', () => {
     await form.getByLabel('Unit 2', { exact: true }).selectOption('pack');
     await form.getByLabel('Qty 2', { exact: true }).fill('2');
     await form.getByLabel('Rate 2', { exact: true }).fill('8000');
-    await expect(form.getByTestId('pi-amount-2')).toHaveText('Rs. 16,000');
+    await expect(form.getByTestId('pi-amount-2')).toHaveText('16,000.00');
     await form.getByLabel('Discount %').fill('5');
     await form.getByLabel('Other charges (Rs.)').fill('1520');
     await form.getByLabel('Paid now').fill('20000');

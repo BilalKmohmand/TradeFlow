@@ -65,7 +65,7 @@ test('CPV typed with the keyboard only: code + Enter, the title search, the grid
   await expect(lines).toHaveCount(1);
   await expect(lines.first()).toContainText('2224');
   await expect(lines.first()).toContainText('MG EDIBLE OIL AND GHEE (PVT) LTD');
-  await expect(lines.first()).toContainText('Rs. 1,750,000');
+  await expect(lines.first()).toContainText('1,750,000.00');
   await expect(lines.first()).toContainText('BAHL- RAHMAT ALI PESHAWAR');
   await expect(code).toBeFocused();
   await expect(code).toHaveValue('');
@@ -105,7 +105,7 @@ test('CPV typed with the keyboard only: code + Enter, the title search, the grid
   await lines.nth(2).focus();
   await page.keyboard.press('Delete');
   await expect(lines).toHaveCount(2);
-  await expect(v.getByTestId('voucher-total-debit')).toHaveText('Rs. 1,750,500');
+  await expect(v.getByTestId('voucher-total-debit')).toHaveText('1,750,500.00');
   await expect(v.getByTestId('voucher-money-side')).toContainText('Cr Rs. 1,750,500');
 
   // Print Voucher ticked, Save (keyboard): printed, then a new blank voucher.
@@ -136,7 +136,7 @@ test('CPV typed with the keyboard only: code + Enter, the title search, the grid
   await v.getByLabel('Debit', { exact: true }).fill('1760000');
   await page.keyboard.press('Enter');
   await page.keyboard.press('Enter');
-  await expect(lines.first()).toContainText('Rs. 1,760,000');
+  await expect(lines.first()).toContainText('1,760,000.00');
   await v.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(v.getByRole('status').first()).toContainText('Voucher CPV-1 saved');
   await expect(v.getByTestId('voucher-number')).toHaveValue('CPV-2');
@@ -160,7 +160,7 @@ test('CRV: customers credited by code with bill-number narrations; totals', asyn
   const v = page.getByRole('dialog', { name: VOUCHER_TITLE.CRV });
   await voucherLine(page, v, '141274', { credit: '120000' }, 'Bill # 1203');
   await voucherLine(page, v, '141275', { credit: '38632350' }, 'Bill # 1204');
-  await expect(v.getByTestId('voucher-total-credit')).toHaveText('Rs. 38,752,350');
+  await expect(v.getByTestId('voucher-total-credit')).toHaveText('38,752,350.00');
   await expect(v.getByTestId('voucher-money-side')).toContainText('Dr Rs. 38,752,350');
   await v.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(v.getByTestId('voucher-number')).toHaveValue('CRV-2');

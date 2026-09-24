@@ -1,6 +1,7 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import { signIn, OWNER } from './helpers/login';
 import { bigShop } from './helpers/bigShop';
+import { openMenuOption } from './helpers/nav';
 import { NAV_GROUPS } from '../src/utils/navMap';
 
 /**
@@ -21,14 +22,11 @@ async function open(page: Page) {
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible({ timeout: 15_000 });
 }
 
-/** Open a nav-map option by its id through the top menu bar. */
+/** Open a nav-map option by its id through the top menu bar (the Invoice menu opens its options to the side). */
 async function openById(page: Page, id: string) {
   const g = NAV_GROUPS.find((x) => x.sections.some((s) => s.entries.some((e) => e.id === id)))!;
   const e = g.sections.flatMap((s) => s.entries).find((x) => x.id === id)!;
-  await page.getByRole('menubar', { name: 'Menu bar' }).getByRole('menuitem', { name: g.label, exact: true }).click();
-  const menu = page.getByRole('menu', { name: g.label, exact: true });
-  await menu.getByRole('menuitem', { name: e.label, exact: true }).click();
-  await expect(menu).toBeHidden();
+  await openMenuOption(page, g.label, e.label);
 }
 
 /** Type into a search box and check what the list shows (and, optionally, what it no longer shows). */
@@ -146,11 +144,13 @@ test('Pickers: Receive payment, Receive from many, report filter and the voucher
   await rm.getByLabel('Line 1 code').fill('c0007');
   await rm.getByLabel('Line 1 code').press('Enter');
   await expect(rm.getByLabel('Line 1 customer')).toHaveValue('c7');
+  await rm.getByLabel('Line 1 amount').fill('1000'); // a line goes into the grid with its amount
   await rm.getByRole('button', { name: 'Add row' }).click();
   await rm.getByLabel('Line 2 customer').focus();
   await page.keyboard.type('gul');
   await expect(rm.getByLabel('Line 2 customer')).toHaveValue('');
   await expect(rm.getByText(/Gul Khan & Sons is already on line 1/)).toBeVisible();
+  await expect(rm.getByLabel('Line 2 code')).toBeFocused(); // back to Code for another customer
   await page.keyboard.press('Escape');
 
   // A report's customer filter: Code box + type-to-find.

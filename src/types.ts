@@ -239,6 +239,8 @@ export interface LedgerEntry {
   note?: string;
   /** Payment rows: every change made after saving (Edit payment). */
   edits?: PaymentEdit[];
+  /** A payment taken on a bill: its own receipt number (referenceId stays the bill's number). */
+  receiptNo?: string;
 }
 
 /** One change to a saved payment: when, who, and what changed ("amount Rs. 500 → Rs. 400"). */

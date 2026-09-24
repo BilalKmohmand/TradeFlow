@@ -427,7 +427,7 @@ export const collectCashMovements = (
   ledger.forEach((l) => {
     if (l.entityType === 'customer' && l.type === 'payment_received' && l.credit > 0) {
       const c = customers.find((x) => x.id === l.entityId);
-      raw.push({ id: `cm-${l.id}`, date: l.date, direction: 'in', amount: l.credit, description: l.description, source: 'customer_payment', counterparty: c?.name || 'Customer', reference: l.referenceId, method: l.method || methodFromDescription(l.description), link: c ? { type: 'customer', id: c.id } : undefined, sourceId: l.id });
+      raw.push({ id: `cm-${l.id}`, date: l.date, direction: 'in', amount: l.credit, description: l.description, source: 'customer_payment', counterparty: c?.name || 'Customer', reference: l.receiptNo || l.referenceId, method: l.method || methodFromDescription(l.description), link: c ? { type: 'customer', id: c.id } : undefined, sourceId: l.id });
     }
     if (l.entityType === 'customer' && l.type === 'refund_paid' && l.debit > 0) {
       const c = customers.find((x) => x.id === l.entityId);
@@ -445,7 +445,7 @@ export const collectCashMovements = (
       const amount = l.debit > 0 ? l.debit : l.credit;
       const direction: 'in' | 'out' = isCust ? (l.debit > 0 ? 'out' : 'in') : l.debit > 0 ? 'in' : 'out';
       const name = party ? (isCust ? party.name : (party as Supplier).company || party.name) : isCust ? 'Customer' : 'Supplier';
-      raw.push({ id: `cm-${l.id}`, date: l.date, direction, amount, description: l.description, source: isCust ? (direction === 'in' ? 'customer_payment' : 'customer_refund') : 'supplier_payment', counterparty: name, reference: l.referenceId, method: l.method, link: party ? { type: l.entityType, id: party.id } : undefined, sourceId: l.id });
+      raw.push({ id: `cm-${l.id}`, date: l.date, direction, amount, description: l.description, source: isCust ? (direction === 'in' ? 'customer_payment' : 'customer_refund') : 'supplier_payment', counterparty: name, reference: l.receiptNo || l.referenceId, method: l.method, link: party ? { type: l.entityType, id: party.id } : undefined, sourceId: l.id });
     }
   });
   expenses.filter((e) => e.paidVia !== 'Credit (unpaid)').forEach((e) => {

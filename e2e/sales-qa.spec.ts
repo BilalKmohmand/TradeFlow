@@ -101,7 +101,7 @@ test.describe('Sales QA', () => {
     await page.keyboard.press('Enter');
     await expect(d.getByLabel('Paid now', { exact: true })).toBeFocused();
     // 12 × 1,980 + 5 × 560 + 2 × 7,250 = 23,760 + 2,800 + 14,500 = 41,060
-    await expect(d.getByTestId('line-amount-1')).toHaveText('Rs. 23,760');
+    await expect(d.getByTestId('line-amount-1')).toHaveText('23,760.00');
     await expect(d.getByText('Rs. 41,060', { exact: true }).first()).toBeVisible();
     await page.keyboard.type('41060');
     await page.keyboard.press('F9');
@@ -135,11 +135,11 @@ test.describe('Sales QA', () => {
       await d.getByLabel('Quantity 1', { exact: true }).fill('1');
       const q = (await d.getByLabel('Quantity 1', { exact: true }).boundingBox())!;
       expect(q.width, 'qty box too narrow').toBeGreaterThanOrEqual(95);
-      await expect(d.getByTestId('line-amount-1')).toHaveText('Rs. 12,345,678.50');
+      await expect(d.getByTestId('line-amount-1')).toHaveText('12,345,678.50');
       expect((await d.getByTestId('line-amount-1').boundingBox())!.height, 'amount wraps onto two lines').toBeLessThan(26);
       await d.getByRole('button', { name: 'Add another item' }).click();
       const amount = d.getByTestId('bill-line').first().getByTestId('line-amount-1');
-      await expect(amount).toHaveText('Rs. 12,345,678.50');
+      await expect(amount).toHaveText('12,345,678.50');
       const a = (await amount.boundingBox())!;
       expect(a.height, 'amount wraps onto two lines').toBeLessThan(26);
       const bin = d.getByRole('button', { name: 'Remove item 1' });

@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { signIn, OWNER } from './helpers/login';
 import { bigShop } from './helpers/bigShop';
+import { openMenuOption } from './helpers/nav';
 import { layoutProblems, describeProblems, LayoutProblem } from './helpers/layoutGuard';
 import { NAV_GROUPS, NavEntry, navCheck } from '../src/utils/navMap';
 
@@ -42,10 +43,8 @@ async function openEntry(page: Page, e: NavEntry, groupLabel: string, groupId: s
     await group.getByRole('button', { name: e.label, exact: true }).first().click();
     await expect(sheet).toBeHidden({ timeout: 10_000 }).catch(() => page.keyboard.press("Escape"));
   } else {
-    await page.getByRole('menubar', { name: 'Menu bar' }).getByRole('menuitem', { name: groupLabel, exact: true }).click();
-    const menu = page.getByRole('menu', { name: groupLabel, exact: true });
-    await menu.getByRole('menuitem', { name: e.label, exact: true }).click();
-    await expect(menu).toBeHidden();
+    // The Invoice menu opens its options to the side ("Purchase Invoice ›"): the shared helper handles that.
+    await openMenuOption(page, groupLabel, e.label);
   }
   await page.waitForTimeout(350); // dialogs slide in over 180ms; lists render
 }

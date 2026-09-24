@@ -1764,4 +1764,7 @@ CREATE INDEX IF NOT EXISTS suppliers_city_idx ON suppliers (city);
 ALTER TABLE ledger ADD COLUMN IF NOT EXISTS note TEXT;
 ALTER TABLE ledger ADD COLUMN IF NOT EXISTS edits JSONB;
 
+-- A payment taken on a bill: its own receipt number (the row's referenceId stays the bill number).
+ALTER TABLE ledger ADD COLUMN IF NOT EXISTS "receiptNo" TEXT;
+
 COMMIT;

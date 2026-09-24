@@ -15,6 +15,7 @@ import { allCities } from '../../../utils/vouchers';
 import { ACC, mergeAccounts } from '../../../utils/accounting';
 import { loadPrintChoice, paperOf, savePrintChoice, PrintChoice } from '../../../utils/saleInvoice';
 import { SearchPartyDialog } from './SearchPartyDialog';
+import { LedgerGrid, LedgerColumn, TotalsLabel, fmt2, ledgerInputCls, ledgerNumCls, ledgerSelectCls } from './LedgerGrid';
 import type { PurchaseInvoice } from '../../../types';
 
 interface Line {
@@ -33,9 +34,17 @@ let seq = 0;
 const blank = (patch: Partial<Line> = {}): Line => ({ key: ++seq, pid: '', qty: '', rate: '', inPack: false, batchNo: '', expiry: '', committed: false, ...patch });
 const num = (s: string) => Math.max(0, parseFloat(s) || 0);
 const round4 = (n: number) => Math.round(n * 10000) / 10000;
-/** Code | Product Name | Unit | Packing Items | Qty | Rate | Amount */
-const PI_COLS = 'lg:grid-cols-[6.5rem_minmax(8rem,1.4fr)_7rem_minmax(5rem,0.8fr)_7rem_8.5rem_minmax(7rem,max-content)]';
-const PI_GRID_COLS = 'lg:grid-cols-[6.5rem_minmax(8rem,1.4fr)_7rem_minmax(5rem,0.8fr)_7rem_8.5rem_minmax(7rem,max-content)_2.25rem]';
+/** Code | Product Name | Unit | Packing Items | Qty | Rate | Amount — entry row and grid alike. */
+const PI_COLUMNS: LedgerColumn[] = [
+  { key: 'code', label: 'Code', width: '6rem' },
+  { key: 'name', label: 'Product Name', width: 'minmax(10rem,1.6fr)' },
+  { key: 'unit', label: 'Unit', width: '7.5rem' },
+  { key: 'packing', label: 'Packing Items', width: 'minmax(6.5rem,1fr)' },
+  { key: 'qty', label: 'Qty', width: '6.5rem', numeric: true },
+  { key: 'rate', label: 'Rate', width: '7.5rem', numeric: true },
+  { key: 'amount', label: 'Amount', width: '10rem', numeric: true },
+  { key: 'act', label: <span className="sr-only">Remove</span>, width: '2.25rem', align: 'center' },
+];
 const PRINT_OPTS: { id: PrintChoice; label: string; hint: string }[] = [
   { id: 'none', label: 'None', hint: 'Do not print' },
   { id: 'half', label: 'Half', hint: 'A5' },
@@ -414,116 +423,88 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
             </div>
           </div>
 
-          {/* ---- Entry row ---- */}
+          {/* ---- Entry row + grid: one ruled sheet ---- */}
           <div>
-            <div className={`hidden lg:grid ${PI_COLS} gap-2 px-1 mb-1 ${hdr}`}>
-              <div>Code</div>
-              <div>Product Name</div>
-              <div>Unit</div>
-              <div>Packing Items</div>
-              <div>Qty</div>
-              <div>Rate</div>
-              <div className="text-right">Amount</div>
-            </div>
-            <div data-pi-entry data-testid="pi-entry" className={`grid grid-cols-12 ${PI_COLS} gap-2 items-start rounded-2xl border-2 ${editingLine ? 'border-indigo-300 dark:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/20' : 'border-teal-200 dark:border-teal-900 bg-teal-50/30 dark:bg-teal-950/10'} p-2`}>
-              <div className="col-span-4 sm:col-span-3 lg:col-auto min-w-0">
-                <span className={`lg:hidden ${small}`}>Code</span>
-                <CodeBox key={entry.key} id="pi-code" label={`Product code ${n}`} items={sortedProducts} value={entry.pid} onPick={(v) => pick(entry.key, v)} nav="code" onEnterResult={lineCodeEnter} />
-              </div>
-              <div className="col-span-8 sm:col-span-9 lg:col-auto min-w-0">
-                <span className={`lg:hidden ${small}`}>Product Name</span>
-                <QuickSelect id="pi-item" data-nav="item" aria-label={`Product ${n}`} value={entry.pid} options={productOptions} onPick={(v) => pick(entry.key, v)} className={inputCls} title={ep ? ep.name : 'Type the product name or code'}>
-                  <option value="">Product…</option>
-                  {sortedProducts.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-                </QuickSelect>
-              </div>
-              <div className="col-span-6 sm:col-span-3 lg:col-auto min-w-0">
-                <span className={`lg:hidden ${small}`}>Unit</span>
-                <select id="pi-unit" aria-label={`Unit ${n}`} data-nav="unit" value={entry.inPack ? 'pack' : 'unit'} onChange={(e) => togglePack(entry.key, e.target.value === 'pack')} disabled={!ep || !hasPack(ep)} className={`${inputCls} !px-2`}>
-                  <option value="unit">{ep ? ep.unit || 'pcs' : 'QTY'}</option>
-                  {ep && hasPack(ep) && <option value="pack">{`${ep.packName} (${ep.packSize})`}</option>}
-                </select>
-              </div>
-              <div className="col-span-6 sm:col-span-3 lg:col-auto min-w-0">
-                <span className={`lg:hidden ${small}`}>Packing Items</span>
-                <div className={`${readBox} !min-h-10 text-xs text-[#374151] dark:text-[#CBD5E1]`} data-testid="pi-packing">{packing(entry) || '—'}</div>
-              </div>
-              <div className="col-span-6 sm:col-span-3 lg:col-auto min-w-0">
-                <label htmlFor="pi-qty" className={`lg:hidden ${small}`}>Qty{ep ? ` (${unitWord})` : ''}</label>
-                <input id="pi-qty" data-nav="qty" aria-label={`Qty ${n}`} type="number" inputMode="decimal" min="0" step="any" value={entryRaw.qty} onChange={(e) => setLine(entry.key, { qty: e.target.value })} className={numInputCls} placeholder="Qty" />
-              </div>
-              <div className="col-span-6 sm:col-span-3 lg:col-auto min-w-0">
-                <label htmlFor="pi-rate" className={`lg:hidden ${small}`}>Rate{ep ? ` per ${unitWord}` : ''}</label>
-                <input id="pi-rate" data-nav="rate" aria-label={`Rate ${n}`} type="number" inputMode="decimal" min="0" step="any" value={entryRaw.rate} onChange={(e) => setLine(entry.key, { rate: e.target.value })} className={numInputCls} placeholder={ep ? `per ${unitWord}` : 'Rate'} />
-              </div>
-              <div className="col-span-12 sm:col-span-3 lg:col-auto min-w-0 flex items-baseline justify-between sm:justify-end gap-2 lg:block lg:text-right self-center">
-                <span className={`lg:hidden ${small}`}>Amount</span>
-                <span className="tabular-nums font-bold text-sm text-[#111827] dark:text-white break-all" data-testid={`pi-amount-${n}`}>{rs(entry.amount)}</span>
-              </div>
-              {ep?.trackBatches && (
-                <div className="col-span-12 lg:col-span-full grid grid-cols-2 gap-2 min-w-0">
-                  <input id="pi-batch" data-nav="batch" aria-label={`Batch no. ${n}`} value={entry.batchNo} onChange={(e) => setLine(entry.key, { batchNo: e.target.value })} className={`${inputCls} min-w-0`} placeholder="Batch no. (auto if empty)" />
-                  <input id="pi-expiry" data-nav="expiry" aria-label={`Expiry ${n}`} type="date" value={entry.expiry} onChange={(e) => setLine(entry.key, { expiry: e.target.value })} className={`${inputCls} min-w-0`} />
-                </div>
-              )}
-              {ep && (
-                <div className="col-span-12 lg:col-span-full flex flex-wrap gap-x-3 text-[11px] text-[#6B7280] dark:text-[#94A3B8] px-1">
-                  {entry.pack > 1 && entry.typedQty > 0 && <span>= {formatPackQty(entry.qty, ep)} at {rs(Math.round(entry.rate * 100) / 100)}/{ep.unit || 'pcs'}</span>}
-                  <span>Stock in hand <strong className="tabular-nums">{formatPackQty(ep.stockKg, ep, 'short')}</strong></span>
-                  {lastBought && <span>Last bought at <strong className="tabular-nums">{rs(lastBought.pricePerKg)}/{ep.unit || 'pcs'}</strong> ({formatDate(lastBought.date)})</span>}
-                </div>
-              )}
-            </div>
+            <LedgerGrid
+              ariaLabel="Purchase lines"
+              testId="pi-grid"
+              columns={PI_COLUMNS}
+              minWidth={940}
+              minRows={12}
+              empty="No lines yet. Type the code, Qty and Rate, then Enter."
+              entry={{
+                editing: editingLine,
+                props: { 'data-pi-entry': true, 'data-testid': 'pi-entry' },
+                cells: {
+                  code: <CodeBox key={entry.key} id="pi-code" label={`Product code ${n}`} items={sortedProducts} value={entry.pid} onPick={(v) => pick(entry.key, v)} nav="code" onEnterResult={lineCodeEnter} inputClassName={ledgerInputCls} />,
+                  name: (
+                    <QuickSelect id="pi-item" data-nav="item" aria-label={`Product ${n}`} value={entry.pid} options={productOptions} onPick={(v) => pick(entry.key, v)} className={ledgerSelectCls} title={ep ? ep.name : 'Type the product name or code'}>
+                      <option value="">Product…</option>
+                      {sortedProducts.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                    </QuickSelect>
+                  ),
+                  unit: (
+                    <select id="pi-unit" aria-label={`Unit ${n}`} data-nav="unit" value={entry.inPack ? 'pack' : 'unit'} onChange={(e) => togglePack(entry.key, e.target.value === 'pack')} disabled={!ep || !hasPack(ep)} className={ledgerSelectCls}>
+                      <option value="unit">{ep ? ep.unit || 'pcs' : 'QTY'}</option>
+                      {ep && hasPack(ep) && <option value="pack">{`${ep.packName} (${ep.packSize})`}</option>}
+                    </select>
+                  ),
+                  packing: <span className="block leading-8 px-1 truncate text-xs text-[#374151] dark:text-[#CBD5E1]" data-testid="pi-packing" title={packing(entry)}>{packing(entry) || '—'}</span>,
+                  qty: <input id="pi-qty" data-nav="qty" aria-label={`Qty ${n}`} type="number" inputMode="decimal" min="0" step="any" value={entryRaw.qty} onChange={(e) => setLine(entry.key, { qty: e.target.value })} className={ledgerNumCls} placeholder="Qty" title={ep ? `Qty (${unitWord})` : 'Qty'} />,
+                  rate: <input id="pi-rate" data-nav="rate" aria-label={`Rate ${n}`} type="number" inputMode="decimal" min="0" step="any" value={entryRaw.rate} onChange={(e) => setLine(entry.key, { rate: e.target.value })} className={ledgerNumCls} placeholder={ep ? `per ${unitWord}` : 'Rate'} title={ep ? `Rate per ${unitWord}` : 'Rate'} />,
+                  amount: <span className="block leading-8 px-1 tabular-nums font-bold text-[#111827] dark:text-white whitespace-nowrap"><span data-testid={`pi-amount-${n}`}>{fmt2(entry.amount)}</span></span>,
+                  act: null,
+                },
+                below: ep ? (
+                  <>
+                    {ep.trackBatches && (
+                      <div className="grid grid-cols-2 gap-2 max-w-md">
+                        <input id="pi-batch" data-nav="batch" aria-label={`Batch no. ${n}`} value={entry.batchNo} onChange={(e) => setLine(entry.key, { batchNo: e.target.value })} className={ledgerInputCls} placeholder="Batch no. (auto if empty)" />
+                        <input id="pi-expiry" data-nav="expiry" aria-label={`Expiry ${n}`} type="date" value={entry.expiry} onChange={(e) => setLine(entry.key, { expiry: e.target.value })} className={ledgerInputCls} />
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-x-3 text-[11px] text-[#6B7280] dark:text-[#94A3B8]">
+                      {entry.pack > 1 && entry.typedQty > 0 && <span>= {formatPackQty(entry.qty, ep)} at {rs(Math.round(entry.rate * 100) / 100)}/{ep.unit || 'pcs'}</span>}
+                      <span>Stock in hand <strong className="tabular-nums">{formatPackQty(ep.stockKg, ep, 'short')}</strong></span>
+                      {lastBought && <span>Last bought at <strong className="tabular-nums">{rs(lastBought.pricePerKg)}/{ep.unit || 'pcs'}</strong> ({formatDate(lastBought.date)})</span>}
+                    </div>
+                  </>
+                ) : undefined,
+              }}
+              rows={committed.map(({ l, i }) => {
+                const active = l.key === activeKey;
+                return {
+                  key: l.key,
+                  testId: 'pi-line',
+                  label: `Line ${i + 1}: ${l.p?.name || ''}`,
+                  selected: active,
+                  onActivate: () => loadLine(l.key),
+                  onDelete: () => removeLine(l.key),
+                  cells: {
+                    code: <span className="text-[#6B7280] dark:text-[#94A3B8]">{l.p?.code || '—'}</span>,
+                    name: <span className="font-semibold">{l.p?.name}{l.batchNo ? <span className="text-[11px] font-normal text-[#6B7280]"> • batch {l.batchNo}</span> : null}</span>,
+                    unit: <span className="text-xs">{l.p ? (l.pack > 1 ? l.p.packName : l.p.unit || 'pcs') : ''}</span>,
+                    packing: <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">{packing(l)}</span>,
+                    qty: l.typedQty,
+                    rate: fmt2(l.typedRate),
+                    amount: <span className="font-bold" {...(active ? {} : { 'data-testid': `pi-amount-${i + 1}` })}>{fmt2(l.amount)}</span>,
+                    act: <button type="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); removeLine(l.key); }} aria-label={`Remove line ${i + 1}`} className="inline-flex w-6 h-6 items-center justify-center rounded text-[#9CA3AF] hover:text-rose-600 align-middle"><Trash2 className="w-3.5 h-3.5" /></button>,
+                  },
+                };
+              })}
+              totals={{
+                testId: 'pi-grid-totals',
+                cells: {
+                  packing: <TotalsLabel />,
+                  qty: round4(committed.reduce((a, { l }) => a + l.typedQty, 0)),
+                  amount: fmt2(Math.round(committed.reduce((a, { l }) => a + l.amount, 0) * 100) / 100),
+                },
+              }}
+            />
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <button type="button" onClick={commitEntry} title="Put the line in the grid (Enter on Rate, Alt+N, or + in Qty / Rate)" className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-300 hover:underline">{editingLine ? 'Update line' : 'Add another item'}</button>
               {editingLine && <button type="button" onClick={() => setActiveKey(newLineOf(lines).key)} className="text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] hover:underline">Done with line {n}</button>}
             </div>
-          </div>
-
-          {/* ---- Grid ---- */}
-          <div className="rounded-2xl border border-[#E5E5E1] dark:border-[#203248] overflow-hidden" role="grid" aria-label="Purchase lines">
-            <div role="row" className={`hidden lg:grid ${PI_GRID_COLS} gap-2 px-3 py-2 bg-[#FAF9F6] dark:bg-[#162436] ${hdr}`}>
-              <div role="columnheader">Code</div>
-              <div role="columnheader">Product Name</div>
-              <div role="columnheader">Unit</div>
-              <div role="columnheader">Packing Items</div>
-              <div role="columnheader" className="text-right">Qty</div>
-              <div role="columnheader" className="text-right">Rate</div>
-              <div role="columnheader" className="text-right">Amount</div>
-              <div />
-            </div>
-            {committed.length === 0 && <p className="px-3 py-3 text-xs text-[#6B7280] dark:text-[#94A3B8]">No lines yet. Type the code, Qty and Rate, then Enter.</p>}
-            {committed.map(({ l, i }) => {
-              const active = l.key === activeKey;
-              return (
-                <div
-                  key={l.key}
-                  role="row"
-                  tabIndex={0}
-                  data-testid="pi-line"
-                  aria-selected={active}
-                  aria-label={`Line ${i + 1}: ${l.p?.name || ''}`}
-                  onClick={() => loadLine(l.key)}
-                  onKeyDown={(e) => {
-                    if (e.target !== e.currentTarget) return;
-                    if (e.key === 'Delete') { e.preventDefault(); removeLine(l.key); }
-                    else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); loadLine(l.key); }
-                  }}
-                  className={`grid grid-cols-12 ${PI_GRID_COLS} gap-x-2 gap-y-0.5 items-center px-3 py-2 text-sm border-t border-[#F1F0EC] dark:border-[#1E2E40] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${active ? 'bg-indigo-50 dark:bg-indigo-950/40' : 'hover:bg-[#FAF9F6] dark:hover:bg-[#162436]'}`}
-                >
-                  <div role="gridcell" className="col-span-3 lg:col-auto font-mono text-xs text-[#6B7280] dark:text-[#94A3B8]">{l.p?.code || '—'}</div>
-                  <div role="gridcell" className="col-span-9 lg:col-auto font-semibold text-[#111827] dark:text-white truncate">{l.p?.name}{l.batchNo ? <span className="text-[11px] font-normal text-[#6B7280]"> • batch {l.batchNo}</span> : null}</div>
-                  <div role="gridcell" className="col-span-3 lg:col-auto text-xs">{l.p ? (l.pack > 1 ? l.p.packName : l.p.unit || 'pcs') : ''}</div>
-                  <div role="gridcell" className="col-span-9 lg:col-auto text-xs text-[#6B7280] dark:text-[#94A3B8] truncate">{packing(l)}</div>
-                  <div role="gridcell" className="col-span-3 lg:col-auto text-right tabular-nums">{l.typedQty}</div>
-                  <div role="gridcell" className="col-span-4 lg:col-auto text-right tabular-nums">{l.typedRate}</div>
-                  <div role="gridcell" className="col-span-4 lg:col-auto text-right font-bold tabular-nums text-[#111827] dark:text-white" {...(active ? {} : { 'data-testid': `pi-amount-${i + 1}` })}>{rs(l.amount)}</div>
-                  <div className="col-span-1 lg:col-auto flex justify-end">
-                    <button type="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); removeLine(l.key); }} aria-label={`Remove line ${i + 1}`} className="p-1.5 rounded-xl text-[#9CA3AF] hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                </div>
-              );
-            })}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

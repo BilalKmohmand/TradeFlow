@@ -16,6 +16,7 @@ import { StockReturn, InvoicePaymentRecord } from '../../types';
 import { ChequeFieldsInput, emptyChequeFields } from './ChequeForms';
 import { EditPaymentButton } from './EditPaymentModal';
 import { isPendingApproval } from '../../context/controlActions';
+import { paymentNo } from '../../utils/paymentNumbers';
 
 interface Props {
   invoiceId: string | null;
@@ -24,7 +25,7 @@ interface Props {
 
 /** One bill: its lines, its payments, and the three things you do with it — take money, print, delete. */
 export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
-  const { invoices, customers, payBill, receiveCheque, deleteBill, setPrintRequest, can, currentUser, returns, deleteReturn, salesmen, areas, billDeleteNeedsApproval, markBillDeliveryPending, billEditBlock, ledger } = useTrading();
+  const { invoices, customers, payBill, receiveCheque, deleteBill, setPrintRequest, can, currentUser, returns, deleteReturn, salesmen, areas, billDeleteNeedsApproval, markBillDeliveryPending, billEditBlock, ledger, previewDocNumber } = useTrading();
   const ui = useBillingUI();
   const inv = invoices.find((i) => i.id === invoiceId) || null;
   const billReturns = inv ? returnsForBill(returns, inv.id) : [];
@@ -199,16 +200,29 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#94A3B8] mb-1.5">Payments</h3>
                 <ul className="text-sm divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248]">
-                  {(inv.payments || []).map((p) => (
-                    <li key={p.id} className="flex items-center justify-between gap-2 px-3 py-2"><span className="flex-1 min-w-0">{formatDate(p.date)} • {p.notes || p.method}</span><span className="tabular-nums font-bold">{rs(p.amount)}</span><EditPaymentButton row={payRow(p)} label={`Edit payment ${formatDate(p.date)} ${rs(p.amount)}`} onSaved={(m) => setMsg({ kind: 'ok', text: m })} /></li>
-                  ))}
+                  {(inv.payments || []).map((p) => {
+                    const row = payRow(p);
+                    const no = p.referenceNumber || (row ? paymentNo(row) : inv.invoiceNumber);
+                    return (
+                      <li key={p.id} className="flex items-center justify-between gap-2 px-3 py-2" data-testid="bill-payment-row">
+                        <span className="tabular-nums text-xs font-bold text-[#111827] dark:text-white shrink-0" data-testid="bill-payment-no" title="Receipt no.">{no}</span>
+                        <span className="flex-1 min-w-0 truncate">{formatDate(p.date)} • {p.notes || p.method}</span>
+                        <span className="tabular-nums font-bold">{rs(p.amount)}</span>
+                        {row && <button type="button" onClick={() => setPrintRequest({ type: 'voucher', ledgerId: row.id })} aria-label={`Print receipt ${no}`} title={`Print receipt ${no}`} className="inline-flex items-center justify-center min-h-9 min-w-9 rounded-xl text-[#6B7280] dark:text-[#94A3B8] hover:text-teal-700 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/40"><Printer className="w-3.5 h-3.5" /></button>}
+                        <EditPaymentButton row={row} label={`Edit payment ${formatDate(p.date)} ${rs(p.amount)}`} onSaved={(m) => setMsg({ kind: 'ok', text: m })} />
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
 
             {inv.balanceDue > 0 && (
               <form onSubmit={takePayment} className="rounded-2xl border border-teal-200 dark:border-teal-900 bg-teal-50/50 dark:bg-teal-950/20 p-4 space-y-3">
-                <h3 className="text-sm font-bold text-[#111827] dark:text-white flex items-center gap-2"><Wallet className="w-4 h-4 text-teal-700" /> Receive payment</h3>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="text-sm font-bold text-[#111827] dark:text-white flex items-center gap-2"><Wallet className="w-4 h-4 text-teal-700" /> Receive payment</h3>
+                  {method !== 'Cheque' && <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">Receipt no. <strong className="tabular-nums text-sm text-[#111827] dark:text-white" title="Given automatically when you save" data-testid="bill-pay-next-number">{previewDocNumber('receipt')}</strong></span>}
+                </div>
                 {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div className="col-span-2 sm:col-span-1">

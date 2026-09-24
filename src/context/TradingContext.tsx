@@ -1,3 +1,4 @@
+import { receiptNumbersIn } from '../utils/paymentNumbers';
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { guardActions } from './accessGuard';
 import { assignMissingCodes, CUSTOMER_CODE_PREFIX, SUPPLIER_CODE_PREFIX } from '../utils/partyCode';
@@ -2253,7 +2254,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       prev.map((c) => (c.id === customerId ? { ...c, totalDue: newTotalDue } : c))
     );
 
-    const payRef = controlStore.nextDocNumber('receipt', today, ledger.filter((l) => l.type === 'payment_received').map((l) => l.referenceId));
+    const payRef = controlStore.nextDocNumber('receipt', today, receiptNumbersIn(ledger));
     const newLedger: LedgerEntry = {
       id: uid('led'),
       entityType: 'customer',
@@ -3175,7 +3176,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const newPaid = round2(inv.paidAmount + payAmt);
     const newBalance = billBalance({ ...inv, paidAmount: newPaid });
     const payLedgerId = uid('led');
-    const record: InvoicePaymentRecord = { id: uid('pay'), date: when, amount: payAmt, method: invoiceMethod(method), notes: notes ? `${method} - ${notes}` : method, recordedBy: currentUser?.name, ledgerId: payLedgerId };
+    // Its own receipt number (shown on the bill before saving, on every list and on the printed receipt).
+    const receiptNo = controlStore.nextDocNumber('receipt', when, receiptNumbersIn(ledger));
+    const record: InvoicePaymentRecord = { id: uid('pay'), date: when, amount: payAmt, method: invoiceMethod(method), referenceNumber: receiptNo, notes: notes ? `${method} - ${notes}` : method, recordedBy: currentUser?.name, ledgerId: payLedgerId };
     setInvoices((prev) =>
       prev.map((i) =>
         i.id === invoiceId
@@ -3193,12 +3196,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         entityId: inv.customerId,
         type: 'payment_received',
         referenceId: inv.invoiceNumber,
+        receiptNo,
         sourceId: inv.id,
         method,
         ...(notes ? { note: notes } : {}),
         ...(bankCode && bankCode !== '1010' ? { bankCode } : {}),
         date: when,
-        description: `Payment received: ${method} - Bill ${inv.invoiceNumber}${notes ? ` (${notes})` : ''}`,
+        description: `Payment received: ${method} - Bill ${inv.invoiceNumber}${notes ? ` (${notes})` : ''} (${receiptNo})`,
         debit: 0,
         credit: payAmt,
         balanceAfter: dueAfter,
@@ -3207,7 +3211,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ...prev,
     ]);
     logAuditEvent('Bill Payment', `${formatCurrency(payAmt)} by ${method} against ${inv.invoiceNumber}. Left: ${formatCurrency(newBalance)}.`, 'info', 'billing');
-    return { success: true, message: `${formatCurrency(payAmt)} received. ${newBalance === 0 ? 'Bill fully paid.' : `${formatCurrency(newBalance)} still due.`}` };
+    return { success: true, message: `${formatCurrency(payAmt)} received (receipt ${receiptNo}). ${newBalance === 0 ? 'Bill fully paid.' : `${formatCurrency(newBalance)} still due.`}` };
   };
 
   /** Why this saved payment row cannot be edited (null = it can). */

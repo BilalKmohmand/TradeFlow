@@ -194,14 +194,20 @@ test.describe('Purchase Invoice: nothing cut off', () => {
       await form.getByLabel('Product code 2').press('Enter');
       await form.getByLabel('Qty 2', { exact: true }).fill('10');
       expect(await cutOff(), 'values cut off').toEqual([]);
-      // Every part of the entry row and each grid line stays inside the dialog (amount, delete, batch/expiry).
+      // Every part of the entry row and each grid line stays inside the dialog (amount, delete, batch/expiry) —
+      // or, on a narrow screen, inside the grid's own sideways-scrolling box (the sheet scrolls, not the page).
       const dialogBox = (await form.boundingBox())!;
       const outside = await form.locator('[data-testid="pi-line"] [data-testid^="pi-amount"], [data-testid="pi-line"] button, [data-testid="pi-entry"] input, [data-testid="pi-entry"] select, [data-testid="pi-entry"] [data-testid^="pi-amount"]').evaluateAll(
-        (els, right) => els.filter((e) => (e as HTMLElement).offsetParent !== null && e.getBoundingClientRect().right > right + 1).map((e) => e.getAttribute('aria-label') || e.getAttribute('data-testid') || e.tagName),
+        (els, right) => els.filter((e) => {
+          if ((e as HTMLElement).offsetParent === null) return false;
+          const box = e.closest('[data-ledger-grid]') as HTMLElement | null;
+          if (box && box.scrollWidth > box.clientWidth + 1) return e.getBoundingClientRect().right > box.getBoundingClientRect().left + box.scrollWidth + 1;
+          return e.getBoundingClientRect().right > right + 1;
+        }).map((e) => e.getAttribute('aria-label') || e.getAttribute('data-testid') || e.tagName),
         dialogBox.x + dialogBox.width
       );
       expect(outside, 'sticks out of the dialog').toEqual([]);
-      await expect(form.getByTestId('pi-amount-1')).toHaveText('Rs. 152,415,739,353.76');
+      await expect(form.getByTestId('pi-amount-1')).toHaveText('152,415,739,353.76');
       const wide = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
       expect(wide, 'page scrolls sideways').toBe(false);
     });

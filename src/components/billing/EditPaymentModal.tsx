@@ -1,3 +1,4 @@
+import { paymentNo } from '../../utils/paymentNumbers';
 import React, { useEffect, useState } from 'react';
 import { Pencil, Save } from 'lucide-react';
 import type { LedgerEntry } from '../../types';
@@ -67,7 +68,7 @@ export const EditPaymentModal: React.FC<{ ledgerId: string | null; onClose: () =
   };
 
   return (
-    <Modal isOpen onClose={onClose} title={`Edit payment ${row.referenceId}`} subtitle={`${isCust ? 'Received' : 'Paid'} ${formatDate(row.date)} — the receipt number stays the same.`}
+    <Modal isOpen onClose={onClose} title={`Edit payment ${paymentNo(row)}`} subtitle={`${isCust ? 'Received' : 'Paid'} ${formatDate(row.date)} — the receipt number stays the same.`}
       footer={
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className={secondaryBtn}>Cancel</button>
@@ -117,7 +118,7 @@ export const EditPaymentButton: React.FC<{ row: LedgerEntry | undefined; label?:
   if (!isEditablePayment(row)) return null;
   return (
     <>
-      <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(true); }} aria-label={label || `Edit payment ${row.referenceId}`}
+      <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(true); }} aria-label={label || `Edit payment ${paymentNo(row)}`}
         className={`inline-flex items-center gap-1 min-h-9 px-2 rounded-xl text-xs font-bold text-[#6B7280] dark:text-[#94A3B8] hover:text-teal-700 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/40 ${className}`}>
         <Pencil className="w-3.5 h-3.5" /> Edit
       </button>

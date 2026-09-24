@@ -1,3 +1,4 @@
+import { receiptNumbersIn } from '../utils/paymentNumbers';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   AppSettings,
@@ -1154,7 +1155,7 @@ export const createControlApi = (d: ApiDeps) => {
       case 'credit_note': return d.returns.filter((r) => r.kind === 'sales').map((r) => r.returnNumber);
       case 'debit_note': return d.returns.filter((r) => r.kind === 'purchase').map((r) => r.returnNumber);
       case 'quotation': return d.quotations.map((q) => q.quoteNumber);
-      case 'receipt': return d.ledger.filter((l) => l.type === 'payment_received').map((l) => l.referenceId);
+      case 'receipt': return receiptNumbersIn(d.ledger);
       case 'supplier_payment': return d.ledger.filter((l) => l.type === 'payment_made').map((l) => l.referenceId);
       case 'po': return d.purchaseOrders.map((p) => p.poNumber);
       case 'purchase_invoice': return (d.purchaseInvoices || []).map((p) => p.invoiceNumber);
