@@ -223,7 +223,7 @@ export const AccountsScreen: React.FC = () => {
       )}
       {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
 
-      {tab === 'vouchers' && <VouchersTab accounts={accounts} flash={flash} request={voucherReq} />}
+      {tab === 'vouchers' && <VouchersTab accounts={accounts} flash={flash} request={voucherReq} balances={balances} />}
       {tab === 'ledger' && <AccountLedgerTab key={`ledger-${ledgerRef.n}`} accounts={accounts} journal={journal} initial={ledgerRef.ref} from={from} to={to} setFrom={setFrom} setTo={setTo} />}
       {tab === 'parties' && <PartyBalancesView />}
 

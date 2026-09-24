@@ -18,7 +18,7 @@ interface Props {
 
 /** Add or edit an item: name, unit, fixed selling price, stock on hand, low-stock alert level. */
 export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
-  const { products, addProduct, updateProduct, adjustStock, can, stockBatches, isFieldVisible } = useTrading();
+  const { products, addProduct, updateProduct, adjustStock, can, stockBatches, isFieldVisible, productUnits, productGroups, manufacturers } = useTrading();
   // Roles that may not see purchase costs (operator, viewer) never see or change the cost price.
   const showCosts = isFieldVisible('purchase_costs');
   // Changing the stock figure of an existing item is a stock count: only for roles that may adjust stock.
@@ -40,8 +40,10 @@ export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
   const [reorderQty, setReorderQty] = useState(editing?.reorderQty ? String(editing.reorderQty) : '');
   const [photo, setPhoto] = useState(editing?.photo || '');
   const [photoBusy, setPhotoBusy] = useState(false);
-  const groups = useMemo(() => itemGroups(products), [products]);
-  const brands = useMemo(() => itemBrands(products), [products]);
+  // Coding › Product Group / Manufacturer / Product Unit Coding lists (they include what items already use).
+  const groups = useMemo(() => productGroups || itemGroups(products), [productGroups, products]);
+  const brands = useMemo(() => manufacturers || itemBrands(products), [manufacturers, products]);
+  const units = useMemo(() => { const l = productUnits?.length ? productUnits : UNITS; return l.some((u) => u.toLowerCase() === unit.toLowerCase()) ? l : [...l, unit]; }, [productUnits, unit]);
   const onPhoto = async (file?: File | null) => {
     if (!file) return;
     setPhotoBusy(true);
@@ -124,7 +126,7 @@ export const ItemModal: React.FC<Props> = ({ isOpen, onClose, editId }) => {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls} htmlFor="item-unit">Sold per</label>
-            <select id="item-unit" value={unit} onChange={(e) => setUnit(e.target.value)} className={inputCls}>{UNITS.map((u) => <option key={u}>{u}</option>)}</select>
+            <select id="item-unit" value={unit} onChange={(e) => setUnit(e.target.value)} className={inputCls}>{units.map((u) => <option key={u}>{u}</option>)}</select>
           </div>
           <div>
             <label className={labelCls} htmlFor="item-price">Selling price (Rs.)</label>

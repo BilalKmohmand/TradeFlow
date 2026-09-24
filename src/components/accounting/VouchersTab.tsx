@@ -1,17 +1,15 @@
 import { matcher } from '../../utils/search';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Printer, Pencil, Trash2, Eye, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Plus, Printer, Pencil, Trash2, Eye } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
-import { Modal, Notice, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, rs, EmptyState, RowAction } from '../billing/ui';
-import { Account, JournalEntry, booksLockedFor } from '../../utils/accounting';
-import { VOUCHER_TYPES, VoucherType, accountOptions, moneySideAmount, moneySideCode, voucherInputOf, voucherTotals, voucherTypeInfo, cleanLines, VoucherInput } from '../../utils/vouchers';
-import { AccountPicker } from './AccountPicker';
-import { BankSelect } from '../billing/BankSelect';
+import { Modal, cardCls, inputCls, labelCls, primaryBtn, secondaryBtn, rs, EmptyState, RowAction } from '../billing/ui';
+import { Account, AccountBalance, JournalEntry, booksLockedFor } from '../../utils/accounting';
+import { VoucherModal } from './VoucherForm';
+import { VOUCHER_TYPES, VoucherType, voucherTypeInfo } from '../../utils/vouchers';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { formatDate } from '../../utils/formatters';
 import { todayISO } from '../../utils/stockFlow';
-import { MAIN_BANK_CODE, bankNameOf } from '../../utils/banks';
-import { isPendingApproval } from '../../context/controlActions';
+import { bankNameOf } from '../../utils/banks';
 import { FileText } from 'lucide-react';
 
 type Flash = (r: { success: boolean; message: string }) => void;
@@ -25,7 +23,7 @@ const typeTone: Record<VoucherType, string> = {
 const voucherTotal = (v: JournalEntry) => v.lines.reduce((a, l) => a + (Number(l.debit) || 0), 0);
 
 /** Accounts → Vouchers: CPV / CRV / BPV / BRV / JV with many lines each, like the old desktop books. */
-export const VouchersTab: React.FC<{ accounts: Account[]; flash: Flash; request?: { sub: string; n: number } | null }> = ({ accounts, flash, request }) => {
+export const VouchersTab: React.FC<{ accounts: Account[]; flash: Flash; request?: { sub: string; n: number } | null; balances?: Map<string, AccountBalance> }> = ({ accounts, flash, request, balances }) => {
   const { vouchers, customers, suppliers, can, setPrintRequest, deleteVoucher, voucherEditBlock, bankAccounts, settings } = useTrading();
   const today = todayISO();
   const [kind, setKind] = useState<'all' | VoucherType>('all');
@@ -124,7 +122,7 @@ export const VouchersTab: React.FC<{ accounts: Account[]; flash: Flash; request?
       )}
       {rows.length > limit && <button type="button" onClick={() => setLimit((n) => n + 100)} className={`${secondaryBtn} w-full`}>Show more ({rows.length - limit} left)</button>}
 
-      {editor && <VoucherModal key={editor.nonce} type={editor.type} editId={editor.id} accounts={accounts} onClose={() => setEditor(null)} onSaved={(m, id) => { flash({ success: true, message: m }); setEditor(null); if (id) setViewId(id); }} />}
+      {editor && <VoucherModal key={editor.nonce} type={editor.type} editId={editor.id} accounts={accounts} balances={balances} onClose={() => setEditor(null)} onSaved={(m) => flash({ success: true, message: m })} />}
 
       <Modal isOpen={Boolean(view)} onClose={() => setViewId(null)} title={view ? `${view.ref} — ${voucherTypeInfo(view.voucherType as VoucherType).label}` : 'Voucher'} subtitle={view ? `${formatDate(view.date)}${view.bankCode ? ` • ${bankNameOf(bankAccounts, view.bankCode)}` : ''} • ${view.memo}` : undefined} wide
         footer={view && (
@@ -166,111 +164,6 @@ export const VouchersTab: React.FC<{ accounts: Account[]; flash: Flash; request?
         onConfirm={() => { if (pendingDel) flash(deleteVoucher(pendingDel.id)); setPendingDel(null); }}
       />
     </div>
-  );
-};
-
-interface LineRow { key: string; account: string; debit: string; credit: string; narration: string }
-let rowSeq = 0;
-const newLine = (p: Partial<LineRow> = {}): LineRow => ({ key: `vl-${++rowSeq}`, account: '', debit: '', credit: '', narration: '', ...p });
-
-/** New / edit voucher: number shown (given automatically), date, bank, narration and many lines. */
-export const VoucherModal: React.FC<{ type: VoucherType; editId?: string; accounts: Account[]; onClose: () => void; onSaved: (message: string, id?: string) => void }> = ({ type, editId, accounts, onClose, onSaved }) => {
-  const { vouchers, customers, suppliers, addVoucher, updateVoucher, previewVoucherNumber, setPrintRequest, bankAccounts } = useTrading();
-  const info = voucherTypeInfo(type);
-  const existing = editId ? vouchers.find((v) => v.id === editId) : undefined;
-  const start: VoucherInput | null = existing ? voucherInputOf(existing) : null;
-  const [date, setDate] = useState(start?.date || todayISO());
-  const [narration, setNarration] = useState(start?.narration || '');
-  const [bank, setBank] = useState(start?.bankCode || MAIN_BANK_CODE);
-  const [lines, setLines] = useState<LineRow[]>(() => (start ? start.lines.map((l) => newLine({ account: l.account, debit: l.debit ? String(l.debit) : '', credit: l.credit ? String(l.credit) : '', narration: l.narration || '' })) : info.money ? [newLine()] : [newLine(), newLine()]));
-  const [error, setError] = useState('');
-  const [sent, setSent] = useState('');
-  const busy = useRef(false);
-  const options = useMemo(() => accountOptions(accounts, customers, suppliers, { forVoucher: true }).filter((o) => o.ref !== moneySideCode(type, bank)), [accounts, customers, suppliers, type, bank]);
-  const num = (s: string) => Math.max(0, parseFloat(s) || 0);
-  const parsed = lines.map((l) => ({ account: l.account, debit: num(l.debit), credit: num(l.credit), narration: l.narration }));
-  const clean = cleanLines(parsed);
-  const totals = voucherTotals(clean);
-  const side = moneySideCode(type, bank);
-  const sideAmt = moneySideAmount(type, clean);
-  const sideName = side ? (side === '1000' ? 'Cash in hand' : bankAccounts.find((b) => b.code === side)?.name || 'Bank') : '';
-  const number = existing ? existing.ref : previewVoucherNumber(type, date);
-  const set = (key: string, patch: Partial<LineRow>) => setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
-  // Lines usually go on one side: payments are debits, receipts are credits.
-  const main: 'debit' | 'credit' = info.side === 'receive' ? 'credit' : 'debit';
-
-  const save = (print: boolean) => {
-    if (busy.current || sent) return;
-    setError('');
-    const input: VoucherInput = { type, date, narration, lines: parsed, ...(info.money === 'bank' ? { bankCode: bank } : {}) };
-    busy.current = true;
-    const r = existing ? updateVoucher(existing.id, input) : addVoucher(input);
-    busy.current = false;
-    if (!r.success) return setError(r.message);
-    if (isPendingApproval(r)) return setSent(r.message);
-    const id = (r as { voucher?: JournalEntry }).voucher?.id;
-    if (print && id) setPrintRequest({ type: 'vouchers_print', ids: [id] });
-    onSaved(r.message, print ? undefined : id);
-  };
-
-  const footer = (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="text-xs text-[#374151] dark:text-[#CBD5E1] tabular-nums" data-testid="voucher-totals">
-        Debit <strong>{rs(totals.debit + (info.side === 'receive' ? sideAmt : 0))}</strong> • Credit <strong>{rs(totals.credit + (info.side === 'pay' ? sideAmt : 0))}</strong>
-        {!info.money && Math.abs(totals.debit - totals.credit) >= 0.005 && <span className="ml-2 font-bold text-rose-700 dark:text-rose-300">Difference {rs(Math.abs(totals.debit - totals.credit))}</span>}
-      </div>
-      <div className="grid grid-cols-2 sm:flex gap-2 max-sm:w-full">
-        <button type="button" onClick={onClose} className={`${secondaryBtn} whitespace-nowrap`}>{sent ? 'Close' : 'Cancel'}</button>
-        <button type="button" onClick={() => save(true)} disabled={Boolean(sent)} className={`${secondaryBtn} whitespace-nowrap`}><Printer className="w-4 h-4" /> Save &amp; print</button>
-        <button type="button" onClick={() => save(false)} disabled={Boolean(sent)} className={`${primaryBtn} max-sm:col-span-2 max-sm:order-first`}>Save voucher</button>
-      </div>
-    </div>
-  );
-
-  return (
-    <Modal isOpen onClose={onClose} title={`${existing ? 'Edit' : 'New'} ${info.label}`} subtitle={info.money ? `The ${info.money === 'cash' ? 'cash' : 'bank'} side is added by itself: just enter who was ${info.side === 'pay' ? 'paid' : 'received from'} and for what.` : 'Debits must equal credits.'} wide="xl" footer={footer}>
-      <form onSubmit={(e) => { e.preventDefault(); save(false); }} className="space-y-4" aria-label={info.label}>
-        {error && <Notice kind="error">{error}</Notice>}
-        {sent && <div data-testid="voucher-sent-for-approval"><Notice kind="ok">{sent}</Notice></div>}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="min-w-0">
-            <label className={labelCls} htmlFor="vch-number">Voucher no.</label>
-            <input id="vch-number" readOnly data-skip-autofocus tabIndex={-1} value={number} className={`${inputCls} tabular-nums !bg-[#F4F3EF] dark:!bg-[#0D1520]`} title="Given automatically" data-testid="voucher-number" />
-          </div>
-          <div className="min-w-0">
-            <label className={labelCls} htmlFor="vch-date">Date</label>
-            <input id="vch-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
-          </div>
-          {info.money === 'bank' && (bankAccounts.length > 1 ? <BankSelect id="vch-bank" className="col-span-2" label="Bank account" value={bank} onChange={setBank} /> : <div className="col-span-2 min-w-0"><span className={labelCls}>Bank account</span><div className={`${inputCls} !bg-[#F4F3EF] dark:!bg-[#0D1520]`}>{bankAccounts[0]?.name}</div></div>)}
-          <div className={`min-w-0 ${info.money === 'bank' ? 'col-span-2 sm:col-span-4' : 'col-span-2'}`}>
-            <label className={labelCls} htmlFor="vch-narration">Narration</label>
-            <input id="vch-narration" value={narration} onChange={(e) => setNarration(e.target.value)} className={inputCls} placeholder={info.side === 'pay' ? 'e.g. Payments to suppliers' : info.side === 'receive' ? 'e.g. Recovery from Mardan' : 'e.g. Set off / correction'} />
-          </div>
-        </div>
-
-        <div className="space-y-2" aria-label="Voucher lines">
-          <div className="hidden sm:grid grid-cols-[minmax(0,2.6fr)_8rem_8rem_minmax(0,1.3fr)_2.5rem] gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
-            <span>Code • account (F1 to search)</span><span className="text-right">Debit</span><span className="text-right">Credit</span><span>Line narration</span><span />
-          </div>
-          {lines.map((l, i) => (
-            <div key={l.key} className="grid grid-cols-2 sm:grid-cols-[minmax(0,2.6fr)_8rem_8rem_minmax(0,1.3fr)_2.5rem] gap-2 items-start relative rounded-2xl sm:rounded-none border sm:border-0 border-[#E5E5E1] dark:border-[#203248] p-2 sm:p-0" data-testid="voucher-line">
-              <AccountPicker id={`vch-acc-${i + 1}`} aria-label={`Line ${i + 1} account`} className="col-span-2 sm:col-span-1" value={l.account} options={options} onPick={(ref) => set(l.key, { account: ref })} />
-              <input aria-label={`Line ${i + 1} debit`} type="number" inputMode="decimal" min="0" step="any" value={l.debit} onChange={(e) => set(l.key, { debit: e.target.value, ...(e.target.value ? { credit: '' } : {}) })} className={`${inputCls} tabular-nums text-right ${main === 'debit' ? '' : 'opacity-80'}`} placeholder="Debit" />
-              <input aria-label={`Line ${i + 1} credit`} type="number" inputMode="decimal" min="0" step="any" value={l.credit} onChange={(e) => set(l.key, { credit: e.target.value, ...(e.target.value ? { debit: '' } : {}) })} className={`${inputCls} tabular-nums text-right ${main === 'credit' ? '' : 'opacity-80'}`} placeholder="Credit" />
-              <input aria-label={`Line ${i + 1} narration`} value={l.narration} onChange={(e) => set(l.key, { narration: e.target.value })} className={`${inputCls} col-span-2 sm:col-span-1 max-sm:w-[calc(100%-3rem)]`} placeholder="Line narration (optional)" />
-              <button type="button" onClick={() => setLines((prev) => (prev.length > 1 ? prev.filter((x) => x.key !== l.key) : prev))} aria-label={`Remove line ${i + 1}`} className="max-sm:absolute max-sm:right-2 max-sm:bottom-2 sm:col-span-1 justify-self-end min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 p-2.5 rounded-xl text-[#9CA3AF] hover:text-rose-600 inline-flex items-center justify-center"><X className="w-4 h-4" /></button>
-            </div>
-          ))}
-          <button type="button" onClick={() => setLines((prev) => [...prev, newLine()])} className={secondaryBtn}><Plus className="w-4 h-4" /> Add line</button>
-          {side && (
-            <div className="flex items-center justify-between gap-2 rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] px-3.5 py-2.5 text-sm" data-testid="voucher-money-side">
-              <span className="min-w-0 truncate"><span className="tabular-nums text-xs text-[#8E9299] mr-2">{side}</span>{sideName} <span className="text-[11px] text-[#6B7280]">(added by itself)</span></span>
-              <span className="tabular-nums font-bold whitespace-nowrap">{info.side === 'pay' ? 'Cr' : 'Dr'} {rs(Math.max(0, sideAmt))}</span>
-            </div>
-          )}
-        </div>
-      </form>
-    </Modal>
   );
 };
 

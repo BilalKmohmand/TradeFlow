@@ -63,10 +63,10 @@ test.describe('Desktop top menu bar', () => {
       await expect(menu).toBeHidden();
     };
 
-    // Coding › Chart of accounts
-    await pick('Coding', 'Chart of accounts', 'desktop-coding');
+    // Coding › Accounts Coding New (the chart of accounts)
+    await pick('Coding', 'Accounts Coding New', 'desktop-coding');
     await expect(page.getByRole('tab', { name: 'Chart of accounts', selected: true })).toBeVisible();
-    await expect(crumb(page)).toHaveText(/Coding\s*Chart of accounts/);
+    await expect(crumb(page)).toHaveText(/Coding\s*Accounts Coding New/);
 
     // Invoice › Sale invoice (new bill)
     await pick('Invoice', 'Sale invoice (new bill)', 'desktop-invoice');
@@ -77,7 +77,7 @@ test.describe('Desktop top menu bar', () => {
     // Accounts › CPV opens a new cash payment voucher
     await pick('Accounts', 'CPV — Cash payment voucher', 'desktop-accounts');
     await expect(page.getByRole('tab', { name: 'Vouchers', selected: true })).toBeVisible();
-    await expect(page.getByRole('dialog', { name: /Cash payment voucher/i })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Cash Payment -- [Debit Voucher]' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(crumb(page)).toHaveText(/Accounts\s*Vouchers/);
@@ -173,7 +173,7 @@ test.describe('Desktop top menu bar', () => {
     await find('CPV');
     await expect(box.getByRole('option').first()).toContainText('CPV — Cash payment voucher');
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('dialog', { name: /Cash payment voucher/i })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Cash Payment -- [Debit Voucher]' })).toBeVisible();
     await page.keyboard.press('Escape');
 
     // 3. A customer

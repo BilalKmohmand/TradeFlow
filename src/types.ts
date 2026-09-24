@@ -83,6 +83,11 @@ export interface Product {
    * reorderQty is how much is normally ordered then (0 / empty = suggest enough for twice the level).
    */
   reorderQty?: number;
+  /**
+   * Coding › Opening Stocks: opening quantity entered for each store other than the main godown
+   * (godown id → qty). The main godown's opening is the item's total opening minus these.
+   */
+  openingByGodown?: Record<string, number>;
 }
 
 export type BookingStatus = 'active' | 'completed' | 'cancelled';
@@ -300,7 +305,7 @@ export type OpsTab = 'fleet' | 'expenses' | 'alerts' | 'tasks';
  * id here: the classic menu and the Reports hub then open it instead of their fallback
  * (see utils/classicMenu.ts, PARTNER_SCREENS).
  */
-export const ACTIVE_SCREENS = ['dashboard', 'customers', 'suppliers', 'products', 'bookings', 'billing', 'reports', 'ops', 'admin', 'bills', 'daily', 'money', 'accounts', 'owner', 'purchases', 'reports-hub'] as const;
+export const ACTIVE_SCREENS = ['dashboard', 'customers', 'suppliers', 'products', 'bookings', 'billing', 'reports', 'ops', 'admin', 'bills', 'daily', 'money', 'accounts', 'owner', 'purchases', 'reports-hub', 'coding'] as const;
 export type ActiveScreen = (typeof ACTIVE_SCREENS)[number];
 
 /** Payment methods treated as cash in hand; everything else is the bank account. */
@@ -898,6 +903,12 @@ export interface AppSettings {
   mainBankName?: string;
   /** Cities / towns offered when adding a customer or supplier (free text is allowed too). */
   cities?: string[];
+  /** Coding › Product Unit Coding: units offered on items (tin, can, ctn…). Unset = the built-in list. */
+  productUnits?: string[];
+  /** Coding › Product Group Coding: item groups (kept on Product.category). */
+  productGroups?: string[];
+  /** Coding › Manufacturer Coding: brands / manufacturers (kept on Product.brand). */
+  manufacturers?: string[];
 }
 
 /**

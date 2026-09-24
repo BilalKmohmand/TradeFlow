@@ -72,6 +72,7 @@ import { ReminderApi, createReminderApi, computeRemindersDue } from './reminderA
 import { NumberGuardApi, useNumberGuard } from './numberGuardActions';
 import { ClassicApi, useClassicStore } from './classicActions';
 import { VoucherApi, createVoucherApi } from './voucherActions';
+import { CodingApi, createCodingApi } from './codingActions';
 import { planDocNumber } from '../utils/control';
 import { chequesBlockingCustomerDelete } from '../utils/cheques';
 import {
@@ -116,7 +117,7 @@ import {
   initialWhatsAppMessages,
 } from '../data/initialData';
 
-interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, PurchasingApi, FinanceApi, AuthApi, SalesExtrasApi, ControlApi, ReminderApi, NumberGuardApi, ClassicApi, VoucherApi {
+interface TradingContextType extends InventoryApi, StockActionsApi, ChequeApi, PurchasingApi, FinanceApi, AuthApi, SalesExtrasApi, ControlApi, ReminderApi, NumberGuardApi, ClassicApi, VoucherApi, CodingApi {
   /** Why this customer can't be deleted right now (cheques still in hand), or null. */
   customerDeleteBlock: (id: string) => string | null;
   customers: Customer[];
@@ -4239,6 +4240,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     nextDocNumber: controlStore.nextDocNumber,
     previewDocNumber: (key, date, existing) => planDocNumber({ numberSeries: settings.numberSeries, docCounters: controlStore.counters.current }, key, date, existing).number,
   });
+  // Coding menu: units / product groups / manufacturers, Accounts Opening Balances, Opening Stocks (see codingActions.ts).
+  const codingApi = createCodingApi({
+    settings, setSettings, products, setProducts, customers, suppliers, ledger, expenses, cashEntries, adjustments, purchases, invoices, dispatches, returns,
+    godowns: inventory.storedGodowns, stockBatches: inventory.api.stockBatches, updateRows: inventory.updateRows, bankAccounts: vouchersApi.bankAccounts,
+    setOpeningBalance, can: (p) => can(p as Permission), logAuditEvent, today: todayISO,
+  });
   /** Expense / cash / ledger rows owned by a cheque, a finance record or a voucher: changed from there, never deleted on their own. */
   const voucherRecordIds = useMemo(() => new Set([...ledger, ...expenses, ...cashEntries].filter((r) => r.voucherId).map((r) => r.id)), [ledger, expenses, cashEntries]);
   const isLinkedRecord = (id: string) => chequeApi.isChequeRecord(id) || finance.api.isFinanceRecord(id) || voucherRecordIds.has(id);
@@ -4281,6 +4288,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ...reminders,
         ...numberGuard,
         ...vouchersApi,
+        ...codingApi,
         customerDeleteBlock,
         customers,
         suppliers,

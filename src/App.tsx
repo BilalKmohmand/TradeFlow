@@ -38,6 +38,7 @@ import { ItemsScreen } from './screens/billing/ItemsScreen';
 import { ReceiveStockModal } from './components/billing/InventoryUI';
 import { DailySheetScreen } from './screens/billing/DailySheetScreen';
 import { MoneyScreen } from './screens/billing/MoneyScreen';
+import { CodingScreen } from './screens/billing/CodingScreen';
 import { CustomersBillingScreen } from './screens/billing/CustomersBillingScreen';
 import { AccountsScreen } from './screens/billing/AccountsScreen';
 import { SuppliersBillingScreen } from './screens/billing/SuppliersBillingScreen';
@@ -178,6 +179,7 @@ function MainApp() {
             {activeScreen === 'bills' && <BillsScreen />}
             {activeScreen === 'daily' && <DailySheetScreen />}
             {activeScreen === 'money' && <MoneyScreen />}
+            {activeScreen === 'coding' && <CodingScreen />}
             {activeScreen === 'accounts' && <AccountsScreen />}
             {activeScreen === 'owner' && <OwnerDashboardScreen />}
             {activeScreen === 'purchases' && <PurchasesScreen />}
