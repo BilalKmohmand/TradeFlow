@@ -145,21 +145,27 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="min-w-0 w-full mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between min-h-14 sm:min-h-16 min-w-0 py-2 sm:py-3 gap-2 sm:gap-4">
           {/* Logo & Brand: the shop name wraps to two lines on phones instead of being cut off. */}
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 lg:flex-none">
+          <button
+            type="button"
+            onClick={() => setActiveScreen('dashboard')}
+            aria-label="Go to Home"
+            title="Home"
+            className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 lg:flex-none text-left rounded-2xl outline-hidden focus-visible:ring-2 focus-visible:ring-teal-600"
+          >
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#111827] dark:bg-[#162436] flex items-center justify-center text-white shadow-xs border border-transparent dark:border-[#203248] shrink-0">
               <Truck className="w-5 h-5 text-teal-400" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 min-w-0">
-                <h1 className="font-serif italic font-bold text-[17px] leading-[1.15] sm:text-xl tracking-tight text-[#111827] dark:text-white line-clamp-2 sm:line-clamp-1 break-words">
+                <span role="heading" aria-level={1} className="block font-serif italic font-bold text-[17px] leading-[1.15] sm:text-xl tracking-tight text-[#111827] dark:text-white line-clamp-2 sm:line-clamp-1 break-words">
                   {settings.companyName || 'Sarmaya'}
-                </h1>
+                </span>
                 <span className="hidden md:inline-flex shrink-0 text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 bg-[#FAF9F6] dark:bg-[#162436] text-teal-800 dark:text-teal-300 rounded-full border border-[#E5E5E1] dark:border-[#203248]">
                   {isBilling ? 'Billing' : 'Bulk Trading'}
                 </span>
               </div>
             </div>
-          </div>
+          </button>
 
           {/* Find anything (Ctrl/⌘ K or "/"): a real search box on wider screens, an icon on phones. */}
           <button
