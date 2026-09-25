@@ -59,6 +59,7 @@ export type AiErrorCode =
   | 'method'
   | 'origin'
   | 'not_configured'
+  | 'no_credit'
   | 'rate_limited'
   | 'too_large'
   | 'bad_request'
@@ -411,6 +412,7 @@ const defaultCreate = (apiKey: string): CreateFn => {
 export const mapAnthropicError = (e: unknown): AiHttpResponse => {
   if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) return fail(503, 'bad_key', 'The AI key is not accepted. Ask the owner to check ANTHROPIC_API_KEY in Vercel.');
   if (e instanceof Anthropic.RateLimitError) return fail(429, 'busy', 'The AI is busy right now. Try again in a minute.');
+  if (e instanceof Anthropic.BadRequestError && /credit balance/i.test(e.message)) return fail(402, 'no_credit', 'The AI account has no credit left. Ask the owner to add credit in the Anthropic console (Plans & Billing).');
   if (e instanceof Anthropic.BadRequestError) return fail(400, 'bad_request', 'The AI could not use this request. Try a shorter question or a clearer photo.');
   if (e instanceof Anthropic.APIConnectionTimeoutError) return fail(504, 'timeout', 'The AI took too long. Try again.');
   if (e instanceof Anthropic.APIConnectionError) return fail(502, 'upstream', 'Could not reach the AI service. Try again.');
