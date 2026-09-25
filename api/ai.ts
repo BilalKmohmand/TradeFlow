@@ -404,7 +404,7 @@ export const validateOutput = (task: AiTask, raw: unknown): AiResultFor<AiTask> 
 type CreateFn = (params: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming) => Promise<Anthropic.Beta.BetaMessage>;
 
 const defaultCreate = (apiKey: string): CreateFn => {
-  const client = new Anthropic({ apiKey, maxRetries: 1, timeout: 55_000 });
+  const client = new Anthropic({ apiKey, maxRetries: 3, timeout: 50_000 });
   return (params) => client.beta.messages.create(params);
 };
 
@@ -434,7 +434,36 @@ export const toOpenAiMessages = (params: Anthropic.Beta.Messages.MessageCreatePa
   return messages;
 };
 
-export const bazaarLinkCreate = (apiKey: string, model = BAZAARLINK_MODEL, fetchFn: typeof fetch = fetch): CreateFn => async (params) => {
+/** A second free model, tried when the first one stays busy. */
+export const BAZAARLINK_FREE_BACKUP = 'deepseek/deepseek-v4-flash-0731free';
+const RETRYABLE = new Set([408, 429, 500, 502, 503, 504, 529]);
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Busy / overloaded / timed-out answers are retried quietly (the shopkeeper never sees "busy"): up to 4 tries
+ * within ~50 s, switching to the backup free model after two, and honouring a short Retry-After.
+ */
+export const bazaarLinkCreate = (apiKey: string, model = BAZAARLINK_MODEL, fetchFn: typeof fetch = fetch, pause: (ms: number) => Promise<unknown> = wait): CreateFn => async (params) => {
+  const started = Date.now();
+  let last: unknown;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const useModel = attempt >= 2 && model.startsWith('qwen/') ? BAZAARLINK_FREE_BACKUP : model;
+    try {
+      return await bazaarLinkOnce(apiKey, useModel, fetchFn, params, Math.max(8_000, 50_000 - (Date.now() - started)));
+    } catch (e) {
+      last = e;
+      const status = (e as { status?: number })?.status;
+      const retryable = status === undefined || RETRYABLE.has(status);
+      if (!retryable || Date.now() - started > 40_000) throw e;
+      const h = (e as { headers?: unknown })?.headers;
+      const after = h instanceof Headers ? Number(h.get('retry-after')) || 0 : 0;
+      await pause(Math.min(5_000, after ? after * 1000 : 800 * 2 ** attempt));
+    }
+  }
+  throw last;
+};
+
+const bazaarLinkOnce = async (apiKey: string, model: string, fetchFn: typeof fetch, params: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming, timeoutMs: number): Promise<Anthropic.Beta.BetaMessage> => {
   const schema = (params.output_config as { format?: { schema?: unknown } } | undefined)?.format?.schema;
   const res = await fetchFn(BAZAARLINK_URL, {
     method: 'POST',
@@ -445,7 +474,7 @@ export const bazaarLinkCreate = (apiKey: string, model = BAZAARLINK_MODEL, fetch
       messages: toOpenAiMessages(params),
       ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'result', schema } } } : {}),
     }),
-    signal: AbortSignal.timeout(55_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const data = (await res.json().catch(() => ({}))) as {
     error?: { message?: string };
@@ -475,7 +504,7 @@ export const mapAnthropicError = (e: unknown): AiHttpResponse => {
   return fail(500, 'upstream', 'Something went wrong while asking the AI.');
 };
 
-export const runTask = async (task: AiTask, content: Anthropic.Beta.BetaContentBlockParam[], create: CreateFn): Promise<AiHttpResponse> => {
+export const runTask = async (task: AiTask, content: Anthropic.Beta.BetaContentBlockParam[], create: CreateFn, retried = false): Promise<AiHttpResponse> => {
   const t = TASK_TOKENS[task];
   let msg: Anthropic.Beta.BetaMessage;
   const base: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming = {
@@ -512,6 +541,7 @@ export const runTask = async (task: AiTask, content: Anthropic.Beta.BetaContentB
     parsed = null;
   }
   const result = validateOutput(task, parsed);
+  if (!result && !retried) return runTask(task, content, create, true);
   if (!result) return fail(502, 'bad_output', 'The AI answer could not be read. Try again.');
   return { status: 200, body: { ok: true, task, result, model: msg.model } };
 };

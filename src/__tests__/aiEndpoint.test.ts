@@ -159,7 +159,7 @@ describe('api/ai → Claude', () => {
     expect((await handleAiRequest(req(askBody), deps())).body.code).toBe('refused');
     h.create.mockResolvedValueOnce(message('{"answer": "cut', { stop_reason: 'max_tokens' }));
     expect((await handleAiRequest(req(askBody), deps())).body.code).toBe('cut_off');
-    h.create.mockResolvedValueOnce(message('not json'));
+    h.create.mockResolvedValueOnce(message('not json')).mockResolvedValueOnce(message('still not json'));
     const bad = await handleAiRequest(req(askBody), deps());
     expect(bad.status).toBe(502);
     expect(bad.body.code).toBe('bad_output');
@@ -226,5 +226,35 @@ describe('BazaarLink provider', () => {
     const fake = (async () => new Response(JSON.stringify({ error: { message: 'Insufficient credits.' } }), { status: 402 })) as unknown as typeof fetch;
     const e = await bazaarLinkCreate('k', undefined, fake)({ model: 'x', max_tokens: 1, messages: [] } as any).catch((x) => x);
     expect(mapAnthropicError(e).body.code).toBe('no_credit');
+  });
+});
+
+describe('quiet retries', () => {
+  it('BazaarLink busy twice → retried, then answered (backup free model on the 3rd try)', async () => {
+    const { bazaarLinkCreate } = await import('../../api/ai');
+    const models: string[] = [];
+    let n = 0;
+    const fake = (async (_u: string, init: any) => {
+      models.push(JSON.parse(init.body).model);
+      if (++n <= 2) return new Response(JSON.stringify({ error: { message: 'busy' } }), { status: 429 });
+      return new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: '{"answer":"ok","open":null}' } }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const msg: any = await bazaarLinkCreate('k', 'qwen/qwen3.7-flash', fake, async () => {})({ model: 'x', max_tokens: 10, messages: [] } as any);
+    expect(msg.content[0].text).toContain('ok');
+    expect(models).toEqual(['qwen/qwen3.7-flash', 'qwen/qwen3.7-flash', 'deepseek/deepseek-v4-flash-0731free']);
+  });
+  it('the app retries a busy answer quietly and never shows "busy"', async () => {
+    const { callAi } = await import('../ai/client');
+    let n = 0;
+    const fake = (async () => (++n < 3
+      ? new Response(JSON.stringify({ ok: false, code: 'busy', error: 'The AI is busy right now.' }), { status: 429 })
+      : new Response(JSON.stringify({ ok: true, result: { answer: 'hi', open: null } }), { status: 200 }))) as unknown as typeof fetch;
+    const out = await callAi('ask', { question: 'q', context: {} }, { fetchImpl: fake, sleep: async () => {} });
+    expect(out.ok).toBe(true);
+    expect(n).toBe(3);
+    const always = (async () => new Response(JSON.stringify({ ok: false, code: 'busy', error: 'The AI is busy right now.' }), { status: 429 })) as unknown as typeof fetch;
+    const fail = await callAi('ask', { question: 'q', context: {} }, { fetchImpl: always, sleep: async () => {} });
+    expect(fail.ok).toBe(false);
+    expect((fail as { message?: string }).message).not.toMatch(/busy/i);
   });
 });
