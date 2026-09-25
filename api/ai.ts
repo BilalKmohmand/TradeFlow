@@ -408,11 +408,65 @@ const defaultCreate = (apiKey: string): CreateFn => {
   return (params) => client.beta.messages.create(params);
 };
 
+/**
+ * BazaarLink (an OpenAI-compatible gateway): used instead of Anthropic when BAZAARLINK_API_KEY is set.
+ * Takes the same Claude request and returns a Claude-shaped message, so the rest of the file is unchanged.
+ */
+export const BAZAARLINK_URL = 'https://api.bazaarlink.ai/v1/chat/completions';
+/** TESTING ONLY: paste a BazaarLink key (sk-bl-…) here. The Vercel variable BAZAARLINK_API_KEY wins over it. Remove before going live. It uses BazaarLink's free model (no credit on that account). */
+export const TEST_BAZAARLINK_KEY = 'sk-bl-nVgt4gyVuQ0NkytWaUtTVQT1_h3S_BYBBbcsIxVwI4jY-AUL';
+export const BAZAARLINK_MODEL = 'anthropic/claude-sonnet-4.6';
+
+type Block = { type: string; text?: string; source?: { type: string; media_type?: string; data?: string } };
+
+export const toOpenAiMessages = (params: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming) => {
+  const system = typeof params.system === 'string' ? params.system : (params.system || []).map((b) => b.text).join('\n');
+  const messages: Array<{ role: string; content: unknown }> = [{ role: 'system', content: system }];
+  for (const m of params.messages) {
+    const blocks = (typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content) as Block[];
+    const content = blocks.flatMap((b): Array<Record<string, unknown>> => {
+      if (b.type === 'text') return [{ type: 'text', text: b.text || '' }];
+      if (b.type === 'image' && b.source?.type === 'base64') return [{ type: 'image_url', image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` } }];
+      return [];
+    });
+    messages.push({ role: m.role, content });
+  }
+  return messages;
+};
+
+export const bazaarLinkCreate = (apiKey: string, model = BAZAARLINK_MODEL, fetchFn: typeof fetch = fetch): CreateFn => async (params) => {
+  const schema = (params.output_config as { format?: { schema?: unknown } } | undefined)?.format?.schema;
+  const res = await fetchFn(BAZAARLINK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}`, 'X-Title': 'Sarmaya' },
+    body: JSON.stringify({
+      model,
+      max_tokens: params.max_tokens,
+      messages: toOpenAiMessages(params),
+      ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'result', schema } } } : {}),
+    }),
+    signal: AbortSignal.timeout(55_000),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: { message?: string };
+    model?: string;
+    choices?: Array<{ finish_reason?: string; message?: { content?: string | null } }>;
+  };
+  if (!res.ok) throw Anthropic.APIError.generate(res.status, data, data.error?.message || `HTTP ${res.status}`, res.headers);
+  const choice = data.choices?.[0];
+  const finish = choice?.finish_reason;
+  return {
+    model: data.model || model,
+    stop_reason: finish === 'length' ? 'max_tokens' : finish === 'content_filter' ? 'refusal' : 'end_turn',
+    content: [{ type: 'text', text: choice?.message?.content || '' }],
+  } as unknown as Anthropic.Beta.BetaMessage;
+};
+
 /** Typed SDK errors → a status and a message the shopkeeper understands. Never echoes the key. */
 export const mapAnthropicError = (e: unknown): AiHttpResponse => {
   if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) return fail(503, 'bad_key', 'The AI key is not accepted. Ask the owner to check ANTHROPIC_API_KEY in Vercel.');
   if (e instanceof Anthropic.RateLimitError) return fail(429, 'busy', 'The AI is busy right now. Try again in a minute.');
-  if (e instanceof Anthropic.BadRequestError && /credit balance/i.test(e.message)) return fail(402, 'no_credit', 'The AI account has no credit left. Ask the owner to add credit in the Anthropic console (Plans & Billing).');
+  if (e instanceof Anthropic.APIError && (e.status === 402 || /credit balance|insufficient credits/i.test(e.message))) return fail(402, 'no_credit', 'The AI account has no credit left. Ask the owner to add credit to the AI account.');
   if (e instanceof Anthropic.BadRequestError) return fail(400, 'bad_request', 'The AI could not use this request. Try a shorter question or a clearer photo.');
   if (e instanceof Anthropic.APIConnectionTimeoutError) return fail(504, 'timeout', 'The AI took too long. Try again.');
   if (e instanceof Anthropic.APIConnectionError) return fail(502, 'upstream', 'Could not reach the AI service. Try again.');
@@ -477,7 +531,8 @@ export const handleAiRequest = async (req: AiHttpRequest, deps: AiDeps = {}): Pr
   const env = deps.env || process.env;
   if ((req.method || '').toUpperCase() !== 'POST') return fail(405, 'method', 'Use POST.');
   if (!originAllowed(req.headers, env)) return fail(403, 'origin', 'This request did not come from the app.');
-  const apiKey = (env.ANTHROPIC_API_KEY || '').trim();
+  const bazaarKey = (env.BAZAARLINK_API_KEY || (deps.env ? '' : TEST_BAZAARLINK_KEY)).trim();
+  const apiKey = bazaarKey || (env.ANTHROPIC_API_KEY || '').trim();
   if (!apiKey) return fail(503, 'not_configured', 'AI is not set up yet');
   const limiter = deps.limiter || defaultLimiter;
   if (!limiter.take(req.ip || 'unknown', deps.now ? deps.now() : Date.now())) return fail(429, 'rate_limited', 'Too many AI requests. Wait a few minutes and try again.');
@@ -510,7 +565,8 @@ export const handleAiRequest = async (req: AiHttpRequest, deps: AiDeps = {}): Pr
 
   const built = buildContent(task, body);
   if ('error' in built) return built.error;
-  return runTask(task, built.content, (deps.create || defaultCreate)(apiKey));
+  const create = deps.create ? deps.create(apiKey) : bazaarKey ? bazaarLinkCreate(bazaarKey, (env.BAZAARLINK_MODEL || '').trim() || (env.BAZAARLINK_API_KEY ? BAZAARLINK_MODEL : 'qwen/qwen3.7-flash')) : defaultCreate(apiKey);
+  return runTask(task, built.content, create);
 };
 
 const clientIp = (req: IncomingMessage): string =>

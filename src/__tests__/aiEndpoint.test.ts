@@ -21,7 +21,7 @@ vi.mock('@anthropic-ai/sdk', async (importOriginal) => {
 });
 
 import Anthropic from '@anthropic-ai/sdk';
-import handler, { handleAiRequest, AiHttpRequest, RateLimiter, originAllowed, LIMITS, MODEL } from '../../api/ai';
+import handler, { handleAiRequest, AiHttpRequest, RateLimiter, originAllowed, LIMITS, MODEL, TEST_BAZAARLINK_KEY } from '../../api/ai';
 
 const KEY = 'sk-ant-test-key-never-shown';
 const env = { ANTHROPIC_API_KEY: KEY };
@@ -184,7 +184,8 @@ describe('api/ai → Claude', () => {
 });
 
 describe('api/ai default export (Node request / response)', () => {
-  it('writes JSON with no-store, and 503 when the key is missing', async () => {
+  // Skipped while a test key is written into api/ai.ts (it would call the real service).
+  it.skipIf(!!TEST_BAZAARLINK_KEY)('writes JSON with no-store, and 503 when the key is missing', async () => {
     const before = process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     const out: { status?: number; headers: Record<string, string>; body?: string } = { headers: {} };
@@ -198,5 +199,32 @@ describe('api/ai default export (Node request / response)', () => {
     expect(out.headers['cache-control']).toBe('no-store');
     expect(JSON.parse(out.body!)).toMatchObject({ code: 'not_configured', error: 'AI is not set up yet' });
     if (before !== undefined) process.env.ANTHROPIC_API_KEY = before;
+  });
+});
+
+describe('BazaarLink provider', () => {
+  it('converts the Claude request to OpenAI format and reads the answer back', async () => {
+    const { bazaarLinkCreate } = await import('../../api/ai');
+    let sent: any;
+    const fake = (async (_url: string, init: any) => {
+      sent = JSON.parse(init.body);
+      return new Response(JSON.stringify({ model: 'anthropic/claude-sonnet-4.6', choices: [{ finish_reason: 'stop', message: { content: '{"answer":"Haji Karim","open":null}' } }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const msg: any = await bazaarLinkCreate('sk-bl-test', undefined, fake)({
+      model: 'x', max_tokens: 100, system: 'sys',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }, { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAA' } }] }],
+      output_config: { format: { type: 'json_schema', schema: { type: 'object' } } },
+    } as any);
+    expect(sent.messages[0]).toEqual({ role: 'system', content: 'sys' });
+    expect(sent.messages[1].content[1].image_url.url).toBe('data:image/png;base64,AAA');
+    expect(sent.response_format.type).toBe('json_schema');
+    expect(msg.content[0].text).toContain('Haji Karim');
+    expect(msg.stop_reason).toBe('end_turn');
+  });
+  it('402 → no_credit', async () => {
+    const { bazaarLinkCreate, mapAnthropicError } = await import('../../api/ai');
+    const fake = (async () => new Response(JSON.stringify({ error: { message: 'Insufficient credits.' } }), { status: 402 })) as unknown as typeof fetch;
+    const e = await bazaarLinkCreate('k', undefined, fake)({ model: 'x', max_tokens: 1, messages: [] } as any).catch((x) => x);
+    expect(mapAnthropicError(e).body.code).toBe('no_credit');
   });
 });
