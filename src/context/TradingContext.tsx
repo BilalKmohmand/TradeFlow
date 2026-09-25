@@ -74,7 +74,7 @@ import { NumberGuardApi, useNumberGuard } from './numberGuardActions';
 import { ClassicApi, useClassicStore } from './classicActions';
 import { VoucherApi, createVoucherApi } from './voucherActions';
 import { CodingApi, createCodingApi } from './codingActions';
-import { planDocNumber } from '../utils/control';
+import { planDocNumber, planDocNumbers } from '../utils/control';
 import { chequesBlockingCustomerDelete } from '../utils/cheques';
 import {
   DEFAULT_ROLES,
@@ -4203,6 +4203,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     logAuditEvent: (a, dt, sev) => logAuditEvent(a, dt, sev, 'billing'),
     uid, userName: currentUser?.name, today: todayISO, isCloudSyncReady, syncToSupabase, removeRemote,
     branchStamp: controlStore.branchStamp,
+    nextReceiptNo: (date) => controlStore.nextDocNumber('receipt', date, receiptNumbersIn(ledger)),
+    previewReceiptNos: (date, count) => planDocNumbers({ numberSeries: settings.numberSeries, docCounters: controlStore.counters.current }, 'receipt', date, receiptNumbersIn(ledger), count),
   });
   // Billing-mode stock adjustments and purchase returns (godown / batch aware), see stockActions.ts.
   const stockActions = createStockActions({

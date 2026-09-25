@@ -70,8 +70,9 @@ const blankLine = (): Line => ({ key: `rl${++lineSeq}`, customerId: '', amount: 
 const focusSoon = (id: string) => setTimeout(() => { const el = document.getElementById(id) as HTMLInputElement | null; el?.focus(); el?.select?.(); }, 30);
 const amountOf = (l: Line) => parseFloat(l.amount) || 0;
 
-/** Code | Title | A/C balance | Amount | Method | Narration, as the old Cash Receipt voucher. */
+/** Receipt no. | Code | Title | A/C balance | Amount | Method | Narration, as the old Cash Receipt voucher. */
 const RM_COLS: LedgerColumn[] = [
+  { key: 'rno', label: 'Receipt no.', width: '6.5rem' },
   { key: 'code', label: 'Code', width: '6rem' },
   { key: 'title', label: 'Title', width: 'minmax(10rem,2fr)' },
   { key: 'balance', label: 'A/C balance', width: '7.5rem', numeric: true },
@@ -85,11 +86,12 @@ const cellBtn = 'w-8 h-8 inline-flex items-center justify-center rounded-md bord
 /**
  * Receive from many customers at once, like the old "Cash Receipt (Credit Voucher)": one entry row on top of a
  * ruled grid — Code → Title → Amount → Method → Narration, Enter moves on and Enter on Narration puts the line
- * in the grid (click a line to change it, Delete removes it). Every customer gets their own payment row; they
- * share one receipt (collection-sheet) number.
+ * in the grid (click a line to change it, Delete removes it). The sheet is one voucher (CS-n, the old Cash
+ * Receipt voucher number); every customer line gets its own payment row with its own receipt number from the
+ * Receipt series (shown before saving: next, next+1, …), so either can be given to the client.
  */
 export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const { customers, salesmen, receiveMany, setPrintRequest, settings, collectionSheets, undoCollection, can, nextCollectionNo, bankAccounts } = useTrading();
+  const { customers, salesmen, receiveMany, setPrintRequest, settings, collectionSheets, undoCollection, can, nextCollectionNo, previewReceiptNos, bankAccounts, ledger } = useTrading();
   const today = todayISO();
   const [date, setDate] = useState(today);
   const [salesmanId, setSalesmanId] = useState('');
@@ -101,7 +103,7 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
   const [editKey, setEditKey] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [warn, setWarn] = useState('');
-  const [done, setDone] = useState<{ sheetNo: string; message: string } | null>(null);
+  const [done, setDone] = useState<{ sheetNo: string; message: string; ledgerIds: string[] } | null>(null);
 
   // The dialog stays mounted: start the next receipt fresh. Done when it CLOSES, so the open dialog never
   // swaps its rows after the user has started typing (on a slow computer the first entry was lost).
@@ -174,6 +176,8 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
   const filled = all.filter((l) => l.customerId && amountOf(l) > 0);
   const total = filled.reduce((a, l) => a + amountOf(l), 0);
   const cash = filled.filter((l) => l.method.toLowerCase().startsWith('cash')).reduce((a, l) => a + amountOf(l), 0);
+  /** The receipt number each line will get on Save (grid lines in order, then the entry row). */
+  const nextNos = isOpen && !done ? previewReceiptNos(Math.max(lines.length, n), date) : [];
 
   const save = (print: boolean) => {
     setError('');
@@ -182,18 +186,35 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
     if (!editKey && !entry.customerId && amountOf(entry) > 0) return setError(`Line ${n} has an amount but no customer.`);
     const r = receiveMany({ date, salesmanId: salesmanId || null, note, rows: filled.map((l) => ({ customerId: l.customerId, amount: amountOf(l), method: l.method, ...(needsBank(l.method) && l.bank ? { bankCode: l.bank } : {}), ...(l.note.trim() ? { note: l.note.trim() } : {}) })) });
     if (!r.success || !r.sheetNo) return setError(r.message);
-    setDone({ sheetNo: r.sheetNo, message: r.message });
+    setDone({ sheetNo: r.sheetNo, message: r.message, ledgerIds: r.ledgerIds || [] });
     if (print) setPrintRequest({ type: 'sales_extras', report: 'collection', sheetNo: r.sheetNo });
   };
 
   if (done) {
+    const saved = done.ledgerIds.map((id) => ledger.find((l) => l.id === id)).filter((l): l is NonNullable<typeof l> => Boolean(l));
     return (
-      <Modal isOpen={isOpen} onClose={onClose} title="Money received" subtitle={`Collection sheet ${done.sheetNo}`}>
+      <Modal isOpen={isOpen} onClose={onClose} title="Money received" subtitle={`Voucher ${done.sheetNo}`}>
         <div className="space-y-4">
           <Notice kind="ok">{done.message}</Notice>
+          {saved.length > 0 && (
+            <ul className="divide-y divide-[#F1F0EC] dark:divide-[#1E2E40] rounded-2xl border border-[#E5E5E1] dark:border-[#203248]" data-testid="rm-saved-lines">
+              {saved.map((l) => {
+                const c = byId.get(l.entityId);
+                return (
+                  <li key={l.id} className="flex items-center gap-2 pl-3 pr-1 py-1.5 text-sm" data-testid="rm-saved-line">
+                    <span className="tabular-nums text-xs font-bold text-[#111827] dark:text-white shrink-0" data-testid="rm-saved-receipt-no">{l.receiptNo || l.referenceId}</span>
+                    <span className="flex-1 min-w-0 truncate">{c?.code ? <span className="text-[#6B7280] dark:text-[#94A3B8]">{c.code} · </span> : null}{c?.name || 'Customer'} <span className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">• {l.method || 'Cash'}</span></span>
+                    <span className={`${moneyCls} font-bold`}>{rs(l.credit)}</span>
+                    <button type="button" onClick={() => setPrintRequest({ type: 'sales_extras', report: 'receipts', ledgerIds: [l.id] })} aria-label={`Print receipt ${l.receiptNo || l.referenceId}`} title="Print this receipt" className="inline-flex items-center justify-center min-h-11 sm:min-h-9 min-w-11 sm:min-w-9 rounded-xl text-[#6B7280] dark:text-[#94A3B8] hover:text-teal-700 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/40"><Printer className="w-4 h-4" /></button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
           <RecentRuns title="Made a mistake?" runs={collectionSheets.filter((c) => c.id === done.sheetNo)} noun="collection" allowed={can('finance:record_payment')} onUndo={undoCollection} testId="undo-collection" />
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" onClick={() => setPrintRequest({ type: 'sales_extras', report: 'collection', sheetNo: done.sheetNo })} className={secondaryBtn}><Printer className="w-4 h-4" /> Print collection sheet</button>
+            {saved.length > 0 && <button type="button" onClick={() => setPrintRequest({ type: 'sales_extras', report: 'receipts', ledgerIds: saved.map((l) => l.id) })} className={secondaryBtn}><Printer className="w-4 h-4" /> Print receipts</button>}
             <button type="button" onClick={onClose} className={primaryBtn}>Done</button>
           </div>
         </div>
@@ -225,8 +246,8 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
         {warn && <Notice kind="error">{warn}</Notice>}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div>
-            <span className={labelCls}>Receipt no.</span>
-            <div className={`${inputCls} tabular-nums`} title="Given automatically when you save" data-testid="rm-next-number">{nextCollectionNo()}</div>
+            <span className={labelCls}>Voucher # / Receipt no.</span>
+            <div className={`${inputCls} tabular-nums`} title="The voucher (collection sheet) number, given automatically when you save. Each line also gets its own receipt number." data-testid="rm-next-number">{nextCollectionNo()}</div>
           </div>
           <div>
             <label className={labelCls} htmlFor="rm-date">Date</label>
@@ -248,13 +269,14 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
           testId="receive-many-table"
           ariaLabel="Receipt lines"
           columns={RM_COLS}
-          minWidth={720}
+          minWidth={820}
           minRows={15}
           empty="No lines yet. Type the customer code and press Enter, then the amount."
           entry={{
             editing: Boolean(editKey),
             props: { 'data-testid': 'receive-many-entry' },
             cells: {
+              rno: <span className="block leading-8 px-1 tabular-nums text-[#6B7280] dark:text-[#94A3B8]" title="Given automatically when you save" data-testid={`rm-receipt-no-${n}`}>{nextNos[n - 1] || ''}</span>,
               code: <CodeBox key={entry.key} id="rm-code" label={`Line ${n} code`} items={customers} value={entry.customerId} onPick={(id) => pickCustomer(id)} inputClassName={ledgerInputCls}
                 onEnter={(hit, typed) => { if (hit) focusSoon('rm-amt'); else if (!typed) focusSoon('rm-cust'); }} />,
               title: (
@@ -299,6 +321,7 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
               onActivate: () => loadLine(l.key),
               onDelete: () => { removeLine(l.key); focusSoon('rm-code'); },
               cells: {
+                rno: <span className="tabular-nums text-[#6B7280] dark:text-[#94A3B8]" data-testid={l.key === editKey ? undefined : `rm-receipt-no-${i + 1}`}>{nextNos[i] || ''}</span>,
                 code: <span className="text-[#6B7280] dark:text-[#94A3B8]">{c?.code || ''}</span>,
                 title: <span className="font-semibold">{c?.name || 'Deleted customer'}</span>,
                 balance: <span data-testid={l.key === editKey ? undefined : `rm-balance-${i + 1}`}>{c ? fmt2(c.totalDue) : ''}</span>,

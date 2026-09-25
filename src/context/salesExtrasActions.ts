@@ -16,7 +16,8 @@ import { formatCurrency } from '../utils/formatters';
  *    pays the transporter is booked as an ordinary expense (Transport & freight 6030), so the net freight
  *    earned or lost is 4100 − 6030 on the P&L. No tax is charged on freight.
  *  - Receive from many: one `payment_received` ledger row per customer (Dr Cash / Bank, Cr Receivable),
- *    all with the same collection-sheet number as the reference.
+ *    all with the same collection-sheet (voucher) number "CS-n" as the reference, and each with its own
+ *    receipt number (`receiptNo`) from the Receipt series, like Receive payment and bill payments.
  *  - Interest: one `interest_charge` ledger row per customer (a debit note): Dr Receivable 1100,
  *    Cr Interest / late-payment income 4150.
  *  - Commission paid: an expense (category salesman_commission, referenceId = salesman id):
@@ -34,6 +35,8 @@ export type SalesExtrasPrintRequest =
   | { type: 'sales_extras'; report: 'sales_by'; by: 'salesman' | 'area'; from: string; to: string }
   | { type: 'sales_extras'; report: 'recovery'; by: 'salesman' | 'area'; asOf: string; filterId?: string }
   | { type: 'sales_extras'; report: 'collection'; sheetNo: string }
+  /** One receipt slip per payment row (Receive from many → Print receipts, or one line's receipt). */
+  | { type: 'sales_extras'; report: 'receipts'; ledgerIds: string[] }
   | { type: 'sales_extras'; report: 'commission'; from: string; to: string };
 
 type Result<T = object> = { success: boolean; message: string } & Partial<T>;
@@ -83,9 +86,11 @@ export interface SalesExtrasApi {
   /** Customer's default area / salesman and late-payment interest. */
   setCustomerSalesInfo: (customerId: string, data: { areaId?: string | null; salesmanId?: string | null; interestPctPerMonth?: number; interestAfterDays?: number }) => Result;
   /** Several customers pay at once: one ledger row each, one collection-sheet number. */
-  receiveMany: (input: ReceiveManyInput) => Result<{ sheetNo: string; ledgerIds: string[]; total: number }>;
+  receiveMany: (input: ReceiveManyInput) => Result<{ sheetNo: string; ledgerIds: string[]; receiptNos: string[]; total: number }>;
   /** The number the next collection sheet will get (e.g. CS-7), shown before saving. */
   nextCollectionNo: () => string;
+  /** The receipt numbers the next `count` lines will get (Receipt series; nothing is used up). */
+  previewReceiptNos: (count: number, date?: string) => string[];
   /** Interest each customer would be charged as of a date (nothing is posted). */
   previewInterest: (asOf: string) => InterestRow[];
   /** Post the interest as debit notes (only the customers given, default all in the preview). */
@@ -120,6 +125,10 @@ interface Deps {
   removeRemote: (table: any, ids: string[]) => void;
   /** Branch of the signed-in user for money rows (nothing while the shop has one branch). */
   branchStamp?: () => { branchId?: string };
+  /** Take the next receipt number (Receipt series: the counter moves on at once and never goes back). */
+  nextReceiptNo?: (date: string) => string;
+  /** The next `count` receipt numbers, without using them up. */
+  previewReceiptNos?: (date: string, count: number) => string[];
 }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -332,7 +341,9 @@ export const useSalesExtrasStore = (d: Deps) => {
     }
     const sheetNo = nextNumber(d.ledger, 'CS');
     const note = input.note?.trim();
-    const entries: LedgerEntry[] = rows.map((r) => {
+    // Each line gets its own receipt number, in line order (the sheet keeps CS-n as the voucher number).
+    const receiptNos = rows.map(() => (d.nextReceiptNo ? d.nextReceiptNo(date) : ''));
+    const entries: LedgerEntry[] = rows.map((r, i) => {
       const c = d.customers.find((x) => x.id === r.customerId)!;
       return {
         id: d.uid('led'),
@@ -340,6 +351,7 @@ export const useSalesExtrasStore = (d: Deps) => {
         entityId: c.id,
         type: 'payment_received',
         referenceId: sheetNo,
+        ...(receiptNos[i] ? { receiptNo: receiptNos[i] } : {}),
         date,
         method: r.method,
         description: `Payment received: ${r.method} - collection ${sheetNo}${(r.note?.trim() || note) ? ` (${r.note?.trim() || note})` : ''}`,
@@ -357,8 +369,10 @@ export const useSalesExtrasStore = (d: Deps) => {
     d.setLedger((prev) => [...entries, ...prev]);
     const total = round2(rows.reduce((a, r) => a + r.amount, 0));
     const cash = round2(rows.filter((r) => isCashMethod(r.method)).reduce((a, r) => a + r.amount, 0));
-    d.logAuditEvent('Collection Recorded', `${sheetNo}: ${rows.length} customer(s), ${formatCurrency(total)} (cash ${formatCurrency(cash)}, bank ${formatCurrency(round2(total - cash))}).`, 'info');
-    return { success: true, message: `${formatCurrency(total)} received from ${rows.length} customer${rows.length === 1 ? '' : 's'} (${sheetNo}).`, sheetNo, ledgerIds: entries.map((e) => e.id), total };
+    const range = receiptNos.filter(Boolean);
+    const receipts = range.length === 0 ? '' : range.length === 1 ? `receipt ${range[0]}` : `receipts ${range[0]} to ${range[range.length - 1]}`;
+    d.logAuditEvent('Collection Recorded', `${sheetNo}: ${rows.length} customer(s), ${formatCurrency(total)} (cash ${formatCurrency(cash)}, bank ${formatCurrency(round2(total - cash))})${receipts ? `, ${receipts}` : ''}.`, 'info');
+    return { success: true, message: `${formatCurrency(total)} received from ${rows.length} customer${rows.length === 1 ? '' : 's'} (${sheetNo}${receipts ? `, ${receipts}` : ''}).`, sheetNo, ledgerIds: entries.map((e) => e.id), receiptNos, total };
   };
 
   // ---- interest ----------------------------------------------------------------------------
@@ -502,9 +516,11 @@ export const useSalesExtrasStore = (d: Deps) => {
   };
 
   const nextCollectionNo = () => nextNumber(d.ledger, 'CS');
+  const previewReceiptNos: SalesExtrasApi['previewReceiptNos'] = (count, date) => (d.previewReceiptNos ? d.previewReceiptNos(date || d.today(), count) : []);
 
   const api: SalesExtrasApi = {
     nextCollectionNo,
+    previewReceiptNos,
     salesmen,
     areas,
     schemes,

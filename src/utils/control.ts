@@ -112,6 +112,26 @@ export const planDocNumber = (
   return { number: formatDocNumber(cfg, n, year), counter, n };
 };
 
+/** The next `count` numbers of a series, in order (a preview: nothing is used up). */
+export const planDocNumbers = (
+  settings: Pick<AppSettings, 'numberSeries' | 'docCounters'>,
+  key: DocSeriesKey,
+  date: string,
+  existing: string[],
+  count: number
+): string[] => {
+  const out: string[] = [];
+  let counters = { ...(settings.docCounters || {}) };
+  const taken = [...existing];
+  for (let i = 0; i < Math.max(0, Math.floor(count)); i++) {
+    const plan = planDocNumber({ numberSeries: settings.numberSeries, docCounters: counters }, key, date, taken);
+    out.push(plan.number);
+    taken.push(plan.number);
+    counters = { ...counters, [plan.counter]: plan.n };
+  }
+  return out;
+};
+
 // ---------------------------------------------------------------------------
 // Approval rules
 // ---------------------------------------------------------------------------

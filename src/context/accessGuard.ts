@@ -15,7 +15,7 @@ export const READ_SAFE: ReadonlySet<string> = new Set([
   // looking things up
   'bankInUse', 'billApprovalReasons', 'branchName', 'can', 'canRestore', 'customerDeleteBlock', 'getCustomerAgreedRate',
   'isBilledReceipt', 'isChequeRecord', 'isFieldVisible', 'isFinanceRecord', 'isLinkedRecord', 'isScreenVisible',
-  'previewDocNumber', 'previewInterest', 'previewPurchaseInvoiceNumber', 'previewVoucherNumber', 'restoreBlockReason',
+  'previewDocNumber', 'previewInterest', 'previewReceiptNos', 'previewPurchaseInvoiceNumber', 'previewVoucherNumber', 'restoreBlockReason',
   'supplierPaymentApproval', 'validateVoucherInput', 'voucherEditBlock', 'voucherRestoreBlock', 'voucherSnapshot',
   'exportSystemBackup', 'refreshAutoBackups', 'billEditBlock',
   // moving around the app (screens, dialogs, print preview, branch filter)

@@ -174,7 +174,9 @@ test.describe('Sales extras (desktop)', () => {
     await goTo(page, 'Money');
     await page.getByRole('main').getByRole('button', { name: 'Receive from many' }).click();
     const dlg = page.getByRole('dialog', { name: 'Receive from many' });
-    await expect(dlg.getByTestId('rm-next-number')).toHaveText('CS-1'); // shown before saving
+    await expect(dlg.getByText('Voucher # / Receipt no.')).toBeVisible();
+    await expect(dlg.getByTestId('rm-next-number')).toHaveText('CS-1'); // the voucher number, shown before saving
+    await expect(dlg.getByTestId('rm-receipt-no-1')).toHaveText('PAY-1'); // each line's own receipt number
     await dlg.getByLabel('Line 1 code').fill('Z01');
     await dlg.getByLabel('Line 1 code').press('Enter');
     await dlg.getByLabel('Line 1 amount').fill('5000');
@@ -193,7 +195,7 @@ test.describe('Sales extras (desktop)', () => {
     await expect(page.locator('#print-root')).toContainText('CS-1');
     await page.getByRole('button', { name: 'Close preview' }).click();
     const done = page.getByRole('dialog', { name: 'Money received' });
-    await expect(done).toContainText(/13,000 received from 2 customers \(CS-1\)/);
+    await expect(done).toContainText(/13,000 received from 2 customers \(CS-1, receipts PAY-1 to PAY-2\)/);
     await done.getByRole('button', { name: 'Done' }).click();
     await expect(page.getByRole('main')).toContainText('Rs. 8,070');
 
@@ -222,7 +224,7 @@ test.describe('Sales extras (desktop)', () => {
 });
 
 test.describe('Edit a saved payment', () => {
-  test('a Receive-from-many line is edited from the customer; same CS number, balance and cash book follow', async ({ page }) => {
+  test('a Receive-from-many line is edited from the customer; same receipt number, balance and cash book follow', async ({ page }) => {
     await open(page);
     await goTo(page, 'Money');
     await page.getByRole('main').getByRole('button', { name: 'Receive from many' }).click();
@@ -239,8 +241,8 @@ test.describe('Edit a saved payment', () => {
     await goTo(page, 'Customers');
     await page.getByRole('button', { name: /Zaman and Co BTK/ }).first().click();
     const sheet = page.getByRole('dialog', { name: 'Zaman and Co BTK' });
-    await sheet.getByRole('button', { name: 'Edit payment CS-1' }).click();
-    const ed = page.getByRole('dialog', { name: 'Edit payment CS-1' });
+    await sheet.getByRole('button', { name: 'Edit payment PAY-1' }).click();
+    const ed = page.getByRole('dialog', { name: 'Edit payment PAY-1' });
     await expect(ed.getByLabel('Amount')).toHaveValue('1000');
     await expect(ed.getByLabel('Note')).toHaveValue('first round');
     await ed.getByLabel('Amount').fill('1500');
@@ -255,9 +257,10 @@ test.describe('Edit a saved payment', () => {
     await goTo(page, 'Money');
     await page.getByRole('button', { name: 'Cash book', exact: true }).click();
     const main = page.getByRole('main');
-    await expect(main.getByRole('button', { name: 'Edit payment CS-1' }).first()).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Edit payment PAY-1' }).first()).toBeVisible();
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('tradeflow_ledger_v2') || '[]'));
     const row = stored.find((l: { referenceId: string }) => l.referenceId === 'CS-1');
+    expect(row.receiptNo).toBe('PAY-1');
     expect(row.credit).toBe(1500);
     expect(row.method).toBe('Bank Transfer');
     expect(row.edits).toHaveLength(1);

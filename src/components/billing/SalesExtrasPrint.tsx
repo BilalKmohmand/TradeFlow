@@ -11,11 +11,14 @@ const money = (n: number) => moneyText(n);
 const th = 'py-2 px-2 text-[10px] uppercase tracking-widest text-gray-600';
 const tdn = 'py-1.5 px-2 text-right font-mono whitespace-nowrap';
 
-type Content = { title: string; number: string; date: string; body: React.ReactNode };
+/** `slips`: the body is shown as it is (each receipt slip carries its own shop header), on the bill / receipt paper. */
+type Content = { title: string; number: string; date: string; body: React.ReactNode; slips?: boolean; thermal?: boolean };
+
+const slipAmount = (n: number) => `Rs. ${money(n)}`;
 
 /** Printable sales-by-salesman/area, recovery list, collection sheet and commission (shown by PrintDocument). */
 export const useSalesExtrasPrint = (request: { type: string } | null): Content | null => {
-  const { customers, ledger, invoices, returns, expenses, salesmen, areas } = useTrading();
+  const { customers, ledger, invoices, returns, expenses, salesmen, areas, settings } = useTrading();
   return useMemo(() => {
     if (!isSalesExtrasPrint(request)) return null;
     const names = { salesmen, areas };
@@ -76,6 +79,86 @@ export const useSalesExtrasPrint = (request: { type: string } | null): Content |
       };
     }
 
+    if (request.report === 'receipts') {
+      // One receipt slip per payment row, in the order asked for (Receive from many → Print receipts).
+      const rows = request.ledgerIds.map((id) => ledger.find((l) => l.id === id)).filter((l): l is NonNullable<typeof l> => Boolean(l && l.type === 'payment_received'));
+      if (rows.length === 0) return null;
+      const shop = { name: settings.companyName || 'Sarmaya', address: settings.companyAddress || '', phone: settings.companyPhone || '' };
+      const thermal = (settings.billPrintSize || 'a4') === 'thermal80';
+      const first = rows[0];
+      return {
+        title: 'RECEIPT',
+        number: rows.length === 1 ? first.receiptNo || first.referenceId : `${rows[0].receiptNo || rows[0].referenceId} to ${rows[rows.length - 1].receiptNo || rows[rows.length - 1].referenceId}`,
+        date: first.date,
+        slips: true,
+        thermal,
+        body: (
+          <div data-testid="print-receipts">
+            {rows.map((l, i) => {
+              const c = customers.find((x) => x.id === l.entityId);
+              const no = l.receiptNo || l.referenceId;
+              const sheet = l.receiptNo && l.referenceId !== l.receiptNo ? l.referenceId : '';
+              const narration = l.note?.trim() || '';
+              const last = i === rows.length - 1;
+              return thermal ? (
+                <div key={l.id} data-testid="receipt-slip" className="font-mono text-[11px] leading-snug text-gray-900" style={last ? undefined : { breakAfter: 'page', pageBreakAfter: 'always' }}>
+                  <div className="text-center">
+                    <div className="font-bold text-[14px]">{shop.name}</div>
+                    {shop.address && <div>{shop.address}</div>}
+                    {shop.phone && <div>{shop.phone}</div>}
+                  </div>
+                  <div className="border-t border-dashed border-gray-900 my-1" />
+                  <div className="font-bold">RECEIPT <span data-testid="slip-receipt-no">{no}</span></div>
+                  <div>Date: {formatDate(l.date)}{sheet ? ` • Voucher ${sheet}` : ''}</div>
+                  <div className="border-t border-dashed border-gray-900 my-1" />
+                  <div>Received from: <b>{c?.code ? `${c.code} · ` : ''}{c?.name || 'Customer'}</b></div>
+                  <div>Method: {l.method || 'Cash'}</div>
+                  {narration && <div>Narration: {narration}</div>}
+                  <div className="border-t border-dashed border-gray-900 my-1" />
+                  <div className="flex justify-between font-bold"><span>AMOUNT</span><span>{slipAmount(l.credit)}</span></div>
+                  <div className="mt-8 border-t border-gray-900 pt-1 text-center">Received by ({shop.name})</div>
+                  {!last && <div className="border-t border-dashed border-gray-400 my-3 print:hidden" />}
+                </div>
+              ) : (
+                <div key={l.id} data-testid="receipt-slip" className={`text-gray-900 border border-gray-300 rounded-lg p-4 sm:p-6 ${last ? '' : 'mb-6 print:mb-0'}`} style={last ? undefined : { breakAfter: 'page', pageBreakAfter: 'always' }}>
+                  <div className="flex items-start justify-between gap-4 border-b-2 border-gray-900 pb-3">
+                    <div>
+                      <div className="font-serif italic font-bold text-xl leading-none">{shop.name}</div>
+                      {(shop.address || shop.phone) && <div className="text-[11px] text-gray-500 mt-1">{shop.address}{shop.phone ? ` • ${shop.phone}` : ''}</div>}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-base font-extrabold tracking-widest">RECEIPT</div>
+                      <div className="font-mono text-sm font-bold" data-testid="slip-receipt-no">{no}</div>
+                      <div className="text-[11px] text-gray-500">Date: {formatDate(l.date)}</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4 text-xs">
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Received from</div>
+                      <div className="font-bold text-sm">{c?.name || 'Customer'}</div>
+                      {c?.code && <div className="font-mono">Code {c.code}</div>}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Amount</div>
+                      <div className="font-mono font-extrabold text-xl">{slipAmount(l.credit)}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-xs border-t border-b border-gray-200 py-2 space-y-0.5">
+                    <div>Method: <b>{l.method || 'Cash'}</b>{sheet ? <span className="text-gray-500"> • Voucher {sheet}</span> : null}</div>
+                    {narration && <div>Narration: {narration}</div>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-10 mt-12 text-xs">
+                    <div className="border-t border-gray-900 pt-2">Received by ({shop.name})</div>
+                    <div className="border-t border-gray-900 pt-2">Payer signature</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ),
+      };
+    }
+
     if (request.report === 'collection') {
       const rows = ledger.filter((l) => l.entityType === 'customer' && l.type === 'payment_received' && l.referenceId === request.sheetNo);
       if (rows.length === 0) return null;
@@ -91,17 +174,17 @@ export const useSalesExtrasPrint = (request: { type: string } | null): Content |
           <div data-testid="print-collection">
             {sm && <p className="text-xs mb-3">Collected by: <b>{salesmen.find((s) => s.id === sm)?.name || '—'}</b></p>}
             <table className="w-full text-xs border-collapse">
-              <thead><tr className="border-b-2 border-gray-900"><th className={`${th} text-left`}>#</th><th className={`${th} text-left`}>Customer</th><th className={`${th} text-left`}>Method</th><th className={`${th} text-right`}>Received</th><th className={`${th} text-right`}>Balance after</th></tr></thead>
+              <thead><tr className="border-b-2 border-gray-900"><th className={`${th} text-left`}>#</th><th className={`${th} text-left`}>Receipt no.</th><th className={`${th} text-left`}>Customer</th><th className={`${th} text-left`}>Method</th><th className={`${th} text-right`}>Received</th><th className={`${th} text-right`}>Balance after</th></tr></thead>
               <tbody>
                 {rows.map((r, i) => {
                   const c = customers.find((x) => x.id === r.entityId);
-                  return <tr key={r.id} className="border-b border-gray-100"><td className="py-1.5 px-2">{i + 1}</td><td className="py-1.5 px-2">{c?.code ? <span className="font-mono">{c.code} · </span> : null}{c?.name || 'Customer'}</td><td className="py-1.5 px-2">{r.method || 'Cash'}</td><td className={`${tdn} font-bold`}>{money(r.credit)}</td><td className={tdn}>{money(r.balanceAfter)}</td></tr>;
+                  return <tr key={r.id} className="border-b border-gray-100"><td className="py-1.5 px-2">{i + 1}</td><td className="py-1.5 px-2 font-mono whitespace-nowrap">{r.receiptNo || ''}</td><td className="py-1.5 px-2">{c?.code ? <span className="font-mono">{c.code} · </span> : null}{c?.name || 'Customer'}</td><td className="py-1.5 px-2">{r.method || 'Cash'}</td><td className={`${tdn} font-bold`}>{money(r.credit)}</td><td className={tdn}>{money(r.balanceAfter)}</td></tr>;
                 })}
               </tbody>
               <tfoot>
-                <tr><td colSpan={3} className="pt-3 px-2 text-right text-gray-600">Cash</td><td className={`${tdn} pt-3`}>{money(cash)}</td><td /></tr>
-                <tr><td colSpan={3} className="px-2 text-right text-gray-600">Bank / wallet</td><td className={tdn}>{money(total - cash)}</td><td /></tr>
-                <tr className="font-bold border-t-2 border-gray-900"><td colSpan={3} className="py-2 px-2 text-right uppercase tracking-widest text-[10px]">Total received</td><td className={`${tdn} text-sm`}>Rs. {money(total)}</td><td /></tr>
+                <tr><td colSpan={4} className="pt-3 px-2 text-right text-gray-600">Cash</td><td className={`${tdn} pt-3`}>{money(cash)}</td><td /></tr>
+                <tr><td colSpan={4} className="px-2 text-right text-gray-600">Bank / wallet</td><td className={tdn}>{money(total - cash)}</td><td /></tr>
+                <tr className="font-bold border-t-2 border-gray-900"><td colSpan={4} className="py-2 px-2 text-right uppercase tracking-widest text-[10px]">Total received</td><td className={`${tdn} text-sm`}>Rs. {money(total)}</td><td /></tr>
               </tfoot>
             </table>
             <div className="grid grid-cols-2 gap-10 mt-14 text-xs"><div className="border-t border-gray-900 pt-2">Handed over by</div><div className="border-t border-gray-900 pt-2">Received by (cashier)</div></div>
@@ -131,5 +214,5 @@ export const useSalesExtrasPrint = (request: { type: string } | null): Content |
       };
     }
     return null;
-  }, [request, customers, ledger, invoices, returns, expenses, salesmen, areas]);
+  }, [request, customers, ledger, invoices, returns, expenses, salesmen, areas, settings]);
 };

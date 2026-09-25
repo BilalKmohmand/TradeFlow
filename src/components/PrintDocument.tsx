@@ -112,7 +112,8 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
   // Paper for bills and receipts (Settings): A4, A5 or an 80 mm thermal roll.
   // A bill can ask for its own paper (Sale Invoice → Print Invoice: Half = A5, Full = A4, Mini = thermal).
   const paper: BillPrintSize = (request?.type === 'bill' && request.paper) || settings.billPrintSize || 'a4';
-  const sizedDoc = Boolean(request && (request.type === 'bill' || request.type === 'voucher'));
+  const receiptSlips = Boolean(request && request.type === 'sales_extras' && (request as SalesExtrasPrintRequest).report === 'receipts');
+  const sizedDoc = Boolean(request && (request.type === 'bill' || request.type === 'voucher' || receiptSlips));
   const books = useAccounting(isAccountingPrint(request));
   const billingReport = useBillingReportPrint(request);
   const salesExtrasReport = useSalesExtrasPrint(request);
@@ -825,7 +826,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
           date: l.date,
           body: (
             <ThermalReceipt company={COMPANY} title={`${isReceipt ? 'RECEIPT' : 'PAYMENT'} ${payNo}`} date={formatDate(l.date)} footer={settings.billFooter}>
-              <div>{isReceipt ? 'Receipt no.' : 'Voucher no.'}: <b data-testid="print-payment-no">{payNo}</b>{onBill ? ` (bill ${onBill})` : ''}</div>
+              <div>{isReceipt ? 'Receipt no.' : 'Voucher no.'}: <b data-testid="print-payment-no">{payNo}</b>{onBill ? ` (${/^CS-\d+$/.test(onBill) ? 'voucher' : 'bill'} ${onBill})` : ''}</div>
               <div>{isReceipt ? 'Received from' : 'Paid to'}: <b>{party?.company || party?.name}</b></div>
               {party?.phone && <div>Ph: {party.phone}</div>}
               <ThermalRule />
@@ -846,7 +847,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
             <div className="grid grid-cols-2 gap-6 text-xs">
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">{isReceipt ? 'Receipt no.' : 'Voucher no.'}</div>
-                <div className="font-mono font-bold text-sm mb-3" data-testid="print-payment-no">{payNo}{onBill ? <span className="font-sans font-normal text-[11px] text-gray-500"> — against bill {onBill}</span> : null}</div>
+                <div className="font-mono font-bold text-sm mb-3" data-testid="print-payment-no">{payNo}{onBill ? <span className="font-sans font-normal text-[11px] text-gray-500"> — {/^CS-\d+$/.test(onBill) ? 'voucher' : 'against bill'} {onBill}</span> : null}</div>
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">{isReceipt ? 'Received from' : 'Paid to'}</div>
                 <div className="font-bold text-sm">{party?.company}</div>
                 <div>{party?.name}</div>
@@ -994,9 +995,9 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
           </div>
         </div>
 
-        <div id="print-root" data-paper={sizedDoc ? paper : undefined} className={`bg-white text-gray-900 rounded-2xl print:rounded-none shadow-2xl print:shadow-none ${content && (content as { raw?: boolean }).raw ? 'p-0 w-fit mx-auto' : content && (content as { thermal?: boolean }).thermal ? 'p-3' : sizedDoc && paper === 'a5' ? 'p-4 sm:p-6' : 'p-4 sm:p-10'} overflow-x-auto`}>
+        <div id="print-root" data-paper={sizedDoc ? paper : undefined} className={`bg-white text-gray-900 rounded-2xl print:rounded-none shadow-2xl print:shadow-none ${content && (content as { raw?: boolean }).raw ? 'p-0 w-fit mx-auto' : content && (content as { thermal?: boolean }).thermal ? 'p-3' : content && (content as { slips?: boolean }).slips ? 'p-3 sm:p-4' : sizedDoc && paper === 'a5' ? 'p-4 sm:p-6' : 'p-4 sm:p-10'} overflow-x-auto`}>
           <div id="print-fit" ref={fitRef}>
-          {content && ((content as { thermal?: boolean }).thermal || (content as { raw?: boolean }).raw) ? (
+          {content && ((content as { thermal?: boolean }).thermal || (content as { raw?: boolean }).raw || (content as { slips?: boolean }).slips) ? (
             content.body
           ) : content ? (
             <>
