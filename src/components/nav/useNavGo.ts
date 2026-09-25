@@ -117,6 +117,10 @@ export const useNavGo = () => {
             t.setActiveScreen('dashboard');
             return;
           case 'lock': return t.lockScreen();
+          case 'askShop': return ui.askShop();
+          case 'aiBill': return ui.newBillFromAi();
+          case 'aiReminder': return ui.aiReminder();
+          case 'aiSummary': return ui.aiSummary();
         }
     }
   };

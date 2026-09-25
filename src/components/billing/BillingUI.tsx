@@ -16,8 +16,19 @@ import { MarkDeliveredModal } from './classic/DeliveryDialogs';
 /** What the Reports hub should show: one report, the Books menu or the whole menu. */
 export type ReportRequest = ReportId | 'books' | 'menu';
 
+/** Which AI dialog is open (hosted by components/ai/AiHost.tsx). */
+export type AiView = { kind: 'ask' } | { kind: 'reminder'; customerId: string | null } | { kind: 'summary' };
+
 interface BillingUI {
   newBill: (customerId?: string | null) => void;
+  /** New Sale Invoice with "AI: from photo / message" opened on it. */
+  newBillFromAi: () => void;
+  /** AI: Ask the shop (Ctrl+J), payment reminder, business summary. */
+  askShop: () => void;
+  aiReminder: (customerId?: string | null) => void;
+  aiSummary: () => void;
+  ai: AiView | null;
+  closeAi: () => void;
   /** Cash Sale Invoice: a walk-in sale paid in cash (customer optional). */
   newCashSale: () => void;
   openBill: (invoiceId: string) => void;
@@ -74,7 +85,8 @@ const Ctx = createContext<BillingUI | null>(null);
 
 /** Hosts every billing dialog once; screens just call e.g. `ui.newBill()`. */
 export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [bill, setBill] = useState<{ open: boolean; customerId: string | null; quotationId?: string | null; editInvoiceId?: string | null; mode?: 'sale' | 'cash' }>({ open: false, customerId: null });
+  const [bill, setBill] = useState<{ open: boolean; customerId: string | null; quotationId?: string | null; editInvoiceId?: string | null; mode?: 'sale' | 'cash'; ai?: boolean }>({ open: false, customerId: null });
+  const [ai, setAi] = useState<AiView | null>(null);
   const [returnFor, setReturnFor] = useState<string | null>(null);
   const [quote, setQuote] = useState<{ open: boolean; editId: string | null; customerId: string | null }>({ open: false, editId: null, customerId: null });
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -106,6 +118,12 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const api: BillingUI = {
     newBill: (customerId) => { bump(); setBill({ open: true, customerId: customerId || null }); },
     newCashSale: () => { bump(); setBill({ open: true, customerId: null, mode: 'cash' }); },
+    newBillFromAi: () => { bump(); setBill({ open: true, customerId: null, ai: true }); },
+    askShop: () => setAi({ kind: 'ask' }),
+    aiReminder: (customerId) => setAi({ kind: 'reminder', customerId: customerId || null }),
+    aiSummary: () => setAi({ kind: 'summary' }),
+    ai,
+    closeAi: () => setAi(null),
     openBill: (id) => { bump(); setDetailId(id); },
     editBill: (id) => { bump(); setDetailId(null); setBill({ open: true, customerId: null, editInvoiceId: id }); },
     billFromQuote: (quotationId) => { bump(); setBill({ open: true, customerId: null, quotationId }); },
@@ -140,7 +158,7 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   return (
     <Ctx.Provider value={api}>
       {children}
-      <NewBillModal key={`bill-${nonce}`} isOpen={bill.open} onClose={() => setBill({ open: false, customerId: null })} customerId={bill.customerId} quotationId={bill.quotationId} editInvoiceId={bill.editInvoiceId} mode={bill.mode} onEdited={(id) => { bump(); setBill({ open: false, customerId: null }); setDetailId(id); }} />
+      <NewBillModal key={`bill-${nonce}`} isOpen={bill.open} onClose={() => setBill({ open: false, customerId: null })} customerId={bill.customerId} quotationId={bill.quotationId} editInvoiceId={bill.editInvoiceId} mode={bill.mode} startWithAi={bill.ai} onEdited={(id) => { bump(); setBill({ open: false, customerId: null }); setDetailId(id); }} />
       <ReturnItemsModal key={`ret-${nonce}`} invoiceId={returnFor} onClose={() => setReturnFor(null)} onDone={(id) => { bump(); setReturnFor(null); setDetailId(id); }} />
       <QuotationModal key={`quote-${nonce}`} isOpen={quote.open} editId={quote.editId} customerId={quote.customerId} onClose={() => setQuote({ open: false, editId: null, customerId: null })} />
       <BillDetailModal key={`detail-${nonce}`} invoiceId={detailId} onClose={() => setDetailId(null)} />

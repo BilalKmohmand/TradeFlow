@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Printer, Save, UserPlus, Keyboard, Gift, Search, Truck, Eye, X, FilePlus2, MoreHorizontal } from 'lucide-react';
+import { Trash2, Printer, Save, UserPlus, Keyboard, Gift, Search, Truck, Eye, X, FilePlus2, MoreHorizontal, Sparkles } from 'lucide-react';
 import { useTrading, CreateBillItemInput } from '../../context/TradingContext';
-import { Modal, inputCls, numInputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, Notice, rs, moneyCls } from './ui';
+import { Modal, inputCls, numInputCls, labelCls, primaryBtn, secondaryBtn, dangerBtn, Notice, rs, moneyCls, bidi } from './ui';
+import { BillFromAiDialog } from '../ai/BillFromAi';
+import type { ParsedBill, ParsedBillLine } from '../../ai/parse';
 import { CodeBox } from './CodeBox';
 import { todayISO } from '../../utils/stockFlow';
 import { formatDate } from '../../utils/formatters';
@@ -56,7 +58,11 @@ interface Row {
   desc: string;
   /** In the grid (Enter on the entry row put it there). The one line that is not is the entry row. */
   committed: boolean;
+  /** Filled by "AI: from photo / message": what was written, and whether the user should check it. */
+  ai?: { written: string; check: boolean };
 }
+/** A change to the item, qty or price of an AI line means the user has looked at it. */
+const aiSeen = (r: Row, patch: Partial<Row>): Partial<Row> => (r.ai?.check && ('productId' in patch || 'qty' in patch || 'price' in patch) ? { ai: { ...r.ai, check: false } } : {});
 
 const newRow = (patch: Partial<Row> = {}): Row => ({ key: Math.random().toString(36).slice(2), productId: '', qty: '1', price: '', inPack: false, priceFrom: 'list', discType: 'rs', disc: '', desc: '', committed: false, ...patch });
 
@@ -114,6 +120,8 @@ interface Props {
   onEdited?: (invoiceId: string) => void;
   /** 'cash' = the Cash Sale Invoice: walk-in customer allowed, paid in full in cash, no Payment Method grid. */
   mode?: 'sale' | 'cash';
+  /** Open "AI: from photo / message" at once (menu option / Find anything "AI"). */
+  startWithAi?: boolean;
 }
 
 /** A saved bill's sold lines as grid rows (per pack when it was sold per pack). */
@@ -140,7 +148,7 @@ const rowsFromBill = (items: import('../../types').InvoiceItem[]): Row[] =>
  * The Cash Sale Invoice (mode 'cash') is the same screen for a walk-in: customer optional, a free-text name,
  * paid in full in cash, no Payment Method grid.
  */
-export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quotationId, editInvoiceId, onEdited, mode = 'sale' }) => {
+export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quotationId, editInvoiceId, onEdited, mode = 'sale', startWithAi }) => {
   const { customers, products: liveProducts, settings, createBill, editBill, setPrintRequest, can, godowns, stockBatches: liveBatches, quotations, getCustomerAgreedRate, invoices, ledger, salesmen, areas, schemes, billApprovalReasons, approvalRules, canApprove, previewDocNumber, customAccounts, deleteBill, billDeleteNeedsApproval, billEditBlock, currentUser } = useTrading();
   const ui = useBillingUI();
   // Editing a saved bill: the form starts from it, and its own stock counts as back on the shelf.
@@ -206,6 +214,10 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const [error, setError] = useState('');
   const [allowOver, setAllowOver] = useState(false);
   const [overReason, setOverReason] = useState('');
+  // AI: from photo / message. Nothing is saved: the lines go into the grid for the user to check.
+  const [aiOpen, setAiOpen] = useState(Boolean(startWithAi));
+  const [aiUnmatched, setAiUnmatched] = useState<ParsedBillLine[]>([]);
+  const [aiInfo, setAiInfo] = useState('');
   const busy = useRef(false);
   const box = useRef<HTMLDivElement>(null);
   const allowNegative = settings.allowNegativeStock !== false;
@@ -235,7 +247,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     setTimeout(() => { if (pendingFocus.current === selector && focusIn(selector)) pendingFocus.current = null; }, 0);
   };
 
-  const setRow = (key: string, patch: Partial<Row>) => setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  const setRow = (key: string, patch: Partial<Row>) => setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch, ...aiSeen(r, patch) } : r)));
   /** Price per base unit for an item: the customer's agreed rate when there is one, else the item's list price. */
   const priceFor = (productId: string, custId: string): { base: number | null; priceFrom: Row['priceFrom'] } => {
     const p = products.find((x) => x.id === productId);
@@ -256,7 +268,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
         const p = products.find((x) => x.id === productId);
         const inPack = r.inPack && hasPack(p);
         const { base, priceFrom } = priceFor(productId, newCustomer ? '' : customer);
-        return { ...r, productId, inPack, price: shownPrice(productId, base, inPack), priceFrom };
+        return { ...r, productId, inPack, price: shownPrice(productId, base, inPack), priceFrom, ...aiSeen(r, { productId }) };
       })
     );
   // Changing the customer re-prices lines the shopkeeper has not typed a price into.
@@ -351,6 +363,38 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     const next = newRow();
     setRows((prev) => [...prev.map((x) => (x.key === entry.key ? { ...x, committed: true } : x)), newRow({ productId, price: shownPrice(productId, base, false), priceFrom, committed: true }), next]);
     setActiveKey(next.key);
+  };
+
+  /** A line read by the AI as a grid row: its rate when one was written, else the customer's / list price. */
+  const aiRow = (l: { productId: string; qty: number; unit: 'base' | 'pack'; rate: number | null; nameAsWritten: string; needsCheck: boolean }, custId: string): Row => {
+    const p = products.find((x) => x.id === l.productId);
+    const inPack = l.unit === 'pack' && hasPack(p);
+    if (l.rate != null) return newRow({ productId: l.productId, qty: num4(l.qty), price: String(l.rate), inPack, priceFrom: 'typed', committed: true, ai: { written: l.nameAsWritten, check: l.needsCheck } });
+    const { base, priceFrom } = priceFor(l.productId, custId);
+    return newRow({ productId: l.productId, qty: num4(l.qty), price: shownPrice(l.productId, base, inPack), inPack, priceFrom, committed: true, ai: { written: l.nameAsWritten, check: l.needsCheck } });
+  };
+  const applyAi = (bill: ParsedBill) => {
+    setError('');
+    let custId = newCustomer ? '' : customer;
+    if (bill.customerId && !newCustomer && customers.some((c) => c.id === bill.customerId)) {
+      pickCustomer(bill.customerId);
+      custId = bill.customerId;
+    }
+    const matched = bill.lines.filter((l): l is ParsedBillLine & { productId: string } => Boolean(l.productId));
+    const added = matched.map((l) => aiRow(l, custId));
+    // Before the entry row (the line not yet in the grid stays last).
+    setRows((prev) => [...prev.filter((r) => r.committed), ...added, ...prev.filter((r) => !r.committed)]);
+    setAiUnmatched(bill.lines.filter((l) => !l.productId));
+    const checks = matched.filter((l) => l.needsCheck).length;
+    const who = bill.customerId ? '' : bill.customerNameGuess ? ` Customer written as “${bill.customerNameGuess}”: pick them above.` : '';
+    setAiInfo(`AI filled ${added.length} line${added.length === 1 ? '' : 's'}${checks ? `; check the ${checks} highlighted` : ''}. Nothing is saved until you press Save.${who}${bill.notes ? ` Note: ${bill.notes}` : ''}`);
+  };
+  const addUnmatched = (i: number, productId: string) => {
+    const l = aiUnmatched[i];
+    if (!l || !productId) return;
+    const row = aiRow({ ...l, productId, needsCheck: false }, newCustomer ? '' : customer);
+    setRows((prev) => [...prev.filter((r) => r.committed), row, ...prev.filter((r) => !r.committed)]);
+    setAiUnmatched((prev) => prev.filter((_, j) => j !== i));
   };
 
   /** Enter in the entry row's Code box: picked → Qty; empty → the payment (the bill has lines) or the item list. */
@@ -889,6 +933,23 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
             </div>
           )}
 
+          {aiInfo && <div data-testid="ai-filled"><Notice kind="ok">{aiInfo}</Notice></div>}
+          {aiUnmatched.length > 0 && (
+            <div data-testid="ai-unmatched" className="rounded-2xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3.5 py-2.5 text-xs space-y-2">
+              <p className="font-bold text-amber-900 dark:text-amber-200">AI could not match {aiUnmatched.length === 1 ? 'this item' : `these ${aiUnmatched.length} items`}. Pick the item, or remove it:</p>
+              {aiUnmatched.map((l, i) => (
+                <div key={`${i}-${l.nameAsWritten}`} className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-0 flex-1 font-semibold text-[#111827] dark:text-white" dir="auto">“{l.nameAsWritten}” × {l.qty}{l.rate != null ? ` @ ${l.rate}` : ''}</span>
+                  <select aria-label={`Item for ${l.nameAsWritten}`} defaultValue="" onChange={(e) => addUnmatched(i, e.target.value)} className={`${inputCls} !w-auto max-w-full`}>
+                    <option value="">Pick item…</option>
+                    {sortedProducts.map((x) => <option key={x.id} value={x.id}>{x.name}{x.code ? ` • ${x.code}` : ''}</option>)}
+                  </select>
+                  <button type="button" onClick={() => setAiUnmatched((prev) => prev.filter((_, j) => j !== i))} className={`${secondaryBtn} !px-2.5`} aria-label={`Remove ${l.nameAsWritten}`}><X className="w-4 h-4" /></button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* ---- Entry row + grid: one ruled sheet ---- */}
           <div>
             <LedgerGrid
@@ -985,8 +1046,9 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                     net: <span className="font-bold" {...(active ? {} : { 'data-testid': `line-amount-${idx + 1}` })}>{fmt2(l.amount)}</span>,
                     act: <button type="button" tabIndex={-1} onClick={(e) => { e.stopPropagation(); removeLine(l.key); }} aria-label={`Remove item ${idx + 1}`} className="inline-flex w-6 h-6 items-center justify-center rounded text-[#9CA3AF] hover:text-rose-600 align-middle"><Trash2 className="w-3.5 h-3.5" /></button>,
                   },
-                  sub: (l.schemePct && !active) || note ? (
+                  sub: (l.schemePct && !active) || note || (l.ai?.check && !active) ? (
                     <>
+                      {l.ai?.check && !active && <div data-testid={`ai-check-${idx + 1}`} className="text-[11px] font-semibold leading-5 whitespace-normal text-amber-700 dark:text-amber-300">AI: check this line (written “{bidi(l.ai.written)}”)</div>}
                       {l.schemePct && !active && <div className="text-[11px] font-semibold text-teal-700 dark:text-teal-300 leading-5">Scheme “{l.schemePct.schemeName}” {l.schemePct.pct}%</div>}
                       {note && <div data-testid={`stock-note-${idx + 1}`} className={`text-[11px] font-semibold leading-5 whitespace-normal ${note.block ? 'text-rose-700 dark:text-rose-300' : note.warn ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{note.text}</div>}
                     </>
@@ -1008,6 +1070,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               <button type="button" onClick={() => commitEntry()} title="Put the line in the grid (Enter on Rate, + or Alt+N)" className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 dark:text-teal-300 hover:underline">{editingLine ? 'Update line' : 'Add another item'}</button>
               {editingLine && <button type="button" onClick={() => setActiveKey(newRowOf(rows).key)} className="text-xs font-semibold text-[#6B7280] dark:text-[#94A3B8] hover:underline">Done with line {n}</button>}
               <ScanButton onPick={(p) => addScanned(p.id)} keepOpen />
+              <button type="button" onClick={() => setAiOpen(true)} className={`${secondaryBtn} !py-1.5`} data-testid="bill-ai" title="Read a photo of a handwritten parchi or a pasted WhatsApp order into the lines (AI)"><Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-300" /> AI: from photo / message</button>
               {ep && (
                 <span data-testid="bill-stock-in-hand" className="text-[11px] text-[#6B7280] dark:text-[#94A3B8]">
                   <span className="font-bold uppercase tracking-wider text-[10px]">Stock in hand</span> {ep.name}: <strong className="tabular-nums text-[#111827] dark:text-white">{formatPackQty(ep.stockKg, ep)}</strong>
@@ -1177,6 +1240,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
         onCancel={() => setConfirmDelete(false)}
         onConfirm={doDelete}
       />
+      <BillFromAiDialog isOpen={isOpen && aiOpen} onClose={() => setAiOpen(false)} onApply={applyAi} customers={customers} products={products} invoices={invoices} />
       <Modal isOpen={preview} onClose={() => setPreview(false)} title="Invoice preview" subtitle={`${computerNo} • ${formatDate(date)} • not saved yet`} wide>
         <div className="space-y-3 text-sm" data-testid="bill-preview">
           <div className="flex justify-between"><span className="font-bold">{selected?.name || newCustomer?.name || (cash ? `Cash Sale${walkIn ? ` — ${walkIn}` : ''}` : '—')}</span><span>{memoNo ? `Memo ${memoNo}` : ''}</span></div>

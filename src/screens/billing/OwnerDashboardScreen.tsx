@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Printer, TrendingUp, Banknote, Landmark, HandCoins, AlertTriangle, Boxes, CalendarClock, Wallet, X } from 'lucide-react';
+import { Printer, TrendingUp, Banknote, Landmark, HandCoins, AlertTriangle, Boxes, CalendarClock, Wallet, X, Sparkles } from 'lucide-react';
+import { useBillingUI } from '../../components/billing/BillingUI';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useTrading } from '../../context/TradingContext';
 import { useBranchScoped } from '../../hooks/useBranchScoped';
@@ -17,6 +18,7 @@ const compact = (n: number) => (Math.abs(n) >= 1_000_000 ? `${(n / 1_000_000).to
 export const OwnerDashboardScreen: React.FC = () => {
   const t = useTrading();
   const scoped = useBranchScoped();
+  const ui = useBillingUI();
   const today = todayISO();
   const [reportDate, setReportDate] = useState<string | null>(null);
   const src: OwnerSources = useMemo(
@@ -39,6 +41,7 @@ export const OwnerDashboardScreen: React.FC = () => {
     <div className="space-y-5" data-testid="owner-dashboard">
       <PageHeader title="Owner dashboard" subtitle={`${formatDate(today)} • the whole business on one screen`}>
         <BranchFilter />
+        <button type="button" onClick={() => ui.aiSummary()} className={secondaryBtn} data-testid="owner-ai-summary"><Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-300" /> AI summary</button>
         <button type="button" onClick={() => setReportDate(today)} className={primaryBtn}><Printer className="w-4 h-4 text-teal-400 dark:text-teal-700" /> Daily business report</button>
       </PageHeader>
 
