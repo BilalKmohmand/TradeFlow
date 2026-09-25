@@ -422,21 +422,28 @@ export const mapAnthropicError = (e: unknown): AiHttpResponse => {
 export const runTask = async (task: AiTask, content: Anthropic.Beta.BetaContentBlockParam[], create: CreateFn): Promise<AiHttpResponse> => {
   const t = TASK_TOKENS[task];
   let msg: Anthropic.Beta.BetaMessage;
+  const base: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming = {
+    model: MODEL,
+    max_tokens: t.maxTokens,
+    thinking: { type: 'adaptive' },
+    output_config: { effort: t.effort, format: { type: 'json_schema', schema: SCHEMAS[task] } },
+    system: SYSTEM[task],
+    messages: [{ role: 'user', content }],
+  };
   try {
-    msg = await create({
-      model: MODEL,
-      max_tokens: t.maxTokens,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: t.effort, format: { type: 'json_schema', schema: SCHEMAS[task] } },
-      system: SYSTEM[task],
-      messages: [{ role: 'user', content }],
+    try {
       // A safety-classifier decline is re-run server-side on Anthropic's recommended fallback model.
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-    });
+      msg = await create({ ...base, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' });
+    } catch (e) {
+      // The account may not have the fallback beta: ask once more without it.
+      if (!(e instanceof Anthropic.BadRequestError)) throw e;
+      console.error(`[api/ai] ${task}: retry without fallback: ${String((e as Error).message).slice(0, 300)}`);
+      msg = await create(base);
+    }
   } catch (e) {
     const r = mapAnthropicError(e);
-    console.error(`[api/ai] ${task}: ${(e as { constructor?: { name?: string } })?.constructor?.name || 'error'} ${(e as { status?: number })?.status ?? ''}`.trim());
+    console.error(`[api/ai] ${task}: ${(e as { constructor?: { name?: string } })?.constructor?.name || 'error'} ${(e as { status?: number })?.status ?? ''} ${String((e as Error)?.message || '').slice(0, 300)}`.trim());
+    if (e instanceof Anthropic.APIError && r.status === 400) r.body.detail = String(e.message || '').slice(0, 300);
     return r;
   }
   if (msg.stop_reason === 'refusal') return fail(422, 'refused', 'The AI would not answer this one. Try asking it another way.');
