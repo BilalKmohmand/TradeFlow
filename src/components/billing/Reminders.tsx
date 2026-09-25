@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { BellRing, MessageCircle, Send, X } from 'lucide-react';
+import { BellRing, MessageCircle, Send, Sparkles, X } from 'lucide-react';
+import { useBillingUI } from './BillingUI';
 import { useTrading } from '../../context/TradingContext';
 import { cardCls, inputCls, labelCls, secondaryBtn, Notice, rs, moneyCls } from './ui';
 import { ReminderRow, reminderLink } from '../../utils/reminders';
@@ -59,6 +60,7 @@ export const RemindersSettingsCard: React.FC = () => {
 /** Home → "Send reminders": everyone due a reminder, one tap each, or "Send all" one chat after another. */
 export const SendRemindersPanel: React.FC = () => {
   const { remindersDue, markReminded, settings, reminderSettings: cfg } = useTrading();
+  const ui = useBillingUI();
   // "Send all": browsers only open one chat per tap, so the list is worked through one tap at a time.
   const [queue, setQueue] = useState<ReminderRow[] | null>(null);
   const [sent, setSent] = useState(0);
@@ -100,7 +102,8 @@ export const SendRemindersPanel: React.FC = () => {
                   {r.oldest ? `Oldest ${r.oldest.invoiceNumber} of ${formatDate(r.oldest.date)}` : 'Opening balance'} • {r.reason} • {r.lastRemindedAt ? `last reminded ${formatDate(r.lastRemindedAt.slice(0, 10))}` : 'never reminded'}
                 </div>
               </div>
-              <a href={reminderLink(r, shop)} target="_blank" rel="noopener noreferrer" onClick={() => send(r)} className={`${waBtn} max-sm:w-full`} aria-label={`Send WhatsApp reminder to ${r.customer.name}`}><MessageCircle className="w-4 h-4" /> WhatsApp</a>
+              <button type="button" onClick={() => ui.aiReminder(r.customer.id)} className={`${secondaryBtn} !py-1.5 max-sm:flex-1`} aria-label={`AI write reminder to ${r.customer.name}`} title="AI writes the reminder in Urdu, Roman Urdu or English; you check it, then send"><Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-300" /> AI write</button>
+              <a href={reminderLink(r, shop)} target="_blank" rel="noopener noreferrer" onClick={() => send(r)} className={`${waBtn} max-sm:flex-1`} aria-label={`Send WhatsApp reminder to ${r.customer.name}`}><MessageCircle className="w-4 h-4" /> WhatsApp</a>
             </li>
           ))}
           {remindersDue.length > 20 && <li className="px-4 sm:px-5 py-2 text-[11px] text-[#6B7280] dark:text-[#94A3B8]">…and {remindersDue.length - 20} more (Send all goes through everyone).</li>}

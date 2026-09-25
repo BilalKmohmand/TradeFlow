@@ -3,6 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import aiHandler from './api/ai';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'sarmaya-enterprise-rbac-secret-key-2026';
 
@@ -382,6 +383,12 @@ const requirePermission = (permission: string) => {
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // AI features: the same handler as the Vercel function api/ai.ts (reads ANTHROPIC_API_KEY from the
+  // environment). Mounted before the global JSON parser so a bill photo is not cut off at its 100 kB limit.
+  app.all('/api/ai', express.json({ limit: '4mb' }), (req, res) => {
+    void aiHandler(req as any, res as any);
+  });
 
   app.use(express.json());
 

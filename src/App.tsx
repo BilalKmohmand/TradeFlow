@@ -49,6 +49,7 @@ import { ReportsHubScreen } from './screens/billing/ReportsHubScreen';
 import { FindAnythingDialog } from './components/nav/FindAnything';
 import { Breadcrumb } from './components/nav/Breadcrumb';
 import { somethingOpen } from './components/billing/useBillingShortcuts';
+import { AiHost } from './components/ai/AiDialogs';
 
 function MainApp() {
   const {
@@ -243,6 +244,8 @@ function MainApp() {
       {/* Phones & tablets in simple billing: bottom tab bar + "More" sheet (the sidebar takes over on desktop). */}
       {isBilling && <BottomNav />}
 
+      {/* AI: Ask the shop (Ctrl/⌘ J), payment reminder, business summary. */}
+      <AiHost enabled={isBilling} />
       {/* Find anything (Ctrl/⌘ K, "/"): the nav map + customers, suppliers, items, bills, vouchers. */}
       {isBilling && <FindAnythingDialog isOpen={isCommandBarOpen} onClose={() => setIsCommandBarOpen(false)} />}
       {/* Trading suite: the older command bar. */}

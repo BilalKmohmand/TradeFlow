@@ -111,6 +111,18 @@ export const cloudSessionEmail = async (): Promise<string | null> => {
   }
 };
 
+/** Access token (JWT) of the Supabase session on this device, or null. Sent to /api/ai so the server can check it. */
+export const cloudAccessToken = async (): Promise<string | null> => {
+  const a = auth();
+  if (!a) return null;
+  try {
+    const { data } = await a.getSession();
+    return data?.session?.access_token || null;
+  } catch {
+    return null;
+  }
+};
+
 /** True when this device holds a Supabase session for this username. */
 export const hasCloudSessionFor = async (username: string | null | undefined): Promise<boolean> =>
   (await cloudSessionEmail()) === authEmail(username);

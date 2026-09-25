@@ -349,9 +349,34 @@ npm start
 2. Set the same Supabase environment variables (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) in the Vercel project settings.
 3. The included `vercel.json` will run `npm run build` and serve the `dist` folder.
 
+## AI features
+
+Three optional AI helpers, powered by Anthropic's Claude (`claude-opus-5`). Without a key the app works exactly as before and the AI buttons say *"AI not set up — ask the owner to add the key in Vercel"*.
+
+| Feature | Where | What it does |
+|---|---|---|
+| **Ask the shop** (Pooch-o) | Header button **Ask AI** next to *Find anything*, **Ctrl/⌘ J**, Reports › *Ask the shop (AI)* | Ask in Urdu, Roman Urdu or English (“Haji Karim ka kitna udhaar hai?”, “aaj kitni sale hui?”, “kaunse items kam hain?”, “is mahine ka munafa?”). The answer comes in the same language, with an **Open** button for the customer, item, bill or screen it is about. |
+| **Bill from photo / WhatsApp** | Sale Invoice › **AI: from photo / message** (and Invoice › Sale Invoice › *AI: bill from photo / message*) | Take or upload a photo of a handwritten parchi, or paste a WhatsApp order. The customer and lines are filled in the form (the customer's rate / item price when no rate is written). Unsure lines are highlighted and unmatched ones listed to pick by hand. **Nothing is saved until you press Save.** |
+| **Reminders & summaries** | **AI write** in *Send reminders* on Home, **AI write reminder** on a customer, Accounts › *AI payment reminder*; **AI summary** on the Owner dashboard | A polite payment reminder in Urdu script, Roman Urdu or English (editable, then sent with the usual WhatsApp link); a short business summary for today, this week or this month. |
+
+### Setting it up (owner)
+
+1. Create an API key at [console.anthropic.com](https://console.anthropic.com) (Settings → API keys) and add some credit.
+2. In Vercel open the project → **Settings → Environment Variables** → add `ANTHROPIC_API_KEY` with the key, for **Production** and **Preview**.
+3. **Redeploy** (Deployments → ⋯ → Redeploy). Environment variables only reach a new deployment.
+
+The key lives only on the server: `api/ai.ts` is a Vercel Serverless Function (Node) that reads `process.env.ANTHROPIC_API_KEY`; the app calls the same-origin `/api/ai`, so there is no URL or key in the app itself. Optional variables: `AI_REQUIRE_SIGN_IN=true` (refuse requests without a Supabase sign-in), `AI_ALLOWED_HOSTS` (extra host names allowed to call it, comma-separated), and `SUPABASE_URL` / `SUPABASE_ANON_KEY` if the `NEXT_PUBLIC_…` ones are not available to functions. For `npm run dev`, start it with the key in the environment: `ANTHROPIC_API_KEY=sk-ant-… npm run dev` (server.ts mounts the same handler).
+
+**How `/api/ai` is protected:** POST only; the request must come from a page on the same host (Origin, else Referer, must equal the deployment host; cross-site fetches are refused); when the app sends a Supabase access token it is checked with `auth.getUser` (an expired / fake token is refused); at most 30 requests per IP per 10 minutes (in the function's memory); input size is capped (question 500 letters, shop data ~60 KB, photo ≤ 1600 px JPEG, whole request ~3 MB); each answer's length is capped (`max_tokens` 3,000–12,000 including thinking). The AI can only answer in fixed JSON shapes, and the app checks every id it sends back before using it.
+
+**Typical cost** (Claude Opus 5 at $5 / $25 per million input / output tokens): a question about **$0.03–0.08** (about Rs. 10–25), a bill from a photo **$0.08–0.15**, a reminder about **$0.01**, a summary **$0.03–0.05**. A shop asking 20 questions and reading 10 parchis a day spends roughly $1.5–3 a day; set a monthly spend limit in the Anthropic console.
+
+**Privacy:** to answer, the shop data needed for that request is sent to Anthropic: for a question, a trimmed slice (names, codes, cities, balances, stock and prices, today's and this month's sales, recent bills); for a bill, the photo or message plus the customer and item list; for a reminder, the customer's name, balance and oldest bill; for a summary, the period's totals. Passwords, password hashes and phone numbers are never sent, and users without finance rights never send profit, cost, cash or bank figures. Anthropic does not train on API data by default. If that is not acceptable for your shop, simply do not add the key.
+
 ## Tech Stack
 
 - React 19 + TypeScript
 - Vite + Tailwind CSS
 - Supabase (`@supabase/supabase-js`)
+- Optional AI: Anthropic Claude via `@anthropic-ai/sdk`, server-side only (`api/ai.ts`, a Vercel Serverless Function)
 - Express dev server

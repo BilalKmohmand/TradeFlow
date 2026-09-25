@@ -45,12 +45,17 @@ export type NavAction =
   | 'recovery'
   | 'commission'
   | 'tradingSuite'
-  | 'lock';
+  | 'lock'
+  | 'askShop'
+  | 'aiBill'
+  | 'aiReminder'
+  | 'aiSummary';
 
 export const NAV_ACTIONS: readonly NavAction[] = [
   'newBill', 'newCashSale', 'newQuote', 'newPurchaseInvoice', 'receive', 'receiveMany', 'paySupplier', 'addExpense', 'transfer', 'interest',
   'newItem', 'receiveStock', 'adjustStock', 'purchaseReturn', 'newOrder', 'reorder', 'labels', 'agingCustomers', 'agingSuppliers',
   'salesHub', 'salesTeam', 'schemes', 'salesReport', 'recovery', 'commission', 'tradingSuite', 'lock',
+  'askShop', 'aiBill', 'aiReminder', 'aiSummary',
 ];
 
 /**
@@ -168,6 +173,7 @@ const INVOICE: { label: string; entries: Raw[] }[] = [
       { id: 'bills', sub: 'Sale Invoice', label: 'Sale Invoices list', aka: ['Bills list'], hint: 'Every bill, paid and unpaid; search by number or memo', keywords: ['parchi', 'bill', 'invoices', 'sale register', 'bikri'], target: scr('bills', 'bills') },
       { sub: 'Sale Invoice', id: 'quotations', label: 'Quotations', hint: 'Price quotes; convert one to a bill', keywords: ['quote', 'estimate', 'rate dena'], target: scr('bills', 'quotes') },
       { sub: 'Sale Invoice', id: 'new-quote', label: 'New quotation', hint: 'Write a price quote for a customer', keywords: ['quote', 'estimate'], target: act('newQuote') },
+      { sub: 'Sale Invoice', id: 'ai-bill', label: 'AI: bill from photo / message', aka: ['Bill from WhatsApp order', 'Parchi photo'], hint: 'Photo of a handwritten parchi or a pasted WhatsApp order fills the bill lines (AI)', keywords: ['ai', 'photo', 'tasveer', 'whatsapp', 'order', 'message', 'parchi', 'camera'], target: act('aiBill') },
       { sub: 'Sale Invoice', id: 'delivery-orders', label: 'Delivery orders (pending)', aka: ['Pending deliveries'], hint: 'Bills whose goods have not gone out yet; mark delivered, print challan', keywords: ['delivery', 'challan', 'maal bhejna', 'gari', 'dispatch'], target: rep('pending-delivery'), primary: false },
       { id: 'move-stock', label: 'Store Transfer', aka: ['Move stock', 'Stock transfer'], hint: 'Move stock from one godown to another', keywords: ['godam', 'transfer', 'shift', 'maal', 'store'], anyPerm: STOCK_IN, target: scr('products', 'move') },
     ],
@@ -212,6 +218,7 @@ const ACCOUNTS: { label: string; entries: Raw[] }[] = [
       { id: 'expense-sheets', label: 'Expense sheets', hint: 'Expenses of a month, sheet by sheet', keywords: ['kharcha', 'kharch', 'expense'], target: scr('money', 'expenses') },
       { id: 'money-moves', label: 'Money in & out (month)', hint: 'Every receipt and payment of a month, cash or one bank', keywords: ['rokar', 'cash', 'lein dein', 'len den'], target: scr('money', 'cashbook') },
       { id: 'daily-sheet', label: 'Daily sheet', hint: 'One day on one page: bills, cash, expenses', keywords: ['rozana', 'aaj', 'today', 'din', 'daily'], target: scr('daily') },
+      { id: 'ai-reminder', label: 'AI payment reminder', aka: ['AI write reminder'], hint: 'AI writes a polite WhatsApp reminder in Urdu, Roman Urdu or English', keywords: ['ai', 'reminder', 'yaad', 'yaad dihani', 'whatsapp', 'message', 'tagaza'], target: act('aiReminder') },
       { id: 'interest', label: 'Late-payment interest', hint: 'Charge interest on overdue money (off unless set on a customer)', keywords: ['interest', 'sood', 'late', 'jurmana'], perm: ['finance:view_pnl'], target: act('interest') },
     ],
   },
@@ -257,6 +264,8 @@ const REPORTS_EXTRA: { label: string; entries: Raw[] } = {
   label: 'Dashboards & business',
   entries: [
     { id: 'owner', label: 'Owner dashboard', hint: 'The whole business on one screen', keywords: ['dashboard', 'malik', 'owner', 'summary'], perm: ['finance:view_pnl'], target: scr('owner') },
+    { id: 'ask-shop', label: 'Ask the shop (AI)', aka: ['Pooch-o', 'Ask AI'], key: 'Ctrl+J', hint: 'Ask in Urdu, Roman Urdu or English: “Haji Karim ka kitna udhaar hai?”', keywords: ['ai', 'poocho', 'pucho', 'sawal', 'question', 'ask', 'chat'], target: act('askShop') },
+    { id: 'ai-summary', label: 'AI business summary', aka: ['AI summary'], hint: 'A short summary of today, this week or this month: changes, top customers and items, risks', keywords: ['ai', 'summary', 'khulasa', 'overview', 'report'], target: act('aiSummary') },
     { id: 'all-reports', label: 'All reports', hint: 'The full Reports menu, with a report search', keywords: ['reports', 'report'], target: rep('menu') },
     { id: 'aging-customers', label: 'Who owes for how long (aging)', aka: ['Aging', 'Receivable aging'], hint: 'Customers by 0–30, 31–60, 61–90, 90+ days', keywords: ['udhaar', 'udhar', 'purana udhaar', 'overdue', 'aging', 'baqaya', 'wasooli'], target: act('agingCustomers') },
     { id: 'aging-suppliers', label: 'Supplier aging', aka: ['Payable aging'], hint: 'What you owe each supplier, by how long', keywords: ['dena', 'udhaar', 'aging', 'supplier'], target: act('agingSuppliers') },
@@ -365,6 +374,11 @@ export const ACTION_ACCESS: Record<NavAction, { perm?: Permission[]; anyPerm?: P
   commission: {},
   tradingSuite: { anyPerm: ADMIN, perm: ['system:company_settings'] },
   lock: {},
+  // AI: the question's data is cut down to what this user may see; a bill from a photo is still a new bill.
+  askShop: {},
+  aiBill: { perm: WRITE },
+  aiReminder: {},
+  aiSummary: { perm: ['finance:view_pnl'] },
 };
 
 /** Permission a target needs by itself (screens gate themselves; the map mirrors that). */
@@ -784,6 +798,7 @@ const ACTION_DIALOG: Record<NavAction, string | null> = {
   adjustStock: 'Adjust stock', purchaseReturn: 'Return goods to supplier', newOrder: 'New purchase order', reorder: 'Re-order report', labels: 'Print barcode labels',
   agingCustomers: 'Who owes for how long', agingSuppliers: 'Who owes for how long', salesHub: 'Sales & recovery', salesTeam: 'Salesmen & areas', schemes: 'Schemes',
   salesReport: 'Sales reports', recovery: 'Sales reports', commission: 'Sales reports', tradingSuite: null, lock: null,
+  askShop: 'Ask the shop', aiBill: 'AI: bill from photo / message', aiReminder: 'AI payment reminder', aiSummary: 'AI business summary',
 };
 /** The voucher screen's title (the old program's window title, utils/voucherEntry.ts VOUCHER_TITLES). */
 const VOUCHER_LABEL: Record<string, string> = { CPV: 'Cash Payment -- [Debit Voucher]', CRV: 'Cash Receipt -- [Credit Voucher]', BPV: 'Bank Payment -- [Debit Voucher]', BRV: 'Bank Receipt -- [Credit Voucher]', JV: 'Journal Voucher' };

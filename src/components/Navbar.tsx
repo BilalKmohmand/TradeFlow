@@ -33,6 +33,7 @@ import { useMemo } from 'react';
 import { computeAlerts } from '../utils/alerts';
 import { useTrading } from '../context/TradingContext';
 import { useTheme, ThemeMode } from '../context/ThemeContext';
+import { useBillingUI } from './billing/BillingUI';
 import { ActiveScreen } from '../types';
 
 interface NavbarProps {
@@ -70,6 +71,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     [products, customers, suppliers, bookings, trucks, ledger, dispatches, tasks, quotations, purchaseOrders]
   );
   const { themeMode, resolvedTheme, setThemeMode, isNightTime, timeLabel } = useTheme();
+  const billingUI = useBillingUI();
 
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [isBellOpen, setIsBellOpen] = useState(false);
@@ -186,6 +188,22 @@ export const Navbar: React.FC<NavbarProps> = ({
               <kbd className="inline-flex items-center text-[11px] font-semibold font-sans bg-white dark:bg-[#0D1520] px-1.5 py-0.5 rounded-md border border-[#E5E5E1] dark:border-[#203248] text-[#6B7280] dark:text-[#94A3B8]">{isMac ? '⌘K' : 'Ctrl K'}</kbd>
             </span>
           </button>
+
+          {/* Ask the shop (AI, Ctrl/⌘ J): next to Find anything. */}
+          {isBilling && (
+            <button
+              type="button"
+              onClick={() => billingUI.askShop()}
+              aria-label="Ask the shop (AI)"
+              aria-keyshortcuts={isMac ? 'Meta+J' : 'Control+J'}
+              title={`Ask the shop: a question in Urdu, Roman Urdu or English (${isMac ? '⌘J' : 'Ctrl+J'})`}
+              data-testid="ask-shop-button"
+              className="shrink-0 inline-flex items-center justify-center gap-2 w-11 h-11 md:w-auto md:px-3.5 rounded-2xl bg-violet-50 dark:bg-violet-950/40 hover:bg-white dark:hover:bg-violet-900/40 border border-violet-200 dark:border-violet-900 text-violet-800 dark:text-violet-200 text-sm font-semibold transition-colors shadow-2xs"
+            >
+              <Sparkles className="w-5 h-5 md:w-4.5 md:h-4.5" aria-hidden="true" />
+              <span className="hidden md:inline">Ask AI</span>
+            </button>
+          )}
 
           {/* Right Action Hub */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">

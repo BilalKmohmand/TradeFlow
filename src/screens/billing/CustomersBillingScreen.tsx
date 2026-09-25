@@ -1,7 +1,7 @@
 import { paymentNo } from '../../utils/paymentNumbers';
 import { CsvButton } from '../../components/billing/CsvButton';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Phone, FilePlus2, HandCoins, Printer, Pencil, Trash2, Clock, FileText, Users, Route } from 'lucide-react';
+import { Plus, Search, Phone, FilePlus2, HandCoins, Printer, Pencil, Trash2, Clock, FileText, Users, Route, Sparkles } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 import { useWideLayout } from '../../hooks/useMediaQuery';
 import { useBillingUI, useRequestedView, useCurrentView } from '../../components/billing/BillingUI';
@@ -170,7 +170,10 @@ export const CustomersBillingScreen: React.FC<{ onAdd: () => void }> = ({ onAdd 
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Bought so far</div><div className="tabular-nums font-extrabold text-[#111827] dark:text-white">{rs(openBills.reduce((a, b) => a + billNetTotal(b), 0))}</div></div>
             </div>
             <CreditUsageBar customer={open} />
-            <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]" data-testid="last-reminded">Last reminded: {open.lastRemindedAt ? `${formatDate(open.lastRemindedAt.slice(0, 10))} (WhatsApp)` : 'never'}</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]" data-testid="last-reminded">Last reminded: {open.lastRemindedAt ? `${formatDate(open.lastRemindedAt.slice(0, 10))} (WhatsApp)` : 'never'}</p>
+              {open.totalDue > 0 && <button type="button" onClick={() => { const id = open.id; setOpenId(null); ui.aiReminder(id); }} className={`${secondaryBtn} !py-1.5`} data-testid="customer-ai-reminder"><Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-300" /> AI write reminder</button>}
+            </div>
             <CustomerRatesPanel customerId={open.id} />
             <CustomerSalesPanel key={open.id} customerId={open.id} />
             <div>
