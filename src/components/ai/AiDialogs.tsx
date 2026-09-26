@@ -12,6 +12,7 @@ import { parseAskResult, parseReminderResult, parseSummaryResult } from '../../a
 import { reminderMessage, openBills, daysFrom } from '../../utils/reminders';
 import { whatsappLink } from '../../utils/purchasing';
 import { AiPrivacyNote, AiStatus, useAiCall, useAiShopData } from './AiKit';
+import { VoiceInput, appendSpoken } from './VoiceInput';
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
 export const ASK_SHORTCUT = isMac ? '⌘J' : 'Ctrl+J';
@@ -89,7 +90,8 @@ export const AskShopDialog: React.FC<{ isOpen: boolean; onClose: () => void }> =
   return (
     <Modal isOpen={isOpen} onClose={close} title="Ask the shop" subtitle={`Pooch-o: ask in Urdu, Roman Urdu or English (${ASK_SHORTCUT})`} wide
       footer={
-        <form className="flex gap-2 items-end" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
+        <form className="flex flex-wrap gap-2 items-end" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
+          <VoiceInput compact label="Speak" onText={(t) => setQuestion((q) => appendSpoken(q, t).slice(0, 500))} />
           <textarea
             dir="auto"
             rows={1}
@@ -97,7 +99,7 @@ export const AskShopDialog: React.FC<{ isOpen: boolean; onClose: () => void }> =
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void ask(); } }}
-            className={`${inputCls} resize-none min-h-11`}
+            className={`${inputCls} resize-none min-h-11 flex-1 min-w-[12rem]`}
             placeholder="e.g. Haji Karim ka kitna udhaar hai?"
             maxLength={500}
           />

@@ -6,6 +6,7 @@ import { buildBillCatalog } from '../../ai/context';
 import { ParsedBill, parseBillResult } from '../../ai/parse';
 import { resizePhoto } from '../../utils/imageResize';
 import { AiPrivacyNote, AiStatus, useAiCall } from './AiKit';
+import { VoiceInput, appendSpoken } from './VoiceInput';
 
 /** Longest side of the photo sent to the AI, and its largest size (JPEG). */
 export const AI_PHOTO_MAX_SIDE = 1600;
@@ -90,7 +91,10 @@ export const BillFromAiDialog: React.FC<{
           )}
         </div>
         <div>
-          <label className={labelCls} htmlFor="ai-order-text">Or paste the WhatsApp order</label>
+          <div className="flex flex-wrap items-end justify-between gap-2 mb-1">
+            <label className={`${labelCls} !mb-0`} htmlFor="ai-order-text">Or paste the WhatsApp order, or speak it</label>
+            <VoiceInput label="Speak the order" onText={(t) => setText((x) => appendSpoken(x, t, '\n'))} />
+          </div>
           <textarea id="ai-order-text" dir="auto" rows={5} value={text} onChange={(e) => setText(e.target.value)} className={inputCls} placeholder={'e.g.\nHaji Karim\n2 peti Dalda 16L\n5 dabbe Habib 5 litre'} />
         </div>
         <AiStatus state={ai.state} onCancel={ai.cancel} loadingText="Reading the order…" />
