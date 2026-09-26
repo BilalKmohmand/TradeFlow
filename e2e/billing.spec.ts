@@ -92,7 +92,7 @@ test.describe('Simple billing', () => {
     await dialog.getByLabel('Item 1', { exact: true }).selectOption('p3');
     await dialog.getByLabel('Quantity 1', { exact: true }).fill('2');
     await dialog.getByLabel('Price 1', { exact: true }).fill('6400');
-    await dialog.getByLabel('Lumsum Disc (Rs.)', { exact: true }).fill('300');
+    await dialog.getByLabel('Carriage Expenses (Rs.)', { exact: true }).fill('300');
     await expect(dialog.getByText('Rs. 12,500 on credit')).toBeVisible();
     await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(dialog).toBeHidden();

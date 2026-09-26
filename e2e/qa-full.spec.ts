@@ -516,7 +516,7 @@ test.describe('QA — selling', () => {
     await bill.getByLabel('Quantity 2', { exact: true }).fill('5');
     await bill.getByLabel('Discount 2', { exact: true }).fill('10');
     await bill.getByRole('group', { name: 'Discount type 2' }).getByRole('button', { name: '%' }).click();
-    await bill.getByLabel('Lumsum Disc (Rs.)', { exact: true }).fill('100');
+    await bill.getByLabel('Carriage Expenses (Rs.)', { exact: true }).fill('100');
     await bill.getByLabel('Others Charges').fill('500');
     await bill.getByLabel('Cost centre (optional)').selectOption({ label: 'Main shop' });
     // 12,000 + (9,500 − 10%) − 100 + 500 = 20,950
@@ -650,7 +650,7 @@ test.describe('QA — selling', () => {
     await bill.getByLabel('Customer', { exact: true }).selectOption('c1');
     await bill.getByLabel('Item 1', { exact: true }).selectOption('p2');
     await bill.getByLabel('Quantity 1', { exact: true }).fill('2');
-    await bill.getByLabel('Lumsum Disc (Rs.)', { exact: true }).fill('400'); // 400 of 3,800 = 10.5%
+    await bill.getByLabel('Carriage Expenses (Rs.)', { exact: true }).fill('400'); // 400 of 3,800 = 10.5%
     await expect(bill.getByTestId('bill-needs-approval')).toContainText('over the 5% limit');
     await bill.getByLabel('Paid now', { exact: true }).fill('3400');
     await bill.getByRole('button', { name: 'Save', exact: true }).click();

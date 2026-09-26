@@ -1223,16 +1223,16 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
               </div>
               <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2 items-end">
                 <div>
-                  <label className={small} htmlFor="bill-lumsum-pct">Lumsum Disc%</label>
+                  <label className={small} htmlFor="bill-lumsum-pct">Carriage Exp %</label>
                   <input id="bill-lumsum-pct" type="number" inputMode="decimal" min="0" max="100" step="any" value={lumsumPct} onChange={(e) => { setLumsumPct(e.target.value); if (e.target.value) setDiscount(''); }} className={numInputCls} placeholder="%" />
                 </div>
                 <div>
-                  <label className={small} htmlFor="bill-discount">Lumsum Disc (Rs.)</label>
+                  <label className={small} htmlFor="bill-discount">Carriage Expenses (Rs.)</label>
                   <input id="bill-discount" type="number" inputMode="decimal" min="0" step="any" value={lumsumPctNum > 0 ? String(disc) : discount} readOnly={lumsumPctNum > 0} onChange={(e) => setDiscount(e.target.value)} className={numInputCls} placeholder="0" />
                 </div>
               </div>
               <div>
-                <label className={small} htmlFor="bill-vehicle">Carriage Expenses</label>
+                <label className={small} htmlFor="bill-vehicle">Vehicle Charges</label>
                 <input id="bill-vehicle" type="number" inputMode="decimal" min="0" step="any" value={vehicle} onChange={(e) => setVehicle(e.target.value)} className={numInputCls} placeholder="0" />
               </div>
               <label className="flex items-center gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">
@@ -1278,9 +1278,9 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
           </table>
           <div className="ml-auto max-w-xs space-y-1">
             <div className="flex justify-between"><span>Amount</span><span className="tabular-nums">{rs(subtotal)}</span></div>
-            {disc > 0 && <div className="flex justify-between"><span>Lumsum disc</span><span className="tabular-nums">− {rs(disc)}</span></div>}
+            {disc > 0 && <div className="flex justify-between"><span>Carriage expenses</span><span className="tabular-nums">− {rs(disc)}</span></div>}
             {freightAmt > 0 && <div className="flex justify-between"><span>Others charges</span><span className="tabular-nums">{rs(freightAmt)}</span></div>}
-            {vehicleAmt > 0 && <div className="flex justify-between"><span>Carriage expenses</span><span className="tabular-nums">{rs(vehicleAmt)}</span></div>}
+            {vehicleAmt > 0 && <div className="flex justify-between"><span>Vehicle charges</span><span className="tabular-nums">{rs(vehicleAmt)}</span></div>}
             <div className="flex justify-between font-bold"><span>Bill total</span><span className="tabular-nums">{rs(total)}</span></div>
             <div className="flex justify-between"><span>Paid</span><span className="tabular-nums">{rs(paid)}</span></div>
             <div className="flex justify-between font-bold"><span>Balance</span><span className="tabular-nums">{rs(balance)}</span></div>

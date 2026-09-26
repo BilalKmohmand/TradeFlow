@@ -284,8 +284,8 @@ describe('Sale Invoice form (entry row + grid)', () => {
     expect(q.getByTestId('line-amount-2').textContent).toBe('900.00');
     expect(q.getByTestId('bill-qty-total').textContent).toBe('30');
     expect(q.getByTestId('bill-amount-total').textContent).toBe('Rs. 67,400');
-    typeIn(q.getByLabelText('Lumsum Disc%'), '2');
-    expect((q.getByLabelText('Lumsum Disc (Rs.)') as HTMLInputElement).value).toBe('1348');
+    typeIn(q.getByLabelText('Carriage Exp %'), '2');
+    expect((q.getByLabelText('Carriage Expenses (Rs.)') as HTMLInputElement).value).toBe('1348');
     typeIn(q.getByLabelText('Others Charges'), '500');
     expect(q.getByTestId('bill-total').textContent).toBe('Rs. 66,552');
 

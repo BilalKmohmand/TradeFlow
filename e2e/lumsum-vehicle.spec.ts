@@ -3,8 +3,8 @@ import { signIn } from './helpers/login';
 import { salesSeed } from './helpers/salesSeed';
 import { goTo } from './helpers/nav';
 
-/** The shop gives one lumsum discount per bill (no per-item discount) and charges carriage expenses on the bill. */
-test('Sale Invoice: lumsum only by default, Carriage Expenses under it, in the total, saved and balanced', async ({ page }) => {
+/** The shop gives one lumsum discount per bill (no per-item discount) and charges vehicle charges on the bill. */
+test('Sale Invoice: lumsum only by default, Vehicle Charges under it, in the total, saved and balanced', async ({ page }) => {
   page.on('pageerror', (e) => { throw e; });
   await page.addInitScript(() => localStorage.setItem('sarmaya_item_discount', '0'));
   await page.addInitScript(salesSeed);
@@ -27,8 +27,8 @@ test('Sale Invoice: lumsum only by default, Carriage Expenses under it, in the t
   await d.getByLabel('Price 1', { exact: true }).press('Enter');
   await expect(d.getByTestId('bill-line')).toHaveCount(1);
 
-  await d.getByLabel('Lumsum Disc (Rs.)', { exact: true }).fill('100');
-  await d.getByLabel('Carriage Expenses', { exact: true }).fill('250');
+  await d.getByLabel('Carriage Expenses (Rs.)', { exact: true }).fill('100');
+  await d.getByLabel('Vehicle Charges', { exact: true }).fill('250');
   await expect(d.getByTestId('bill-total')).toHaveText('Rs. 2,150');
 
   // The per-item discount can still be turned on.

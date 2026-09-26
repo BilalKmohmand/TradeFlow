@@ -118,7 +118,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
               </table>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">{(inv.returnedAmount || 0) > 0 ? 'Net total' : 'Total'}</div><div className="tabular-nums font-extrabold text-[#111827] dark:text-white" data-testid="bill-net-total">{rs(billNetTotal(inv))}</div>{(inv.returnedAmount || 0) > 0 && <div className="text-[11px] text-amber-700 dark:text-amber-300">{rs(inv.totalAmount)} less {rs(inv.returnedAmount || 0)} returned</div>}{(inv.discount || 0) > 0 && <div className="text-[11px] text-[#8E9299]">after {rs(inv.discount || 0)} discount</div>}</div>
+              <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">{(inv.returnedAmount || 0) > 0 ? 'Net total' : 'Total'}</div><div className="tabular-nums font-extrabold text-[#111827] dark:text-white" data-testid="bill-net-total">{rs(billNetTotal(inv))}</div>{(inv.returnedAmount || 0) > 0 && <div className="text-[11px] text-amber-700 dark:text-amber-300">{rs(inv.totalAmount)} less {rs(inv.returnedAmount || 0)} returned</div>}{(inv.discount || 0) > 0 && <div className="text-[11px] text-[#8E9299]">after {rs(inv.discount || 0)} carriage expenses</div>}</div>
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Paid</div><div className="tabular-nums font-extrabold text-teal-700 dark:text-teal-300">{rs(inv.paidAmount - (inv.refundedAmount || 0))}</div>{(inv.refundedAmount || 0) > 0 && <div className="text-[11px] text-[#8E9299]">after {rs(inv.refundedAmount || 0)} given back</div>}</div>
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Balance</div><div className={`tabular-nums font-extrabold ${inv.balanceDue > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-[#111827] dark:text-white'}`}>{rs(inv.balanceDue)}</div></div>
               <div className="rounded-2xl bg-[#FAF9F6] dark:bg-[#162436] p-3"><div className="text-[11px] uppercase tracking-wider text-[#6B7280]">Customer owes (all bills)</div><div className="tabular-nums font-extrabold text-[#111827] dark:text-white">{rs(customer?.totalDue || 0)}</div></div>
@@ -127,7 +127,7 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]" data-testid="bill-extras">
                 {[
                   (inv.freightCharges || 0) > 0 && `Freight / loading ${rs(inv.freightCharges || 0)} (in the total)`,
-                  (inv.handlingCharges || 0) > 0 && `Carriage expenses ${rs(inv.handlingCharges || 0)} (in the total)`,
+                  (inv.handlingCharges || 0) > 0 && `Vehicle charges ${rs(inv.handlingCharges || 0)} (in the total)`,
                   inv.salesmanId && `Salesman: ${salesmen.find((x) => x.id === inv.salesmanId)?.name || '—'}`,
                   inv.areaId && `Area: ${areas.find((x) => x.id === inv.areaId)?.name || '—'}`,
                 ].filter(Boolean).join(' • ')}

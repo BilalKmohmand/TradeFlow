@@ -117,7 +117,7 @@ test('Bill edit the old way: Search by number opens it filled in; change qty and
   await page.keyboard.type('4');
   await page.keyboard.press('Enter');
   await page.keyboard.press('Enter');
-  await d.getByLabel('Lumsum Disc (Rs.)', { exact: true }).fill('50');
+  await d.getByLabel('Carriage Expenses (Rs.)', { exact: true }).fill('50');
   await d.getByLabel('Others Charges', { exact: true }).fill('200');
   await d.getByLabel('Remarks', { exact: true }).fill('first');
   await d.getByLabel('Paid now', { exact: true }).fill('10000');
@@ -145,7 +145,7 @@ test('Bill edit the old way: Search by number opens it filled in; change qty and
   await expect(e.getByLabel('Customer', { exact: true })).toHaveValue('c3');
   await expect(e.getByTestId('bill-line')).toHaveCount(1);
   await expect(e.getByTestId('line-amount-1')).toHaveText('28,200.00');
-  await expect(e.getByLabel('Lumsum Disc (Rs.)', { exact: true })).toHaveValue('50');
+  await expect(e.getByLabel('Carriage Expenses (Rs.)', { exact: true })).toHaveValue('50');
   await expect(e.getByLabel('Others Charges', { exact: true })).toHaveValue('200');
   await expect(e.getByLabel('Remarks', { exact: true })).toHaveValue('first');
   await expect(e.getByTestId('bill-saved-pay')).toHaveCount(1);
