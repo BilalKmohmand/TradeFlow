@@ -239,6 +239,7 @@ describe('Sale Invoice form (entry row + grid)', () => {
   const mount = async () => {
     seed();
     localStorage.setItem('sarmaya_bill_after_save', 'close');
+    localStorage.setItem('sarmaya_item_discount', '1');
     render(<TradingProvider><Grab /><BillingUIProvider><Opener /></BillingUIProvider></TradingProvider>);
     await signIn(() => api);
   };

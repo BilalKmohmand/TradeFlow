@@ -366,6 +366,8 @@ export interface BillLikeInput {
   discount?: number;
   /** Freight / loading charged on the bill (part of the total the customer owes). */
   freightCharges?: number;
+  /** Vehicle charges on the bill (part of the total). */
+  vehicleCharges?: number;
   paidNow?: number;
   paymentMethod?: string;
   payments?: { method: string; amount: number }[];
@@ -529,7 +531,8 @@ export const createControlApi = (d: ApiDeps) => {
     const discount = round2(Math.min(Math.max(0, input.discount || 0), subtotal));
     const tax = round2(((subtotal - discount) * (d.settings.taxRatePct ?? 0)) / 100);
     const freight = round2(Math.max(0, Number(input.freightCharges) || 0));
-    const total = round2(subtotal - discount + tax + freight);
+    const vehicle = round2(Math.max(0, Number(input.vehicleCharges) || 0));
+    const total = round2(subtotal - discount + tax + freight + vehicle);
     const parts = input.payments ? input.payments : (input.paidNow || 0) > 0 ? [{ method: input.paymentMethod || 'Cash', amount: input.paidNow || 0 }] : [];
     const chequeAmt = input.cheque && Number(input.cheque.amount) > 0 ? Number(input.cheque.amount) : 0;
     const pay = resolveBillPayments(total, parts, chequeAmt);
@@ -955,6 +958,7 @@ export const createControlApi = (d: ApiDeps) => {
       })),
       discount: inv.discount || 0,
       freightCharges: inv.freightCharges || 0,
+      vehicleCharges: inv.handlingCharges || 0,
       payments: paidSameDay.map((p) => ({ method: payLabel(p), amount: p.amount })),
       date: inv.issueDate,
       godownId: inv.items[0]?.godownId,

@@ -126,7 +126,8 @@ export const BillDetailModal: React.FC<Props> = ({ invoiceId, onClose }) => {
             {((inv.freightCharges || 0) + (inv.handlingCharges || 0) > 0 || inv.salesmanId || inv.areaId) && (
               <p className="text-xs text-[#6B7280] dark:text-[#94A3B8]" data-testid="bill-extras">
                 {[
-                  (inv.freightCharges || 0) + (inv.handlingCharges || 0) > 0 && `Freight / loading ${rs((inv.freightCharges || 0) + (inv.handlingCharges || 0))} (in the total)`,
+                  (inv.freightCharges || 0) > 0 && `Freight / loading ${rs(inv.freightCharges || 0)} (in the total)`,
+                  (inv.handlingCharges || 0) > 0 && `Vehicle charges ${rs(inv.handlingCharges || 0)} (in the total)`,
                   inv.salesmanId && `Salesman: ${salesmen.find((x) => x.id === inv.salesmanId)?.name || '—'}`,
                   inv.areaId && `Area: ${areas.find((x) => x.id === inv.areaId)?.name || '—'}`,
                 ].filter(Boolean).join(' • ')}

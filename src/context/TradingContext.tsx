@@ -559,6 +559,8 @@ export interface CreateBillInput {
   quotationId?: string | null;
   /** Freight / cartage / loading charged to the customer on top of the goods (Rs., no tax). */
   freightCharges?: number;
+  /** Vehicle charges on the bill (Rs., no tax): kept as the invoice's handlingCharges, booked like freight. */
+  vehicleCharges?: number;
   /** Salesman and area on the bill; left out = the customer's defaults, '' / null = none. */
   salesmanId?: string | null;
   areaId?: string | null;
@@ -588,6 +590,7 @@ const billEditSummary = (before: Invoice, after: Invoice): string => {
   const lines = (inv: Invoice) => inv.items.map((it) => `${it.productName} × ${it.qty ?? it.kg} @ ${it.unitPrice ?? it.ratePerKg}${it.free ? ' (free)' : ''}`).join(', ');
   if (lines(before) !== lines(after)) parts.push(`items [${lines(before)}] → [${lines(after)}]`);
   if ((before.freightCharges || 0) !== (after.freightCharges || 0)) parts.push(`freight ${fmt(before.freightCharges || 0)} → ${fmt(after.freightCharges || 0)}`);
+  if ((before.handlingCharges || 0) !== (after.handlingCharges || 0)) parts.push(`vehicle charges ${fmt(before.handlingCharges || 0)} → ${fmt(after.handlingCharges || 0)}`);
   if ((before.memoNo || '') !== (after.memoNo || '')) parts.push(`memo ${before.memoNo || '-'} → ${after.memoNo || '-'}`);
   parts.push(`total ${fmt(before.totalAmount)} → ${fmt(after.totalAmount)}`);
   return parts.join('; ');
@@ -2826,6 +2829,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (items.every((it) => it.free)) return { success: false, message: 'A bill needs at least one item that is sold (not only free goods).' };
     const freight = round2(Number(input.freightCharges) || 0);
     if (freight < 0) return { success: false, message: 'Freight cannot be negative.' };
+    const vehicle = round2(Number(input.vehicleCharges) || 0);
+    if (vehicle < 0) return { success: false, message: 'Vehicle charges cannot be negative.' };
     if (items.some((it) => !(it.unitPrice >= 0))) return { success: false, message: 'A price cannot be negative.' };
     // Where the stock comes from (godown, batches first-expiry-first-out). Plain items are unchanged.
     // Expiry is judged against today (not the bill date), so a back-dated bill can't sell an expired batch.
@@ -2875,7 +2880,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const discount = round2(Math.min(Math.max(0, input.discount || 0), subtotal));
     const taxRatePct = settings.taxRatePct ?? 0;
     const taxAmount = round2(((subtotal - discount) * taxRatePct) / 100);
-    const totalAmount = round2(subtotal - discount + taxAmount + freight);
+    const totalAmount = round2(subtotal - discount + taxAmount + freight + vehicle);
     if (totalAmount <= 0) return { success: false, message: 'The bill total must be more than zero.' };
     // Salesman / area: as picked on the bill, else the customer's defaults.
     const salesmanId = input.salesmanId !== undefined ? input.salesmanId || null : customer.salesmanId || null;
@@ -2971,6 +2976,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       taxAmount,
       discount,
       ...(freight > 0 ? { freightCharges: freight } : {}),
+      ...(vehicle > 0 ? { handlingCharges: vehicle } : {}),
       totalAmount,
       paidAmount,
       balanceDue,
@@ -3043,7 +3049,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         referenceId: invoiceNumber,
         sourceId: invoice.id,
         date,
-        description: `Bill ${invoiceNumber}: ${invoiceItems.map((it) => `${it.productName} × ${it.qty}${it.free ? ' (free)' : ''}`).join(', ')}${freight > 0 ? `, freight ${formatCurrency(freight)}` : ''}`,
+        description: `Bill ${invoiceNumber}: ${invoiceItems.map((it) => `${it.productName} × ${it.qty}${it.free ? ' (free)' : ''}`).join(', ')}${freight > 0 ? `, freight ${formatCurrency(freight)}` : ''}${vehicle > 0 ? `, vehicle ${formatCurrency(vehicle)}` : ''}`,
         debit: totalAmount,
         credit: 0,
         balanceAfter: round2((customer.totalDue || 0) - (ed.customerId === customer.id ? ed.balanceDue : 0) + totalAmount),
@@ -3070,7 +3076,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         referenceId: invoiceNumber,
         sourceId: invoice.id,
         date,
-        description: `Bill ${invoiceNumber}: ${invoiceItems.map((it) => `${it.productName} × ${it.qty}${it.free ? ' (free)' : ''}`).join(', ')}${freight > 0 ? `, freight ${formatCurrency(freight)}` : ''}`,
+        description: `Bill ${invoiceNumber}: ${invoiceItems.map((it) => `${it.productName} × ${it.qty}${it.free ? ' (free)' : ''}`).join(', ')}${freight > 0 ? `, freight ${formatCurrency(freight)}` : ''}${vehicle > 0 ? `, vehicle ${formatCurrency(vehicle)}` : ''}`,
         debit: totalAmount,
         credit: 0,
         balanceAfter: dueAfterBill,

@@ -25,6 +25,8 @@ export async function seedUsers(page: Page, users: unknown[] = testUsers()) {
   // Older specs expect the bill dialog to close after Save; the app now opens the next bill.
   await page.addInitScript(() => {
     if (!localStorage.getItem('sarmaya_bill_after_save')) localStorage.setItem('sarmaya_bill_after_save', 'close');
+    // Older specs type into the per-item Disc column (hidden by default: this shop gives a lumsum discount).
+    if (!localStorage.getItem('sarmaya_item_discount')) localStorage.setItem('sarmaya_item_discount', '1');
   });
   await page.addInitScript(
     ([key, list]) => {

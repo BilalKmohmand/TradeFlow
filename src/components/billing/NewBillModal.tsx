@@ -78,6 +78,7 @@ const newPay = (patch: Partial<PayRow> = {}): PayRow => ({ key: Math.random().to
 const num4 = (n: number) => String(Math.round(n * 10000) / 10000);
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** Code | Product Name | Unit | Description | Qty | Rate | Amount | Disc | Net Amount — entry row and grid alike. */
+const ITEM_DISC_KEY = 'sarmaya_item_discount';
 const LINE_COLUMNS: LedgerColumn[] = [
   { key: 'code', label: 'Code', width: '6rem' },
   { key: 'name', label: 'Product Name', width: 'minmax(10rem,1.6fr)' },
@@ -91,6 +92,7 @@ const LINE_COLUMNS: LedgerColumn[] = [
   { key: 'act', label: <span className="sr-only">Remove</span>, width: '2.25rem', align: 'center' },
 ];
 /** Payment Method: Code | Title | Debit | Narration against cash / bank accounts. */
+const LINE_COLUMNS_NO_DISC = LINE_COLUMNS.filter((c) => c.key !== 'disc');
 const PAY_COLUMNS: LedgerColumn[] = [
   { key: 'code', label: 'Code', width: '6rem' },
   { key: 'title', label: 'Title', width: 'minmax(10rem,1fr)' },
@@ -200,6 +202,16 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   /** The line shown in the entry row: the new line, or a grid line being changed. */
   const [activeKey, setActiveKey] = useState(() => rows[rows.length - 1].key);
   const [lumsumPct, setLumsumPct] = useState('');
+  const [vehicle, setVehicle] = useState(editInv?.handlingCharges ? String(editInv.handlingCharges) : '');
+  // This shop gives one lumsum discount on the bill, not a discount per item: the per-item Disc column and the
+  // header Disc % stay hidden unless turned on here (remembered on this device) or the bill already uses them.
+  const [itemDiscOn, setItemDiscOn] = useState(() => {
+    try {
+      return localStorage.getItem(ITEM_DISC_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
   const [discount, setDiscount] = useState(editInv?.discount ? String(editInv.discount) : '');
   const [payRows, setPayRows] = useState<PayRow[]>(() => [newPay()]);
   const [activePay, setActivePay] = useState(() => payRows[0].key);
@@ -498,12 +510,15 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const used = lines.filter((l) => l.productId);
   const qtyTotal = Math.round(used.reduce((a, l) => a + l.typedQty, 0) * 10000) / 10000;
   const subtotal = round2(lines.reduce((a, l) => a + l.amount, 0));
+  const itemDiscInUse = rows.some((r) => (parseFloat(r.disc) || 0) > 0) || (parseFloat(billPct) || 0) > 0;
+  const showItemDisc = itemDiscOn || itemDiscInUse;
   const lumsumPctNum = Math.min(100, Math.max(0, parseFloat(lumsumPct) || 0));
   const disc = round2(Math.min(lumsumPctNum > 0 ? (subtotal * lumsumPctNum) / 100 : Math.max(0, parseFloat(discount) || 0), subtotal));
   const taxRate = settings.taxRatePct ?? 0;
   const tax = round2(((subtotal - disc) * taxRate) / 100);
   const freightAmt = Math.max(0, parseFloat(freight) || 0);
-  const total = round2(subtotal - disc + tax + freightAmt);
+  const vehicleAmt = Math.max(0, parseFloat(vehicle) || 0);
+  const total = round2(subtotal - disc + tax + freightAmt + vehicleAmt);
 
   // ---- Payment Method grid (the line being typed counts too) ----
   const payEntry = payRows.find((p) => p.key === activePay) || payRows[payRows.length - 1];
@@ -574,6 +589,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
     items: used.filter((l) => l.qty > 0).map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: l.price, ...(l.lineDisc > 0 ? { discountType: l.discType, discountValue: l.discValue } : {}), ...(l.schemePct ? { schemeId: l.schemePct.schemeId } : {}) })),
     discount: disc,
     freightCharges: freightAmt,
+    vehicleCharges: vehicleAmt,
     payments: editInv ? [] : payment.parts,
     ...(hasCheque ? { cheque: { amount: chequeAmount, ...cheque } } : {}),
     date,
@@ -585,7 +601,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
   const blockedWhy = stockBlocked ? 'Not enough stock for this bill' : creditBlocked ? 'Over the credit limit' : undefined;
   const snapshot = useMemo(() => (selected ? customerSnapshot(selected.id, invoices, ledger) : null), [selected, invoices, ledger]);
   // Any change to the bill clears an old error message.
-  React.useEffect(() => { setError(''); }, [customer, newCustomer, rows, discount, lumsumPct, billPct, payRows, godownId, allowOver, overReason, cheque, freight, salesmanId, areaId, dropped, saleAc]);
+  React.useEffect(() => { setError(''); }, [customer, newCustomer, rows, discount, lumsumPct, billPct, payRows, godownId, allowOver, overReason, cheque, freight, vehicle, salesmanId, areaId, dropped, saleAc]);
 
   const submit = (after: 'next' | 'stay' = 'next') => {
     if (busy.current) return; // a double tap must not make two bills
@@ -624,6 +640,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
         ...(l.schemePct ? { schemeId: l.schemePct.schemeId, schemeName: l.schemePct.schemeName } : {}),
       } as CreateBillItemInput)).concat(freeLines.map((f) => ({ productId: f.productId, name: f.product!.name, qty: f.qty, unitPrice: 0, unit: f.product!.unit, free: true, schemeId: f.schemeId, schemeName: f.schemeName }))),
       freightCharges: freightAmt,
+      vehicleCharges: vehicleAmt,
       ...(salesmen.length ? { salesmanId: salesmanId || null } : {}),
       ...(areas.length ? { areaId: areaId || null } : {}),
       quotationId: quote?.id,
@@ -885,10 +902,10 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                 <label className={labelCls} htmlFor="bill-date">Your Date</label>
                 <input id="bill-date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className={inputCls} />
               </div>
-              <div className="col-span-2 lg:col-span-1">
+              {showItemDisc && <div className="col-span-2 lg:col-span-1">
                 <label className={labelCls} htmlFor="bill-disc-pct">Disc %</label>
                 <input id="bill-disc-pct" type="number" inputMode="decimal" min="0" max="100" step="any" value={billPct} onChange={(e) => setBillPct(e.target.value)} className={numInputCls} placeholder="0 (on every line)" title="A discount % on every line that has no discount of its own" />
-              </div>
+              </div>}
             </div>
           </div>
 
@@ -955,7 +972,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
             <LedgerGrid
               ariaLabel="Invoice lines"
               testId="bill-grid"
-              columns={LINE_COLUMNS}
+              columns={showItemDisc ? LINE_COLUMNS : LINE_COLUMNS_NO_DISC}
               minWidth={1090}
               minRows={12}
               empty="No lines yet. Type the code (or pick the product), Qty and Rate, then Enter."
@@ -1214,6 +1231,14 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                   <input id="bill-discount" type="number" inputMode="decimal" min="0" step="any" value={lumsumPctNum > 0 ? String(disc) : discount} readOnly={lumsumPctNum > 0} onChange={(e) => setDiscount(e.target.value)} className={numInputCls} placeholder="0" />
                 </div>
               </div>
+              <div>
+                <label className={small} htmlFor="bill-vehicle">Vehicle Charges</label>
+                <input id="bill-vehicle" type="number" inputMode="decimal" min="0" step="any" value={vehicle} onChange={(e) => setVehicle(e.target.value)} className={numInputCls} placeholder="0" />
+              </div>
+              <label className="flex items-center gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">
+                <input type="checkbox" checked={showItemDisc} disabled={itemDiscInUse} onChange={(e) => { setItemDiscOn(e.target.checked); try { localStorage.setItem(ITEM_DISC_KEY, e.target.checked ? '1' : '0'); } catch { /* private mode */ } }} />
+                Discount on each item too
+              </label>
               {taxRate > 0 && <div className="flex justify-between text-[#6B7280] dark:text-[#94A3B8]"><span>{settings.taxLabel || 'Tax'} {taxRate}%</span><span className="tabular-nums">{rs(tax)}</span></div>}
               <div className="flex justify-between font-extrabold text-[#111827] dark:text-white border-t border-[#E5E5E1] dark:border-[#203248] pt-2"><span>Bill Total</span><span className="tabular-nums" data-testid="bill-total">{rs(total)}</span></div>
               {!cash && <div className="flex justify-between text-xs text-[#6B7280] dark:text-[#94A3B8]"><span>{editInv ? 'Received' : 'Paid now'}</span><span className="tabular-nums">{rs(paid)}</span></div>}
@@ -1255,6 +1280,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
             <div className="flex justify-between"><span>Amount</span><span className="tabular-nums">{rs(subtotal)}</span></div>
             {disc > 0 && <div className="flex justify-between"><span>Lumsum disc</span><span className="tabular-nums">− {rs(disc)}</span></div>}
             {freightAmt > 0 && <div className="flex justify-between"><span>Others charges</span><span className="tabular-nums">{rs(freightAmt)}</span></div>}
+            {vehicleAmt > 0 && <div className="flex justify-between"><span>Vehicle charges</span><span className="tabular-nums">{rs(vehicleAmt)}</span></div>}
             <div className="flex justify-between font-bold"><span>Bill total</span><span className="tabular-nums">{rs(total)}</span></div>
             <div className="flex justify-between"><span>Paid</span><span className="tabular-nums">{rs(paid)}</span></div>
             <div className="flex justify-between font-bold"><span>Balance</span><span className="tabular-nums">{rs(balance)}</span></div>
