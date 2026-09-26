@@ -1232,7 +1232,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                 </div>
               </div>
               <div>
-                <label className={small} htmlFor="bill-vehicle">Vehicle Charges</label>
+                <label className={small} htmlFor="bill-vehicle">Carriage Expenses</label>
                 <input id="bill-vehicle" type="number" inputMode="decimal" min="0" step="any" value={vehicle} onChange={(e) => setVehicle(e.target.value)} className={numInputCls} placeholder="0" />
               </div>
               <label className="flex items-center gap-2 text-xs text-[#6B7280] dark:text-[#94A3B8]">
@@ -1280,7 +1280,7 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
             <div className="flex justify-between"><span>Amount</span><span className="tabular-nums">{rs(subtotal)}</span></div>
             {disc > 0 && <div className="flex justify-between"><span>Lumsum disc</span><span className="tabular-nums">− {rs(disc)}</span></div>}
             {freightAmt > 0 && <div className="flex justify-between"><span>Others charges</span><span className="tabular-nums">{rs(freightAmt)}</span></div>}
-            {vehicleAmt > 0 && <div className="flex justify-between"><span>Vehicle charges</span><span className="tabular-nums">{rs(vehicleAmt)}</span></div>}
+            {vehicleAmt > 0 && <div className="flex justify-between"><span>Carriage expenses</span><span className="tabular-nums">{rs(vehicleAmt)}</span></div>}
             <div className="flex justify-between font-bold"><span>Bill total</span><span className="tabular-nums">{rs(total)}</span></div>
             <div className="flex justify-between"><span>Paid</span><span className="tabular-nums">{rs(paid)}</span></div>
             <div className="flex justify-between font-bold"><span>Balance</span><span className="tabular-nums">{rs(balance)}</span></div>

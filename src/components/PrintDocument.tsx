@@ -186,7 +186,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
               {(inv.discount || 0) > 0 && <ThermalRow left="Discount" right={`-${money(inv.discount || 0)}`} />}
               {inv.taxAmount > 0 && <ThermalRow left={`${settings.taxLabel || 'Sales Tax'} ${inv.taxRatePct}%`} right={money(inv.taxAmount)} />}
               {freight > 0 && <ThermalRow left="Freight / loading" right={money(freight)} />}
-              {vehicle > 0 && <ThermalRow left="Vehicle charges" right={money(vehicle)} />}
+              {vehicle > 0 && <ThermalRow left="Carriage expenses" right={money(vehicle)} />}
               <ThermalRow left="TOTAL" right={`Rs. ${money(inv.totalAmount)}`} bold />
               {billRets.map((r) => <ThermalRow key={r.id} left={`Returned ${r.returnNumber}`} right={`-${money(r.amount)}`} />)}
               {inv.paidAmount > 0 && <ThermalRow left={`Paid${inv.paymentMethod ? ` (${inv.paymentMethod})` : ''}`} right={money(inv.paidAmount)} />}
@@ -275,7 +275,7 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({ request, onClose }
                 {(inv.discount || 0) > 0 && <tr><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">Discount</td><td className="pt-1 text-right font-mono px-3">− {money(inv.discount || 0)}</td></tr>}
                 {inv.taxAmount > 0 && <tr><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">{settings.taxLabel || 'Sales Tax'} ({inv.taxRatePct}%)</td><td className="pt-1 text-right font-mono px-3">{money(inv.taxAmount)}</td></tr>}
                 {freight > 0 && <tr data-testid="print-freight"><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">Freight / cartage / loading</td><td className="pt-1 text-right font-mono px-3">{money(freight)}</td></tr>}
-                {vehicle > 0 && <tr data-testid="print-vehicle"><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">Vehicle charges</td><td className="pt-1 text-right font-mono px-3">{money(vehicle)}</td></tr>}
+                {vehicle > 0 && <tr data-testid="print-vehicle"><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">Carriage expenses</td><td className="pt-1 text-right font-mono px-3">{money(vehicle)}</td></tr>}
                 <tr><td colSpan={span} className="pt-3 text-right font-bold uppercase tracking-widest text-[10px] text-gray-600">Total</td><td className="pt-3 text-right font-mono font-extrabold text-base px-3 whitespace-nowrap">Rs. {money(inv.totalAmount)}</td></tr>
                 {billRets.map((r) => <tr key={r.id}><td colSpan={span} className="pt-1 text-right text-[11px] text-gray-600">Returned ({r.returnNumber}, {formatDate(r.date)})</td><td className="pt-1 text-right font-mono px-3">− {money(r.amount)}</td></tr>)}
                 {billRets.length > 0 && <tr><td colSpan={span} className="pt-1 text-right font-bold text-[11px] text-gray-800">Net total</td><td className="pt-1 text-right font-mono font-bold px-3 whitespace-nowrap">Rs. {money(billNetTotal(inv))}</td></tr>}

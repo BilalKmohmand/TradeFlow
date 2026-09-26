@@ -366,7 +366,7 @@ export interface BillLikeInput {
   discount?: number;
   /** Freight / loading charged on the bill (part of the total the customer owes). */
   freightCharges?: number;
-  /** Vehicle charges on the bill (part of the total). */
+  /** Carriage expenses on the bill (part of the total). */
   vehicleCharges?: number;
   paidNow?: number;
   paymentMethod?: string;
