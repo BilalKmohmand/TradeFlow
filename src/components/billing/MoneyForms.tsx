@@ -148,7 +148,7 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
     if (date > todayISO()) return setError('The date cannot be in the future.');
     const closed = booksLockedFor(settings, date);
     if (closed) return setError(closed);
-    if (amt > c.totalDue + 0.005) return setError(c.totalDue > 0 ? `${c.name} owes only ${rs(c.totalDue)}. Enter up to that amount.` : `${c.name} owes nothing right now. Make a bill first.`);
+    // More than is owed is fine: the rest is kept as an advance (the balance goes minus) for the next bills.
     if (isCheque) {
       // A cheque goes into the cheque register (in hand until the bank clears it), not straight into the bank.
       const r = receiveCheque({ customerId: c.id, amount: amt, ...cheque, date, note: note.trim() || undefined });
@@ -173,6 +173,9 @@ export const ReceiveModal: React.FC<{ isOpen: boolean; onClose: () => void; cust
           placeholder="Select customer…"
           hint={c && <p className="mt-1 text-[11px] text-[#6B7280] dark:text-[#94A3B8]" data-testid="rc-balance">{c.totalDue > 0.005 ? <>Owes <strong className="tabular-nums">{rs(c.totalDue)}</strong> now</> : c.totalDue < -0.005 ? <>Paid <strong className="tabular-nums">{rs(-c.totalDue)}</strong> in advance</> : 'Owes nothing now'}{c.city ? ` • ${c.city}` : ''}</p>}
         />
+        {c && (parseFloat(amount) || 0) > Math.max(0, c.totalDue) + 0.005 && (
+          <Notice kind="ok">{rs(Math.round(((parseFloat(amount) || 0) - Math.max(0, c.totalDue)) * 100) / 100)} will be kept as an advance for {c.name}'s next bills.</Notice>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls} htmlFor="rc-amount">Amount (Rs.)</label>

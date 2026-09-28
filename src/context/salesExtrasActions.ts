@@ -337,7 +337,7 @@ export const useSalesExtrasStore = (d: Deps) => {
       if (seen.has(c.id)) return fail(`${c.name} is on the list twice.`);
       seen.add(c.id);
       if (!r.method || /cheque/i.test(r.method)) return fail(`${c.name}: cheques go through Receive payment (they wait in the cheque register until the bank clears them).`);
-      if (r.amount > round2(c.totalDue) + 0.005) return fail(c.totalDue > 0 ? `${c.name} owes only ${formatCurrency(c.totalDue)}.` : `${c.name} owes nothing right now.`);
+      // More than is owed is kept as an advance (the balance goes minus).
     }
     const sheetNo = nextNumber(d.ledger, 'CS');
     const note = input.note?.trim();

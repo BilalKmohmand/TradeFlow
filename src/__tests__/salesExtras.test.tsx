@@ -210,11 +210,10 @@ describe('receive from many', () => {
     expect(run(() => h.result.current.receiveMany({ rows: [{ customerId: 'c1', amount: 1, method: 'Cash' }] })).sheetNo).toBe('CS-2');
   });
 
-  it('refuses more than owed, cheques, a closed period and an empty list — and then records nothing', async () => {
+  it('takes more than owed as an advance; refuses cheques, a closed period and an empty list — and then records nothing', async () => {
     const h = await setup();
     seedDues(h);
     const before = h.result.current.ledger.length;
-    expect(run(() => h.result.current.receiveMany({ rows: [{ customerId: 'c1', amount: 25000, method: 'Cash' }] })).message).toMatch(/owes only/);
     expect(run(() => h.result.current.receiveMany({ rows: [{ customerId: 'c1', amount: 100, method: 'Cheque' }] })).success).toBe(false);
     expect(run(() => h.result.current.receiveMany({ rows: [] })).success).toBe(false);
     run(() => h.result.current.updateSettings({ booksLockedUntil: today }));
