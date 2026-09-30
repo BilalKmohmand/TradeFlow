@@ -210,6 +210,19 @@ describe('receive from many', () => {
     expect(run(() => h.result.current.receiveMany({ rows: [{ customerId: 'c1', amount: 1, method: 'Cash' }] })).sheetNo).toBe('CS-2');
   });
 
+  it('the same customer on two lines (cash + bank): both amounts come off, balances follow on, books balance', async () => {
+    const h = await setup();
+    seedDues(h);
+    const due = cust(h).totalDue;
+    const r = run(() => h.result.current.receiveMany({ rows: [{ customerId: 'c1', amount: 1000, method: 'Cash' }, { customerId: 'c1', amount: 500, method: 'Cash' }] }));
+    expect(r.success).toBe(true);
+    expect(cust(h).totalDue).toBe(due - 1500);
+    const rows = h.result.current.ledger.filter((l) => l.referenceId === r.sheetNo).sort((a, b) => b.balanceAfter - a.balanceAfter);
+    expect(rows.map((l) => l.balanceAfter)).toEqual([due - 1000, due - 1500]);
+    expect(r.message).toMatch(/from 1 customer /);
+    balanced(h);
+  });
+
   it('takes more than owed as an advance; refuses cheques, a closed period and an empty list — and then records nothing', async () => {
     const h = await setup();
     seedDues(h);

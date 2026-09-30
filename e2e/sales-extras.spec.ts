@@ -140,7 +140,7 @@ test.describe('Sales extras (desktop)', () => {
     await expect(com).toContainText('still owed Rs. 0');
   });
 
-  test('receive from many is a voucher table: no customer list; code + Enter fills the line; same customer twice is refused', async ({ page }) => {
+  test('receive from many is a voucher table: no customer list; code + Enter fills the line; the same customer can be on two lines', async ({ page }) => {
     await open(page);
     await goTo(page, 'Money');
     await page.getByRole('main').getByRole('button', { name: 'Receive from many' }).click();
@@ -163,10 +163,21 @@ test.describe('Sales extras (desktop)', () => {
     await expect(dlg.getByLabel('Line 2 code')).toBeFocused();
     await page.keyboard.type('Z01');
     await page.keyboard.press('Enter');
-    await expect(dlg.getByText(/Zaman and Co BTK is already on line 1/)).toBeVisible();
-    await expect(dlg.getByLabel('Line 2 customer')).toHaveValue('');
+    await expect(dlg.getByLabel('Line 2 customer')).toHaveValue('c1'); // a second line for the same customer is fine
+    await expect(dlg.getByText(/already on line/)).toHaveCount(0);
     // The name list shows names without the code.
     await expect(dlg.getByLabel('Line 2 customer').locator('option', { hasText: 'Zaman and Co BTK' })).not.toContainText('Z01');
+    await expect(dlg.getByLabel('Line 2 amount')).toBeFocused();
+    await page.keyboard.type('500');
+    await page.keyboard.press('Enter');
+    await expect(dlg.getByLabel('Line 2 method')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(dlg.getByLabel('Line 2 narration')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(dlg.getByTestId('receive-many-row')).toHaveCount(2);
+    await expect(dlg.getByTestId('receive-many-count')).toContainText('1 customer(s)');
+    await dlg.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('tradeflow_customers_v2') || '[]').find((c: { id: string }) => c.id === 'c1')?.totalDue)).toBe(11570);
   });
 
   test('receive from many: tick customers, one save, collection sheet prints; interest preview and post', async ({ page }) => {

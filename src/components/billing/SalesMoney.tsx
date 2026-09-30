@@ -126,16 +126,9 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
   /** The line number the entry row is (or will become). */
   const n = editAt >= 0 ? editAt + 1 : lines.length + 1;
   const setE = (patch: Partial<Line>) => { setError(''); setEntry((e) => ({ ...e, ...patch })); };
-  /** Pick the entry row's customer; one already in the grid is not taken twice — change the amount there. */
+  /** Pick the entry row's customer (the same customer may be on more than one line, e.g. cash and bank). */
   const pickCustomer = (id: string): boolean => {
     setWarn('');
-    const other = lines.findIndex((l) => l.key !== editKey && l.customerId === id);
-    if (id && other >= 0) {
-      setWarn(`${byId.get(id)?.name || 'This customer'} is already on line ${other + 1}. Change the amount there.`);
-      setE({ customerId: '' });
-      focusSoon('rm-code'); // back to Code for another customer
-      return false;
-    }
     setE({ customerId: id });
     return true;
   };
@@ -225,7 +218,7 @@ export const ReceiveManyModal: React.FC<{ isOpen: boolean; onClose: () => void }
   const footer = (
     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
       <div className="flex-1 text-sm">
-        <span className="text-[#6B7280] dark:text-[#94A3B8]" data-testid="receive-many-count">{filled.length} customer(s) • </span>
+        <span className="text-[#6B7280] dark:text-[#94A3B8]" data-testid="receive-many-count">{new Set(filled.map((l) => l.customerId)).size} customer(s) • </span>
         <span className={`${moneyCls} font-extrabold text-lg text-[#111827] dark:text-white`} data-testid="receive-many-total">{rs(total)}</span>
         {total > 0 && <span className="ml-2 text-[11px] text-[#6B7280] dark:text-[#94A3B8]">cash {rs(cash)} • bank {rs(total - cash)}</span>}
       </div>

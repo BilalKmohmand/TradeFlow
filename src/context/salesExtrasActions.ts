@@ -330,12 +330,9 @@ export const useSalesExtrasStore = (d: Deps) => {
     if (input.salesmanId && !salesmen.some((s) => s.id === input.salesmanId)) return fail('Salesman not found.');
     const rows = (input.rows || []).map((r) => ({ ...r, amount: round2(Number(r.amount) || 0) })).filter((r) => r.amount > 0);
     if (rows.length === 0) return fail('Tick at least one customer and enter the amount received.');
-    const seen = new Set<string>();
     for (const r of rows) {
       const c = d.customers.find((x) => x.id === r.customerId);
       if (!c) return fail('A customer on the list was not found.');
-      if (seen.has(c.id)) return fail(`${c.name} is on the list twice.`);
-      seen.add(c.id);
       if (!r.method || /cheque/i.test(r.method)) return fail(`${c.name}: cheques go through Receive payment (they wait in the cheque register until the bank clears them).`);
       // More than is owed is kept as an advance (the balance goes minus).
     }
@@ -343,8 +340,13 @@ export const useSalesExtrasStore = (d: Deps) => {
     const note = input.note?.trim();
     // Each line gets its own receipt number, in line order (the sheet keeps CS-n as the voucher number).
     const receiptNos = rows.map(() => (d.nextReceiptNo ? d.nextReceiptNo(date) : ''));
+    // The same customer may be on the sheet more than once (e.g. cash and a bank transfer): each line's balance
+    // follows on from the one before it, and the customer's total comes down by all of them.
+    const running = new Map<string, number>();
     const entries: LedgerEntry[] = rows.map((r, i) => {
       const c = d.customers.find((x) => x.id === r.customerId)!;
+      const after = round2((running.has(c.id) ? running.get(c.id)! : c.totalDue) - r.amount);
+      running.set(c.id, after);
       return {
         id: d.uid('led'),
         entityType: 'customer',
@@ -357,22 +359,23 @@ export const useSalesExtrasStore = (d: Deps) => {
         description: `Payment received: ${r.method} - collection ${sheetNo}${(r.note?.trim() || note) ? ` (${r.note?.trim() || note})` : ''}`,
         debit: 0,
         credit: r.amount,
-        balanceAfter: round2(c.totalDue - r.amount),
+        balanceAfter: after,
         ...(r.note?.trim() ? { note: r.note.trim() } : note ? { note } : {}),
         ...(input.salesmanId ? { salesmanId: input.salesmanId } : {}),
         ...(r.bankCode && r.bankCode !== '1010' && !isCashMethod(r.method) ? { bankCode: r.bankCode } : {}),
         ...(d.branchStamp ? d.branchStamp() : {}),
       };
     });
-    const byCustomer = new Map(rows.map((r) => [r.customerId, r.amount]));
+    const byCustomer = new Map<string, number>();
+    for (const r of rows) byCustomer.set(r.customerId, round2((byCustomer.get(r.customerId) || 0) + r.amount));
     d.setCustomers((prev) => prev.map((c) => (byCustomer.has(c.id) ? { ...c, totalDue: round2(c.totalDue - (byCustomer.get(c.id) || 0)) } : c)));
     d.setLedger((prev) => [...entries, ...prev]);
     const total = round2(rows.reduce((a, r) => a + r.amount, 0));
     const cash = round2(rows.filter((r) => isCashMethod(r.method)).reduce((a, r) => a + r.amount, 0));
     const range = receiptNos.filter(Boolean);
     const receipts = range.length === 0 ? '' : range.length === 1 ? `receipt ${range[0]}` : `receipts ${range[0]} to ${range[range.length - 1]}`;
-    d.logAuditEvent('Collection Recorded', `${sheetNo}: ${rows.length} customer(s), ${formatCurrency(total)} (cash ${formatCurrency(cash)}, bank ${formatCurrency(round2(total - cash))})${receipts ? `, ${receipts}` : ''}.`, 'info');
-    return { success: true, message: `${formatCurrency(total)} received from ${rows.length} customer${rows.length === 1 ? '' : 's'} (${sheetNo}${receipts ? `, ${receipts}` : ''}).`, sheetNo, ledgerIds: entries.map((e) => e.id), receiptNos, total };
+    d.logAuditEvent('Collection Recorded', `${sheetNo}: ${byCustomer.size} customer(s), ${formatCurrency(total)} (cash ${formatCurrency(cash)}, bank ${formatCurrency(round2(total - cash))})${receipts ? `, ${receipts}` : ''}.`, 'info');
+    return { success: true, message: `${formatCurrency(total)} received from ${byCustomer.size} customer${byCustomer.size === 1 ? '' : 's'} (${sheetNo}${receipts ? `, ${receipts}` : ''}).`, sheetNo, ledgerIds: entries.map((e) => e.id), receiptNos, total };
   };
 
   // ---- interest ----------------------------------------------------------------------------

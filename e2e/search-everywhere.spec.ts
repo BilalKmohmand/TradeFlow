@@ -148,10 +148,11 @@ test('Pickers: Receive payment, Receive from many, report filter and the voucher
   await rm.getByRole('button', { name: 'Add row' }).click();
   await rm.getByLabel('Line 2 customer').focus();
   await page.keyboard.type('gul');
-  await expect(rm.getByLabel('Line 2 customer')).toHaveValue('');
-  await expect(rm.getByText(/Gul Khan & Sons is already on line 1/)).toBeVisible();
-  await expect(rm.getByLabel('Line 2 code')).toBeFocused(); // back to Code for another customer
+  await expect(rm.getByLabel('Line 2 customer')).toHaveValue('c7'); // the same customer may be on two lines
   await page.keyboard.press('Escape');
+  if (await rm.isVisible()) await page.keyboard.press('Escape');
+  if (await rm.isVisible()) await rm.getByRole('button', { name: /^close$/i }).first().click();
+  await expect(rm).toBeHidden();
 
   // A report's customer filter: Code box + type-to-find.
   await openById(page, 'rep-party-sales');
