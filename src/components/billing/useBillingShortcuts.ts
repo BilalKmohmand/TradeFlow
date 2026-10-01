@@ -14,7 +14,7 @@ export const BILLING_SHORTCUTS = {
 /** The function keys, for the Cmd+K list and tooltips. */
 export const FUNCTION_KEYS: { key: string; label: string; target: NavTarget }[] = [
   { key: BILLING_SHORTCUTS.newBill, label: 'New bill (Sale Invoice)', target: { kind: 'action', action: 'newBill' } },
-  { key: BILLING_SHORTCUTS.receive, label: 'Receive payment', target: { kind: 'action', action: 'receive' } },
+  { key: BILLING_SHORTCUTS.receive, label: 'Cash receipt voucher (CRV)', target: { kind: 'screen', screen: 'accounts', view: 'vouchers', sub: 'new:CRV' } },
   { key: BILLING_SHORTCUTS.expense, label: 'Add expense', target: { kind: 'action', action: 'addExpense' } },
   { key: BILLING_SHORTCUTS.receiveStock, label: 'Receive stock', target: { kind: 'action', action: 'receiveStock' } },
   { key: BILLING_SHORTCUTS.cashBook, label: 'Cash Book (in a bill: save)', target: { kind: 'report', report: 'cash-book' } },

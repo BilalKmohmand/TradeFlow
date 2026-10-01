@@ -141,12 +141,12 @@ export const CommandBar: React.FC<CommandBarProps> = ({
     const act = (id: string, title: string, subtitle: string, icon: CommandItem['icon'], run: () => void, badge?: string, badgeType?: CommandItem['badgeType']) =>
       items.push({ id, category: 'actions', title, subtitle, icon, badge, badgeType, perform: () => { onClose(); run(); } });
     act('b-new-bill', 'New bill', 'Make a bill for a customer • F2', FilePlus2, () => billingUI.newBill(), 'Bill', 'info');
-    act('b-receive-payment', 'Receive payment', 'Money a customer paid you • F3', HandCoins, () => billingUI.receive(), 'Money in', 'success');
+    if (can('view_finance') && can('finance:record_payment')) act('b-crv', 'Cash receipt voucher (CRV)', 'Money a customer paid you • F3', HandCoins, () => billingUI.cashReceipt(), 'Money in', 'success');
     act('b-add-expense', 'Add expense', 'Rent, salaries, food, transport… • F4', Receipt, () => billingUI.addExpense(), 'Money out', 'warning');
     if (can('products:create') || can('stock:adjust')) act('b-receive-stock', 'Receive stock', 'Stock you bought or brought in • F6', PackagePlus, () => stockUI.receiveStock(), 'Stock', 'success');
     if (can('stock:adjust')) act('b-adjust-stock', 'Adjust stock', 'Leaked, damaged, expired, count correction, received free', Scale, () => stockUI.adjustStock(), 'Stock');
     if (can('products:create') || can('stock:adjust')) act('b-return-goods', 'Return goods to supplier', 'Send stock back and make a debit note', Undo2, () => stockUI.purchaseReturn(), 'Supplier');
-    act('b-pay-supplier', 'Pay a supplier', 'Money you paid a supplier', CreditCard, () => billingUI.paySupplier(), 'Money out', 'warning');
+    if (can('view_finance') && can('finance:record_payment')) act('b-cpv', 'Cash payment voucher (CPV)', 'Money you paid a supplier, rent, anything', CreditCard, () => { billingUI.openAccountsTab('vouchers', 'new:CPV'); setActiveScreen('accounts'); }, 'Money out', 'warning');
     act('b-aging', 'Who owes for how long', 'Customers and suppliers by 0–30, 31–60, 61–90, 90+ days', Clock, () => stockUI.aging('customers'), 'Report');
     if (can('products:create') || can('stock:adjust')) act('b-purchase-invoice', 'Purchase Invoice', "Enter a supplier's bill: stock in, supplier owed", PackagePlus, () => billingUI.newPurchaseInvoice(), 'Purchase', 'success');
     if (can('view_finance')) act('b-cash-book', 'Cash Book', 'Cash in hand, receipts and payments • F9', BookOpen, () => billingUI.openReport('cash-book'), 'Report');

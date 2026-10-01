@@ -31,12 +31,12 @@ export interface FindSection {
 /** What "Find anything" shows before anything is typed: the everyday actions (old function keys first). */
 const QUICK: { entry: string; title: string }[] = [
   { entry: 'new-bill', title: 'New bill' },
-  { entry: 'receive', title: 'Receive payment' },
+  { entry: 'crv', title: 'Cash receipt voucher (CRV)' },
   { entry: 'add-expense', title: 'Add expense' },
   { entry: 'receive-stock', title: 'Receive stock' },
   { entry: 'acc-cash-book', title: 'Cash Book' },
   { entry: 'new-purchase-invoice', title: 'Purchase Invoice' },
-  { entry: 'pay-supplier', title: 'Pay a supplier' },
+  { entry: 'cpv', title: 'Cash payment voucher (CPV)' },
   { entry: 'aging-customers', title: 'Who owes for how long' },
   { entry: 'all-reports', title: 'Reports' },
 ];

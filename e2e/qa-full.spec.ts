@@ -725,7 +725,7 @@ test.describe('QA — money', () => {
     await dialog(page, 'Money received').getByRole('button', { name: 'Done' }).click();
 
     // Cheques: Zaman pays 10,000 by cheque (cleared) and 5,000 by a cheque that bounces.
-    await main(page).getByRole('button', { name: 'Receive payment' }).first().click();
+    await main(page).getByRole('button', { name: /^Receive payment from / }).first().click();
     const rc = dialog(page, 'Receive payment');
     await rc.getByLabel('Customer').selectOption('c1');
     await rc.getByLabel('Amount (Rs.)').fill('10000');

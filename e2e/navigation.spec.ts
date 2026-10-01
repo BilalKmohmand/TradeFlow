@@ -248,7 +248,10 @@ test.describe('Phone More sheet', () => {
     await sheet.getByTestId('more-group-accounts').click();
     await expect(sheet.getByTestId('more-group-accounts')).toHaveAttribute('aria-expanded', 'true');
     const accounts = sheet.getByRole('group', { name: 'Accounts' });
-    await expect(accounts.getByRole('button', { name: 'Receive payment', exact: true })).toBeVisible();
+    // Receive payment / Pay supplier are not in the menus any more: CRV / CPV do the same.
+    await expect(accounts.getByRole('button', { name: 'CRV — Cash receipt voucher', exact: true })).toBeVisible();
+    await expect(accounts.getByRole('button', { name: 'Receive payment', exact: true })).toHaveCount(0);
+    await expect(accounts.getByRole('button', { name: 'Pay supplier', exact: true })).toHaveCount(0);
     await page.screenshot({ path: `${SHOTS}/phone-more-accounts.png` });
     await noSideScroll(page, 'More sheet, Accounts open');
     await accounts.getByRole('button', { name: 'Cheques', exact: true }).click();

@@ -48,7 +48,7 @@ test('New Bill: Code boxes for the customer and every item line; Enter on a code
 test('focus returns to the button that opened a dialog, Find anything and the menu; Tab stays inside a dialog', async ({ page }) => {
   await open(page);
   await goTo(page, 'Money');
-  const btn = page.locator('main').getByRole('button', { name: 'Receive payment' }).first();
+  const btn = page.locator('main').getByRole('button', { name: /^Receive payment from / }).first();
   await btn.focus();
   await page.keyboard.press('Enter');
   const rc = page.getByRole('dialog', { name: 'Receive payment' });

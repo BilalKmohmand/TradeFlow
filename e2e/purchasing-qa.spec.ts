@@ -237,7 +237,10 @@ test.describe('Paying and receiving', () => {
     let items = await store(page, 'tradeflow_products_v2');
     expect(items.find((p: { id: string }) => p.id === 'p2').stockKg).toBe(8);
 
-    await openMenuOption(page, 'Accounts', 'Pay supplier');
+    // Pay supplier is not in the menu any more (CPV does the same); the quick form opens from the supplier's row.
+    await goTo(page, 'Suppliers');
+    await page.getByLabel('Search suppliers').fill('S-0002');
+    await page.getByRole('button', { name: 'Pay Habib Oil Mills', exact: true }).first().click();
     const pay = page.getByRole('dialog', { name: 'Pay supplier' });
     await pay.locator('#ps-sup').selectOption('s2');
     await pay.locator('#ps-amount').fill('1000');

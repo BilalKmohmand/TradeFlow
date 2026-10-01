@@ -34,7 +34,7 @@
  *         JV lines on cash or a bank -> cash entries.
  *   Deleting or editing a voucher removes / rewrites exactly those records and undoes the balance changes.
  */
-import { AppSettings, CashEntry, Customer, DocSeriesKey, Expense, ExpenseCategory, LedgerEntry, Supplier } from '../types';
+import { AppSettings, CashEntry, Customer, DocSeriesKey, Expense, ExpenseCategory, Invoice, LedgerEntry, Purchase, PurchaseInvoice, Supplier } from '../types';
 import { ACC, Account, EXPENSE_ACCOUNT, JournalEntry, JournalLine, booksLockedFor, generalLedger, drCr } from './accounting';
 import { MAIN_BANK_CODE } from './finance';
 import { foldText, matcher } from './search';
@@ -407,11 +407,27 @@ export interface AccountLedgerReport {
   from: string;
   to: string;
   opening: number;
+  /** The OB row's own Debit / Credit: everything before `from` (and opening balances), as the old program shows it. */
+  openingDebit: number;
+  openingCredit: number;
   rows: AccountLedgerRow[];
   totalDebit: number;
   totalCredit: number;
   closing: number;
+  /** Grand Total as the old program prints it: the OB row's figures plus the period's. */
+  grandDebit: number;
+  grandCredit: number;
 }
+
+/** "Product:Local 2.5kg Daba Qty:4000.00, @1175.00- Product:…": a bill's lines the way the old ledger prints them. */
+const productLines = (items: { name: string; qty: number; rate: number }[]) =>
+  items.map((it) => `Product:${it.name} Qty:${it.qty.toFixed(2)}, @${it.rate.toFixed(2)}`).join('- ');
+
+type LedgerDocs = {
+  invoices?: Pick<Invoice, 'id' | 'invoiceNumber' | 'items'>[];
+  purchaseInvoices?: Pick<PurchaseInvoice, 'id' | 'invoiceNumber' | 'memoNo' | 'lines'>[];
+  purchases?: Pick<Purchase, 'id' | 'receiptNumber'>[];
+};
 
 /**
  * The old program's "Account Ledger": opening balance (OB), then every posting in the period with a running
@@ -422,7 +438,7 @@ export const accountLedger = (
   ref: AccountRef,
   from: string,
   to: string,
-  src: { journal: JournalEntry[]; accounts: Account[]; customers: Customer[]; suppliers: Supplier[]; ledger: LedgerEntry[] }
+  src: { journal: JournalEntry[]; accounts: Account[]; customers: Customer[]; suppliers: Supplier[]; ledger: LedgerEntry[] } & LedgerDocs
 ): AccountLedgerReport => {
   const r = parseRef(ref);
   if (r.kind === 'account') {
@@ -435,6 +451,10 @@ export const accountLedger = (
       from,
       to,
       opening: gl.opening,
+      openingDebit: gl.opening > 0 ? gl.opening : 0,
+      openingCredit: gl.opening < 0 ? -gl.opening : 0,
+      grandDebit: round2(gl.totalDebit + (gl.opening > 0 ? gl.opening : 0)),
+      grandCredit: round2(gl.totalCredit + (gl.opening < 0 ? -gl.opening : 0)),
       rows: gl.lines.map((l) => ({ date: l.date, ref: l.ref, narration: l.memo, debit: l.debit, credit: l.credit, balance: l.balance })),
       totalDebit: gl.totalDebit,
       totalCredit: gl.totalCredit,
@@ -443,36 +463,74 @@ export const accountLedger = (
   }
   const isCust = r.kind === 'customer';
   const party = isCust ? src.customers.find((c) => c.id === r.id) : src.suppliers.find((s) => s.id === r.id);
-  const rows = src.ledger.filter((l) => l.entityType === r.kind && l.entityId === r.id).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  // The ledger is kept newest first: reversed, a stable sort by date leaves a day's rows in the order they were entered.
+  const rows = src.ledger.filter((l) => l.entityType === r.kind && l.entityId === r.id).reverse().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   // Debit-positive amounts: customer rows as they are; a supplier's "owed more" (ledger debit) is a credit.
   const dr = (l: LedgerEntry) => round2(isCust ? Number(l.debit) || 0 : Number(l.credit) || 0);
   const cr = (l: LedgerEntry) => round2(isCust ? Number(l.credit) || 0 : Number(l.debit) || 0);
   const recorded = party ? (isCust ? (party as Customer).totalDue : -(party as Supplier).totalOwed) : 0;
   const net = round2(rows.reduce((a, l) => a + dr(l) - cr(l), 0));
   // Opening dues typed in when the account was made (not explained by any row) count from the start.
-  let running = round2(recorded - net);
+  const base = round2(recorded - net);
+  let openingDebit = base > 0 ? base : 0;
+  let openingCredit = base < 0 ? -base : 0;
+
+  // One row per bill, as the old program prints it: a sale bill with its products, and a purchase invoice's
+  // stock rows (one per line in our books) rolled into a single row under the invoice's own number.
+  const saleOf = new Map((src.invoices || []).map((i) => [i.id, i]));
+  const receiptOf = new Map((src.purchases || []).map((p) => [p.id, p.receiptNumber]));
+  const purchaseOfReceipt = new Map<string, NonNullable<LedgerDocs['purchaseInvoices']>[number]>();
+  (src.purchaseInvoices || []).forEach((pi) => pi.lines.forEach((l) => { const rc = l.purchaseId ? receiptOf.get(l.purchaseId) : undefined; if (rc) purchaseOfReceipt.set(rc, pi); }));
+  const purchaseOf = (l: LedgerEntry) =>
+    isCust ? undefined : l.type === 'purchase_received' ? purchaseOfReceipt.get(l.referenceId) : l.type === 'purchase_variance' && l.sourceId ? (src.purchaseInvoices || []).find((pi) => pi.id === l.sourceId) : undefined;
+
+  let running = base;
   const out: AccountLedgerRow[] = [];
+  const rolled = new Map<string, AccountLedgerRow>();
   let totalDebit = 0;
   let totalCredit = 0;
   rows.forEach((l) => {
-    if (l.date > to) return;
+    // An opening balance belongs in the OB row whatever date it was typed with.
+    const isOpening = l.type === 'opening_balance';
+    if (l.date > to && !isOpening) return;
     running = round2(running + dr(l) - cr(l));
-    if (l.date < from) return;
+    if (l.date < from || isOpening) {
+      openingDebit = round2(openingDebit + dr(l));
+      openingCredit = round2(openingCredit + cr(l));
+      return;
+    }
     totalDebit = round2(totalDebit + dr(l));
     totalCredit = round2(totalCredit + cr(l));
-    out.push({ date: l.date, ref: l.referenceId, narration: l.description, debit: dr(l), credit: cr(l), balance: running });
+    const pi = purchaseOf(l);
+    if (pi) {
+      const had = rolled.get(pi.id);
+      if (had) {
+        had.debit = round2(had.debit + dr(l));
+        had.credit = round2(had.credit + cr(l));
+        return; // balances are worked out again below
+      }
+      const row: AccountLedgerRow = { date: l.date, ref: pi.invoiceNumber, narration: `Purchase bill ${pi.invoiceNumber}${pi.memoNo ? ` (bill ${pi.memoNo})` : ''} ${productLines(pi.lines.map((x) => ({ name: x.productName, qty: x.qty, rate: x.rate })))}`, debit: dr(l), credit: cr(l), balance: 0 };
+      rolled.set(pi.id, row);
+      out.push(row);
+      return;
+    }
+    const inv = isCust && l.type === 'bill_issued' && l.sourceId ? saleOf.get(l.sourceId) : undefined;
+    const narration = inv ? `Sale bill ${inv.invoiceNumber} ${productLines(inv.items.filter((it) => (it.qty || 0) > 0).map((it) => ({ name: `${it.productName}${it.free ? ' (free)' : ''}`, qty: it.qty || 0, rate: it.unitPrice || 0 })))}` : l.description;
+    out.push({ date: l.date, ref: l.receiptNo || l.referenceId, narration, debit: dr(l), credit: cr(l), balance: 0 });
   });
-  const opening = round2(running - totalDebit + totalCredit);
+  const opening = round2(openingDebit - openingCredit);
+  let bal = opening;
+  out.forEach((row) => { bal = round2(bal + row.debit - row.credit); row.balance = bal; });
   const title = party ? (isCust ? party.name : (party as Supplier).company || party.name) : isCust ? 'Customer' : 'Supplier';
-  return { ref, code: party?.code || '', title, from, to, opening, rows: out, totalDebit, totalCredit, closing: running };
+  return { ref, code: party?.code || '', title, from, to, opening, openingDebit, openingCredit, rows: out, totalDebit, totalCredit, closing: bal, grandDebit: round2(openingDebit + totalDebit), grandCredit: round2(openingCredit + totalCredit) };
 };
 
 export const ledgerCsv = (rep: AccountLedgerReport) => ({
   headers: ['Date', 'VchNo', 'Narration', 'Debit', 'Credit', 'Balance', 'Dr/Cr'],
   rows: [
-    [rep.from, 'OB', 'Opening balance', '', '', Math.abs(rep.opening), rep.opening > 0 ? 'Dr' : rep.opening < 0 ? 'Cr' : ''],
+    [rep.from, 'OB', 'Opening Balances', rep.openingDebit || '', rep.openingCredit || '', Math.abs(rep.opening), rep.opening > 0 ? 'Dr' : rep.opening < 0 ? 'Cr' : ''],
     ...rep.rows.map((x) => [x.date, x.ref, x.narration, x.debit || '', x.credit || '', Math.abs(x.balance), x.balance > 0 ? 'Dr' : x.balance < 0 ? 'Cr' : '']),
-    ['', '', 'Grand Total', rep.totalDebit, rep.totalCredit, Math.abs(rep.closing), rep.closing > 0 ? 'Dr' : rep.closing < 0 ? 'Cr' : ''],
+    ['', '', 'Grand Total', rep.grandDebit, rep.grandCredit, Math.abs(rep.closing), rep.closing > 0 ? 'Dr' : rep.closing < 0 ? 'Cr' : ''],
   ] as (string | number)[][],
 });
 

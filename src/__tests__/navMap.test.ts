@@ -141,7 +141,7 @@ describe('nav map: structure', () => {
 
 describe('nav map: permissions', () => {
   it('an owner with every permission sees every entry; nobody sees only the open ones', () => {
-    expect(navGroupsFor(everyone).flatMap((g) => g.sections.flatMap((s) => s.entries))).toHaveLength(NAV_ENTRIES.length);
+    expect(navGroupsFor(everyone).flatMap((g) => g.sections.flatMap((s) => s.entries))).toHaveLength(NAV_ENTRIES.filter((e) => !e.hidden).length);
     const open = navGroupsFor(nobody).flatMap((g) => g.sections.flatMap((s) => s.entries));
     open.forEach((e) => {
       expect(e.perm, e.id).toBeUndefined();
@@ -195,7 +195,10 @@ describe('nav map: search', () => {
     expect(top('kharcha')).toContain('add-expense');
     expect(top('maal')).toContain('rep-stock-in-hand');
     expect(top('rozana')).toContain('daily-sheet');
-    expect(top('wasooli')).toContain('receive');
+    expect(top('wasooli')).toContain('crv'); // Receive payment is left out of the menus: CRV does it
+    expect(top('receive payment')).toContain('crv');
+    expect(top('pay supplier')).toContain('cpv');
+    expect(top('receive payment')).not.toContain('receive');
     expect(top('rokar')).toContain('rep-cash-book');
     expect(top('godam')).toContain('godowns');
     expect(top('backup')[0]).toBe('backups');

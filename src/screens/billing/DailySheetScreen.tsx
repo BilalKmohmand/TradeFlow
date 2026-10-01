@@ -63,7 +63,7 @@ export const DailySheetScreen: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <button type="button" onClick={() => ui.newBill()} className={`${secondaryBtn} py-3`}><FilePlus2 className="w-4 h-4 text-teal-700 dark:text-teal-300" /> New bill</button>
         <button type="button" onClick={() => ui.addExpense({ date })} className={`${secondaryBtn} py-3`}><Receipt className="w-4 h-4 text-rose-600 dark:text-rose-400" /> Add expense</button>
-        <button type="button" onClick={() => ui.receive()} className={`${secondaryBtn} py-3`}><HandCoins className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Receive payment</button>
+        <button type="button" onClick={() => ui.cashReceipt()} title="Cash receipt voucher (F3)" className={`${secondaryBtn} py-3`}><HandCoins className="w-4 h-4 text-teal-700 dark:text-teal-300" /> Cash receipt (CRV)</button>
         <button type="button" onClick={() => ui.transfer()} className={`${secondaryBtn} py-3`}><ArrowLeftRight className="w-4 h-4 text-indigo-600 dark:text-indigo-300" /> Cash ↔ Bank</button>
       </div>
 

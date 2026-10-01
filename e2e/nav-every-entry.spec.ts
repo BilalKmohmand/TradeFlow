@@ -78,7 +78,9 @@ async function addBankChequeVoucher(page: Page) {
   await b.getByRole('button', { name: 'Add bank account' }).click();
   await expect(b).toHaveCount(0);
 
-  await openMenuOption(page, 'Accounts', 'Receive payment');
+  // Receive payment is not in the menu any more (CRV does the same); the quick form opens from the customer's row.
+  await openMenuOption(page, 'System', 'Customers');
+  await page.getByRole('button', { name: 'Receive payment from Zaman and Co BTK' }).first().click();
   const rc = dialog('Receive payment');
   await rc.getByLabel('Customer').selectOption('c1');
   await rc.getByLabel('Amount (Rs.)').fill('10000');
@@ -132,12 +134,12 @@ async function closeAll(page: Page) {
   await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
-const everyEntry = () => NAV_GROUPS.flatMap((g) => g.sections.flatMap((s) => s.entries));
+const everyEntry = () => NAV_GROUPS.flatMap((g) => g.sections.flatMap((s) => s.entries)).filter((e) => !e.hidden);
 
 test.describe('Every nav-map entry through the desktop top menu', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
   for (const g of NAV_GROUPS) {
-    const entries = g.sections.flatMap((s) => s.entries);
+    const entries = g.sections.flatMap((s) => s.entries).filter((e) => !e.hidden);
     test(`${g.label}: all ${entries.length} options open what they promise`, async ({ page }) => {
       test.setTimeout(240_000);
       const errs = watchErrors(page);
@@ -169,7 +171,7 @@ test.describe('Every group through "Find anything"', () => {
     const box = page.getByRole('dialog', { name: 'Find anything' });
     const input = box.getByRole('combobox', { name: 'Search' });
     for (const g of NAV_GROUPS) {
-      const all = g.sections.flatMap((s) => s.entries).filter((e) => !navCheck(e).special);
+      const all = g.sections.flatMap((s) => s.entries).filter((e) => !e.hidden && !navCheck(e).special);
       const picks = [...new Set([all[0], all[Math.floor(all.length / 2)], all[all.length - 1]])];
       for (const e of picks) {
         await test.step(`search ${e.label}`, async () => {
@@ -203,7 +205,7 @@ test.describe('Every group through the phone More sheet', () => {
       expect(r.sw, `${label}: page is wider than the screen`).toBeLessThanOrEqual(r.w);
     };
     for (const g of NAV_GROUPS) {
-      const all = g.sections.flatMap((s) => s.entries).filter((e) => !navCheck(e).special);
+      const all = g.sections.flatMap((s) => s.entries).filter((e) => !e.hidden && !navCheck(e).special);
       for (const e of [all[0], all[all.length - 1]]) {
         await test.step(`${g.label} › ${e.label}`, async () => {
           await bar.getByRole('button', { name: 'More', exact: true }).click();

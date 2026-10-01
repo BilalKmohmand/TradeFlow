@@ -4,7 +4,7 @@ import { goTo } from './helpers/nav';
 
 /**
  * Post-dated cheque register. Haji Karim owes Rs. 100,000; Dalda Foods is owed Rs. 50,000.
- * A cheque is received through "Receive payment", another (post-dated) from the Cheques tab;
+ * A cheque is received through "Receive payment" (from the customer's row), another (post-dated) from the Cheques tab;
  * the first is deposited and cleared, the second bounces with a bank charge passed on; a cheque is
  * given to the supplier; then the cash book, daily sheet, customer balance and printed register are checked.
  */
@@ -41,7 +41,9 @@ async function chequeFlow(page: Page, opts: { mobile?: boolean } = {}) {
   await expect(tile).toContainText('0 • Rs. 0');
 
   // 1. Receive payment by cheque: asks for cheque no., bank and date.
-  await page.getByRole('button', { name: 'Receive payment' }).first().click();
+  // The quick form opens from the customer's row (the top "Receive payment" button is now CRV).
+  await goTo(page, 'Customers');
+  await page.getByRole('button', { name: 'Receive payment from Haji Karim' }).first().click();
   const rc = page.getByRole('dialog', { name: 'Receive payment' });
   await rc.getByLabel('Customer').selectOption('c1');
   await rc.getByLabel('Amount (Rs.)').fill('25000');
@@ -51,6 +53,7 @@ async function chequeFlow(page: Page, opts: { mobile?: boolean } = {}) {
   if (opts.mobile) await noOverflow(page, 'receive by cheque');
   await rc.getByRole('button', { name: 'Receive' }).click();
   await expect(rc).toHaveCount(0);
+  await goTo(page, 'Home');
   await expect(tile).toContainText('1 • Rs. 25,000');
 
   // 2. The tile opens Money → Cheques.

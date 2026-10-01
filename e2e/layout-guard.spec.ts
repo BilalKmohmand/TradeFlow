@@ -22,7 +22,7 @@ const SIZES: { name: string; width: number; height: number; phone?: boolean }[] 
   { name: 'small phone 360×740', width: 360, height: 740, phone: true },
 ];
 
-const entries = NAV_GROUPS.flatMap((g) => g.sections.flatMap((s) => s.entries.map((e) => ({ e, g })))).filter(({ e }) => !navCheck(e).special);
+const entries = NAV_GROUPS.flatMap((g) => g.sections.flatMap((s) => s.entries.map((e) => ({ e, g })))).filter(({ e }) => !e.hidden && !navCheck(e).special);
 
 async function closeAll(page: Page) {
   for (let i = 0; i < 4 && (await page.getByRole('dialog').count()) > 0; i++) {
@@ -99,7 +99,7 @@ test.describe('Layout guard: the busiest dialogs filled in, on the smallest phon
     await closeAll(page);
 
     await bar.getByRole('button', { name: 'Money', exact: true }).click();
-    await page.getByRole('button', { name: 'Receive payment' }).first().click();
+    await page.getByRole('button', { name: /^Receive payment from / }).first().click();
     const rc = page.getByRole('dialog', { name: 'Receive payment' });
     await rc.getByLabel('Code', { exact: true }).fill('3');
     await rc.getByLabel('Code', { exact: true }).press('Enter');

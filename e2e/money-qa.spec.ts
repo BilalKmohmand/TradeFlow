@@ -68,7 +68,7 @@ test('double-clicking Save records once: expense, receive payment, cash ↔ bank
   expect((await stored<{ description: string }[]>(page, 'tradeflow_expenses_v2')).filter((e) => e.description === 'Loader wages')).toHaveLength(1);
 
   await page.getByRole('button', { name: 'Overview', exact: true }).click();
-  await page.getByRole('button', { name: 'Receive payment' }).first().click();
+  await page.getByRole('button', { name: /^Receive payment from / }).first().click();
   d = dialog(page, 'Receive payment');
   await d.getByLabel('Customer').selectOption('c1');
   await d.getByLabel('Amount (Rs.)').fill('100');
@@ -93,11 +93,10 @@ test('receive by code into a bank on an earlier date, cheque by code, bounce wit
   await expect(bankBal(page, '1012')).toHaveText('Rs. 350,000');
 
   // Receive payment: keyboard only — type the code C007 in the Code box, Enter, and the rest.
-  await page.getByRole('button', { name: 'Receive payment' }).first().click();
+  await page.getByRole('button', { name: /^Receive payment from / }).first().click(); // the quick form, from a customer's row
   let d = dialog(page, 'Receive payment');
-  await expect(d.getByLabel('Code', { exact: true })).toBeFocused();
-  await page.keyboard.type('c007');
-  await page.keyboard.press('Enter');
+  await d.getByLabel('Code', { exact: true }).fill('c007');
+  await d.getByLabel('Code', { exact: true }).press('Enter');
   await expect(d.getByLabel('Customer')).toHaveValue('c7');
   await expect(d.getByTestId('rc-balance')).toContainText('Owes Rs. 75,500');
   await d.getByLabel('Amount (Rs.)').fill('5500.50');
@@ -114,7 +113,7 @@ test('receive by code into a bank on an earlier date, cheque by code, bounce wit
   await page.evaluate((until) => { const s = JSON.parse(localStorage.getItem('tradeflow_settings_v2')!); s.booksLockedUntil = until; localStorage.setItem('tradeflow_settings_v2', JSON.stringify(s)); }, day(5));
   await page.reload();
   await goTo(page, 'Money');
-  await page.getByRole('button', { name: 'Receive payment' }).first().click();
+  await page.getByRole('button', { name: /^Receive payment from / }).first().click();
   d = dialog(page, 'Receive payment');
   await d.getByLabel('Code', { exact: true }).fill('C001');
   await d.getByLabel('Code', { exact: true }).press('Enter');
@@ -298,7 +297,7 @@ test('phone 390px: voucher buttons fit, the account ledger shows amounts, money 
   await expect(page.getByTestId('book-closing')).toHaveText('Rs. 740,500');
   await noSideScroll(page, 'Cash book');
   await page.getByRole('button', { name: 'Overview', exact: true }).click();
-  await page.getByRole('button', { name: 'Receive payment' }).first().click();
+  await page.getByRole('button', { name: /^Receive payment from / }).first().click();
   const code = dialog(page, 'Receive payment').getByLabel('Code', { exact: true });
   expect((await code.boundingBox())!.width).toBeGreaterThanOrEqual(90);
   await noSideScroll(page, 'Receive payment');

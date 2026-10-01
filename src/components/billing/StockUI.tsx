@@ -50,7 +50,7 @@ export const StockUIProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const may = (t: NavTarget) => targetAllowed(t, { can });
   useBillingShortcuts((settings.appMode || 'billing') === 'billing', {
     newBill: may({ kind: 'action', action: 'newBill' }) ? () => billing.newBill() : undefined,
-    receive: may({ kind: 'action', action: 'receive' }) ? () => billing.receive() : undefined,
+    receive: may({ kind: 'screen', screen: 'accounts', view: 'vouchers', sub: 'new:CRV' }) || may({ kind: 'action', action: 'receive' }) ? () => billing.cashReceipt() : undefined,
     expense: may({ kind: 'action', action: 'addExpense' }) ? () => billing.addExpense() : undefined,
     receiveStock: may({ kind: 'action', action: 'receiveStock' }) ? () => api.receiveStock() : undefined,
     cashBook: may({ kind: 'report', report: 'cash-book' }) ? () => billing.openReport('cash-book') : undefined,

@@ -107,7 +107,7 @@ test.describe('Batch 2 (desktop)', () => {
 
     // F3 / F4 / F6 on their own.
     await page.keyboard.press('F3');
-    await expect(page.getByRole('dialog', { name: 'Receive payment' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Cash Receipt -- [Credit Voucher]' })).toBeVisible(); // F3 = CRV, as in the old program
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await page.keyboard.press('F4');
@@ -125,6 +125,7 @@ test.describe('Batch 2 (desktop)', () => {
     await expect(rcv).toContainText('= 2 cartons • Rs. 900 per tin');
     await rcv.getByRole('button', { name: 'Receive stock' }).click();
     await expect(rcv).toBeHidden();
+    await page.getByRole('button', { name: 'Items & Prices' }).first().click(); // F3 (CRV) moved us to Accounts
     await expect(page.getByTestId('stock-p1')).toContainText('6 ctn + 4 tins'); // 28 + 12 = 40
   });
 

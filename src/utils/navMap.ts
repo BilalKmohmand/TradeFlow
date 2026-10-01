@@ -82,6 +82,8 @@ export interface NavEntry {
   hint: string;
   /** Names the staff may know it by: Apna Accountant's name, English synonyms. Shown in the menu and searched. */
   aka?: string[];
+  /** Kept (links and buttons still reach it) but not listed in the menus or search. */
+  hidden?: boolean;
   /** Search words, including the Urdu / Roman-Urdu words shopkeepers use (udhaar, khata, parchi, maal…). */
   keywords: string[];
   /** All of these are needed. */
@@ -198,8 +200,8 @@ const ACCOUNTS: { label: string; entries: Raw[] }[] = [
     label: 'Vouchers',
     entries: [
       { id: 'vouchers', label: 'Vouchers', aka: ['Vouchers'], hint: 'All vouchers: find, view, print, edit', keywords: ['voucher', 'parchi', 'cpv', 'crv', 'bpv', 'brv', 'jv'], perm: FIN, target: scr('accounts', 'vouchers') },
-      voucher('CPV', 'Cash payment voucher', 'Cash paid out: rent, a supplier, anything', ['cash payment', 'naqad', 'adaigi', 'kharcha']),
-      voucher('CRV', 'Cash receipt voucher', 'Cash received in', ['cash receipt', 'naqad', 'wasooli', 'wasuli']),
+      voucher('CPV', 'Cash payment voucher', 'Cash paid out: a supplier, rent, anything', ['cash payment', 'naqad', 'adaigi', 'kharcha', 'pay supplier', 'supplier payment', 'dena']),
+      voucher('CRV', 'Cash receipt voucher', 'Cash received: a customer paid you (F3)', ['cash receipt', 'naqad', 'wasooli', 'wasuli', 'receive payment', 'udhaar', 'recovery', 'payment']),
       voucher('BPV', 'Bank payment voucher', 'Paid from a bank account or by cheque', ['bank payment', 'cheque', 'adaigi']),
       voucher('BRV', 'Bank receipt voucher', 'Received into a bank account', ['bank receipt', 'jama', 'deposit']),
       voucher('JV', 'Journal voucher', 'Adjustments between accounts', ['journal', 'adjustment']),
@@ -209,9 +211,11 @@ const ACCOUNTS: { label: string; entries: Raw[] }[] = [
   {
     label: 'Money in & out',
     entries: [
-      { id: 'receive', label: 'Receive payment', key: 'F3', hint: 'Money a customer paid you', keywords: ['wasooli', 'wasuli', 'udhaar', 'udhar', 'payment', 'raqam', 'paisay', 'recovery'], target: act('receive') },
+      // Receive payment / Pay supplier are left out of the menus: CRV / CPV (BRV / BPV) do the same, as in the
+      // old program. The quick forms still open from a bill, a customer or a supplier.
+      { id: 'receive', hidden: true, label: 'Receive payment', hint: 'Money a customer paid you', keywords: ['wasooli', 'wasuli', 'udhaar', 'udhar', 'payment', 'raqam', 'paisay', 'recovery'], target: act('receive') },
       { id: 'receive-many', label: 'Receive from many', hint: 'Several customers paid at once (recovery round)', keywords: ['wasooli', 'wasuli', 'recovery', 'udhaar', 'bulk'], perm: ['finance:record_payment'], target: act('receiveMany') },
-      { id: 'pay-supplier', label: 'Pay supplier', hint: 'Money you paid a supplier (cash, bank or cheque)', keywords: ['adaigi', 'payment', 'supplier', 'dena'], target: act('paySupplier') },
+      { id: 'pay-supplier', hidden: true, label: 'Pay supplier', hint: 'Money you paid a supplier (cash, bank or cheque)', keywords: ['adaigi', 'payment', 'supplier', 'dena'], target: act('paySupplier') },
       { id: 'add-expense', label: 'Add expense', key: 'F4', hint: 'Rent, salaries, food, transport…', keywords: ['kharcha', 'kharch', 'kiraya', 'rent', 'bijli', 'expense'], target: act('addExpense') },
       { id: 'transfer', label: 'Cash ↔ Bank', aka: ['Bank deposit', 'Cash withdrawal'], hint: 'Deposit cash in the bank or draw it out', keywords: ['jama', 'deposit', 'withdraw', 'nikalna', 'bank', 'cash'], target: act('transfer') },
       { id: 'money', label: 'Money overview', hint: 'Cash, bank, who owes you and whom you owe', keywords: ['paisay', 'paise', 'cash in hand', 'position', 'naqad', 'udhaar'], target: scr('money', 'overview') },
@@ -567,7 +571,7 @@ export const entryAllowed = (e: NavEntry, a: NavAccess): boolean => {
 export const navGroupsFor = (a: NavAccess): NavGroup[] =>
   NAV_GROUPS.map((g) => ({
     ...g,
-    sections: g.sections.map((s) => ({ ...s, entries: s.entries.filter((e) => entryAllowed(e, a)) })).filter((s) => s.entries.length > 0),
+    sections: g.sections.map((s) => ({ ...s, entries: s.entries.filter((e) => !e.hidden && entryAllowed(e, a)) })).filter((s) => s.entries.length > 0),
   }));
 
 /** Split a group's sections into `cols` columns, in order, roughly balanced by height. */
@@ -658,7 +662,7 @@ export const scoreEntry = (e: NavEntry, query: string): number => {
 
 /** Options matching the query, best first; the same place reached two ways is listed once. */
 export const searchNav = (query: string, a?: NavAccess, limit = 12): NavEntry[] => {
-  const pool = a ? NAV_ENTRIES.filter((e) => entryAllowed(e, a)) : NAV_ENTRIES;
+  const pool = (a ? NAV_ENTRIES.filter((e) => entryAllowed(e, a)) : NAV_ENTRIES).filter((e) => !e.hidden);
   const scored = pool
     .map((e, i) => ({ e, i, s: scoreEntry(e, query) }))
     .filter((x) => x.s > 0)

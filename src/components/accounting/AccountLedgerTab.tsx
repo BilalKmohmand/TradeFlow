@@ -19,11 +19,11 @@ const tdn = 'px-3 py-2 text-sm text-right tabular-nums whitespace-nowrap';
  * income — for a date range, with the OB row, running Dr / Cr balance and the grand total.
  */
 export const AccountLedgerTab: React.FC<{ accounts: Account[]; journal: JournalEntry[]; initial?: string; from: string; to: string; setFrom: (v: string) => void; setTo: (v: string) => void }> = ({ accounts, journal, initial, from, to, setFrom, setTo }) => {
-  const { customers, suppliers, ledger, setPrintRequest } = useTrading();
+  const { customers, suppliers, ledger, setPrintRequest, invoices, purchaseInvoices, purchases } = useTrading();
   const today = todayISO();
   const [ref, setRef] = useState(initial || '1000');
   const options = useMemo(() => accountOptions(accounts, customers, suppliers), [accounts, customers, suppliers]);
-  const rep = useMemo(() => accountLedger(ref, from, to, { journal, accounts, customers, suppliers, ledger }), [ref, from, to, journal, accounts, customers, suppliers, ledger]);
+  const rep = useMemo(() => accountLedger(ref, from, to, { journal, accounts, customers, suppliers, ledger, invoices, purchaseInvoices, purchases }), [ref, from, to, journal, accounts, customers, suppliers, ledger, invoices, purchaseInvoices, purchases]);
   return (
     <div className={`${cardCls} overflow-hidden`} data-testid="account-ledger">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 sm:px-5 py-4 border-b border-[#E5E5E1] dark:border-[#203248]">
@@ -63,7 +63,7 @@ export const AccountLedgerTab: React.FC<{ accounts: Account[]; journal: JournalE
         <table className="w-full min-w-[640px]" aria-label="Account ledger">
           <thead><tr className="border-b border-[#E5E5E1] dark:border-[#203248] text-left"><th className={th}>Date</th><th className={th}>VchNo</th><th className={th}>Narration</th><th className={`${th} text-right`}>Debit</th><th className={`${th} text-right`}>Credit</th><th className={`${th} text-right`}>Balance</th></tr></thead>
           <tbody>
-            <tr className="border-b border-[#F1F0EC] dark:border-[#1E2E40] font-semibold" data-testid="ledger-ob"><td className={`${td} tabular-nums text-xs`}>{formatDate(from)}</td><td className={td}>OB</td><td className={td}>Opening balance</td><td className={tdn} /><td className={tdn} /><td className={tdn}>{drCr(rep.opening)}</td></tr>
+            <tr className="border-b border-[#F1F0EC] dark:border-[#1E2E40] font-semibold" data-testid="ledger-ob"><td className={`${td} tabular-nums text-xs`}>{formatDate(from)}</td><td className={td}>OB</td><td className={td}>Opening Balances</td><td className={tdn}>{rep.openingDebit ? money(rep.openingDebit) : ''}</td><td className={tdn}>{rep.openingCredit ? money(rep.openingCredit) : ''}</td><td className={tdn}>{drCr(rep.opening)}</td></tr>
             {rep.rows.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-[#8E9299]">Nothing posted to this account in these dates.</td></tr>}
             {rep.rows.map((r, i) => (
               <tr key={i} className="border-b border-[#F1F0EC] dark:border-[#1E2E40]" data-testid="ledger-row">
@@ -77,7 +77,7 @@ export const AccountLedgerTab: React.FC<{ accounts: Account[]; journal: JournalE
             ))}
           </tbody>
           <tfoot>
-            <tr className="font-bold border-t-2 border-[#111827] dark:border-white" data-testid="ledger-total"><td colSpan={3} className={td}>Grand Total</td><td className={tdn}>{money(rep.totalDebit)}</td><td className={tdn}>{money(rep.totalCredit)}</td><td className={tdn}>{drCr(rep.closing)}</td></tr>
+            <tr className="font-bold border-t-2 border-[#111827] dark:border-white" data-testid="ledger-total"><td colSpan={3} className={td}>Grand Total</td><td className={tdn}>{money(rep.grandDebit)}</td><td className={tdn}>{money(rep.grandCredit)}</td><td className={tdn}>{drCr(rep.closing)}</td></tr>
           </tfoot>
         </table>
       </div>

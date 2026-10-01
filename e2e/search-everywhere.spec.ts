@@ -123,8 +123,9 @@ test('Bills list, purchase invoices, cheques and vouchers find by number, memo, 
 
 test('Pickers: Receive payment, Receive from many, report filter and the voucher account search', async ({ page }) => {
   await open(page);
-  // Receive payment (F3): the Code box, and type-to-find in the name list.
-  await page.keyboard.press('F3');
+  // Receive payment (the quick form, from a customer's row; F3 is now CRV): the Code box, and type-to-find in the name list.
+  await openById(page, 'customers');
+  await page.getByRole('button', { name: /^Receive payment from / }).first().click();
   const rc = page.getByRole('dialog', { name: 'Receive payment' });
   await rc.getByLabel('Customer', { exact: true }).focus();
   await page.keyboard.type('gul');
@@ -149,10 +150,11 @@ test('Pickers: Receive payment, Receive from many, report filter and the voucher
   await rm.getByLabel('Line 2 customer').focus();
   await page.keyboard.type('gul');
   await expect(rm.getByLabel('Line 2 customer')).toHaveValue('c7'); // the same customer may be on two lines
-  await page.keyboard.press('Escape');
-  if (await rm.isVisible()) await page.keyboard.press('Escape');
-  if (await rm.isVisible()) await rm.getByRole('button', { name: /^close$/i }).first().click();
-  await expect(rm).toBeHidden();
+  // Esc until it closes (the first Esc may only close the name list); don't click Close while it is closing.
+  await expect(async () => {
+    if (await rm.isVisible()) await page.keyboard.press('Escape');
+    await expect(rm).toBeHidden({ timeout: 1_000 });
+  }).toPass({ timeout: 10_000 });
 
   // A report's customer filter: Code box + type-to-find.
   await openById(page, 'rep-party-sales');

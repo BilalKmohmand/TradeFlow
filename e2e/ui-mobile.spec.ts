@@ -60,11 +60,11 @@ const seedShop = (dark: boolean) => {
   set('tradeflow_cash_entries_v2', []);
 };
 
-type Screen = { name: string; heading: RegExp; dialog?: { open: string; title: string; before?: (page: Page) => Promise<void> } };
+type Screen = { name: string; heading: RegExp; dialog?: { open: string | RegExp; title: string; before?: (page: Page) => Promise<void> } };
 const SCREENS: Screen[] = [
   { name: 'Home', heading: /^Home$/, dialog: { open: 'New Bill', title: 'New Bill' } },
   { name: 'Bills', heading: /^Bills$/, dialog: { open: 'New Bill', title: 'New Bill' } },
-  { name: 'Money', heading: /^Money$/, dialog: { open: 'Receive payment', title: 'Receive payment' } },
+  { name: 'Money', heading: /^Money$/, dialog: { open: /^Receive payment from /, title: 'Receive payment' } }, // quick form from a customer's row (the top button is now CRV)
   { name: 'Daily Sheet', heading: /^Daily Sheet$/, dialog: { open: 'Add expense', title: 'Add expense' } },
   { name: 'Customers', heading: /^Customers$/, dialog: { open: 'Add customer', title: 'New customer' } },
   { name: 'Suppliers', heading: /^Suppliers$/, dialog: { open: 'Add supplier', title: 'New supplier' } },

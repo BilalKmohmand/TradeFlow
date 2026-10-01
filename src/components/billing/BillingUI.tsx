@@ -60,6 +60,8 @@ interface BillingUI {
   reportRequest: { id: ReportRequest; n: number } | null;
   /** Ask the Accounts screen to show a tab (then go to 'accounts'); `sub` = a step inside it ("new:CPV", "view:<id>", "new"). */
   openAccountsTab: (tab: AccountsTab, sub?: string) => void;
+  /** A new Cash Receipt Voucher (CRV): the one place money received is entered, as in the old program. */
+  cashReceipt: () => void;
   accountsTabRequest: { tab: AccountsTab; sub?: string; n: number } | null;
   /** Ask a screen to show one of its views (a tab or one of its dialogs) the next time it mounts / now. */
   requestView: (screen: string, view: string) => void;
@@ -99,7 +101,7 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [nonce, setNonce] = useState(0);
   const bump = () => setNonce((n) => n + 1);
   const [salesView, setSalesView] = useState<SalesView | null>(null);
-  const { setActiveScreen, activeScreen } = useTrading();
+  const { setActiveScreen, activeScreen, can } = useTrading();
   const pendingView = useRef<{ screen: string; view: string } | null>(null);
   const [viewRequestN, setViewRequestN] = useState(0);
   const [currentView, setCurrentViewState] = useState<BillingUI['currentView']>(null);
@@ -149,6 +151,12 @@ export const BillingUIProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     reportRequest,
     openAccountsTab: (tab, sub) => setAccountsTabRequest((r) => ({ tab, ...(sub ? { sub } : {}), n: (r?.n || 0) + 1 })),
     accountsTabRequest,
+    // Staff without the Accounts rights still take money through the simple Receive payment form.
+    cashReceipt: () => {
+      if (!(can('view_finance') && can('finance:record_payment'))) { bump(); setReceive({ open: true, customerId: null }); return; }
+      setAccountsTabRequest((r) => ({ tab: 'vouchers', sub: 'new:CRV', n: (r?.n || 0) + 1 }));
+      setActiveScreen('accounts');
+    },
     newPurchaseInvoice: (supplierId) => { bump(); setPurchase({ open: true, supplierId: supplierId || null }); },
     openPurchaseInvoice: (id) => { bump(); setPurchaseId(id); },
     editPurchaseInvoice: (id) => { bump(); setPurchaseId(null); setPurchase({ open: true, supplierId: null, editId: id }); },

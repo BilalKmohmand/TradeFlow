@@ -59,7 +59,7 @@ test('banks, vouchers, account ledger, chart tree, receivable & payable by city'
   const banks = page.getByTestId('bank-accounts');
   await expect(banks.getByTestId('bank-balance-1010')).toHaveText('Rs. 100,000');
   await expect(banks.getByTestId('bank-balance-1011')).toHaveText('Rs. 50,000');
-  await page.getByRole('button', { name: 'Receive payment' }).first().click();
+  await page.getByRole('button', { name: /^Receive payment from / }).first().click();
   const rc = dialog(page, 'Receive payment');
   await rc.getByLabel('Customer').selectOption('c1');
   await rc.getByLabel('Amount (Rs.)').fill('2000');

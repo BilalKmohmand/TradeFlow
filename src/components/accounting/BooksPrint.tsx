@@ -93,7 +93,7 @@ export const useBooksPrint = (request: { type: string } | null) => {
     }
 
     if (request.type === 'account_ledger') {
-      const rep = accountLedger(request.ref, request.from, request.to, { journal: books.journal, accounts, customers, suppliers, ledger });
+      const rep = accountLedger(request.ref, request.from, request.to, { journal: books.journal, accounts, customers, suppliers, ledger, invoices: t.invoices, purchaseInvoices: t.purchaseInvoices, purchases: t.purchases });
       return {
         title: 'ACCOUNT LEDGER',
         number: rep.code || rep.title,
@@ -105,7 +105,7 @@ export const useBooksPrint = (request: { type: string } | null) => {
             <table className="w-full border-collapse">
               <thead><tr><th className={`${th} text-left`}>Date</th><th className={`${th} text-left`}>VchNo</th><th className={`${th} text-left`}>Narration</th><th className={`${th} text-right`}>Debit</th><th className={`${th} text-right`}>Credit</th><th className={`${th} text-right`}>Balance</th></tr></thead>
               <tbody>
-                <tr className="border-b border-gray-200 font-semibold"><td className={td}>{formatDate(request.from)}</td><td className={td}>OB</td><td className={td}>Opening balance</td><td className={tdn} /><td className={tdn} /><td className={tdn}>{drcr(rep.opening)}</td></tr>
+                <tr className="border-b border-gray-200 font-semibold"><td className={td}>{formatDate(request.from)}</td><td className={td}>OB</td><td className={td}>Opening Balances</td><td className={tdn}>{rep.openingDebit ? money(rep.openingDebit) : ''}</td><td className={tdn}>{rep.openingCredit ? money(rep.openingCredit) : ''}</td><td className={tdn}>{drcr(rep.opening)}</td></tr>
                 {rep.rows.map((r, i) => (
                   <tr key={i} className="border-b border-gray-100">
                     <td className={`${td} whitespace-nowrap`}>{formatDate(r.date)}</td>
@@ -117,7 +117,7 @@ export const useBooksPrint = (request: { type: string } | null) => {
                   </tr>
                 ))}
               </tbody>
-              <tfoot><tr className="font-bold border-t-2 border-gray-900"><td className={td} colSpan={3}>Grand Total</td><td className={tdn}>{money(rep.totalDebit)}</td><td className={tdn}>{money(rep.totalCredit)}</td><td className={tdn}>{drcr(rep.closing)}</td></tr></tfoot>
+              <tfoot><tr className="font-bold border-t-2 border-gray-900"><td className={td} colSpan={3}>Grand Total</td><td className={tdn}>{money(rep.grandDebit)}</td><td className={tdn}>{money(rep.grandCredit)}</td><td className={tdn}>{drcr(rep.closing)}</td></tr></tfoot>
             </table>
             <div className="mt-6 flex justify-between text-[10px] text-gray-500"><span>Printed {formatDate(todayISO())}{currentUser ? ` by ${currentUser.name}` : ''}</span><span>Amounts in PKR (Rs.)</span></div>
           </div>
