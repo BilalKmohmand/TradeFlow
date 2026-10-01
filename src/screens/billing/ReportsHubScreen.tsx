@@ -13,6 +13,7 @@ import { todayISO } from '../../utils/stockFlow';
 import { financialYearOf, fyStartOf } from '../../utils/financeBooks';
 import { PartyPick, customerParties, supplierParties } from '../../components/billing/PartyPick';
 import { fromClassicTarget, targetAllowed } from '../../utils/navMap';
+import { CodeBox } from '../../components/billing/CodeBox';
 
 /** Who may open a report: the books and cost / profit figures need finance access. */
 const useReportAllowed = () => {
@@ -99,12 +100,15 @@ const ReportView: React.FC<{ id: ReportId; onBack: () => void; backLabel: string
             </div>
           )}
           {def.filters?.includes('product') && (
-            <div className="w-full sm:w-64">
+            <div className="w-full sm:w-96">
               <label className={labelCls} htmlFor="rep-product">Product</label>
-              <select id="rep-product" value={filter.productId || ''} onChange={(e) => set({ productId: e.target.value || undefined })} className={inputCls}>
-                <option value="">{def.requires === 'product' ? 'Pick a product…' : 'All products'}</option>
-                {sortedProducts.map((p) => <option key={p.id} value={p.id}>{p.code ? `${p.code} • ` : ''}{p.name}</option>)}
-              </select>
+              <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-1.5">
+                <CodeBox id="rep-product-code" label="Product code" items={sortedProducts} value={filter.productId || ''} onPick={(id) => set({ productId: id || undefined })} pairId="rep-product" />
+                <select id="rep-product" value={filter.productId || ''} onChange={(e) => set({ productId: e.target.value || undefined })} className={inputCls}>
+                  <option value="">{def.requires === 'product' ? 'Pick a product…' : 'All products'}</option>
+                  {sortedProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
             </div>
           )}
           {def.filters?.includes('godown') && godowns.length > 1 && (

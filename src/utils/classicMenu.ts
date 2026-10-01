@@ -93,8 +93,9 @@ export const REPORTS_MENU: MenuSection[] = [
     label: 'Inventory Reports',
     items: [
       r('Daily Gross Profit', 'daily-gross-profit'),
-      { label: 'Party Reports', entries: [r('Party-wise Sale', 'party-sales'), r('Party-wise Purchase', 'party-purchases'), r('Party Outstanding', 'party-outstanding')] },
-      { label: 'Product Reports', entries: [r('Daily Sale', 'daily-sale'), r('Daily Purchase', 'daily-purchase'), r('Product-wise Sale', 'product-sales'), r('Product-wise Purchase', 'product-purchases'), r('Product List / Rate List', 'rate-list')] },
+      // Names and order as in the old program's Party Reports / Product Reports menus (ours added at the end).
+      { label: 'Party Reports', entries: [{ label: 'Party Ledger', target: { kind: 'accounts', tab: 'ledger' } }, r('Party Wise Purchase', 'party-purchases'), r('Party Wise Sale', 'party-sales'), r('City Wise Sale', 'city-sales'), r('Party Outstanding', 'party-outstanding')] },
+      { label: 'Product Reports', entries: [r('Product List', 'rate-list'), r('ProductWise Purchase', 'product-purchases'), r('ProductWise Sale', 'product-sales'), r('PartyWise Product Sale Detail', 'party-product-sales'), r('PartyWise Product Purchase Detail', 'party-product-purchases'), r('Daily Sale', 'daily-sale'), r('Daily Purchase', 'daily-purchase')] },
       { label: 'Stock Reports', entries: [r('Stock In Hand', 'stock-in-hand'), r('Stock Ledger', 'stock-ledger'), r('Godown-wise Stock', 'godown-stock'), r('Stock Value', 'stock-value'), r('Low Stock', 'low-stock')] },
     ],
   },

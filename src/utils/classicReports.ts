@@ -143,6 +143,9 @@ export type ReportId =
   | 'party-outstanding'
   | 'product-sales'
   | 'product-purchases'
+  | 'party-product-sales'
+  | 'party-product-purchases'
+  | 'city-sales'
   | 'rate-list'
   | 'stock-ledger'
   | 'godown-stock'
@@ -1130,7 +1133,79 @@ export const productTotals = (d: Pick<ReportData, 'invoices' | 'returns' | 'purc
     .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
 };
 
+/**
+ * One product's sales (or purchases) bill by bill, grouped by party: the old program's "ProductWise Sale" /
+ * "ProductWise Purchase" — Date | Inv # | Mode | QtyDr | QtyCr | Rate | Amount. A sale is QtyCr (stock out), a
+ * purchase is QtyDr (stock in); returns go in the other column and come off the amount.
+ */
+const productDetailReport = (side: 'sale' | 'purchase', d: ReportData, f: ReportFilter): ReportResult => {
+  const p = prod(d, f.productId!);
+  type Line = { party: string; date: string; ref: string; dr: number; cr: number; rate: number; amount: number; billId?: string };
+  const lines: Line[] = [];
+  if (side === 'sale') {
+    billsOnly(d.invoices).filter((i) => inRange(i.issueDate, f)).forEach((i) =>
+      i.items.filter((it) => it.productId === f.productId).forEach((it) => {
+        const qty = Number(it.qty ?? it.kg) || 0;
+        lines.push({ party: i.customerName || custName(d, i.customerId), date: i.issueDate, ref: i.invoiceNumber, dr: 0, cr: qty, rate: it.free ? 0 : Number(it.unitPrice ?? it.ratePerKg) || 0, amount: Number(it.amount) || 0, billId: i.id });
+      })
+    );
+    d.returns.filter((x) => x.kind === 'sales' && inRange(x.date, f)).forEach((x) =>
+      returnLines(x).filter((l) => l.productId === f.productId && l.qty > 0).forEach((l) =>
+        lines.push({ party: custName(d, x.customerId), date: x.date, ref: x.returnNumber, dr: l.qty, cr: 0, rate: round2(l.value / l.qty), amount: -l.value })
+      )
+    );
+  } else {
+    const invOf = new Map<string, string>();
+    d.purchaseInvoices.forEach((pi) => pi.lines.forEach((l) => { if (l.purchaseId) invOf.set(l.purchaseId, pi.invoiceNumber); }));
+    d.purchases.filter((x) => x.productId === f.productId && inRange(x.date, f)).forEach((x) =>
+      lines.push({ party: supName(d, x.supplierId), date: x.date, ref: invOf.get(x.id) || x.receiptNumber, dr: Number(x.kg) || 0, cr: 0, rate: Number(x.pricePerKg) || 0, amount: Number(x.amount) || 0 })
+    );
+    d.returns.filter((x) => x.kind === 'purchase' && x.productId === f.productId && inRange(x.date, f)).forEach((x) =>
+      lines.push({ party: supName(d, x.supplierId), date: x.date, ref: x.returnNumber, dr: 0, cr: Number(x.kg) || 0, rate: Number(x.pricePerKg) || 0, amount: -(Number(x.amount) || 0) })
+    );
+  }
+  const parties = Array.from(new Set(lines.map((l) => l.party))).sort((a, b) => a.localeCompare(b));
+  const rows: ReportRow[] = [];
+  parties.forEach((party) => {
+    rows.push({ cells: { date: side === 'sale' ? 'Customer :' : 'Supplier :', ref: party, mode: '', qtyDr: null, qtyCr: null, rate: null, amount: null }, style: 'heading' });
+    lines.filter((l) => l.party === party).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.ref.localeCompare(b.ref, undefined, { numeric: true }))).forEach((l) =>
+      rows.push({ cells: { date: l.date, ref: l.ref, mode: 'QTY', qtyDr: l.dr, qtyCr: l.cr, rate: l.rate, amount: l.amount }, billId: l.billId })
+    );
+  });
+  const dr = round2(lines.reduce((a, l) => a + l.dr, 0));
+  const cr = round2(lines.reduce((a, l) => a + l.cr, 0));
+  const amount = round2(lines.reduce((a, l) => a + l.amount, 0));
+  const net = side === 'sale' ? round2(cr - dr) : round2(dr - cr);
+  return {
+    title: side === 'sale' ? 'ProductWise Sale' : 'ProductWise Purchase',
+    period: `Product: ${p ? `${p.code ? `${p.code} ` : ''}${p.name}` : 'Item'} • ${rangeText(f)}`,
+    summary: [
+      { label: side === 'sale' ? 'Qty sold' : 'Qty bought', value: p ? qtyText(net, p) : net },
+      { label: 'Amount', value: amount, money: true },
+      { label: side === 'sale' ? 'Customers' : 'Suppliers', value: parties.length },
+    ],
+    sections: [
+      {
+        columns: [
+          { key: 'date', label: 'Date' },
+          { key: 'ref', label: 'Inv #' },
+          { key: 'mode', label: 'Mode' },
+          { key: 'qtyDr', label: 'QtyDr', align: 'right' },
+          { key: 'qtyCr', label: 'QtyCr', align: 'right' },
+          { key: 'rate', label: 'Rate', align: 'right', money: true },
+          { key: 'amount', label: 'Amount', align: 'right', money: true },
+        ],
+        rows,
+        totals: { date: 'Total', ref: '', mode: '', qtyDr: dr, qtyCr: cr, rate: null, amount },
+        empty: side === 'sale' ? 'This product was not sold in these dates.' : 'This product was not bought in these dates.',
+      },
+    ],
+    notes: side === 'sale' ? ['QtyCr = sold, QtyDr = returned by the customer. Amounts are after the line discount, before the bill\'s lumsum / carriage, tax and charges.'] : ['QtyDr = bought, QtyCr = sent back to the supplier. Amounts at cost.'],
+  };
+};
+
 const productReport = (side: 'sale' | 'purchase') => (d: ReportData, f: ReportFilter): ReportResult => {
+  if (f.productId) return productDetailReport(side, d, f);
   const rows = productTotals(d, side, f);
   // Paisa rounding of purchase invoices belongs to no one item: shown as its own line so the total
   // equals Daily Purchase and Party-wise Purchase.
@@ -1164,6 +1239,56 @@ const productReport = (side: 'sale' | 'purchase') => (d: ReportData, f: ReportFi
       },
     ],
     notes: side === 'sale' ? ['Amounts are after line and bill discounts, without sales tax and freight; returns are taken off.'] : ['Amounts at cost (after purchase-invoice discount and charges); goods sent back are taken off.'],
+  };
+};
+
+/** "PartyWise Product Sale / Purchase Detail": the products one party bought (or supplied), with qty and amount. */
+const partyProductReport = (side: 'sale' | 'purchase') => (d: ReportData, f: ReportFilter): ReportResult => ({
+  ...productReport(side)(d, { ...f, productId: undefined }),
+  title: side === 'sale' ? 'PartyWise Product Sale Detail' : 'PartyWise Product Purchase Detail',
+});
+
+/** "City Wise Sale": bills, sale, returns and net sale of every city (customers without a city are grouped last). */
+const citySalesReport = (d: ReportData, f: ReportFilter): ReportResult => {
+  const map = new Map<string, { city: string; customers: Set<string>; bills: number; sale: number; returns: number }>();
+  const row = (customerId?: string | null) => {
+    const city = (d.customers.find((c) => c.id === customerId)?.city || '').trim() || '(no city)';
+    const key = city.toLowerCase();
+    let r = map.get(key);
+    if (!r) map.set(key, (r = { city, customers: new Set(), bills: 0, sale: 0, returns: 0 }));
+    if (customerId) r.customers.add(customerId);
+    return r;
+  };
+  liveBills(d).filter((i) => inRange(i.issueDate, f)).forEach((i) => {
+    const r = row(i.customerId);
+    r.bills += 1;
+    r.sale += i.totalAmount;
+  });
+  d.returns.filter((x) => x.kind === 'sales' && x.customerId && inRange(x.date, f)).forEach((x) => (row(x.customerId).returns += Number(x.amount) || 0));
+  const rows = Array.from(map.values())
+    .map((r) => ({ city: r.city, customers: r.customers.size, bills: r.bills, sale: round2(r.sale), returns: round2(r.returns), net: round2(r.sale - r.returns) }))
+    .sort((a, b) => (a.city === '(no city)' ? 1 : b.city === '(no city)' ? -1 : b.net - a.net || a.city.localeCompare(b.city)));
+  const rr = rows.map((r) => ({ cells: r as unknown as Record<string, Cell> }));
+  return {
+    title: 'City Wise Sale',
+    period: rangeText(f),
+    summary: [{ label: 'Net sale', value: sumCol(rr, 'net'), money: true }, { label: 'Cities', value: rows.filter((r) => r.city !== '(no city)').length }],
+    sections: [
+      {
+        columns: [
+          { key: 'city', label: 'City' },
+          { key: 'customers', label: 'Customers', align: 'right' },
+          { key: 'bills', label: 'Bills', align: 'right' },
+          { key: 'sale', label: 'Sale', align: 'right', money: true },
+          { key: 'returns', label: 'Returns', align: 'right', money: true },
+          { key: 'net', label: 'Net sale', align: 'right', money: true },
+        ],
+        rows: rr,
+        totals: { city: 'Total', customers: null, bills: sumCol(rr, 'bills'), sale: sumCol(rr, 'sale'), returns: sumCol(rr, 'returns'), net: sumCol(rr, 'net') },
+        empty: 'No sales in these dates.',
+      },
+    ],
+    notes: ['Sale is the bill total (as in Party Wise Sale); the city is the one on the customer.'],
   };
 };
 
@@ -1309,8 +1434,11 @@ export const REPORTS: Record<ReportId, ReportDef> = {
   'party-sales': { id: 'party-sales', title: 'Party-wise Sale', dateMode: 'range', filters: ['customer'], help: 'Sale, returns, money received and balance per customer.', build: partySalesReport },
   'party-purchases': { id: 'party-purchases', title: 'Party-wise Purchase', dateMode: 'range', filters: ['supplier'], help: 'Purchase, returns, payments and balance per supplier.', build: partyPurchasesReport },
   'party-outstanding': { id: 'party-outstanding', title: 'Party Outstanding', dateMode: 'asOf', help: 'Every customer and supplier with a balance, their last bill and last payment.', build: partyOutstandingReport },
-  'product-sales': { id: 'product-sales', title: 'Product-wise Sale', dateMode: 'range', filters: ['customer'], help: 'Quantity and amount sold of each product.', build: productReport('sale') },
-  'product-purchases': { id: 'product-purchases', title: 'Product-wise Purchase', dateMode: 'range', filters: ['supplier'], help: 'Quantity and amount bought of each product.', build: productReport('purchase') },
+  'product-sales': { id: 'product-sales', title: 'Product-wise Sale', dateMode: 'range', filters: ['product'], help: 'Type the product code: its sales bill by bill, customer by customer. No code = every product\'s total.', build: productReport('sale') },
+  'party-product-sales': { id: 'party-product-sales', title: 'PartyWise Product Sale Detail', dateMode: 'range', filters: ['customer'], help: 'Pick a customer: every product they bought, with quantity and amount.', build: partyProductReport('sale') },
+  'party-product-purchases': { id: 'party-product-purchases', title: 'PartyWise Product Purchase Detail', dateMode: 'range', filters: ['supplier'], help: 'Pick a supplier: every product bought from them, with quantity and amount.', build: partyProductReport('purchase') },
+  'city-sales': { id: 'city-sales', title: 'City Wise Sale', dateMode: 'range', help: 'Sale, returns and net sale of every city.', build: citySalesReport },
+  'product-purchases': { id: 'product-purchases', title: 'Product-wise Purchase', dateMode: 'range', filters: ['product'], help: 'Type the product code: its purchases bill by bill, supplier by supplier. No code = every product\'s total.', build: productReport('purchase') },
   'rate-list': { id: 'rate-list', title: 'Product List / Rate List', dateMode: 'asOf', help: 'Codes, sale prices, last sale rate and last purchase rate of every product.', build: rateListReport },
   'stock-ledger': { id: 'stock-ledger', title: 'Stock Ledger', dateMode: 'range', filters: ['product'], requires: 'product', help: 'Every movement of one item with the running stock.', build: stockLedgerReport },
   'godown-stock': { id: 'godown-stock', title: 'Godown-wise Stock', dateMode: 'none', help: 'Stock of every item in each godown, now.', build: (d) => godownStockReport(d) },
