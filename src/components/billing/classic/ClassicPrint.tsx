@@ -4,7 +4,7 @@ import { useReportData } from '../../../hooks/useReportData';
 import { REPORTS, ReportFilter, ReportId } from '../../../utils/classicReports';
 import { formatDate, moneyText } from '../../../utils/formatters';
 import { todayISO } from '../../../utils/stockFlow';
-import { ClassicPage, PrintReport, reportPaper } from './ReportTables';
+import { ClassicPage, OldProgramReport, PrintReport, reportPaper } from './ReportTables';
 
 /** Printable classic reports and the purchase invoice (shown by PrintDocument). */
 export type ClassicPrintRequest =
@@ -37,7 +37,9 @@ export const useClassicPrint = (request: { type: string } | null): Content | nul
         number: report.period,
         date: todayISO(),
         pageCss: paper.pageCss,
-        body: (
+        body: report.oldLayout ? (
+          <OldProgramReport report={report} company={company} width={paper.width} />
+        ) : (
           <ClassicPage company={company} title={report.title} period={report.period} printedBy={currentUser?.name} width={paper.width}>
             <PrintReport report={report} />
           </ClassicPage>

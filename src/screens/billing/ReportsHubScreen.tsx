@@ -139,7 +139,7 @@ const ReportView: React.FC<{ id: ReportId; onBack: () => void; backLabel: string
         <p className="mt-2 text-[11px] text-[#6B7280] dark:text-[#94A3B8]" data-testid="report-period">{report.period}</p>
       </div>
 
-      {missing ? <div className={`${cardCls} px-4 py-6 text-sm text-center text-[#6B7280] dark:text-[#94A3B8]`}>Pick a product to see its stock ledger.</div> : <ScreenReport report={report} onOpenBill={ui.openBill} rowAction={rowAction} />}
+      {missing ? <div className={`${cardCls} px-4 py-6 text-sm text-center text-[#6B7280] dark:text-[#94A3B8]`}>Pick a product to see its stock ledger.</div> : <ScreenReport report={report} onOpenBill={ui.openBill} rowAction={rowAction} company={{ name: settings.companyName || 'Sarmaya' }} />}
     </div>
   );
 };

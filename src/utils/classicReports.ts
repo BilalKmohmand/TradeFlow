@@ -52,6 +52,11 @@ export interface ReportColumn {
   align?: 'left' | 'right';
   /** Shown as money (Rs., two decimals at most). */
   money?: boolean;
+  /**
+   * The old program's own number / date styles (its report layout): 'dmy' = 19/Sep/26, 'fixed2' = 2300.00 (no
+   * separators: quantities and rates), 'amount2' = 52,900.00.
+   */
+  format?: 'dmy' | 'fixed2' | 'amount2';
 }
 
 export interface ReportRow {
@@ -74,6 +79,11 @@ export interface ReportSection {
 
 export interface ReportResult {
   title: string;
+  /**
+   * Drawn exactly like the old program's printed report (shop name, underlined title, this caption line, a
+   * rounded header bar, no grid lines, "Customer : name" group headings) on screen and on paper.
+   */
+  oldLayout?: { caption: string };
   /** "From 1 Jul 2026 to 22 Sep 2026" / "As at 22 Sep 2026". */
   period: string;
   sections: ReportSection[];
@@ -177,6 +187,11 @@ export interface ReportDef {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** 2026-09-01 → 01-Sep-2026 (the old program's caption dates). */
+export const dashDate = (iso: string) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso.slice(8, 10)}-${MON[Number(iso.slice(5, 7)) - 1]}-${iso.slice(0, 4)}` : iso);
+/** 2026-09-19 → 19/Sep/26 (the old program's row dates). */
+export const slashDate = (iso: string) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso.slice(8, 10)}/${MON[Number(iso.slice(5, 7)) - 1]}/${iso.slice(2, 4)}` : iso);
 const rangeText = (f: ReportFilter) => `From ${formatDate(f.from)} to ${formatDate(f.to)}`;
 const asOfText = (d: string) => `As at ${formatDate(d)}`;
 const inRange = (date: string, f: ReportFilter) => date >= f.from && date <= f.to;
@@ -1178,6 +1193,7 @@ const productDetailReport = (side: 'sale' | 'purchase', d: ReportData, f: Report
   const net = side === 'sale' ? round2(cr - dr) : round2(dr - cr);
   return {
     title: side === 'sale' ? 'ProductWise Sale' : 'ProductWise Purchase',
+    oldLayout: { caption: `Product: ${p?.name || 'Item'} From: ${dashDate(f.from)} To: ${dashDate(f.to)}` },
     period: `Product: ${p ? `${p.code ? `${p.code} ` : ''}${p.name}` : 'Item'} • ${rangeText(f)}`,
     summary: [
       { label: side === 'sale' ? 'Qty sold' : 'Qty bought', value: p ? qtyText(net, p) : net },
@@ -1187,13 +1203,13 @@ const productDetailReport = (side: 'sale' | 'purchase', d: ReportData, f: Report
     sections: [
       {
         columns: [
-          { key: 'date', label: 'Date' },
+          { key: 'date', label: 'Date', format: 'dmy' },
           { key: 'ref', label: 'Inv #' },
           { key: 'mode', label: 'Mode' },
-          { key: 'qtyDr', label: 'QtyDr', align: 'right' },
-          { key: 'qtyCr', label: 'QtyCr', align: 'right' },
-          { key: 'rate', label: 'Rate', align: 'right', money: true },
-          { key: 'amount', label: 'Amount', align: 'right', money: true },
+          { key: 'qtyDr', label: 'QtyDr', align: 'right', format: 'fixed2' },
+          { key: 'qtyCr', label: 'QtyCr', align: 'right', format: 'fixed2' },
+          { key: 'rate', label: 'Rate', align: 'right', money: true, format: 'fixed2' },
+          { key: 'amount', label: 'Amount', align: 'right', money: true, format: 'amount2' },
         ],
         rows,
         totals: { date: 'Total', ref: '', mode: '', qtyDr: dr, qtyCr: cr, rate: null, amount },
@@ -1216,7 +1232,7 @@ const productReport = (side: 'sale' | 'purchase') => (d: ReportData, f: ReportFi
   const total = round2(rows.reduce((a, r) => a + r.amount, 0) + rounding);
   const who = side === 'sale' ? (f.customerId ? custName(d, f.customerId) : '') : f.supplierId ? supName(d, f.supplierId) : '';
   return {
-    title: side === 'sale' ? 'Product-wise Sale' : 'Product-wise Purchase',
+    title: side === 'sale' ? 'ProductWise Sale' : 'ProductWise Purchase',
     period: `${rangeText(f)}${who ? ` • ${who}` : ''}`,
     summary: [{ label: side === 'sale' ? 'Net sale' : 'Net purchase', value: total, money: true }],
     sections: [
@@ -1434,11 +1450,11 @@ export const REPORTS: Record<ReportId, ReportDef> = {
   'party-sales': { id: 'party-sales', title: 'Party-wise Sale', dateMode: 'range', filters: ['customer'], help: 'Sale, returns, money received and balance per customer.', build: partySalesReport },
   'party-purchases': { id: 'party-purchases', title: 'Party-wise Purchase', dateMode: 'range', filters: ['supplier'], help: 'Purchase, returns, payments and balance per supplier.', build: partyPurchasesReport },
   'party-outstanding': { id: 'party-outstanding', title: 'Party Outstanding', dateMode: 'asOf', help: 'Every customer and supplier with a balance, their last bill and last payment.', build: partyOutstandingReport },
-  'product-sales': { id: 'product-sales', title: 'Product-wise Sale', dateMode: 'range', filters: ['product'], help: 'Type the product code: its sales bill by bill, customer by customer. No code = every product\'s total.', build: productReport('sale') },
+  'product-sales': { id: 'product-sales', title: 'ProductWise Sale', dateMode: 'range', filters: ['product'], help: 'Type the product code: its sales bill by bill, customer by customer. No code = every product\'s total.', build: productReport('sale') },
   'party-product-sales': { id: 'party-product-sales', title: 'PartyWise Product Sale Detail', dateMode: 'range', filters: ['customer'], help: 'Pick a customer: every product they bought, with quantity and amount.', build: partyProductReport('sale') },
   'party-product-purchases': { id: 'party-product-purchases', title: 'PartyWise Product Purchase Detail', dateMode: 'range', filters: ['supplier'], help: 'Pick a supplier: every product bought from them, with quantity and amount.', build: partyProductReport('purchase') },
   'city-sales': { id: 'city-sales', title: 'City Wise Sale', dateMode: 'range', help: 'Sale, returns and net sale of every city.', build: citySalesReport },
-  'product-purchases': { id: 'product-purchases', title: 'Product-wise Purchase', dateMode: 'range', filters: ['product'], help: 'Type the product code: its purchases bill by bill, supplier by supplier. No code = every product\'s total.', build: productReport('purchase') },
+  'product-purchases': { id: 'product-purchases', title: 'ProductWise Purchase', dateMode: 'range', filters: ['product'], help: 'Type the product code: its purchases bill by bill, supplier by supplier. No code = every product\'s total.', build: productReport('purchase') },
   'rate-list': { id: 'rate-list', title: 'Product List / Rate List', dateMode: 'asOf', help: 'Codes, sale prices, last sale rate and last purchase rate of every product.', build: rateListReport },
   'stock-ledger': { id: 'stock-ledger', title: 'Stock Ledger', dateMode: 'range', filters: ['product'], requires: 'product', help: 'Every movement of one item with the running stock.', build: stockLedgerReport },
   'godown-stock': { id: 'godown-stock', title: 'Godown-wise Stock', dateMode: 'none', help: 'Stock of every item in each godown, now.', build: (d) => godownStockReport(d) },

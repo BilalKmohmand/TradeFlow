@@ -1,16 +1,82 @@
 import React from 'react';
 import { formatDate, moneyText } from '../../../utils/formatters';
+import { slashDate } from '../../../utils/classicReports';
 import type { Cell, ReportColumn, ReportResult, ReportRow } from '../../../utils/classicReports';
 
 const QTY = new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 });
 
 /** One cell as text: money with separators, ISO dates as "22 Sep 2026", other numbers as quantities. */
-export const formatCell = (col: Pick<ReportColumn, 'money' | 'key'>, v: Cell): string => {
+export const formatCell = (col: Pick<ReportColumn, 'money' | 'key' | 'format'>, v: Cell): string => {
   if (v == null || v === '') return '';
-  if (typeof v === 'number') return col.money ? moneyText(v) : QTY.format(v);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return formatDate(v);
+  if (typeof v === 'number') {
+    if (col.format === 'fixed2') return v.toFixed(2);
+    if (col.format === 'amount2') return AMT2.format(v);
+    return col.money ? moneyText(v) : QTY.format(v);
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return col.format === 'dmy' ? slashDate(v) : formatDate(v);
   return v;
 };
+const AMT2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+type Company = { name: string; address?: string; phone?: string };
+
+/**
+ * A report drawn the way the old program prints it: the shop name in dark red, the title underlined in navy,
+ * a caption line in italics, a rounded header bar, no grid lines, and group headings as "Customer :  Name".
+ * Always black on white (a sheet of paper), on screen and in print.
+ */
+export const OldProgramReport: React.FC<{ report: ReportResult; company?: Company; onOpenBill?: (id: string) => void; width?: string }> = ({ report, company, onOpenBill, width }) => (
+  <div className="bg-white text-black px-6 sm:px-10 py-8 mx-auto" style={{ width: width || '100%', maxWidth: '100%', fontFamily: 'Arial, Helvetica, sans-serif' }} data-testid="old-report">
+    <div className="text-center">
+      {company && <div className="text-[22px] font-bold tracking-wide" style={{ color: '#7B1113', fontFamily: 'Georgia, "Times New Roman", serif' }}>{company.name.toUpperCase()}</div>}
+      <div className="mt-0.5"><span className="text-[17px] font-bold underline underline-offset-4" style={{ color: '#14146E' }} data-testid="classic-title">{report.title}</span></div>
+    </div>
+    <div className="mt-7 text-[12px] font-bold italic" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }} data-testid="old-report-caption">{report.oldLayout?.caption}</div>
+    {report.sections.map((s, si) => (
+      <div key={si} className="mt-3 overflow-x-auto">
+        <table className="w-full border-separate" style={{ borderSpacing: 0 }} data-testid="report-table">
+          <thead>
+            <tr>
+              {s.columns.map((c, ci) => (
+                <th
+                  key={c.key}
+                  className={`px-3 py-1 text-[13px] font-bold whitespace-nowrap border-y-2 border-black ${ci === 0 ? 'border-l-2 rounded-l-lg' : ''} ${ci === s.columns.length - 1 ? 'border-r-2 rounded-r-lg' : ''} ${c.align === 'right' ? 'text-right' : 'text-left'}`}
+                  style={{ color: '#14146E', fontFamily: 'Georgia, "Times New Roman", serif', ...(c.align === 'right' ? {} : { width: '6.5rem' }) }}
+                >
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {s.rows.length === 0 && <tr><td colSpan={s.columns.length} className="px-3 py-6 text-center text-[12px] text-gray-600">{s.empty || 'Nothing to show.'}</td></tr>}
+            {s.rows.map((r, ri) =>
+              r.style === 'heading' ? (
+                <tr key={ri} data-testid="old-report-group">
+                  <td colSpan={s.columns.length} className="pl-10 pt-2.5 pb-0.5">
+                    <span className="text-[11px] italic mr-8">{String(r.cells[s.columns[0].key] ?? '')}</span>
+                    <span className="text-[13px] font-bold italic" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>{String(r.cells[s.columns[1].key] ?? '')}</span>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={ri} className={r.billId && onOpenBill ? 'cursor-pointer hover:bg-gray-100' : ''} onClick={r.billId && onOpenBill ? () => onOpenBill(r.billId!) : undefined}>
+                  {s.columns.map((c) => <td key={c.key} className={`px-3 py-1 text-[11.5px] whitespace-nowrap ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}>{formatCell(c, r.cells[c.key])}</td>)}
+                </tr>
+              )
+            )}
+          </tbody>
+          {s.totals && s.rows.length > 0 && (
+            <tfoot>
+              <tr data-testid="report-totals">
+                {s.columns.map((c) => <td key={c.key} className={`px-3 py-1.5 text-[12px] font-bold border-t-2 border-black whitespace-nowrap ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}>{formatCell(c, s.totals![c.key] ?? null)}</td>)}
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+    ))}
+  </div>
+);
 
 /** Short keys (code, date, doc #) never wrap; other text columns keep at least ~9rem on a phone. */
 const NOWRAP_KEYS = new Set(['code', 'date', 'ref', 'bill', 'memo', 'unit', 'lastDoc', 'lastPay', 'lastSaleOn', 'lastBuyOn', 'doc']);
@@ -26,7 +92,12 @@ const rowCls = (r: ReportRow) =>
         : 'text-[#374151] dark:text-[#CBD5E1]';
 
 /** The report on screen: summary tiles, then each section as a scrollable table. */
-export const ScreenReport: React.FC<{ report: ReportResult; onOpenBill?: (id: string) => void; rowAction?: (row: ReportRow) => React.ReactNode }> = ({ report, onOpenBill, rowAction }) => (
+export const ScreenReport: React.FC<{ report: ReportResult; onOpenBill?: (id: string) => void; rowAction?: (row: ReportRow) => React.ReactNode; company?: Company }> = ({ report, onOpenBill, rowAction, company }) =>
+  report.oldLayout ? (
+    <div className="rounded-[20px] border border-[#E5E5E1] dark:border-[#203248] bg-white overflow-hidden shadow-sm" data-testid="report-body">
+      <OldProgramReport report={report} company={company} onOpenBill={onOpenBill} />
+    </div>
+  ) : (
   <div className="space-y-4" data-testid="report-body">
     {report.summary && report.summary.length > 0 && (
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
