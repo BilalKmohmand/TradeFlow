@@ -375,8 +375,9 @@ export const PurchaseInvoiceModal: React.FC<{ isOpen: boolean; onClose: () => vo
               </div>
             </div>
             <div>
-              <span className={labelCls}>Computer Date</span>
-              <div className={`${readBox} text-[#111827] dark:text-white`}>{formatDate(editInv ? editInv.createdAt.slice(0, 10) : todayISO())}</div>
+              {/* The invoice's date (same as Your Date): change it here to enter a bill on an earlier day. */}
+              <label className={labelCls} htmlFor="pi-computer-date">Computer Date</label>
+              <input id="pi-computer-date" data-skip-autofocus type="date" value={date} max={todayISO()} onChange={(e) => e.target.value && setDate(e.target.value)} className={inputCls} />
             </div>
             <div className="col-span-2">
               <label className={labelCls} htmlFor="pi-search">Search old invoice</label>

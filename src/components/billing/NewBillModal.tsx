@@ -824,8 +824,9 @@ export const NewBillModal: React.FC<Props> = ({ isOpen, onClose, customerId, quo
                 </div>
               </div>
               <div>
-                <span className={labelCls}>Computer Date</span>
-                <div className={`${readBox} text-[#111827] dark:text-white`} data-testid="bill-computer-date">{formatDate(editInv ? (editInv.enteredAt || editInv.createdAt || todayISO()).slice(0, 10) : todayISO())}</div>
+                {/* The bill's date (same as Your Date): change it here to enter a bill on an earlier day. */}
+                <label className={labelCls} htmlFor="bill-computer-date">Computer Date</label>
+                <input id="bill-computer-date" data-skip-autofocus data-testid="bill-computer-date" type="date" value={date} max={todayISO()} onChange={(e) => e.target.value && setDate(e.target.value)} className={inputCls} />
               </div>
               <label htmlFor="bill-delivery-order" className="flex items-center gap-2.5 min-h-11 rounded-2xl border border-[#E5E5E1] dark:border-[#203248] px-3 cursor-pointer" title="Goods go out later. Stock is taken now; the bill waits in the Pending Delivery List.">
                 <input id="bill-delivery-order" data-skip-autofocus type="checkbox" checked={deliveryOrder} onChange={(e) => setDeliveryOrder(e.target.checked)} className="w-5 h-5 accent-teal-700" />
